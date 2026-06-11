@@ -48,6 +48,7 @@ func defaultNavigation(activeHref string) []NavItem {
 	items := []NavItem{
 		{Label: "Overview", Href: "/"},
 		{Label: "Servers", Href: "/servers"},
+		{Label: "Alerts", Href: "/alerts"},
 		{Label: "Diagnostics", Href: "/ops/diagnostics"},
 	}
 

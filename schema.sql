@@ -120,3 +120,92 @@ CREATE TABLE IF NOT EXISTS install_metadata (
   installed_at DATETIME,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ── Alerting ─────────────────────────────────────────────────────────────────
+-- Channels describe where a notification is delivered. The Telegram bot token
+-- is a SECRET and is intentionally NOT stored here: it is read from the
+-- environment variable NODEXIA_TELEGRAM_BOT_TOKEN. Only the non-secret chat id
+-- and an optional message template live in the database.
+-- alert_channels is created before alert_rules so the channel foreign key has a
+-- valid referent on engines (MySQL) that resolve foreign keys at creation time.
+CREATE TABLE IF NOT EXISTS alert_channels (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL DEFAULT 'telegram',
+  name TEXT NOT NULL,
+  chat_id TEXT NOT NULL DEFAULT '',
+  message_template TEXT NOT NULL DEFAULT '',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_channels_enabled
+  ON alert_channels (enabled);
+
+-- alert_rules bind a metric threshold to an optional server and channel.
+-- server_id NULL means the rule applies to every server (a global rule);
+-- channel_id NULL means dispatch to all enabled channels.
+CREATE TABLE IF NOT EXISTS alert_rules (
+  id INTEGER PRIMARY KEY,
+  server_id INTEGER,
+  metric TEXT NOT NULL,
+  comparator TEXT NOT NULL DEFAULT 'gte',
+  threshold REAL NOT NULL,
+  consecutive_hits INTEGER NOT NULL DEFAULT 1,
+  cooldown_seconds INTEGER NOT NULL DEFAULT 900,
+  severity TEXT NOT NULL DEFAULT 'warning',
+  channel_id INTEGER,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  note TEXT NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+  FOREIGN KEY (channel_id) REFERENCES alert_channels(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_rules_server_id
+  ON alert_rules (server_id);
+
+CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled
+  ON alert_rules (enabled);
+
+-- alert_silences mute a specific metric (or the literal `all`) for one server.
+-- expires_at NULL means the silence stays until it is removed manually.
+CREATE TABLE IF NOT EXISTS alert_silences (
+  id INTEGER PRIMARY KEY,
+  server_id INTEGER NOT NULL,
+  metric TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  expires_at DATETIME,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+  UNIQUE (server_id, metric)
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_silences_server_id
+  ON alert_silences (server_id);
+
+-- alert_events record firing/resolved transitions (written in the evaluation
+-- phase). They are the persistent source of truth for open alerts across
+-- restarts.
+CREATE TABLE IF NOT EXISTS alert_events (
+  id INTEGER PRIMARY KEY,
+  rule_id INTEGER,
+  server_id INTEGER NOT NULL,
+  metric TEXT NOT NULL,
+  observed_value REAL NOT NULL DEFAULT 0,
+  threshold REAL NOT NULL DEFAULT 0,
+  severity TEXT NOT NULL DEFAULT 'warning',
+  state TEXT NOT NULL DEFAULT 'firing',
+  fired_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at DATETIME,
+  notified_at DATETIME,
+  FOREIGN KEY (rule_id) REFERENCES alert_rules(id) ON DELETE SET NULL,
+  FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_events_server_id
+  ON alert_events (server_id);
+
+CREATE INDEX IF NOT EXISTS idx_alert_events_server_metric_state
+  ON alert_events (server_id, metric, state);

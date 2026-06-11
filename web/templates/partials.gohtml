@@ -45,7 +45,7 @@
   <nav class="drawer__nav" aria-label="Sections">
     {{ range .NavigationItems }}
     <a href="{{ .Href }}" class="drawer__link{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="page"{{ end }}>
-      <i data-lucide="{{ if eq .Label "Overview" }}layout-dashboard{{ else if eq .Label "Home" }}house{{ else if eq .Label "Servers" }}server{{ else if eq .Label "Diagnostics" }}stethoscope{{ else if eq .Label "Login" }}log-in{{ else if eq .Label "Logout" }}log-out{{ else }}circle{{ end }}"></i>
+      <i data-lucide="{{ if eq .Label "Overview" }}layout-dashboard{{ else if eq .Label "Home" }}house{{ else if eq .Label "Servers" }}server{{ else if eq .Label "Alerts" }}bell-ring{{ else if eq .Label "Diagnostics" }}stethoscope{{ else if eq .Label "Login" }}log-in{{ else if eq .Label "Logout" }}log-out{{ else }}circle{{ end }}"></i>
       <span>{{ .Label }}</span>
     </a>
     {{ end }}
@@ -70,7 +70,7 @@
 <nav class="bottom-nav" aria-label="Primary mobile navigation">
   {{ range .NavigationItems }}
   <a href="{{ .Href }}" class="bottom-nav__item{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="page"{{ end }}>
-    <i data-lucide="{{ if eq .Label "Overview" }}layout-dashboard{{ else if eq .Label "Home" }}house{{ else if eq .Label "Servers" }}server{{ else if eq .Label "Diagnostics" }}stethoscope{{ else if eq .Label "Login" }}log-in{{ else if eq .Label "Logout" }}log-out{{ else }}circle{{ end }}"></i>
+    <i data-lucide="{{ if eq .Label "Overview" }}layout-dashboard{{ else if eq .Label "Home" }}house{{ else if eq .Label "Servers" }}server{{ else if eq .Label "Alerts" }}bell-ring{{ else if eq .Label "Diagnostics" }}stethoscope{{ else if eq .Label "Login" }}log-in{{ else if eq .Label "Logout" }}log-out{{ else }}circle{{ end }}"></i>
     <span>{{ .Label }}</span>
   </a>
   {{ end }}
@@ -81,7 +81,7 @@
 <nav class="shell-nav" aria-label="Primary">
   {{ range .NavigationItems }}
   <a href="{{ .Href }}" class="{{ if .Active }}is-active{{ end }}"{{ if .Active }} aria-current="page"{{ end }}>
-    <i data-lucide="{{ if eq .Label "Overview" }}layout-dashboard{{ else if eq .Label "Home" }}house{{ else if eq .Label "Servers" }}server{{ else if eq .Label "Diagnostics" }}stethoscope{{ else if eq .Label "Login" }}log-in{{ else if eq .Label "Logout" }}log-out{{ else }}circle{{ end }}" class="nav-icon"></i>
+    <i data-lucide="{{ if eq .Label "Overview" }}layout-dashboard{{ else if eq .Label "Home" }}house{{ else if eq .Label "Servers" }}server{{ else if eq .Label "Alerts" }}bell-ring{{ else if eq .Label "Diagnostics" }}stethoscope{{ else if eq .Label "Login" }}log-in{{ else if eq .Label "Logout" }}log-out{{ else }}circle{{ end }}" class="nav-icon"></i>
     {{ .Label }}
   </a>
   {{ end }}

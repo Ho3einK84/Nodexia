@@ -2916,3 +2916,144 @@ body.drawer-open {
   width: 12px;
   height: 12px;
 }
+
+/* ── Alerts ─────────────────────────────────────────── */
+
+.data-table-wrap {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.data-table thead th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
+}
+
+.data-table tbody td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.data-table tbody tr:hover td {
+  background: var(--surface-2);
+}
+
+.data-table code {
+  white-space: nowrap;
+}
+
+.data-table__actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.data-table__note-row td {
+  padding-top: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table__note {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+.severity-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  border: 1px solid transparent;
+}
+
+.severity-badge--info {
+  color: var(--accent-soft);
+  background: rgba(96, 165, 250, 0.12);
+  border-color: rgba(96, 165, 250, 0.3);
+}
+
+.severity-badge--warning {
+  color: var(--warn);
+  background: rgba(250, 204, 21, 0.12);
+  border-color: rgba(250, 204, 21, 0.3);
+}
+
+.severity-badge--critical {
+  color: var(--crit);
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.badge--ok {
+  color: var(--ok);
+  background: rgba(74, 222, 128, 0.12);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
+.badge--warn {
+  color: var(--warn);
+  background: rgba(250, 204, 21, 0.12);
+  border: 1px solid rgba(250, 204, 21, 0.3);
+}
+
+.flash-banner--warn {
+  border-color: rgba(250, 204, 21, 0.35);
+  background: rgba(250, 204, 21, 0.08);
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-field input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.silence-form {
+  margin-bottom: 18px;
+}
+
+.btn--danger-ghost:hover {
+  color: var(--crit);
+}
+
+.silence-quick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.silence-quick select {
+  height: 30px;
+  padding: 2px 6px;
+  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
+}

@@ -8,6 +8,21 @@
     <span class="badge badge--auth-{{ .MonitoringTarget.AuthMode }}">{{ .MonitoringTarget.AuthMode }}</span>
     {{ range .MonitoringTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
     <div class="info-strip__actions">
+      <form method="post" action="/servers/{{ .MonitoringTarget.ID }}/alerts/silence" class="inline-form silence-quick" title="Mute alert notifications for this server">
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+        <select name="metric" aria-label="Metric to silence">
+          <option value="all">All metrics</option>
+          <option value="cpu">CPU</option>
+          <option value="ram">RAM</option>
+          <option value="disk">Disk</option>
+          <option value="load1">Load (1m)</option>
+          <option value="load5">Load (5m)</option>
+          <option value="load15">Load (15m)</option>
+          <option value="traffic_total">Traffic total</option>
+          <option value="bandwidth_mbps">Bandwidth</option>
+        </select>
+        <button type="submit" class="btn btn--ghost btn--sm"><i data-lucide="bell-off" class="icon-in-button"></i> Silence</button>
+      </form>
       <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> System</a>
       <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
       <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>

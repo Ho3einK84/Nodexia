@@ -88,6 +88,11 @@ type PageData struct {
 	NodeForm             NodeFormView
 	NodeSnapshots        []NodeSnapshotView
 	NodeCollection       NodeCollectionResultView
+	AlertsOverview        AlertsOverviewView
+	AlertRuleForm         AlertRuleFormView
+	AlertChannelForm      AlertChannelFormView
+	IsEditingAlertRule    bool
+	IsEditingAlertChannel bool
 }
 
 // PaginationView describes a rendered pagination control. It is reusable across
@@ -499,6 +504,117 @@ type NodeProbeView struct {
 	Stdout   string
 	Stderr   string
 	Error    string
+}
+
+// ── Alerts ───────────────────────────────────────────────────────────────────
+
+// AlertOptionView is a single <select> option, used for server, channel, and
+// metric dropdowns on the alert forms.
+type AlertOptionView struct {
+	Value    string
+	Label    string
+	Selected bool
+}
+
+// AlertRuleView renders one row in the rules section of the alerts overview.
+type AlertRuleView struct {
+	ID               int64
+	ServerLabel      string
+	IsGlobal         bool
+	Metric           string
+	MetricLabel      string
+	ComparatorSymbol string
+	ThresholdDisplay string
+	ConsecutiveHits  int
+	Cooldown         string
+	Severity         string
+	ChannelLabel     string
+	Enabled          bool
+	Note             string
+	EditURL          string
+	DeleteURL        string
+}
+
+// AlertChannelView renders one row in the channels section.
+type AlertChannelView struct {
+	ID          int64
+	Kind        string
+	Name        string
+	ChatID      string
+	HasTemplate bool
+	Enabled     bool
+	EditURL     string
+	DeleteURL   string
+	TestURL     string
+}
+
+// AlertSilenceView renders one active or scheduled silence.
+type AlertSilenceView struct {
+	ID          int64
+	ServerLabel string
+	Metric      string
+	MetricLabel string
+	Reason      string
+	Expires     string
+	Active      bool
+	DeleteURL   string
+}
+
+// AlertSilenceFormView powers the inline "mute a metric" form on the overview.
+type AlertSilenceFormView struct {
+	Action        string
+	Reason        string
+	ExpiresHours  string
+	ServerOptions []AlertOptionView
+	MetricOptions []AlertOptionView
+	Errors        map[string]string
+}
+
+// AlertsOverviewView is the data backing the /alerts management page.
+type AlertsOverviewView struct {
+	Rules           []AlertRuleView
+	Channels        []AlertChannelView
+	Silences        []AlertSilenceView
+	SilenceForm     AlertSilenceFormView
+	HasServers      bool
+	NewRuleURL      string
+	NewChannelURL   string
+	TokenConfigured bool
+	TokenNotice     string
+}
+
+// AlertRuleFormView powers the rule create/edit form.
+type AlertRuleFormView struct {
+	ID              int64
+	Metric          string
+	Comparator      string
+	Threshold       string
+	ConsecutiveHits string
+	CooldownSeconds string
+	Severity        string
+	Enabled         bool
+	Note            string
+	Action          string
+	DeleteAction    string
+	ServerOptions   []AlertOptionView
+	ChannelOptions  []AlertOptionView
+	MetricOptions   []AlertOptionView
+	Errors          map[string]string
+}
+
+// AlertChannelFormView powers the channel create/edit form.
+type AlertChannelFormView struct {
+	ID              int64
+	Kind            string
+	Name            string
+	ChatID          string
+	MessageTemplate string
+	Enabled         bool
+	Action          string
+	DeleteAction    string
+	TokenConfigured bool
+	TokenNotice     string
+	Errors          map[string]string
 }
 
 type Renderer struct {
