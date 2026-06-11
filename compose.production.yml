@@ -1,0 +1,41 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${NODEXIA_IMAGE_VERSION:-dev}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    expose:
+      - "8080"
+    volumes:
+      - nodexia_data:/var/lib/nodexia
+    healthcheck:
+      test: [ "CMD", "/app/nodexia", "healthcheck" ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  nodexia_data:
+  caddy_data:
+  caddy_config:

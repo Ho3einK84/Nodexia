@@ -1,0 +1,128 @@
+{{ define "content-servers-list" }}
+<section class="hero">
+  {{ template "page-header" . }}
+
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
+  <div class="server-toolbar">
+    <form class="server-search" method="get" action="/servers" role="search">
+      <i data-lucide="search" class="server-search__icon"></i>
+      <input
+        type="search"
+        name="q"
+        value="{{ .ServerSearch }}"
+        placeholder="Search name, host, tag…"
+        autocomplete="off"
+        aria-label="Search servers"
+      >
+      {{ if .ServerSearch }}
+      <a class="server-search__clear" href="/servers" aria-label="Clear search"><i data-lucide="x"></i></a>
+      {{ end }}
+    </form>
+    <div class="server-toolbar__aside">
+      <span class="server-toolbar__count"><i data-lucide="server"></i> {{ .ServerCount }} registered</span>
+      <a href="/servers/new" class="btn btn--primary"><i data-lucide="plus" class="icon-in-button"></i> Add server</a>
+    </div>
+  </div>
+
+  {{ if .Servers }}
+  {{ if .ServerSearch }}
+  <p class="server-result-note">
+    Showing <strong>{{ .ServerShowingFrom }}–{{ .ServerShowingTo }}</strong> of {{ .ServerMatchCount }} match{{ if ne .ServerMatchCount 1 }}es{{ end }} for “{{ .ServerSearch }}”
+  </p>
+  {{ end }}
+
+  <div class="server-list">
+    {{ range .Servers }}
+    <article class="server-card server-card--{{ .AuthMode }}">
+      <div class="server-card__top">
+        <div class="server-card__identity">
+          <h4 class="server-card__name"><i data-lucide="server" class="icon-in-button"></i> {{ .Name }}</h4>
+          <span class="server-card__host">{{ .Username }}@{{ .Host }}:{{ .Port }}</span>
+        </div>
+        <div class="server-card__badges">
+          <span class="badge badge--auth-{{ .AuthMode }}">{{ .AuthMode }}</span>
+          <span class="badge badge--strat-{{ .CredentialStrategy }}">{{ .CredentialStrategy }}</span>
+          <span class="badge badge--id">#{{ .ID }}</span>
+          {{ range .Tags }}<span class="tag">{{ . }}</span>{{ end }}
+        </div>
+      </div>
+      {{ if .Note }}
+      <p class="server-card__note">{{ .Note }}</p>
+      {{ end }}
+      <div class="server-card__actions">
+        <a class="btn btn--primary" href="/servers/{{ .ID }}/monitoring" aria-label="Monitoring"><i data-lucide="gauge" class="icon-in-button"></i><span class="btn-label"> Monitoring</span></a>
+        <a class="btn btn--secondary" href="/servers/{{ .ID }}/nodes" aria-label="Nodes"><i data-lucide="boxes" class="icon-in-button"></i><span class="btn-label"> Nodes</span></a>
+        <a class="btn btn--secondary" href="/servers/{{ .ID }}/system" aria-label="System"><i data-lucide="info" class="icon-in-button"></i><span class="btn-label"> System</span></a>
+        <div class="action-menu" data-action-menu>
+          <button type="button" class="btn btn--ghost action-menu__toggle" aria-haspopup="true" aria-expanded="false" aria-label="More actions for {{ .Name }}"><i data-lucide="ellipsis-vertical" class="icon-in-button"></i><span class="action-menu__label"> More</span></button>
+          <div class="action-menu__panel" role="menu">
+            <span class="action-menu__caption"><i data-lucide="calendar"></i> Created {{ .CreatedAt }}</span>
+            <div class="action-menu__divider" role="separator"></div>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> Edit</a>
+            <div class="action-menu__divider" role="separator"></div>
+            <form method="post" action="/servers/{{ .ID }}/delete" class="action-menu__form">
+              <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+              <button type="submit" class="action-menu__item action-menu__item--danger" role="menuitem" data-confirm="Delete server &quot;{{ .Name }}&quot;? This cannot be undone."><i data-lucide="trash-2" class="icon-in-button"></i> Delete</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </article>
+    {{ end }}
+  </div>
+
+  {{ template "pagination" .ServerPagination }}
+
+  {{ else if .ServerSearch }}
+  <div class="empty-state-card">
+    <span class="empty-state-icon"><i data-lucide="search-x"></i></span>
+    <p class="empty-state-title">No matching servers</p>
+    <p class="empty-state-desc">Nothing matched “{{ .ServerSearch }}”. Try another name, host, or tag.</p>
+    <a class="btn btn--secondary" href="/servers"><i data-lucide="x" class="icon-in-button"></i> Clear search</a>
+  </div>
+  {{ else }}
+  <div class="empty-state-card">
+    <span class="empty-state-icon"><i data-lucide="server"></i></span>
+    <p class="empty-state-title">No servers yet</p>
+    <p class="empty-state-desc">Register your first SSH target to start managing servers.</p>
+    <a class="btn btn--primary" href="/servers/new"><i data-lucide="plus" class="icon-in-button"></i> Register a server</a>
+  </div>
+  {{ end }}
+</section>
+{{ end }}
+
+{{/* ── Reusable pagination control ─────────────────────── */}}
+{{ define "pagination" }}
+{{ if gt .TotalPages 1 }}
+<nav class="pagination" aria-label="Pagination">
+  {{ if .HasPrev }}
+  <a class="pagination__nav" href="{{ .PrevURL }}" aria-label="Previous page"><i data-lucide="chevron-left"></i></a>
+  {{ else }}
+  <span class="pagination__nav pagination__nav--disabled" aria-disabled="true"><i data-lucide="chevron-left"></i></span>
+  {{ end }}
+
+  {{ range .Pages }}
+  {{ if .IsGap }}
+  <span class="pagination__gap">…</span>
+  {{ else if .IsActive }}
+  <span class="pagination__page pagination__page--active" aria-current="page">{{ .Number }}</span>
+  {{ else }}
+  <a class="pagination__page" href="{{ .URL }}">{{ .Number }}</a>
+  {{ end }}
+  {{ end }}
+
+  {{ if .HasNext }}
+  <a class="pagination__nav" href="{{ .NextURL }}" aria-label="Next page"><i data-lucide="chevron-right"></i></a>
+  {{ else }}
+  <span class="pagination__nav pagination__nav--disabled" aria-disabled="true"><i data-lucide="chevron-right"></i></span>
+  {{ end }}
+</nav>
+{{ end }}
+{{ end }}

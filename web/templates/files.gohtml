@@ -1,0 +1,162 @@
+{{ define "content-files" }}
+<section class="hero">
+
+  <div class="info-strip">
+    <i data-lucide="server" class="info-strip__icon"></i>
+    <span class="info-strip__name">{{ .FileTarget.Name }}</span>
+    <span class="info-strip__addr">{{ .FileTarget.Username }}@{{ .FileTarget.Host }}:{{ .FileTarget.Port }}</span>
+    <span class="badge badge--auth-{{ .FileTarget.AuthMode }}">{{ .FileTarget.AuthMode }}</span>
+    {{ range .FileTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
+    <div class="info-strip__actions">
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .FileTarget.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .FileTarget.ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> Edit</a>
+      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> Servers</a>
+    </div>
+  </div>
+
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
+  <article class="card file-browser-card">
+    <form method="post" action="{{ .FileForm.Action }}" class="file-form" id="file-form">
+      <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+
+      <div class="file-nav">
+        <i data-lucide="folder-open" class="file-nav__icon"></i>
+        <div class="breadcrumb" id="file-breadcrumb" aria-label="File path"></div>
+        <div class="file-path-input">
+          <input
+            type="text"
+            name="path"
+            id="file-path"
+            value="{{ .FileForm.Path }}"
+            placeholder="/var/log"
+            spellcheck="false"
+            autocomplete="off"
+            aria-label="Remote path"
+          >
+          <button type="submit" name="intent" value="browse" class="btn btn--secondary btn--sm" id="file-browse-btn">
+            <i data-lucide="folder-search" class="icon-in-button"></i> Browse
+          </button>
+        </div>
+        {{ with index .FileForm.Errors "path" }}<small class="field-error">{{ . }}</small>{{ end }}
+      </div>
+
+      {{ if not .FileForm.StoredCredentialsAvailable }}
+      <div class="file-creds" id="file-creds">
+        <div class="file-creds__header">
+          <span class="file-creds__title"><i data-lucide="key" class="icon-in-button"></i> SSH Credentials</span>
+          <span class="file-creds__hint">Not persisted — used only for this session</span>
+        </div>
+        <div class="form-grid">
+          <label class="form-field">
+            <span>Password</span>
+            <input type="password" name="password" id="file-password" placeholder="Runtime SSH password" autocomplete="current-password">
+            {{ with index .FileForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+          <label class="form-field">
+            <span>Key passphrase</span>
+            <input type="password" name="key_passphrase" id="file-passphrase" placeholder="Optional">
+          </label>
+        </div>
+        <label class="form-field">
+          <span>Private key</span>
+          <textarea name="private_key" id="file-key" rows="4" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+          {{ with index .FileForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+        </label>
+        {{ with index .FileForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+        <input type="hidden" name="connect_timeout" value="{{ .FileForm.ConnectTimeout }}">
+      </div>
+      {{ end }}
+
+      {{ with index .FileForm.Errors "intent" }}<small class="field-error">{{ . }}</small>{{ end }}
+
+      <button type="submit" name="intent" value="download" class="btn btn--ghost" id="file-download-btn" hidden aria-hidden="true">Download</button>
+
+    </form>
+
+    {{ if .FileDownload.Available }}
+    <div class="file-result {{ if .FileDownload.Error }}file-result--error{{ else }}file-result--ok{{ end }}">
+      <div class="file-result__header">
+        <i data-lucide="{{ if .FileDownload.Error }}alert-circle{{ else }}download{{ end }}" class="icon-in-button"></i>
+        <span>{{ if .FileDownload.Error }}Download failed{{ else if .FileDownload.Name }}{{ .FileDownload.Name }}{{ else }}Result{{ end }}</span>
+        {{ if .FileDownload.Size }}<code class="result-duration">{{ .FileDownload.Size }}</code>{{ end }}
+      </div>
+      {{ if .FileDownload.Error }}<pre class="output-block output-block--error">{{ .FileDownload.Error }}</pre>{{ end }}
+      {{ if .FileDownload.Message }}<p class="result-message">{{ .FileDownload.Message }}</p>{{ end }}
+    </div>
+    {{ end }}
+
+    <div class="file-listing" id="file-listing">
+      {{ if .FileListing.Available }}
+        {{ if or .FileListing.Entries .FileListing.Parent }}
+        <div class="file-table-wrap">
+          <div class="file-table">
+            <div class="file-table__head">
+              <span>Name</span>
+              <span>Mode</span>
+              <span>Size</span>
+              <span>Modified</span>
+              <span></span>
+            </div>
+
+            {{ if .FileListing.Parent }}
+            <div class="file-row file-row--dir" data-nav-path="{{ .FileListing.Parent }}" title="Go up to {{ .FileListing.Parent }}">
+              <div class="file-row__name">
+                <i data-lucide="arrow-up" class="file-row__icon"></i>
+                <span class="file-row__name-text">..</span>
+              </div>
+              <span class="file-row__mode"></span>
+              <span class="file-row__size">—</span>
+              <span class="file-row__date">—</span>
+              <div class="file-row__actions"></div>
+            </div>
+            {{ end }}
+
+            {{ range .FileListing.Entries }}
+            {{ if eq .Kind "directory" }}
+            <div class="file-row file-row--dir" data-nav-path="{{ .Path }}" title="{{ .Path }}">
+              <div class="file-row__name">
+                <i data-lucide="folder" class="file-row__icon"></i>
+                <span class="file-row__name-text">{{ .Name }}</span>
+              </div>
+              <span class="file-row__mode">{{ .Mode }}</span>
+              <span class="file-row__size">—</span>
+              <span class="file-row__date">{{ .ModifiedAt }}</span>
+              <div class="file-row__actions"></div>
+            </div>
+            {{ else }}
+            <div class="file-row file-row--file" data-file-path="{{ .Path }}">
+              <div class="file-row__name">
+                <i data-lucide="{{ if hasSuffix .Name ".log" }}scroll-text{{ else if hasSuffix .Name ".conf" }}settings{{ else if hasSuffix .Name ".sh" }}terminal{{ else if hasSuffix .Name ".json" }}braces{{ else if hasSuffix .Name ".yaml" }}file-code{{ else if hasSuffix .Name ".yml" }}file-code{{ else if or (hasSuffix .Name ".gz") (hasSuffix .Name ".zip") (hasSuffix .Name ".tar") }}archive{{ else }}file{{ end }}" class="file-row__icon"></i>
+                <span class="file-row__name-text" title="{{ .Name }}">{{ .Name }}</span>
+              </div>
+              <span class="file-row__mode">{{ .Mode }}</span>
+              <span class="file-row__size">{{ .Size }}</span>
+              <span class="file-row__date">{{ .ModifiedAt }}</span>
+              <div class="file-row__actions">
+                <button type="button" class="file-row__download" data-download-path="{{ .Path }}" title="Download {{ .Name }}">
+                  <i data-lucide="download"></i> Download
+                </button>
+              </div>
+            </div>
+            {{ end }}
+            {{ end }}
+
+          </div>
+        </div>
+        {{ else }}
+        <p class="empty-state"><i data-lucide="folder-open" class="icon-in-button"></i> This directory is empty.</p>
+        {{ end }}
+      {{ else if not .FileDownload.Available }}
+      <p class="empty-state">Browse a directory to see its contents here.</p>
+      {{ end }}
+    </div>
+
+  </article>
+
+</section>
+{{ end }}

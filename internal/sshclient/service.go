@@ -1,0 +1,738 @@
+package sshclient
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/Ho3einK84/Nodexia/internal/config"
+	"github.com/pkg/sftp"
+	xssh "golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
+)
+
+type Service struct {
+	connectTimeout time.Duration
+	commandTimeout time.Duration
+	hostKeyPolicy  string
+	knownHostsPath string
+	hostKeysMu     sync.Mutex
+}
+
+type ConnectionRequest struct {
+	Host           string
+	Port           int
+	Username       string
+	AuthMode       string
+	Password       string
+	PrivateKeyPEM  string
+	KeyPassphrase  string
+	ConnectTimeout time.Duration
+}
+
+type ConnectionResult struct {
+	RemoteAddress string
+	Duration      time.Duration
+}
+
+type CommandRequest struct {
+	ConnectionRequest
+	Command        string
+	CommandTimeout time.Duration
+}
+
+type CommandResult struct {
+	Stdout      string
+	Stderr      string
+	ExitCode    *int
+	Duration    time.Duration
+	CompletedAt time.Time
+}
+
+type StreamHandlers struct {
+	OnStdout func(string)
+	OnStderr func(string)
+}
+
+type FileEntry struct {
+	Name       string
+	Path       string
+	Size       int64
+	Mode       string
+	IsDir      bool
+	ModifiedAt time.Time
+}
+
+type DirectoryListing struct {
+	Path    string
+	Entries []FileEntry
+}
+
+type RemoteFile struct {
+	Name       string
+	Path       string
+	Size       int64
+	Mode       string
+	ModifiedAt time.Time
+	Content    io.ReadCloser
+}
+
+func New(cfg config.SSHConfig, security config.SecurityConfig) *Service {
+	return &Service{
+		connectTimeout: cfg.ConnectTimeout,
+		commandTimeout: cfg.CommandTimeout,
+		hostKeyPolicy:  strings.TrimSpace(security.SSHHostKeyPolicy),
+		knownHostsPath: strings.TrimSpace(security.SSHKnownHostsPath),
+	}
+}
+
+func (s Service) TestConnection(ctx context.Context, req ConnectionRequest) (ConnectionResult, error) {
+	startedAt := time.Now()
+	client, address, err := s.connect(ctx, req)
+	if err != nil {
+		return ConnectionResult{}, err
+	}
+	defer client.Close()
+
+	return ConnectionResult{
+		RemoteAddress: address,
+		Duration:      time.Since(startedAt),
+	}, nil
+}
+
+func (s Service) RunCommand(ctx context.Context, req CommandRequest) (CommandResult, error) {
+	return s.StreamCommand(ctx, req, StreamHandlers{})
+}
+
+func (s Service) StreamCommand(ctx context.Context, req CommandRequest, handlers StreamHandlers) (CommandResult, error) {
+	command := strings.TrimSpace(req.Command)
+	if command == "" {
+		return CommandResult{}, errors.New("sshclient: command cannot be empty")
+	}
+
+	startedAt := time.Now()
+	client, _, err := s.connect(ctx, req.ConnectionRequest)
+	if err != nil {
+		return CommandResult{}, err
+	}
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		return CommandResult{}, fmt.Errorf("sshclient: create session: %w", err)
+	}
+	defer session.Close()
+
+	stdoutReader, err := session.StdoutPipe()
+	if err != nil {
+		return CommandResult{}, fmt.Errorf("sshclient: stdout pipe: %w", err)
+	}
+	stderrReader, err := session.StderrPipe()
+	if err != nil {
+		return CommandResult{}, fmt.Errorf("sshclient: stderr pipe: %w", err)
+	}
+
+	if err := session.Start(command); err != nil {
+		return CommandResult{}, fmt.Errorf("sshclient: start command: %w", err)
+	}
+
+	stdout := newLimitedBuffer()
+	stderr := newLimitedBuffer()
+	var streamWG sync.WaitGroup
+	streamWG.Add(2)
+	go streamOutput(stdoutReader, stdout, handlers.OnStdout, &streamWG)
+	go streamOutput(stderrReader, stderr, handlers.OnStderr, &streamWG)
+
+	waitTimeout := s.resolveCommandTimeout(req.CommandTimeout)
+	waitCtx, cancel := context.WithTimeout(ctx, waitTimeout)
+	defer cancel()
+
+	waitResult := make(chan error, 1)
+	go func() {
+		waitResult <- session.Wait()
+	}()
+
+	result := CommandResult{
+		CompletedAt: time.Now().UTC(),
+	}
+
+	select {
+	case err := <-waitResult:
+		streamWG.Wait()
+		result.Stdout = stdout.String()
+		result.Stderr = stderr.String()
+		result.Duration = time.Since(startedAt)
+		result.CompletedAt = time.Now().UTC()
+
+		if err == nil {
+			exitCode := 0
+			result.ExitCode = &exitCode
+			return result, nil
+		}
+
+		var exitErr *xssh.ExitError
+		if errors.As(err, &exitErr) {
+			exitCode := exitErr.ExitStatus()
+			result.ExitCode = &exitCode
+			return result, nil
+		}
+
+		return result, fmt.Errorf("sshclient: wait for command: %w", err)
+	case <-waitCtx.Done():
+		result.Duration = time.Since(startedAt)
+		result.CompletedAt = time.Now().UTC()
+		_ = session.Close()
+		streamWG.Wait()
+		result.Stdout = stdout.String()
+		result.Stderr = stderr.String()
+		return result, fmt.Errorf("sshclient: command timed out after %s", waitTimeout)
+	}
+}
+
+func (s Service) ListDirectory(ctx context.Context, req ConnectionRequest, remotePath string) (DirectoryListing, error) {
+	_, sftpClient, cleanup, err := s.openSFTP(ctx, req)
+	if err != nil {
+		return DirectoryListing{}, err
+	}
+	defer cleanup()
+
+	entries, err := sftpClient.ReadDir(remotePath)
+	if err != nil {
+		return DirectoryListing{}, fmt.Errorf("sshclient: read directory %s: %w", remotePath, err)
+	}
+
+	items := make([]FileEntry, 0, len(entries))
+	for _, entry := range entries {
+		items = append(items, newFileEntry(remotePath, entry))
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].IsDir != items[j].IsDir {
+			return items[i].IsDir
+		}
+		return strings.ToLower(items[i].Name) < strings.ToLower(items[j].Name)
+	})
+
+	return DirectoryListing{
+		Path:    remotePath,
+		Entries: items,
+	}, nil
+}
+
+func (s Service) OpenFile(ctx context.Context, req ConnectionRequest, remotePath string) (RemoteFile, error) {
+	_, sftpClient, cleanup, err := s.openSFTP(ctx, req)
+	if err != nil {
+		return RemoteFile{}, err
+	}
+
+	info, err := sftpClient.Stat(remotePath)
+	if err != nil {
+		cleanup()
+		return RemoteFile{}, fmt.Errorf("sshclient: stat file %s: %w", remotePath, err)
+	}
+	if info.IsDir() {
+		cleanup()
+		return RemoteFile{}, fmt.Errorf("sshclient: %s is a directory", remotePath)
+	}
+
+	file, err := sftpClient.Open(remotePath)
+	if err != nil {
+		cleanup()
+		return RemoteFile{}, fmt.Errorf("sshclient: open file %s: %w", remotePath, err)
+	}
+
+	return RemoteFile{
+		Name:       info.Name(),
+		Path:       remotePath,
+		Size:       info.Size(),
+		Mode:       info.Mode().String(),
+		ModifiedAt: info.ModTime().UTC(),
+		Content: &remoteReadCloser{
+			reader:   file,
+			cleanup:  cleanup,
+			closers:  nil,
+		},
+	}, nil
+}
+
+// Algorithm preferences pinned to a modern, OpenSSH-compatible set. We set
+// these explicitly instead of relying on x/crypto/ssh defaults: the defaults
+// lead with mlkem768x25519-sha256, and offering a post-quantum key exchange
+// first has been observed to stall handshakes against some hardened/stock sshd
+// builds (x/crypto's own interop tests strip it before recording). Leading with
+// curve25519 keeps negotiation deterministic and interoperable with stock
+// OpenSSH 9.x while still covering ECDH and the standard DH groups.
+var (
+	kexAlgorithms = []string{
+		xssh.KeyExchangeCurve25519,
+		xssh.KeyExchangeECDHP256,
+		xssh.KeyExchangeECDHP384,
+		xssh.KeyExchangeECDHP521,
+		xssh.KeyExchangeDH14SHA256,
+		xssh.KeyExchangeDH16SHA512,
+		xssh.KeyExchangeDHGEXSHA256,
+	}
+	ciphers = []string{
+		xssh.CipherChaCha20Poly1305,
+		xssh.CipherAES128GCM,
+		xssh.CipherAES256GCM,
+		xssh.CipherAES128CTR,
+		xssh.CipherAES192CTR,
+		xssh.CipherAES256CTR,
+	}
+	macs = []string{
+		xssh.HMACSHA256ETM,
+		xssh.HMACSHA512ETM,
+		xssh.HMACSHA256,
+		xssh.HMACSHA512,
+		xssh.HMACSHA1,
+	}
+	hostKeyAlgorithms = []string{
+		xssh.CertAlgoED25519v01,
+		xssh.CertAlgoECDSA256v01,
+		xssh.CertAlgoECDSA384v01,
+		xssh.CertAlgoECDSA521v01,
+		xssh.CertAlgoRSASHA256v01,
+		xssh.CertAlgoRSASHA512v01,
+		xssh.KeyAlgoED25519,
+		xssh.KeyAlgoECDSA256,
+		xssh.KeyAlgoECDSA384,
+		xssh.KeyAlgoECDSA521,
+		xssh.KeyAlgoRSASHA256,
+		xssh.KeyAlgoRSASHA512,
+		xssh.KeyAlgoRSA,
+	}
+)
+
+func (s Service) connect(ctx context.Context, req ConnectionRequest) (*xssh.Client, string, error) {
+	host := strings.TrimSpace(req.Host)
+	username := strings.TrimSpace(req.Username)
+	if host == "" {
+		return nil, "", errors.New("sshclient: host cannot be empty")
+	}
+	if username == "" {
+		return nil, "", errors.New("sshclient: username cannot be empty")
+	}
+
+	port := req.Port
+	if port <= 0 {
+		port = 22
+	}
+
+	authMethods, err := authMethods(req)
+	if err != nil {
+		return nil, "", err
+	}
+
+	address := net.JoinHostPort(host, strconv.Itoa(port))
+	dialCtx, cancel := context.WithTimeout(ctx, s.resolveConnectTimeout(req.ConnectTimeout))
+	defer cancel()
+
+	conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", address)
+	if err != nil {
+		return nil, "", fmt.Errorf("sshclient: dial %s: %w", address, err)
+	}
+
+	// xssh.NewClientConn does not honour dialCtx, so a stalled SSH handshake
+	// would block far beyond the connect timeout (observed ~24s hangs against
+	// hardened sshd). Bound the handshake with a connection deadline and abort
+	// it promptly if the caller's context is cancelled.
+	if deadline, ok := dialCtx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
+	}
+	stopAbort := context.AfterFunc(dialCtx, func() { _ = conn.SetDeadline(time.Now()) })
+
+	clientConn, channels, requests, err := xssh.NewClientConn(conn, address, &xssh.ClientConfig{
+		User:              username,
+		Auth:              authMethods,
+		HostKeyCallback:   s.hostKeyCallback(address),
+		HostKeyAlgorithms: hostKeyAlgorithms,
+		Config: xssh.Config{
+			KeyExchanges: kexAlgorithms,
+			Ciphers:      ciphers,
+			MACs:         macs,
+		},
+	})
+	stopAbort()
+	if err != nil {
+		_ = conn.Close()
+		return nil, "", fmt.Errorf("sshclient: handshake %s: %w", address, err)
+	}
+
+	// Clear the handshake deadline so the established session is not torn down
+	// by the connect timeout; commands enforce their own timeouts.
+	_ = conn.SetDeadline(time.Time{})
+
+	return xssh.NewClient(clientConn, channels, requests), address, nil
+}
+
+func (s Service) hostKeyCallback(address string) xssh.HostKeyCallback {
+	if strings.EqualFold(strings.TrimSpace(s.hostKeyPolicy), "insecure") {
+		return xssh.InsecureIgnoreHostKey()
+	}
+
+	return func(_ string, _ net.Addr, key xssh.PublicKey) error {
+		return s.verifyOrTrustHostKey(address, key)
+	}
+}
+
+func (s Service) verifyOrTrustHostKey(address string, key xssh.PublicKey) error {
+	s.hostKeysMu.Lock()
+	defer s.hostKeysMu.Unlock()
+
+	store, err := s.loadKnownHosts()
+	if err != nil {
+		return err
+	}
+
+	serializedKey := marshalAuthorizedKey(key)
+	fingerprint := xssh.FingerprintSHA256(key)
+	entry, exists := store[address]
+	if exists {
+		if entry.AuthorizedKey == serializedKey {
+			entry.LastSeenAt = time.Now().UTC()
+			store[address] = entry
+			return s.saveKnownHosts(store)
+		}
+		return fmt.Errorf("sshclient: host key mismatch for %s: expected %s, got %s", address, entry.Fingerprint, fingerprint)
+	}
+
+	store[address] = knownHostEntry{
+		AuthorizedKey: serializedKey,
+		Fingerprint:   fingerprint,
+		TrustedAt:     time.Now().UTC(),
+		LastSeenAt:    time.Now().UTC(),
+	}
+	return s.saveKnownHosts(store)
+}
+
+func (s Service) ForgetHostKey(address string) error {
+	s.hostKeysMu.Lock()
+	defer s.hostKeysMu.Unlock()
+
+	store, err := s.loadKnownHosts()
+	if err != nil {
+		return err
+	}
+
+	if _, exists := store[address]; !exists {
+		return nil
+	}
+
+	delete(store, address)
+	return s.saveKnownHosts(store)
+}
+
+func (s Service) openSFTP(ctx context.Context, req ConnectionRequest) (*xssh.Client, *sftp.Client, func(), error) {
+	client, _, err := s.connect(ctx, req)
+	if err != nil {
+		return nil, nil, func() {}, err
+	}
+
+	sftpClient, err := sftp.NewClient(client)
+	if err != nil {
+		client.Close()
+		return nil, nil, func() {}, fmt.Errorf("sshclient: create sftp client: %w", err)
+	}
+
+	return client, sftpClient, func() {
+		_ = sftpClient.Close()
+		_ = client.Close()
+	}, nil
+}
+
+func authMethods(req ConnectionRequest) ([]xssh.AuthMethod, error) {
+	password := strings.TrimSpace(req.Password)
+	privateKey := strings.TrimSpace(req.PrivateKeyPEM)
+	authMode := strings.TrimSpace(req.AuthMode)
+
+	switch authMode {
+	case "password":
+		if password == "" {
+			return nil, errors.New("sshclient: password is required for password auth mode")
+		}
+		return []xssh.AuthMethod{xssh.Password(req.Password)}, nil
+	case "key":
+		signer, err := signerFromRequest(req)
+		if err != nil {
+			return nil, err
+		}
+		return []xssh.AuthMethod{xssh.PublicKeys(signer)}, nil
+	case "hybrid":
+		methods := make([]xssh.AuthMethod, 0, 2)
+		if privateKey != "" {
+			signer, err := signerFromRequest(req)
+			if err != nil {
+				return nil, err
+			}
+			methods = append(methods, xssh.PublicKeys(signer))
+		}
+		if password != "" {
+			methods = append(methods, xssh.Password(req.Password))
+		}
+		if len(methods) == 0 {
+			return nil, errors.New("sshclient: password or private key is required for hybrid auth mode")
+		}
+		return methods, nil
+	default:
+		if privateKey != "" {
+			signer, err := signerFromRequest(req)
+			if err != nil {
+				return nil, err
+			}
+			return []xssh.AuthMethod{xssh.PublicKeys(signer)}, nil
+		}
+		if password != "" {
+			return []xssh.AuthMethod{xssh.Password(req.Password)}, nil
+		}
+
+		agentMethods, agentErr := sshAgentAuth()
+		if agentErr == nil && len(agentMethods) > 0 {
+			return agentMethods, nil
+		}
+
+		return nil, errors.New("sshclient: runtime credentials are required")
+	}
+}
+
+func sshAgentAuth() ([]xssh.AuthMethod, error) {
+	authSock := os.Getenv("SSH_AUTH_SOCK")
+	if authSock == "" {
+		return nil, errors.New("sshclient: SSH_AUTH_SOCK not set")
+	}
+
+	conn, err := net.Dial("unix", authSock)
+	if err != nil {
+		return nil, fmt.Errorf("sshclient: dial SSH agent: %w", err)
+	}
+
+	agentClient := agent.NewClient(conn)
+	_ = conn.Close()
+
+	return []xssh.AuthMethod{xssh.PublicKeysCallback(agentClient.Signers)}, nil
+}
+
+func signerFromRequest(req ConnectionRequest) (xssh.Signer, error) {
+	privateKey := strings.TrimSpace(req.PrivateKeyPEM)
+	if privateKey == "" {
+		return nil, errors.New("sshclient: private key is required for key auth mode")
+	}
+
+	passphrase := strings.TrimSpace(req.KeyPassphrase)
+	if passphrase == "" {
+		signer, err := xssh.ParsePrivateKey([]byte(req.PrivateKeyPEM))
+		if err != nil {
+			return nil, fmt.Errorf("sshclient: parse private key: %w", err)
+		}
+		return signer, nil
+	}
+
+	signer, err := xssh.ParsePrivateKeyWithPassphrase([]byte(req.PrivateKeyPEM), []byte(req.KeyPassphrase))
+	if err != nil {
+		return nil, fmt.Errorf("sshclient: parse private key with passphrase: %w", err)
+	}
+
+	return signer, nil
+}
+
+type knownHostEntry struct {
+	AuthorizedKey string    `json:"authorized_key"`
+	Fingerprint   string    `json:"fingerprint"`
+	TrustedAt     time.Time `json:"trusted_at"`
+	LastSeenAt    time.Time `json:"last_seen_at"`
+}
+
+func (s Service) loadKnownHosts() (map[string]knownHostEntry, error) {
+	if strings.TrimSpace(s.knownHostsPath) == "" {
+		return nil, errors.New("sshclient: known hosts path is not configured")
+	}
+
+	content, err := os.ReadFile(s.knownHostsPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return map[string]knownHostEntry{}, nil
+		}
+		return nil, fmt.Errorf("sshclient: read known hosts: %w", err)
+	}
+
+	if len(bytes.TrimSpace(content)) == 0 {
+		return map[string]knownHostEntry{}, nil
+	}
+
+	store := map[string]knownHostEntry{}
+	if err := json.Unmarshal(content, &store); err != nil {
+		return nil, fmt.Errorf("sshclient: parse known hosts: %w", err)
+	}
+	return store, nil
+}
+
+func (s Service) saveKnownHosts(store map[string]knownHostEntry) error {
+	if strings.TrimSpace(s.knownHostsPath) == "" {
+		return errors.New("sshclient: known hosts path is not configured")
+	}
+
+	if err := os.MkdirAll(filepath.Dir(s.knownHostsPath), 0o755); err != nil {
+		return fmt.Errorf("sshclient: create known hosts directory: %w", err)
+	}
+
+	payload, err := json.MarshalIndent(store, "", "  ")
+	if err != nil {
+		return fmt.Errorf("sshclient: marshal known hosts: %w", err)
+	}
+	if err := os.WriteFile(s.knownHostsPath, append(payload, '\n'), 0o600); err != nil {
+		return fmt.Errorf("sshclient: write known hosts: %w", err)
+	}
+	return nil
+}
+
+func marshalAuthorizedKey(key xssh.PublicKey) string {
+	return strings.TrimSpace(string(xssh.MarshalAuthorizedKey(key)))
+}
+
+func (s Service) resolveConnectTimeout(override time.Duration) time.Duration {
+	if override > 0 {
+		return override
+	}
+	if s.connectTimeout > 0 {
+		return s.connectTimeout
+	}
+	return 10 * time.Second
+}
+
+func (s Service) resolveCommandTimeout(override time.Duration) time.Duration {
+	if override > 0 {
+		return override
+	}
+	if s.commandTimeout > 0 {
+		return s.commandTimeout
+	}
+	return 20 * time.Second
+}
+
+const maxCommandOutputBytes = 1 << 20 // 1 MiB per stdout/stderr stream
+
+// limitedBuffer accumulates up to maxCommandOutputBytes bytes, then stops
+// writing and appends a single truncation notice. This prevents unbounded
+// memory growth when a command produces very large output.
+type limitedBuffer struct {
+	buf       bytes.Buffer
+	remaining int
+	capped    bool
+}
+
+func newLimitedBuffer() *limitedBuffer {
+	return &limitedBuffer{remaining: maxCommandOutputBytes}
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if b.capped {
+		return len(p), nil
+	}
+	if len(p) > b.remaining {
+		_, _ = b.buf.Write(p[:b.remaining])
+		b.remaining = 0
+		b.capped = true
+		_, _ = b.buf.WriteString("\n[output truncated at 1 MiB]")
+		return len(p), nil
+	}
+	n, err := b.buf.Write(p)
+	b.remaining -= n
+	return n, err
+}
+
+func (b *limitedBuffer) String() string { return b.buf.String() }
+
+func streamOutput(reader io.Reader, output io.Writer, onChunk func(string), wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	buffered := bufio.NewReader(reader)
+	chunk := make([]byte, 1024)
+	for {
+		readCount, err := buffered.Read(chunk)
+		if readCount > 0 {
+			piece := string(chunk[:readCount])
+			_, _ = io.WriteString(output, piece)
+			if onChunk != nil {
+				onChunk(piece)
+			}
+		}
+		if err == nil {
+			continue
+		}
+		if errors.Is(err, io.EOF) {
+			return
+		}
+		_, _ = io.WriteString(output, "\n[stream read error] "+err.Error())
+		return
+	}
+}
+
+func newFileEntry(parent string, info os.FileInfo) FileEntry {
+	childPath := strings.TrimRight(parent, "/")
+	if childPath == "" {
+		childPath = "/"
+	}
+	if childPath == "/" {
+		childPath = "/" + info.Name()
+	} else {
+		childPath = childPath + "/" + info.Name()
+	}
+
+	return FileEntry{
+		Name:       info.Name(),
+		Path:       childPath,
+		Size:       info.Size(),
+		Mode:       info.Mode().String(),
+		IsDir:      info.IsDir(),
+		ModifiedAt: info.ModTime().UTC(),
+	}
+}
+
+type remoteReadCloser struct {
+	reader  io.ReadCloser
+	cleanup func()
+	closers []io.Closer
+}
+
+func (r *remoteReadCloser) Read(p []byte) (int, error) {
+	return r.reader.Read(p)
+}
+
+func (r *remoteReadCloser) Close() error {
+	var combined error
+	if r.reader != nil {
+		if err := r.reader.Close(); err != nil {
+			combined = errors.Join(combined, err)
+		}
+		r.reader = nil
+	}
+
+	for _, closer := range r.closers {
+		if closer == nil {
+			continue
+		}
+		if err := closer.Close(); err != nil {
+			combined = errors.Join(combined, err)
+		}
+	}
+
+	if r.cleanup != nil {
+		r.cleanup()
+		r.cleanup = nil
+	}
+
+	r.closers = nil
+	return combined
+}

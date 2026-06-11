@@ -1,0 +1,31 @@
+{{ define "layout" }}
+<!doctype html>
+<html lang="en">
+{{ template "head" . }}
+<body>
+  <div id="shell" class="shell">
+    {{ template "shell-header" . }}
+    {{ template "shell-nav" . }}
+
+    <main id="shell-main" class="shell-main">
+      {{ .MainHTML }}
+      <div id="loading-overlay" class="loading-overlay" style="display:none" role="status" aria-live="polite">
+        <div class="loading-spinner"></div>
+        <p class="loading-overlay__label">Working over SSH…</p>
+      </div>
+    </main>
+
+    {{ template "footer" . }}
+  </div>
+
+  {{ if ne .ContentTemplate "content-login" }}
+  {{ template "mobile-drawer" . }}
+  {{ template "bottom-nav" . }}
+  {{ end }}
+
+  <script src="/static/app.js"></script>
+  {{ range .PageScripts }}<script src="{{ . }}"></script>
+  {{ end }}
+</body>
+</html>
+{{ end }}

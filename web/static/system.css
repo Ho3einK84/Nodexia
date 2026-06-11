@@ -1,0 +1,142 @@
+/* ── System facts card ───────────────────────────────────────────────────── */
+
+.sys-facts-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.sys-facts-primary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.sys-fact-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px 24px;
+  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  transition: background 0.15s ease;
+}
+
+.sys-fact-hero:hover {
+  background: rgba(148, 163, 184, 0.03);
+}
+
+.sys-fact-hero__label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #475569;
+}
+
+.sys-fact-hero__label svg {
+  width: 12px;
+  height: 12px;
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
+.sys-fact-hero__value {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.sys-fact-version {
+  font-weight: 400;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+/* ── Secondary metadata strip ───────────────────────────────────────────── */
+
+.sys-facts-secondary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.sys-fact-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 24px;
+  border-right: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.sys-fact-item:last-child {
+  border-right: none;
+}
+
+.sys-fact-item__label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #475569;
+}
+
+.sys-fact-item__label svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.sys-fact-item__value {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 0.82rem;
+  color: #94a3b8;
+  word-break: break-word;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 800px) {
+  .sys-facts-primary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .sys-facts-secondary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .sys-fact-item:nth-child(2) {
+    border-right: none;
+  }
+  .sys-fact-item:last-child {
+    grid-column: span 2;
+    border-right: none;
+    border-top: 1px solid rgba(148, 163, 184, 0.1);
+  }
+}
+
+@media (max-width: 520px) {
+  .sys-facts-primary {
+    grid-template-columns: 1fr 1fr;
+  }
+  .sys-fact-hero {
+    padding: 16px;
+  }
+  .sys-facts-secondary {
+    grid-template-columns: 1fr;
+  }
+  .sys-fact-item {
+    border-right: none;
+    border-top: 1px solid rgba(148, 163, 184, 0.1);
+  }
+  .sys-fact-item:first-child {
+    border-top: none;
+  }
+  .sys-fact-item:last-child {
+    grid-column: auto;
+  }
+}

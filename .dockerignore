@@ -1,0 +1,41 @@
+# Keep the Docker build context small. Only the Go module, source packages,
+# and go:embed assets (web/templates, web/static, schema.sql) are needed to
+# build the binary — everything below is irrelevant to the image build.
+
+# Version control & CI
+.git
+.gitignore
+.github
+
+# Docs & licensing
+*.md
+LICENSE
+
+# Secrets & local env
+.env
+.env.*
+
+# Build/compose/deploy descriptors (not needed inside the build context)
+Dockerfile
+.dockerignore
+compose*.yml
+docker-compose*.yml
+install.sh
+scripts/
+deploy/
+
+# Tests & fixtures (not compiled into the binary)
+**/*_test.go
+**/testdata/**
+
+# Local databases & artifacts
+*.sqlite
+*.sqlite3
+*.db
+/out
+bin/
+
+# Editor / OS cruft
+.vscode
+.idea
+.DS_Store

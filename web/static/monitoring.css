@@ -1,0 +1,503 @@
+/* ── Traffic card ────────────────────────────────────────────────────────── */
+
+.traffic-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.traffic-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  flex-wrap: wrap;
+}
+
+.traffic-iface {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.traffic-iface__label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #475569;
+}
+
+.traffic-iface__label svg {
+  width: 13px;
+  height: 13px;
+  color: #3b82f6;
+}
+
+.traffic-iface__name {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.traffic-iface__others {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.traffic-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.traffic-meta svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ── Interface chips ─────────────────────────────────────────────────────── */
+
+.iface-chip {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 0.78rem;
+  color: #64748b;
+  cursor: default;
+}
+
+.iface-chip--active {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+}
+
+.iface-hints {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+/* ── Bandwidth summary bar ───────────────────────────────────────────────── */
+
+.traffic-bw {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.traffic-bw__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 18px 20px 16px;
+  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  gap: 4px;
+}
+
+.traffic-bw__item:last-child {
+  border-right: none;
+}
+
+.traffic-bw__label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #475569;
+}
+
+.traffic-bw__label svg {
+  width: 13px;
+  height: 13px;
+  color: #3b82f6;
+}
+
+.traffic-bw__item:first-child .traffic-bw__label svg {
+  color: #f59e0b;
+}
+
+.traffic-bw__value {
+  font-size: 1.55rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: #e2e8f0;
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  line-height: 1.1;
+}
+
+.traffic-bw__sub {
+  font-size: 0.68rem;
+  color: #334155;
+}
+
+@media (max-width: 480px) {
+  .traffic-bw {
+    grid-template-columns: 1fr;
+  }
+  .traffic-bw__item {
+    border-right: none;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    padding: 14px 20px 12px;
+  }
+  .traffic-bw__item:last-child {
+    border-bottom: none;
+  }
+  .traffic-bw__value {
+    font-size: 1.3rem;
+  }
+}
+
+/* ── Traffic two-column layout ───────────────────────────────────────────── */
+
+.traffic-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.traffic-section {
+  padding: 0;
+  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  min-width: 0;
+}
+
+.traffic-section:last-child {
+  border-right: none;
+}
+
+.traffic-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 20px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #475569;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.07);
+}
+
+.traffic-section__head svg {
+  width: 12px;
+  height: 12px;
+}
+
+.traffic-section__count {
+  font-size: 0.68rem;
+  color: #334155;
+}
+
+/* ── Traffic rows ────────────────────────────────────────────────────────── */
+
+.traffic-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.traffic-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  grid-template-rows: auto 4px;
+  column-gap: 12px;
+  row-gap: 6px;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.06);
+  align-items: center;
+  transition: background 0.12s ease;
+}
+
+.traffic-row:last-child {
+  border-bottom: none;
+}
+
+.traffic-row:hover {
+  background: rgba(148, 163, 184, 0.04);
+}
+
+.traffic-row--latest {
+  background: rgba(74, 222, 128, 0.03);
+}
+
+.traffic-row--latest:hover {
+  background: rgba(74, 222, 128, 0.06);
+}
+
+.traffic-row__label {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 0.78rem;
+  color: #64748b;
+  white-space: nowrap;
+  align-self: center;
+}
+
+.traffic-row--latest .traffic-row__label {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.traffic-row__data {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+}
+
+.traffic-row__rx {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #60a5fa;
+}
+
+.traffic-row__tx {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #a78bfa;
+}
+
+.traffic-row__total {
+  color: #e2e8f0;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.traffic-row__rx svg,
+.traffic-row__tx svg {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
+
+.traffic-row__bar {
+  grid-column: 1 / -1;
+  height: 3px;
+  background: rgba(148, 163, 184, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.traffic-row__bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  transition: width 0.5s ease;
+}
+
+.traffic-row--latest .traffic-row__bar-fill {
+  background: linear-gradient(90deg, #16a34a, #4ade80);
+}
+
+/* ── vnStat collector collapsible footer ─────────────────────────────────── */
+
+.traffic-collector {
+  padding: 0 4px 4px;
+}
+
+.traffic-collector .collapsible__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #334155;
+}
+
+.traffic-collector .collapsible__toggle:hover {
+  color: #64748b;
+}
+
+/* ── Traffic responsive ──────────────────────────────────────────────────── */
+
+@media (max-width: 800px) {
+  .traffic-columns {
+    grid-template-columns: 1fr;
+  }
+  .traffic-section {
+    border-right: none;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  }
+  .traffic-section:last-child {
+    border-bottom: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .traffic-row {
+    grid-template-columns: 80px 1fr;
+    padding: 8px 14px;
+  }
+  .traffic-row__data {
+    gap: 8px;
+  }
+  .traffic-row__total {
+    margin-left: 0;
+  }
+}
+
+/* ── Semi-circular gauges ────────────────────────────────────────────────── */
+
+.gauge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 18px;
+  margin-bottom: 8px;
+}
+
+.gauge {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 18px 16px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.gauge:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
+}
+
+.gauge__svg {
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.gauge__track {
+  fill: none;
+  stroke: rgba(148, 163, 184, 0.14);
+  stroke-width: 14;
+  stroke-linecap: round;
+}
+
+.gauge__arc {
+  fill: none;
+  stroke: var(--gauge-color, var(--accent-soft));
+  stroke-width: 14;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px var(--gauge-glow, rgba(96, 165, 250, 0.45)));
+  transition: stroke-dashoffset 1.1s cubic-bezier(0.22, 1, 0.36, 1), stroke 0.4s ease;
+}
+
+.gauge__center {
+  position: absolute;
+  top: 52%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.gauge__value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.gauge__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.gauge__label svg {
+  width: 13px;
+  height: 13px;
+  color: var(--gauge-color, var(--accent-soft));
+}
+
+.gauge__scale {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 220px;
+  margin-top: -6px;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Metric detail strip ─────────────────────────────────────────────────── */
+
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.metric-strip__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metric-strip__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.metric-strip__label svg {
+  width: 13px;
+  height: 13px;
+  color: var(--accent-soft);
+}
+
+.metric-strip__value {
+  font-size: 0.95rem;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+
+.metric-strip__value .badge--load {
+  margin-right: 2px;
+}

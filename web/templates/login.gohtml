@@ -1,0 +1,33 @@
+{{ define "content-login" }}
+<section class="hero">
+  <div class="login-container">
+    <article class="card login-card">
+      <h3><i data-lucide="log-in"></i> Administrator login</h3>
+      <p class="page-description">Enter your credentials to access the control panel.</p>
+
+      {{ if .FlashMessage }}
+      <div class="flash-banner flash-banner--{{ .FlashKind }}">
+        <p>{{ .FlashMessage }}</p>
+      </div>
+      {{ end }}
+
+      <form method="post" action="/login" class="server-form">
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+        <label class="form-field">
+          <span><i data-lucide="user" class="icon-in-button"></i> Username</span>
+          <input type="text" name="username" placeholder="admin" required autofocus>
+        </label>
+
+        <label class="form-field">
+          <span><i data-lucide="lock" class="icon-in-button"></i> Password</span>
+          <input type="password" name="password" placeholder="Password" required>
+        </label>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary"><i data-lucide="log-in" class="icon-in-button"></i> Sign in</button>
+        </div>
+      </form>
+    </article>
+  </div>
+</section>
+{{ end }}

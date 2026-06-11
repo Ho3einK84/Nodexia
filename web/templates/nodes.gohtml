@@ -1,0 +1,312 @@
+{{ define "content-nodes" }}
+<section class="hero">
+
+  <div class="info-strip">
+    <i data-lucide="server" class="info-strip__icon"></i>
+    <span class="info-strip__name">{{ .NodeTarget.Name }}</span>
+    <span class="info-strip__addr">{{ .NodeTarget.Username }}@{{ .NodeTarget.Host }}:{{ .NodeTarget.Port }}</span>
+    <span class="badge badge--auth-{{ .NodeTarget.AuthMode }}">{{ .NodeTarget.AuthMode }}</span>
+    {{ range .NodeTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
+    <div class="info-strip__actions">
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> Monitoring</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> System</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
+      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> Servers</a>
+    </div>
+  </div>
+
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
+  {{/* ── Discovery results ─────────────────────────────── */}}
+  {{ $noneOnly := and (eq (len .NodeSnapshots) 1) (eq (index .NodeSnapshots 0).NodeType "none") }}
+
+  {{ if and .NodeSnapshots (not $noneOnly) }}
+  <div class="node-grid">
+    {{ range .NodeSnapshots }}
+    {{ if ne .NodeType "none" }}
+    <article class="node-card node-card--{{ .NodeType }}">
+
+      <header class="node-card__head">
+        <span class="node-card__icon">
+          <i data-lucide="{{ template "node-icon" .NodeType }}"></i>
+        </span>
+        <div class="node-card__title">
+          <span class="node-card__name">{{ template "node-display-name" . }}</span>
+          <code class="node-card__type">{{ .NodeType }}</code>
+        </div>
+        <div class="node-confidence node-confidence--{{ .Confidence }}" title="Detection confidence: {{ .Confidence }}">
+          <span class="node-confidence__meter">
+            <span class="node-confidence__seg"></span>
+            <span class="node-confidence__seg"></span>
+            <span class="node-confidence__seg"></span>
+          </span>
+          <span class="node-confidence__label">{{ .Confidence }}</span>
+        </div>
+      </header>
+
+      <div class="node-status-row">
+        <span class="node-pill node-pill--health-{{ .HealthStatus }}">
+          <span class="node-pill__dot"></span>{{ template "node-health-label" .HealthStatus }}
+        </span>
+        <span class="node-pill node-pill--mode-{{ .InstallMode }}">
+          <i data-lucide="{{ if eq .InstallMode "docker" }}container{{ else if eq .InstallMode "binary" }}package{{ else }}help-circle{{ end }}"></i>{{ .InstallMode }}
+        </span>
+        {{ if and (ne .Protocol "-") (ne .Protocol "") }}
+        <span class="node-pill node-pill--proto-{{ .Protocol }}">
+          <i data-lucide="{{ if eq .Protocol "grpc" }}layers{{ else }}globe{{ end }}"></i>{{ .Protocol }}
+        </span>
+        {{ end }}
+        {{ if ne .ServiceName "-" }}
+        <span class="node-pill node-pill--service" title="Container / service name">
+          <i data-lucide="{{ if eq .InstallMode "docker" }}box{{ else }}cog{{ end }}"></i>{{ .ServiceName }}
+        </span>
+        {{ end }}
+      </div>
+
+      <div class="node-facts">
+        <div class="node-fact">
+          <span class="node-fact__label"><i data-lucide="tag"></i> Version</span>
+          <span class="node-fact__value">{{ .Version }}</span>
+        </div>
+        <div class="node-fact">
+          <span class="node-fact__label"><i data-lucide="plug"></i> Service port</span>
+          <span class="node-fact__value">
+            {{ if and (ne .ServicePort "-") (ne .ServicePort "") }}
+            <code class="node-port node-port--service">{{ .ServicePort }}</code>
+            {{ else }}-{{ end }}
+          </span>
+        </div>
+        <div class="node-fact">
+          <span class="node-fact__label"><i data-lucide="webhook"></i> API port</span>
+          <span class="node-fact__value">
+            {{ if and (ne .APIPort "-") (ne .APIPort "") }}
+            <code class="node-port node-port--api">{{ .APIPort }}</code>
+            {{ else }}-{{ end }}
+          </span>
+        </div>
+      </div>
+
+      {{ if .ActivePorts }}
+      {{ $apiPort := .APIPort }}{{ $servicePort := .ServicePort }}
+      <div class="node-section">
+        <span class="node-section__label"><i data-lucide="network"></i> Active ports</span>
+        <div class="node-chips">
+          {{ range .ActivePorts }}
+          <code class="node-port{{ if eq . $apiPort }} node-port--api{{ else if eq . $servicePort }} node-port--service{{ end }}">{{ . }}</code>
+          {{ end }}
+        </div>
+      </div>
+      {{ end }}
+
+      {{ if .XrayPorts }}
+      <div class="node-section">
+        <span class="node-section__label"><i data-lucide="arrow-left-right"></i> Xray proxy ports</span>
+        <div class="node-chips">
+          {{ range .XrayPorts }}<code class="node-port node-port--xray">{{ . }}</code>{{ end }}
+        </div>
+      </div>
+      {{ end }}
+
+      {{ if .Dependencies }}
+      <div class="node-section">
+        <span class="node-section__label"><i data-lucide="package-check"></i> Dependencies</span>
+        <div class="node-chips">
+          {{ range .Dependencies }}<code class="node-dep{{ if hasSuffix . ":missing" }} node-dep--missing{{ end }}">{{ . }}</code>{{ end }}
+        </div>
+      </div>
+      {{ end }}
+
+      {{ if .Evidence }}
+      <div class="node-evidence collapsible">
+        <button class="collapsible__toggle" data-collapse-key="evidence_{{ .NodeType }}_{{ .ServiceName }}">
+          <i data-lucide="chevron-right" class="collapsible__icon"></i>
+          <span>Evidence</span>
+          <span class="node-evidence__count">{{ len .Evidence }}</span>
+        </button>
+        <div class="collapsible__content">
+          <ul class="node-evidence__list">
+            {{ range .Evidence }}<li><i data-lucide="check" class="node-evidence__check"></i><span>{{ . }}</span></li>{{ end }}
+          </ul>
+        </div>
+      </div>
+      {{ end }}
+
+      <div class="node-card__footer">
+        <span><i data-lucide="calendar"></i> {{ .CollectedAt }}</span>
+      </div>
+
+    </article>
+    {{ end }}
+    {{ end }}
+  </div>
+  {{ else if $noneOnly }}
+  <div class="empty-state-card">
+    <span class="empty-state-icon"><i data-lucide="search-x"></i></span>
+    <p class="empty-state-title">No node runtime detected</p>
+    <p class="empty-state-desc">Discovery ran but no Rebecca or PasarGuard signatures matched. Inspect the raw probe output below for clues.</p>
+  </div>
+  {{ else }}
+  <div class="empty-state-card">
+    <span class="empty-state-icon"><i data-lucide="radar"></i></span>
+    <p class="empty-state-title">No discovery snapshot yet</p>
+    <p class="empty-state-desc">Run a discovery sweep to detect node runtimes, classify the install mode, and map occupied ports over SSH.</p>
+  </div>
+  {{ end }}
+
+  {{/* ── Workspace: refresh + collector ────────────────── */}}
+  <div class="sys-workspace">
+
+    <article class="card">
+      <div class="card__header">
+        <h3><i data-lucide="radar"></i> Run discovery</h3>
+      </div>
+
+      <form method="post" action="{{ .NodeForm.Action }}" id="node-form">
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+
+        {{- $nodeAdvErr := or (index .NodeForm.Errors "password") (index .NodeForm.Errors "private_key") (index .NodeForm.Errors "connect_timeout") (index .NodeForm.Errors "command_timeout") -}}
+
+        {{ if .NodeForm.StoredCredentialsAvailable }}
+        <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> Stored credentials will be used automatically.</p>
+        {{ end }}
+
+        <div
+          id="node-advanced"
+          class="sys-advanced"
+          {{ if and (not $nodeAdvErr) .NodeForm.StoredCredentialsAvailable }}hidden{{ end }}
+        >
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Connect timeout</span>
+              <input type="text" name="connect_timeout" value="{{ .NodeForm.ConnectTimeout }}" placeholder="10s">
+              {{ with index .NodeForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>Command timeout</span>
+              <input type="text" name="command_timeout" value="{{ .NodeForm.CommandTimeout }}" placeholder="20s">
+              {{ with index .NodeForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+          </div>
+
+          {{ if not .NodeForm.StoredCredentialsAvailable }}
+          <label class="form-field">
+            <span>SSH password</span>
+            <input type="password" name="password" placeholder="Runtime password" autocomplete="current-password">
+            {{ with index .NodeForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+          <label class="form-field">
+            <span>Private key</span>
+            <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+            {{ with index .NodeForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+          <label class="form-field">
+            <span>Key passphrase</span>
+            <input type="password" name="key_passphrase" placeholder="Optional">
+          </label>
+          {{ end }}
+        </div>
+
+        <div class="sys-form__actions">
+          <button type="submit" class="btn btn--primary">
+            <i data-lucide="radar" class="icon-in-button"></i> Run discovery
+          </button>
+          {{ if .NodeForm.StoredCredentialsAvailable }}
+          <button type="button" class="btn btn--ghost" data-refresh-now="{{ .NodeForm.RefreshURL }}?refresh=1">
+            <i data-lucide="zap" class="icon-in-button"></i> Quick scan
+          </button>
+          <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="node-advanced" aria-expanded="false">
+            <i data-lucide="settings-2" class="icon-in-button"></i> Advanced
+          </button>
+          {{ end }}
+        </div>
+
+      </form>
+    </article>
+
+    {{ if .NodeCollection.Available }}
+    <article class="card sys-result-card{{ if .NodeCollection.Error }} sys-result-card--error{{ else }} sys-result-card--ok{{ end }}">
+      <div class="result-header">
+        <span class="result-header__label">
+          <i data-lucide="{{ if .NodeCollection.Error }}alert-circle{{ else }}check-circle{{ end }}" class="icon-in-button"></i>
+          {{ if .NodeCollection.Error }}Discovery had errors{{ else }}Discovery complete{{ end }}
+        </span>
+        <code class="result-duration">{{ .NodeCollection.Duration }}</code>
+      </div>
+
+      <div class="node-collect-meta">
+        <span class="node-collect-meta__item"><i data-lucide="list"></i> {{ .NodeCollection.ProbeCount }} probes</span>
+        <span class="node-collect-meta__item"><i data-lucide="calendar"></i> {{ .NodeCollection.CollectedAt }}</span>
+      </div>
+
+      {{ if .NodeCollection.Error }}<pre class="output-block output-block--error">{{ .NodeCollection.Error }}</pre>{{ end }}
+
+      {{ if .NodeCollection.Probes }}
+      <div class="node-probes">
+        {{ range .NodeCollection.Probes }}
+        <div class="collapsible node-probe">
+          <button class="collapsible__toggle" data-collapse-key="probe_{{ .Label }}">
+            <i data-lucide="chevron-right" class="collapsible__icon"></i>
+            <span class="node-probe__label">{{ .Label }}</span>
+            {{ if .Error }}<span class="node-probe__badge node-probe__badge--err">error</span>{{ end }}
+            <code class="result-duration">{{ .Duration }}</code>
+          </button>
+          <div class="collapsible__content">
+            <div class="result-cmd"><code>{{ .Command }}</code></div>
+            {{ if .Error }}<pre class="output-block output-block--error">{{ .Error }}</pre>{{ end }}
+            {{ if .Stdout }}
+            <pre class="output-block scrollable">{{ .Stdout }}</pre>
+            {{ else }}
+            <p class="empty-state">No stdout captured.</p>
+            {{ end }}
+            {{ if .Stderr }}<pre class="output-block output-block--error scrollable">{{ .Stderr }}</pre>{{ end }}
+          </div>
+        </div>
+        {{ end }}
+      </div>
+      {{ else }}
+      <p class="empty-state">No probe output was captured for this run.</p>
+      {{ end }}
+    </article>
+    {{ end }}
+
+  </div>
+
+  {{/* ── How discovery works ───────────────────────────── */}}
+  <article class="card node-scope">
+    <div class="collapsible">
+      <button class="collapsible__toggle" data-collapse-key="node_scope">
+        <i data-lucide="chevron-right" class="collapsible__icon"></i>
+        <span><i data-lucide="book-open" class="icon-in-button"></i> How node discovery works</span>
+      </button>
+      <div class="collapsible__content">
+        <ul class="node-scope__list">
+          <li>Seven probes run over SSH: <code>systemctl</code>, <code>ps</code>, <code>ss</code>, <code>docker ps</code>, filesystem paths, and dedicated config-file readers for each node type.</li>
+          <li><strong>PasarGuard</strong> runs as Docker (<code>pasarguard/node</code> image). Multiple instances with different container names are detected and shown as separate cards. Config is read from <code>/opt/{name}/.env</code> to get the real service port and protocol.</li>
+          <li><strong>Rebecca</strong> runs as a binary under <code>/opt/rebecca-node/</code>. Version is read from <code>.binary-release.json</code>; ports and protocol from <code>.env</code>.</li>
+          <li><strong>Service port</strong> is the port the panel uses to reach the node API. <strong>API port</strong> is the Xray management API. <strong>Xray proxy ports</strong> carry tunnelled traffic.</li>
+          <li>Runtime credentials stay request-scoped and are never stored.</li>
+        </ul>
+      </div>
+    </div>
+  </article>
+
+</section>
+{{ end }}
+
+{{/* ── Node type → presentation helpers ────────────────── */}}
+{{ define "node-icon" -}}
+{{ if eq . "pasarguard-node" }}container{{ else if eq . "rebecca-node" }}package{{ else if eq . "runtime-signature" }}radar{{ else if eq . "port-signature" }}plug-zap{{ else }}help-circle{{ end }}
+{{- end }}
+
+{{ define "node-display-name" -}}
+{{ if eq .NodeType "pasarguard-node" }}PasarGuard{{ else if eq .NodeType "rebecca-node" }}Rebecca{{ else if eq .NodeType "runtime-signature" }}Runtime signature{{ else if eq .NodeType "port-signature" }}Port signature{{ else }}{{ .NodeType }}{{ end }}
+{{- end }}
+
+{{ define "node-health-label" -}}
+{{ if eq . "running" }}Running{{ else if eq . "detected" }}Detected{{ else if eq . "not_detected" }}Not detected{{ else }}Unknown{{ end }}
+{{- end }}

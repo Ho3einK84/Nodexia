@@ -1,0 +1,201 @@
+{{ define "content-diagnostics" }}
+<section class="hero">
+  {{ template "page-header" . }}
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <span class="kpi-card__icon"><i data-lucide="timer"></i></span>
+      <div class="kpi-card__body">
+        <span class="kpi-card__value">{{ .Diagnostics.Uptime }}</span>
+        <span class="kpi-card__label">Process uptime</span>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-card__icon"><i data-lucide="cpu"></i></span>
+      <div class="kpi-card__body">
+        <span class="kpi-card__value">{{ .Diagnostics.Goroutines }}</span>
+        <span class="kpi-card__label">Goroutines</span>
+      </div>
+    </div>
+    <div class="kpi-card{{ if eq .Diagnostics.DatabaseStatus "ok" }} kpi-card--ok{{ else }} kpi-card--warn{{ end }}">
+      <span class="kpi-card__icon"><i data-lucide="database"></i></span>
+      <div class="kpi-card__body">
+        <span class="kpi-card__value">{{ .Diagnostics.DatabaseStatus }}</span>
+        <span class="kpi-card__label">Database status</span>
+      </div>
+    </div>
+    <div class="kpi-card{{ if .SchedulerOverview.Enabled }} kpi-card--ok{{ else }} kpi-card--warn{{ end }}">
+      <span class="kpi-card__icon"><i data-lucide="calendar-clock"></i></span>
+      <div class="kpi-card__body">
+        <span class="kpi-card__value">{{ if .SchedulerOverview.Enabled }}Active{{ else }}Off{{ end }}</span>
+        <span class="kpi-card__label">Scheduler</span>
+      </div>
+    </div>
+  </div>
+
+  <p class="dash-section"><i data-lucide="layers"></i> Process &amp; runtime</p>
+  <div class="dashboard-meta">
+    <article class="card">
+      <div class="card__header">
+        <h3><i data-lucide="monitor"></i> Process</h3>
+      </div>
+      <ul class="fact-list">
+        <li>
+          <span class="fact-list__key"><i data-lucide="play" class="icon-in-button"></i> Started at</span>
+          <code>{{ .Diagnostics.StartedAt }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="timer" class="icon-in-button"></i> Uptime</span>
+          <code>{{ .Diagnostics.Uptime }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="code" class="icon-in-button"></i> Go runtime</span>
+          <code>{{ .Diagnostics.GoVersion }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="cpu" class="icon-in-button"></i> CPUs</span>
+          <code>{{ .Diagnostics.NumCPU }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="git-branch" class="icon-in-button"></i> Goroutines</span>
+          <code>{{ .Diagnostics.Goroutines }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="terminal" class="icon-in-button"></i> Active streams</span>
+          <code>{{ .Diagnostics.CommandStreamCount }}</code>
+        </li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <div class="card__header">
+        <h3><i data-lucide="database"></i> Database</h3>
+        <span class="status-pill status-pill--{{ if eq .Diagnostics.DatabaseStatus "ok" }}ok{{ else }}warn{{ end }}">{{ .Diagnostics.DatabaseStatus }}</span>
+      </div>
+      <ul class="fact-list">
+        <li>
+          <span class="fact-list__key"><i data-lucide="info" class="icon-in-button"></i> Detail</span>
+          <code>{{ .Diagnostics.DatabaseDetail }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="layers" class="icon-in-button"></i> Driver</span>
+          <code>{{ .DatabaseDriver }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="hard-drive" class="icon-in-button"></i> Target</span>
+          <code>{{ .DatabaseTarget }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="list-checks" class="icon-in-button"></i> Migrations</span>
+          <code>{{ .Diagnostics.MigrationCount }}</code>
+        </li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <div class="card__header">
+        <h3><i data-lucide="shield"></i> Security &amp; proxy</h3>
+      </div>
+      <ul class="fact-list">
+        <li>
+          <span class="fact-list__key"><i data-lucide="key" class="icon-in-button"></i> SSH host key policy</span>
+          <code>{{ .Diagnostics.SSHHostKeyPolicy }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="globe" class="icon-in-button"></i> Behind reverse proxy</span>
+          <code>{{ .Diagnostics.BehindReverseProxy }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="calendar-clock" class="icon-in-button"></i> Scheduler enabled</span>
+          <code>{{ .Diagnostics.SchedulerEnabled }}</code>
+        </li>
+      </ul>
+    </article>
+  </div>
+
+  <p class="dash-section"><i data-lucide="heart-pulse"></i> Health endpoints</p>
+  <article class="card">
+    <div class="card__header">
+      <h3><i data-lucide="heart"></i> Health probes</h3>
+    </div>
+    <div class="dashboard-list">
+      <div class="health-ep">
+        <div>
+          <p class="health-ep__label">Liveness · text</p>
+          <code>GET /healthz</code>
+        </div>
+        <a class="health-ep__link" href="/healthz" target="_blank" rel="noopener noreferrer">
+          <i data-lucide="external-link"></i> Open
+        </a>
+      </div>
+      <div class="health-ep">
+        <div>
+          <p class="health-ep__label">Liveness · JSON</p>
+          <code>GET {{ .Diagnostics.HealthLiveURL }}</code>
+        </div>
+        <a class="health-ep__link" href="{{ .Diagnostics.HealthLiveURL }}" target="_blank" rel="noopener noreferrer">
+          <i data-lucide="external-link"></i> Open
+        </a>
+      </div>
+      <div class="health-ep">
+        <div>
+          <p class="health-ep__label">Readiness · JSON</p>
+          <code>GET {{ .Diagnostics.HealthReadyURL }}</code>
+        </div>
+        <a class="health-ep__link" href="{{ .Diagnostics.HealthReadyURL }}" target="_blank" rel="noopener noreferrer">
+          <i data-lucide="external-link"></i> Open
+        </a>
+      </div>
+    </div>
+    <p class="field-hint" style="margin-top:12px">Use the ready endpoint for database-backed probes. Container healthchecks can keep using <code>/healthz</code>.</p>
+  </article>
+
+  <p class="dash-section"><i data-lucide="clock"></i> Background scheduler</p>
+  <article class="card">
+    <div class="card__header">
+      <h3><i data-lucide="calendar-clock"></i> Scheduler</h3>
+      <span class="status-pill status-pill--{{ if .SchedulerOverview.Enabled }}ok{{ else }}idle{{ end }}">{{ if .SchedulerOverview.Enabled }}Active{{ else }}Off{{ end }}</span>
+    </div>
+    <div class="kpi-grid" style="margin-bottom: 16px">
+      <div class="kpi-card">
+        <span class="kpi-card__icon"><i data-lucide="circle-check"></i></span>
+        <div class="kpi-card__body">
+          <span class="kpi-card__value">{{ .SchedulerOverview.EligibleJobs }}</span>
+          <span class="kpi-card__label">Eligible</span>
+        </div>
+      </div>
+      <div class="kpi-card{{ if gt .SchedulerOverview.BlockedJobs 0 }} kpi-card--warn{{ end }}">
+        <span class="kpi-card__icon"><i data-lucide="circle-alert"></i></span>
+        <div class="kpi-card__body">
+          <span class="kpi-card__value">{{ .SchedulerOverview.BlockedJobs }}</span>
+          <span class="kpi-card__label">Blocked</span>
+        </div>
+      </div>
+      <div class="kpi-card{{ if gt .SchedulerOverview.RunningJobs 0 }} kpi-card--ok{{ end }}">
+        <span class="kpi-card__icon"><i data-lucide="activity"></i></span>
+        <div class="kpi-card__body">
+          <span class="kpi-card__value">{{ .SchedulerOverview.RunningJobs }}</span>
+          <span class="kpi-card__label">Running</span>
+        </div>
+      </div>
+    </div>
+    {{ if .SchedulerOverview.Jobs }}
+    <div class="dashboard-list">
+      {{ range .SchedulerOverview.Jobs }}
+      <article class="dashboard-item">
+        <div class="server-item__header">
+          <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }} &middot; <span style="font-weight:400; color: var(--text-dim)">{{ .JobType }}</span></h4>
+          <span class="status-pill status-pill--{{ if or (eq .Status "running") (eq .Status "scheduled") }}ok{{ else if eq .Status "retrying" }}crit{{ else if eq .Status "blocked" }}warn{{ else }}idle{{ end }}">{{ .Status }}</span>
+        </div>
+        {{ if .Detail }}<p style="margin:4px 0 0; font-size:0.85rem; color:var(--text-muted)">{{ .Detail }}</p>{{ end }}
+        {{ if .LastError }}<p class="error-inline">{{ .LastError }}</p>{{ end }}
+      </article>
+      {{ end }}
+    </div>
+    {{ template "pagination" .SchedulerOverview.Pagination }}
+    {{ else }}
+    <p class="field-hint">No scheduler jobs registered yet.</p>
+    {{ end }}
+  </article>
+</section>
+{{ end }}

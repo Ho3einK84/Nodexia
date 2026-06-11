@@ -1,0 +1,223 @@
+{{ define "content-commands" }}
+<section class="hero">
+
+  <div class="info-strip">
+    <i data-lucide="server" class="info-strip__icon"></i>
+    <span class="info-strip__name">{{ .CommandTarget.Name }}</span>
+    <span class="info-strip__addr">{{ .CommandTarget.Username }}@{{ .CommandTarget.Host }}:{{ .CommandTarget.Port }}</span>
+    <span class="badge badge--auth-{{ .CommandTarget.AuthMode }}">{{ .CommandTarget.AuthMode }}</span>
+    {{ range .CommandTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
+    <div class="info-strip__actions">
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> Edit</a>
+      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> Servers</a>
+    </div>
+  </div>
+
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
+  {{ if .CommandPresets }}
+  <div class="preset-chips">
+    <span class="preset-chips__label"><i data-lucide="zap"></i> Quick:</span>
+    {{ range .CommandPresets }}
+    <button type="button" class="preset-chip" data-preset-cmd="{{ .Command }}" title="{{ .Description }}">{{ .Label }}</button>
+    {{ end }}
+  </div>
+  {{ end }}
+
+  <div class="cmd-workspace">
+
+    <div class="cmd-main">
+
+      <article class="card">
+        <form method="post" action="{{ .CommandForm.Action }}" class="cmd-form" id="cmd-form">
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+
+          <label class="form-field">
+            <div class="cmd-label-row">
+              <span><i data-lucide="terminal" class="icon-in-button"></i> Command</span>
+              <span class="cmd-hint">Ctrl+Enter to run</span>
+            </div>
+            <textarea
+              name="command"
+              rows="6"
+              class="cmd-textarea"
+              placeholder="uname -a &amp;&amp; uptime"
+              id="cmd-input"
+              spellcheck="false"
+              autocomplete="off"
+            >{{ .CommandForm.Command }}</textarea>
+            {{ with index .CommandForm.Errors "command" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+
+          <div class="cmd-actions">
+            <div class="cmd-actions__primary">
+              <button type="submit" name="intent" value="run" class="btn btn--primary" id="cmd-run-btn">
+                <i data-lucide="play" class="icon-in-button"></i> Run
+              </button>
+              <button type="submit" name="intent" value="stream" class="btn btn--secondary">
+                <i data-lucide="radio" class="icon-in-button"></i> Stream
+              </button>
+              <button type="submit" name="intent" value="test" class="btn btn--ghost">
+                <i data-lucide="wifi" class="icon-in-button"></i> Test SSH
+              </button>
+            </div>
+            <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="cmd-advanced" aria-expanded="false">
+              <i data-lucide="settings-2" class="icon-in-button"></i> Advanced
+            </button>
+          </div>
+
+          {{ with index .CommandForm.Errors "intent" }}<small class="field-error">{{ . }}</small>{{ end }}
+
+          {{- $advErr := or (index .CommandForm.Errors "password") (index .CommandForm.Errors "private_key") (index .CommandForm.Errors "connect_timeout") (index .CommandForm.Errors "command_timeout") -}}
+          <div
+            id="cmd-advanced"
+            class="cmd-advanced"
+            {{ if and (not $advErr) .CommandForm.StoredCredentialsAvailable }}hidden{{ end }}
+          >
+            <div class="form-grid">
+              <label class="form-field">
+                <span>Connect timeout</span>
+                <input type="text" name="connect_timeout" value="{{ .CommandForm.ConnectTimeout }}" placeholder="10s">
+                {{ with index .CommandForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+              <label class="form-field">
+                <span>Command timeout</span>
+                <input type="text" name="command_timeout" value="{{ .CommandForm.CommandTimeout }}" placeholder="20s">
+                {{ with index .CommandForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+            </div>
+
+            {{ if not .CommandForm.StoredCredentialsAvailable }}
+            <label class="form-field">
+              <span>SSH password</span>
+              <input type="password" name="password" placeholder="Runtime password" autocomplete="current-password">
+              {{ with index .CommandForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>Private key</span>
+              <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+              {{ with index .CommandForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>Key passphrase</span>
+              <input type="password" name="key_passphrase" placeholder="Optional">
+            </label>
+            {{ end }}
+          </div>
+
+        </form>
+      </article>
+
+      {{ if .CommandStream.Available }}
+      <article class="card cmd-result-card{{ if .CommandStream.IsRunning }} cmd-result-card--live{{ end }}"
+        {{ if .CommandStream.IsRunning }}data-stream-refresh-url="{{ .CommandStream.RefreshURL }}" data-stream-refresh-ms="{{ .CommandStream.RefreshMillis }}"{{ end }}
+      >
+        <div class="result-header">
+          <span class="result-header__label">
+            {{ if .CommandStream.IsRunning }}<span class="live-dot"></span> Live stream{{ else }}<i data-lucide="terminal" class="icon-in-button"></i> Stream complete{{ end }}
+          </span>
+          <div class="result-header__meta">
+            {{ if not .CommandStream.IsRunning }}
+            <span class="result-exit {{ if eq .CommandStream.ExitCode "0" }}result-exit--ok{{ else }}result-exit--err{{ end }}">exit {{ .CommandStream.ExitCode }}</span>
+            {{ end }}
+            <code class="result-duration">{{ .CommandStream.Duration }}</code>
+            {{ if .CommandStream.IsRunning }}
+            <a class="btn btn--ghost btn--sm" href="{{ .CommandStream.RefreshURL }}"><i data-lucide="refresh-cw" class="icon-in-button"></i> Refresh</a>
+            {{ end }}
+          </div>
+        </div>
+        <div class="result-cmd"><code>{{ .CommandStream.Command }}</code></div>
+        {{ if .CommandStream.Error }}<pre class="output-block output-block--error">{{ .CommandStream.Error }}</pre>{{ end }}
+        {{ if .CommandStream.Stdout }}
+        <pre class="output-block scrollable">{{ .CommandStream.Stdout }}</pre>
+        {{ else }}
+        <p class="empty-state">No stdout captured yet.</p>
+        {{ end }}
+        {{ if .CommandStream.Stderr }}
+        <pre class="output-block output-block--error scrollable">{{ .CommandStream.Stderr }}</pre>
+        {{ end }}
+        {{ if .CommandStream.IsRunning }}
+        <p class="result-message"><span class="live-dot"></span> Refreshing automatically every {{ .CommandStream.RefreshMillis }}ms.</p>
+        {{ end }}
+      </article>
+
+      {{ else if .ConnectionResult.Available }}
+      <article class="card cmd-result-card {{ if .ConnectionResult.Error }}cmd-result-card--error{{ else }}cmd-result-card--ok{{ end }}">
+        <div class="result-header">
+          <span class="result-header__label">
+            <i data-lucide="{{ if .ConnectionResult.Error }}x-circle{{ else }}check-circle{{ end }}" class="icon-in-button"></i>
+            Connection test
+          </span>
+          <code class="result-duration">{{ .ConnectionResult.Duration }}</code>
+        </div>
+        {{ if .ConnectionResult.Message }}<p class="result-message">{{ .ConnectionResult.Message }}</p>{{ end }}
+        {{ if .ConnectionResult.Error }}<pre class="output-block output-block--error">{{ .ConnectionResult.Error }}</pre>{{ end }}
+      </article>
+
+      {{ else if .CommandResult.Available }}
+      <article class="card cmd-result-card{{ if .CommandResult.Error }} cmd-result-card--error{{ end }}">
+        <div class="result-header">
+          <span class="result-header__label"><i data-lucide="terminal" class="icon-in-button"></i> Output</span>
+          <div class="result-header__meta">
+            <span class="result-exit {{ if eq .CommandResult.ExitCode "0" }}result-exit--ok{{ else }}result-exit--err{{ end }}">exit {{ .CommandResult.ExitCode }}</span>
+            <code class="result-duration">{{ .CommandResult.Duration }}</code>
+          </div>
+        </div>
+        <div class="result-cmd"><code>{{ .CommandResult.Command }}</code></div>
+        {{ if .CommandResult.Error }}<pre class="output-block output-block--error">{{ .CommandResult.Error }}</pre>{{ end }}
+        {{ if .CommandResult.Stdout }}
+        <pre class="output-block scrollable">{{ .CommandResult.Stdout }}</pre>
+        {{ else }}
+        <p class="empty-state">No stdout output captured.</p>
+        {{ end }}
+        {{ if .CommandResult.Stderr }}
+        <pre class="output-block output-block--error scrollable">{{ .CommandResult.Stderr }}</pre>
+        {{ end }}
+      </article>
+      {{ end }}
+
+    </div>
+
+    <div class="cmd-sidebar">
+      <article class="card">
+        <div class="card__header">
+          <h3><i data-lucide="clock"></i> History</h3>
+          {{ if .CommandHistory }}<span class="badge badge--id">{{ len .CommandHistory }}</span>{{ end }}
+        </div>
+        {{ if .CommandHistory }}
+        <div class="history-compact">
+          {{ range .CommandHistory }}
+          <div class="history-row" data-history-cmd="{{ .Command }}">
+            <div class="history-row__top">
+              <span class="history-row__cmd">{{ .Command }}</span>
+              <div class="history-row__right">
+                <button type="button" class="rerun-btn" data-cmd="{{ .Command }}" title="Load into editor" aria-label="Load into editor">
+                  <i data-lucide="corner-up-left"></i>
+                </button>
+                <span class="history-row__exit {{ if eq .ExitCode "0" }}history-row__exit--ok{{ else if eq .ExitCode "n/a" }}history-row__exit--na{{ else }}history-row__exit--err{{ end }}">{{ .ExitCode }}</span>
+              </div>
+            </div>
+            <div class="history-row__time">{{ .ExecutedAt }}</div>
+            <div class="history-row__detail">
+              {{ if .Stdout }}<pre class="output-block output-block--sm scrollable--sm">{{ .Stdout }}</pre>{{ end }}
+              {{ if .Stderr }}<pre class="output-block output-block--error output-block--sm scrollable--sm">{{ .Stderr }}</pre>{{ end }}
+              {{ if and (not .Stdout) (not .Stderr) }}<p class="empty-state">No output captured.</p>{{ end }}
+            </div>
+          </div>
+          {{ end }}
+        </div>
+        {{ else }}
+        <p class="empty-state">No command history for this server yet.</p>
+        {{ end }}
+      </article>
+    </div>
+
+  </div>
+
+</section>
+{{ end }}

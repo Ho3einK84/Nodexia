@@ -1,0 +1,337 @@
+{{ define "content-monitoring" }}
+<section class="hero">
+
+  <div class="info-strip">
+    <i data-lucide="server" class="info-strip__icon"></i>
+    <span class="info-strip__name">{{ .MonitoringTarget.Name }}</span>
+    <span class="info-strip__addr">{{ .MonitoringTarget.Username }}@{{ .MonitoringTarget.Host }}:{{ .MonitoringTarget.Port }}</span>
+    <span class="badge badge--auth-{{ .MonitoringTarget.AuthMode }}">{{ .MonitoringTarget.AuthMode }}</span>
+    {{ range .MonitoringTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
+    <div class="info-strip__actions">
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> System</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
+      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> Servers</a>
+    </div>
+  </div>
+
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
+  <article class="card">
+    <h3><i data-lucide="gauge"></i> Resource health</h3>
+    {{ if .MonitoringSnapshot.Available }}
+    <div class="gauge-grid">
+      <div class="gauge" data-gauge="{{ trimSuffix .MonitoringSnapshot.CPUUsage "%" }}" role="img" aria-label="CPU usage {{ .MonitoringSnapshot.CPUUsage }}">
+        <svg class="gauge__svg" viewBox="0 0 200 118" preserveAspectRatio="xMidYMid meet">
+          <path class="gauge__track" d="M20 100 A 80 80 0 0 1 180 100"></path>
+          <path class="gauge__arc" d="M20 100 A 80 80 0 0 1 180 100"></path>
+        </svg>
+        <div class="gauge__center">
+          <span class="gauge__value">{{ .MonitoringSnapshot.CPUUsage }}</span>
+          <span class="gauge__label"><i data-lucide="cpu"></i> CPU</span>
+        </div>
+        <div class="gauge__scale"><span>0</span><span>100</span></div>
+      </div>
+      <div class="gauge" data-gauge="{{ trimSuffix .MonitoringSnapshot.RAMUsage "%" }}" role="img" aria-label="RAM usage {{ .MonitoringSnapshot.RAMUsage }}">
+        <svg class="gauge__svg" viewBox="0 0 200 118" preserveAspectRatio="xMidYMid meet">
+          <path class="gauge__track" d="M20 100 A 80 80 0 0 1 180 100"></path>
+          <path class="gauge__arc" d="M20 100 A 80 80 0 0 1 180 100"></path>
+        </svg>
+        <div class="gauge__center">
+          <span class="gauge__value">{{ .MonitoringSnapshot.RAMUsage }}</span>
+          <span class="gauge__label"><i data-lucide="memory-stick"></i> RAM</span>
+        </div>
+        <div class="gauge__scale"><span>0</span><span>100</span></div>
+      </div>
+      <div class="gauge" data-gauge="{{ trimSuffix .MonitoringSnapshot.DiskUsage "%" }}" role="img" aria-label="Disk usage {{ .MonitoringSnapshot.DiskUsage }}">
+        <svg class="gauge__svg" viewBox="0 0 200 118" preserveAspectRatio="xMidYMid meet">
+          <path class="gauge__track" d="M20 100 A 80 80 0 0 1 180 100"></path>
+          <path class="gauge__arc" d="M20 100 A 80 80 0 0 1 180 100"></path>
+        </svg>
+        <div class="gauge__center">
+          <span class="gauge__value">{{ .MonitoringSnapshot.DiskUsage }}</span>
+          <span class="gauge__label"><i data-lucide="hard-drive"></i> Disk</span>
+        </div>
+        <div class="gauge__scale"><span>0</span><span>100</span></div>
+      </div>
+    </div>
+    <div class="metric-strip">
+      <div class="metric-strip__item">
+        <span class="metric-strip__label"><i data-lucide="activity"></i> Load average</span>
+        <span class="metric-strip__value"><span class="badge badge--load">{{ .MonitoringSnapshot.LoadAverage1 }}</span><span class="badge badge--load">{{ .MonitoringSnapshot.LoadAverage5 }}</span><span class="badge badge--load">{{ .MonitoringSnapshot.LoadAverage15 }}</span></span>
+      </div>
+      <div class="metric-strip__item">
+        <span class="metric-strip__label"><i data-lucide="clock"></i> Uptime</span>
+        <span class="metric-strip__value">{{ .MonitoringSnapshot.UptimeHuman }}</span>
+      </div>
+      <div class="metric-strip__item">
+        <span class="metric-strip__label"><i data-lucide="download"></i> This month DL</span>
+        <span class="metric-strip__value">{{ .MonitoringTraffic.CurrentMonthRX }}</span>
+      </div>
+      <div class="metric-strip__item">
+        <span class="metric-strip__label"><i data-lucide="calendar"></i> Collected at</span>
+        <span class="metric-strip__value">{{ .MonitoringSnapshot.CollectedAt }}</span>
+      </div>
+    </div>
+    {{ else }}
+    <div class="empty-state-card">
+      <span class="empty-state-icon"><i data-lucide="gauge"></i></span>
+      <p class="empty-state-title">No resource snapshot yet</p>
+      <p class="empty-state-desc">Use the refresh panel below to collect CPU, memory, disk, load, and network metrics over SSH.</p>
+    </div>
+    {{ end }}
+  </article>
+
+  {{ if .MonitoringTraffic.Known }}
+  {{ if .MonitoringTraffic.Available }}
+  <article class="card traffic-card">
+
+    <div class="traffic-header">
+      <div class="traffic-iface">
+        <span class="traffic-iface__label"><i data-lucide="activity"></i> Traffic</span>
+        <span class="traffic-iface__name">{{ .MonitoringTraffic.InterfaceName }}</span>
+        {{ if gt (len .MonitoringTraffic.AvailableInterfaces) 1 }}
+        <div class="traffic-iface__others">
+          {{ range .MonitoringTraffic.AvailableInterfaces }}{{ if ne . $.MonitoringTraffic.InterfaceName }}<code class="iface-chip">{{ . }}</code>{{ end }}{{ end }}
+        </div>
+        {{ end }}
+      </div>
+      <span class="traffic-meta"><i data-lucide="calendar" class="icon-in-button"></i> {{ .MonitoringTraffic.CollectedAt }}</span>
+    </div>
+
+    {{ if or (ne .MonitoringTraffic.PeakMbps "-") (ne .MonitoringTraffic.AvgMbps "-") }}
+    <div class="traffic-bw">
+      <div class="traffic-bw__item">
+        <span class="traffic-bw__label"><i data-lucide="zap"></i> Peak bandwidth</span>
+        <span class="traffic-bw__value">{{ .MonitoringTraffic.PeakMbps }}</span>
+        <span class="traffic-bw__sub">max per hour</span>
+      </div>
+      <div class="traffic-bw__item">
+        <span class="traffic-bw__label"><i data-lucide="trending-up"></i> Avg bandwidth</span>
+        <span class="traffic-bw__value">{{ .MonitoringTraffic.AvgMbps }}</span>
+        <span class="traffic-bw__sub">mean over available hours</span>
+      </div>
+    </div>
+    {{ end }}
+
+    <div class="traffic-columns">
+
+      <div class="traffic-section">
+        <div class="traffic-section__head">
+          <span><i data-lucide="calendar-days" class="icon-in-button"></i> Recent days</span>
+          {{ if .MonitoringTraffic.DailyRows }}<span class="traffic-section__count">{{ len .MonitoringTraffic.DailyRows }} days</span>{{ end }}
+        </div>
+        {{ if .MonitoringTraffic.DailyRows }}
+        <div class="traffic-rows">
+          {{ range .MonitoringTraffic.DailyRows }}
+          <div class="traffic-row{{ if .IsLatest }} traffic-row--latest{{ end }}">
+            <span class="traffic-row__label">{{ .Label }}</span>
+            <div class="traffic-row__data">
+              <span class="traffic-row__rx"><i data-lucide="arrow-down"></i>{{ .RX }}</span>
+              <span class="traffic-row__tx"><i data-lucide="arrow-up"></i>{{ .TX }}</span>
+              <span class="traffic-row__total">{{ .Total }}</span>
+            </div>
+            <div class="traffic-row__bar"><div class="traffic-row__bar-fill" style="width:{{ .Bar }}%"></div></div>
+          </div>
+          {{ end }}
+        </div>
+        {{ else }}
+        <p class="empty-state">No daily data available yet.</p>
+        {{ end }}
+      </div>
+
+      <div class="traffic-section">
+        <div class="traffic-section__head">
+          <span><i data-lucide="calendar-range" class="icon-in-button"></i> Monthly</span>
+          {{ if .MonitoringTraffic.MonthlyRows }}<span class="traffic-section__count">{{ len .MonitoringTraffic.MonthlyRows }} months</span>{{ end }}
+        </div>
+        {{ if .MonitoringTraffic.MonthlyRows }}
+        <div class="traffic-rows">
+          {{ range .MonitoringTraffic.MonthlyRows }}
+          <div class="traffic-row{{ if .IsLatest }} traffic-row--latest{{ end }}">
+            <span class="traffic-row__label">{{ .Label }}</span>
+            <div class="traffic-row__data">
+              <span class="traffic-row__rx"><i data-lucide="arrow-down"></i>{{ .RX }}</span>
+              <span class="traffic-row__tx"><i data-lucide="arrow-up"></i>{{ .TX }}</span>
+              <span class="traffic-row__total">{{ .Total }}</span>
+            </div>
+            <div class="traffic-row__bar"><div class="traffic-row__bar-fill" style="width:{{ .Bar }}%"></div></div>
+          </div>
+          {{ end }}
+        </div>
+        {{ else }}
+        <p class="empty-state">No monthly data available yet.</p>
+        {{ end }}
+      </div>
+
+    </div>
+
+    {{ if .MonitoringTrafficCollection.Available }}
+    <div class="traffic-collector">
+      <div class="collapsible">
+        <button class="collapsible__toggle" data-collapse-key="traffic_collect">
+          <i data-lucide="chevron-right" class="collapsible__icon"></i>
+          <span>vnStat collector output</span>
+          <code class="result-duration">{{ .MonitoringTrafficCollection.Duration }}</code>
+        </button>
+        <div class="collapsible__content">
+          {{ if .MonitoringTrafficCollection.Error }}<pre class="output-block output-block--error">{{ .MonitoringTrafficCollection.Error }}</pre>{{ end }}
+          {{ if .MonitoringTrafficCollection.Stdout }}<pre class="output-block scrollable">{{ .MonitoringTrafficCollection.Stdout }}</pre>{{ end }}
+          {{ if .MonitoringTrafficCollection.Stderr }}<pre class="output-block output-block--error scrollable">{{ .MonitoringTrafficCollection.Stderr }}</pre>{{ end }}
+        </div>
+      </div>
+    </div>
+    {{ end }}
+
+  </article>
+  {{ else }}
+  <div class="empty-state-card">
+    <span class="empty-state-icon"><i data-lucide="activity"></i></span>
+    <p class="empty-state-title">{{ .MonitoringTraffic.Message }}</p>
+    <p class="empty-state-desc">
+      {{ if .MonitoringTraffic.AvailableInterfaces }}
+      Available interfaces:{{ range .MonitoringTraffic.AvailableInterfaces }} <code>{{ . }}</code>{{ end }}
+      {{ else }}
+      vnStat may not be installed or the interface has no data yet.
+      {{ end }}
+    </p>
+    {{ if .MonitoringTraffic.VnstatMissing }}
+    <a class="btn btn--primary" href="/servers/{{ .MonitoringTarget.ID }}/commands?preset=install-vnstat">
+      <i data-lucide="terminal" class="icon-in-button"></i> Install via Commands
+    </a>
+    {{ end }}
+  </div>
+  {{ end }}
+  {{ end }}
+
+  <div class="sys-workspace">
+
+    <article class="card">
+      <div class="card__header">
+        <h3><i data-lucide="refresh-cw"></i> Refresh snapshot</h3>
+      </div>
+
+      <form method="post" action="{{ .MonitoringForm.Action }}" id="mon-form">
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+
+        {{- $monAdvErr := or (index .MonitoringForm.Errors "password") (index .MonitoringForm.Errors "private_key") (index .MonitoringForm.Errors "connect_timeout") (index .MonitoringForm.Errors "command_timeout") -}}
+
+        {{ if .MonitoringForm.StoredCredentialsAvailable }}
+        <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> Stored credentials will be used automatically.</p>
+        {{ end }}
+
+        <label class="form-field">
+          <span><i data-lucide="wifi" class="icon-in-button"></i> vnStat interface</span>
+          <input type="text" name="traffic_interface" value="{{ .MonitoringForm.TrafficInterface }}" placeholder="auto-detect">
+          {{ with index .MonitoringForm.Errors "traffic_interface" }}<small class="field-error">{{ . }}</small>{{ end }}
+          {{ if .MonitoringTraffic.AvailableInterfaces }}
+          <div class="iface-hints">
+            {{ range .MonitoringTraffic.AvailableInterfaces }}<code class="iface-chip{{ if eq . $.MonitoringTraffic.InterfaceName }} iface-chip--active{{ end }}">{{ . }}</code>{{ end }}
+          </div>
+          {{ end }}
+        </label>
+
+        <div
+          id="mon-advanced"
+          class="sys-advanced"
+          {{ if and (not $monAdvErr) .MonitoringForm.StoredCredentialsAvailable }}hidden{{ end }}
+        >
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Connect timeout</span>
+              <input type="text" name="connect_timeout" value="{{ .MonitoringForm.ConnectTimeout }}" placeholder="10s">
+              {{ with index .MonitoringForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>Command timeout</span>
+              <input type="text" name="command_timeout" value="{{ .MonitoringForm.CommandTimeout }}" placeholder="20s">
+              {{ with index .MonitoringForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+          </div>
+          {{ if not .MonitoringForm.StoredCredentialsAvailable }}
+          <label class="form-field">
+            <span>SSH password</span>
+            <input type="password" name="password" placeholder="Runtime password" autocomplete="current-password">
+            {{ with index .MonitoringForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+          <label class="form-field">
+            <span>Private key</span>
+            <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+            {{ with index .MonitoringForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+          <label class="form-field">
+            <span>Key passphrase</span>
+            <input type="password" name="key_passphrase" placeholder="Optional">
+          </label>
+          {{ end }}
+        </div>
+
+        <div class="sys-form__actions">
+          <button type="submit" class="btn btn--primary">
+            <i data-lucide="refresh-cw" class="icon-in-button"></i> Refresh now
+          </button>
+          {{ if .MonitoringForm.StoredCredentialsAvailable }}
+          <button type="button" class="btn btn--ghost" data-refresh-now="{{ .MonitoringForm.RefreshURL }}?refresh=1">
+            <i data-lucide="zap" class="icon-in-button"></i> Quick refresh
+          </button>
+          <label class="auto-refresh-toggle">
+            <span>Auto:</span>
+            <select id="auto-refresh-select" data-refresh-url="{{ .MonitoringForm.RefreshURL }}" data-refresh-key="mon_{{ .MonitoringTarget.ID }}">
+              <option value="0">Off</option>
+              <option value="5000">5s</option>
+              <option value="10000">10s</option>
+              <option value="30000">30s</option>
+              <option value="60000">1m</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="mon-advanced" aria-expanded="false">
+            <i data-lucide="settings-2" class="icon-in-button"></i> Advanced
+          </button>
+          {{ end }}
+        </div>
+
+      </form>
+    </article>
+
+    {{ if .MonitoringCollection.Available }}
+    <article class="card sys-result-card{{ if .MonitoringCollection.Error }} sys-result-card--error{{ else }} sys-result-card--ok{{ end }}">
+      <div class="result-header">
+        <span class="result-header__label">
+          <i data-lucide="{{ if .MonitoringCollection.Error }}alert-circle{{ else }}check-circle{{ end }}" class="icon-in-button"></i>
+          {{ if .MonitoringCollection.Error }}Collection failed{{ else }}Collection complete{{ end }}
+        </span>
+        <code class="result-duration">{{ .MonitoringCollection.Duration }}</code>
+      </div>
+      <div class="result-cmd"><code>{{ .MonitoringCollection.Command }}</code></div>
+      {{ if .MonitoringCollection.Error }}<pre class="output-block output-block--error">{{ .MonitoringCollection.Error }}</pre>{{ end }}
+      {{ if .MonitoringCollection.Stdout }}
+      <div class="collapsible">
+        <button class="collapsible__toggle" data-collapse-key="mon_stdout">
+          <i data-lucide="chevron-right" class="collapsible__icon"></i> Stdout
+        </button>
+        <div class="collapsible__content">
+          <pre class="output-block scrollable">{{ .MonitoringCollection.Stdout }}</pre>
+        </div>
+      </div>
+      {{ end }}
+      {{ if .MonitoringCollection.Stderr }}
+      <div class="collapsible">
+        <button class="collapsible__toggle" data-collapse-key="mon_stderr">
+          <i data-lucide="chevron-right" class="collapsible__icon"></i> Stderr
+        </button>
+        <div class="collapsible__content">
+          <pre class="output-block output-block--error scrollable">{{ .MonitoringCollection.Stderr }}</pre>
+        </div>
+      </div>
+      {{ end }}
+    </article>
+    {{ end }}
+
+  </div>
+
+</section>
+{{ end }}
