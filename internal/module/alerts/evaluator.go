@@ -133,11 +133,27 @@ func (e *Evaluator) evaluateRule(ctx context.Context, target Target, rule Rule, 
 	value, ok := metrics.valueFor(rule.Metric)
 	if !ok {
 		// Metric not collected this cycle (e.g. traffic snapshot unavailable).
+		slog.Debug("alert: metric unavailable this cycle — skipping rule",
+			slog.Int64("rule_id", rule.ID),
+			slog.Int64("server_id", target.ID),
+			slog.String("metric", rule.Metric),
+		)
 		return nil
 	}
 
 	now := e.clock()
 	breach := Breaches(rule.Comparator, value, rule.Threshold)
+
+	slog.Debug("alert: evaluating rule",
+		slog.Int64("rule_id", rule.ID),
+		slog.Int64("server_id", target.ID),
+		slog.String("server", target.Name),
+		slog.String("metric", rule.Metric),
+		slog.Float64("value", value),
+		slog.Float64("threshold", rule.Threshold),
+		slog.String("comparator", rule.Comparator),
+		slog.Bool("breach", breach),
+	)
 
 	open, openErr := e.repo.GetOpenEvent(ctx, rule.ID, target.ID)
 	hasOpen := openErr == nil
@@ -150,6 +166,12 @@ func (e *Evaluator) evaluateRule(ctx context.Context, target Target, rule Rule, 
 	if !breach {
 		e.resetStreak(rule, target)
 		if hasOpen {
+			slog.Info("alert: metric recovered — resolving open event",
+				slog.Int64("rule_id", rule.ID),
+				slog.Int64("server_id", target.ID),
+				slog.String("metric", rule.Metric),
+				slog.Float64("value", value),
+			)
 			return e.resolve(ctx, target, rule, open, value, now)
 		}
 		return nil
@@ -162,6 +184,11 @@ func (e *Evaluator) evaluateRule(ctx context.Context, target Target, rule Rule, 
 	if silenced {
 		// Do not fire or re-notify while muted; a silenced breach does not count
 		// toward the consecutive-hit streak.
+		slog.Debug("alert: breach suppressed by silence",
+			slog.Int64("rule_id", rule.ID),
+			slog.Int64("server_id", target.ID),
+			slog.String("metric", rule.Metric),
+		)
 		e.resetStreak(rule, target)
 		return nil
 	}
@@ -169,18 +196,48 @@ func (e *Evaluator) evaluateRule(ctx context.Context, target Target, rule Rule, 
 	if hasOpen {
 		// Already firing: re-notify only once the cooldown has elapsed.
 		if e.cooldownElapsed(rule, open, now) {
+			slog.Info("alert: cooldown elapsed — re-notifying",
+				slog.Int64("rule_id", rule.ID),
+				slog.Int64("server_id", target.ID),
+				slog.String("metric", rule.Metric),
+			)
 			e.dispatch(ctx, rule, target, e.message(rule, target, value, notify.StateFiring, now))
 			if err := e.repo.MarkEventNotified(ctx, open.ID, now); err != nil {
 				return err
 			}
+		} else {
+			slog.Debug("alert: already firing, cooldown not yet elapsed",
+				slog.Int64("rule_id", rule.ID),
+				slog.Int64("server_id", target.ID),
+				slog.String("metric", rule.Metric),
+				slog.Int("cooldown_seconds", rule.CooldownSeconds),
+			)
 		}
 		return nil
 	}
 
 	// Not yet firing: accumulate consecutive breaches before transitioning.
-	if e.incStreak(rule, target) < rule.ConsecutiveHits {
+	streak := e.incStreak(rule, target)
+	if streak < rule.ConsecutiveHits {
+		slog.Info("alert: breach detected — waiting for consecutive hits",
+			slog.Int64("rule_id", rule.ID),
+			slog.Int64("server_id", target.ID),
+			slog.String("server", target.Name),
+			slog.String("metric", rule.Metric),
+			slog.Float64("value", value),
+			slog.Int("streak", streak),
+			slog.Int("required", rule.ConsecutiveHits),
+		)
 		return nil
 	}
+	slog.Info("alert: firing",
+		slog.Int64("rule_id", rule.ID),
+		slog.Int64("server_id", target.ID),
+		slog.String("server", target.Name),
+		slog.String("metric", rule.Metric),
+		slog.Float64("value", value),
+		slog.Int("consecutive_hits", rule.ConsecutiveHits),
+	)
 	return e.fire(ctx, target, rule, value, now)
 }
 

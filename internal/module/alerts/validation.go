@@ -50,7 +50,7 @@ func DefaultRuleFormInput() RuleFormInput {
 		Metric:          MetricCPU,
 		Comparator:      ComparatorGTE,
 		Threshold:       "90",
-		ConsecutiveHits: "3",
+		ConsecutiveHits: "1",
 		CooldownSeconds: "900",
 		Severity:        SeverityWarning,
 		Enabled:         true,
