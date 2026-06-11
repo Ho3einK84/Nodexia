@@ -23,6 +23,7 @@ GIT_REF=""
 IMAGE_VERSION=""
 ADMIN_USER=""
 ADMIN_PASSWORD=""
+TELEGRAM_BOT_TOKEN=""
 NON_INTERACTIVE=0
 SKIP_DNS=0
 SKIP_PORT_CHECK=0
@@ -90,6 +91,9 @@ Options:
   --image-version <tag>   Docker build version. Default: ${DEFAULT_IMAGE_VERSION}
   --admin-user <name>     Admin username. Preserved on rerun unless provided.
   --admin-password <pass> Admin password. Preserved on rerun unless provided.
+  --telegram-bot-token <token>
+                          Telegram bot token for alert delivery (optional).
+                          Preserved on rerun unless provided.
   --non-interactive       Do not prompt; fail or generate missing values.
   --skip-dns-check        Skip public DNS verification.
   --skip-port-check       Skip local 80/443 port check.
@@ -155,6 +159,11 @@ parse_args() {
       ADMIN_PASSWORD="$2"
       shift 2
       ;;
+    --telegram-bot-token)
+      require_value "$1" "${2:-}"
+      TELEGRAM_BOT_TOKEN="$(trim "$2")"
+      shift 2
+      ;;
     --non-interactive)
       NON_INTERACTIVE=1
       shift
@@ -217,6 +226,10 @@ set_defaults() {
 
   if [[ -z "$ADMIN_PASSWORD" ]]; then
     ADMIN_PASSWORD="$(read_existing_env_value NODEXIA_AUTH_PASSWORD)"
+  fi
+
+  if [[ -z "$TELEGRAM_BOT_TOKEN" ]]; then
+    TELEGRAM_BOT_TOKEN="$(read_existing_env_value NODEXIA_TELEGRAM_BOT_TOKEN)"
   fi
 }
 
@@ -482,6 +495,8 @@ NODEXIA_IMAGE_VERSION=${IMAGE_VERSION}
 
 NODEXIA_APP_NAME=Nodexia
 NODEXIA_ENV=production
+NODEXIA_LOG_LEVEL=info
+NODEXIA_LOG_FORMAT=json
 NODEXIA_HTTP_ADDR=:8080
 NODEXIA_HTTP_READ_TIMEOUT=15s
 NODEXIA_HTTP_WRITE_TIMEOUT=15s
@@ -520,6 +535,11 @@ NODEXIA_BEHIND_REVERSE_PROXY=true
 
 NODEXIA_AUTH_USERNAME=${ADMIN_USER}
 NODEXIA_AUTH_PASSWORD=${ADMIN_PASSWORD}
+
+# Telegram alerting (optional). Provide a bot token to enable alert delivery,
+# then configure rules and channels in the panel under /alerts. Leave blank to
+# keep sending disabled. This is a secret: never commit or share it.
+NODEXIA_TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
 
 NODEXIA_HEALTHCHECK_URL=http://127.0.0.1:8080/healthz
 NODEXIA_HEALTHCHECK_TIMEOUT=3s
@@ -647,6 +667,12 @@ print_summary() {
   say "  cd ${INSTALL_DIR} && docker compose ps"
   say "  cd ${INSTALL_DIR} && docker compose logs -f"
   say ""
+  if [[ -z "$(trim "$TELEGRAM_BOT_TOKEN")" ]]; then
+    say "  Tip: to enable Telegram alerts, set NODEXIA_TELEGRAM_BOT_TOKEN in"
+    say "       ${ENV_FILE}, restart the stack, then configure /alerts."
+    say ""
+  fi
+  say "  Edit config:  nano ${INSTALL_DIR}/${ENV_FILE}  (then: systemctl restart ${SYSTEMD_UNIT})"
   say "  Run this installer again to update Nodexia."
   say ""
 }
