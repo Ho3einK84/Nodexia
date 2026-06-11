@@ -38,19 +38,27 @@ func buildOverview(
 	channels []Channel,
 	silences []Silence,
 	servers []serverRef,
+	tokenConfigured bool,
 	now time.Time,
 ) view.AlertsOverviewView {
 	names := serverNameMap(servers)
 	channelNames := channelNameMap(channels)
 
+	notice := ""
+	if !tokenConfigured {
+		notice = "Telegram bot token not configured — set NODEXIA_TELEGRAM_BOT_TOKEN to enable sending test messages and alerts."
+	}
+
 	return view.AlertsOverviewView{
-		Rules:         buildRuleRows(rules, names, channelNames),
-		Channels:      buildChannelRows(channels),
-		Silences:      buildSilenceRows(silences, names, now),
-		SilenceForm:   buildSilenceFormView(SilenceFormInput{}, ValidationErrors{}, servers),
-		HasServers:    len(servers) > 0,
-		NewRuleURL:    "/alerts/rules/new",
-		NewChannelURL: "/alerts/channels/new",
+		Rules:           buildRuleRows(rules, names, channelNames),
+		Channels:        buildChannelRows(channels),
+		Silences:        buildSilenceRows(silences, names, now),
+		SilenceForm:     buildSilenceFormView(SilenceFormInput{}, ValidationErrors{}, servers),
+		HasServers:      len(servers) > 0,
+		NewRuleURL:      "/alerts/rules/new",
+		NewChannelURL:   "/alerts/channels/new",
+		TokenConfigured: tokenConfigured,
+		TokenNotice:     notice,
 	}
 }
 

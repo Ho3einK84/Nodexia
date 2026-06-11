@@ -43,6 +43,7 @@ type Config struct {
 	Security    SecurityConfig
 	Database    DatabaseConfig
 	Install     InstallConfig
+	Notify      NotifyConfig
 }
 
 type AppConfig struct {
@@ -105,6 +106,14 @@ type InstallConfig struct {
 	BehindReverseProxy bool
 }
 
+// NotifyConfig holds notification transport settings. The Telegram bot token is
+// a secret: it lives only in the environment, is never persisted to the
+// database, and must never be logged or rendered. It is optional — when empty,
+// sending is disabled and the UI shows a "not configured" notice.
+type NotifyConfig struct {
+	TelegramBotToken string
+}
+
 func Load(version string) (Config, error) {
 	envFile := envOrDefault("NODEXIA_ENV_FILE", ".env")
 	if err := loadEnvFile(envFile); err != nil {
@@ -165,6 +174,9 @@ func Load(version string) (Config, error) {
 			AutoTLS:            boolFromEnv("NODEXIA_AUTO_TLS", true),
 			EnvFile:            envFile,
 			BehindReverseProxy: boolFromEnv("NODEXIA_BEHIND_REVERSE_PROXY", false),
+		},
+		Notify: NotifyConfig{
+			TelegramBotToken: strings.TrimSpace(os.Getenv("NODEXIA_TELEGRAM_BOT_TOKEN")),
 		},
 	}
 

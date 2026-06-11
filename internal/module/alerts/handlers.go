@@ -7,49 +7,62 @@ import (
 
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
+	"github.com/Ho3einK84/Nodexia/internal/notify"
+	"github.com/Ho3einK84/Nodexia/internal/view"
 )
 
 // Handlers groups every alerts HTTP handler around the shared dependencies and
 // repositories. The servers repository is used only to resolve server names for
 // labels and dropdowns, keeping this module decoupled from server internals.
+// notifier is nil when no Telegram bot token is configured; the UI then shows a
+// "not configured" notice instead of attempting to send.
 type Handlers struct {
 	deps       module.Dependencies
 	repo       Repository
 	serverRepo servers.Repository
+	notifier   notify.Notifier
 }
 
-func NewHandlers(deps module.Dependencies, repo Repository, serverRepo servers.Repository) Handlers {
-	return Handlers{deps: deps, repo: repo, serverRepo: serverRepo}
+func NewHandlers(deps module.Dependencies, repo Repository, serverRepo servers.Repository, notifier notify.Notifier) Handlers {
+	return Handlers{deps: deps, repo: repo, serverRepo: serverRepo, notifier: notifier}
+}
+
+// tokenConfigured reports whether a notifier is available to send messages.
+func (h Handlers) tokenConfigured() bool {
+	return h.notifier != nil
 }
 
 // ── Overview ─────────────────────────────────────────────────────────────────
 
 func (h Handlers) Overview(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	overview, err := h.overviewModel(r.Context())
+	if err != nil {
+		renderError(w, h.deps, err, "Could not load alerts", "The alerts page could not be loaded.")
+		return
+	}
+	renderOverview(w, r, h.deps, http.StatusOK, overview, flashKind(r), flashMessage(r))
+}
 
+// overviewModel loads every section of the alerts overview in one place so the
+// page, the inline-error path, and the channel test action share one builder.
+func (h Handlers) overviewModel(ctx context.Context) (view.AlertsOverviewView, error) {
 	rules, err := h.repo.ListRules(ctx)
 	if err != nil {
-		renderError(w, h.deps, err, "Could not load alert rules", "The alert rules could not be loaded.")
-		return
+		return view.AlertsOverviewView{}, err
 	}
 	channels, err := h.repo.ListChannels(ctx)
 	if err != nil {
-		renderError(w, h.deps, err, "Could not load channels", "The notification channels could not be loaded.")
-		return
+		return view.AlertsOverviewView{}, err
 	}
 	silences, err := h.repo.ListSilences(ctx)
 	if err != nil {
-		renderError(w, h.deps, err, "Could not load silences", "The active silences could not be loaded.")
-		return
+		return view.AlertsOverviewView{}, err
 	}
 	refs, err := h.loadServerRefs(ctx)
 	if err != nil {
-		renderError(w, h.deps, err, "Could not load servers", "The server registry could not be loaded.")
-		return
+		return view.AlertsOverviewView{}, err
 	}
-
-	overview := buildOverview(rules, channels, silences, refs, time.Now().UTC())
-	renderOverview(w, r, h.deps, http.StatusOK, overview, flashKind(r), flashMessage(r))
+	return buildOverview(rules, channels, silences, refs, h.tokenConfigured(), time.Now().UTC()), nil
 }
 
 // ── Rules ────────────────────────────────────────────────────────────────────
@@ -269,6 +282,66 @@ func (h Handlers) ChannelDelete(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirectURL("channel-deleted"), http.StatusSeeOther)
 }
 
+// ChannelTest sends a fixed sample message to a channel's chat id using the
+// configured Telegram bot token, then re-renders the alerts overview with a
+// success or error flash. When no token is configured it shows a notice instead
+// of erroring.
+func (h Handlers) ChannelTest(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		renderError(w, h.deps, ErrNotFound, "Channel not found", "The requested channel does not exist.")
+		return
+	}
+	channel, err := h.repo.GetChannel(r.Context(), id)
+	if err != nil {
+		renderError(w, h.deps, err, "Could not load channel", "The requested channel could not be loaded.")
+		return
+	}
+
+	kind, message, statusCode := h.sendTestMessage(r.Context(), channel)
+
+	overview, err := h.overviewModel(r.Context())
+	if err != nil {
+		renderError(w, h.deps, err, "Could not load alerts", "The alerts page could not be loaded.")
+		return
+	}
+	renderOverview(w, r, h.deps, statusCode, overview, kind, message)
+}
+
+// sendTestMessage renders and dispatches a sample alert to the channel, mapping
+// the outcome to a flash kind, message, and HTTP status. The Telegram client
+// redacts the bot token from any error, so the message is safe to surface.
+func (h Handlers) sendTestMessage(ctx context.Context, channel Channel) (kind, message string, statusCode int) {
+	if !h.tokenConfigured() {
+		return "warn", "Telegram bot token not configured. Set NODEXIA_TELEGRAM_BOT_TOKEN to send test messages.", http.StatusOK
+	}
+
+	text, err := notify.RenderMessage(channel.MessageTemplate, sampleAlertMessage())
+	if err != nil {
+		return "error", "Could not render the test message — check this channel's template: " + err.Error(), http.StatusUnprocessableEntity
+	}
+
+	sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	if err := h.notifier.Send(sendCtx, channel.ChatID, text); err != nil {
+		return "error", "Test message to " + channel.Name + " failed: " + err.Error(), http.StatusBadGateway
+	}
+
+	return "success", "Test message sent to " + channel.Name + ".", http.StatusOK
+}
+
+// sampleAlertMessage is the canned alert used by the channel test action.
+func sampleAlertMessage() notify.AlertMessage {
+	return notify.AlertMessage{
+		Server:    "example-server",
+		Metric:    MetricLabel(MetricCPU),
+		Value:     "93%",
+		Threshold: ComparatorSymbol(ComparatorGTE) + " 90%",
+		Severity:  SeverityWarning,
+		FiredAt:   time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
+	}
+}
+
 // ── Silences ─────────────────────────────────────────────────────────────────
 
 func (h Handlers) SilenceCreate(w http.ResponseWriter, r *http.Request) {
@@ -349,19 +422,9 @@ func (h Handlers) ServerSilence(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) renderOverviewWithSilenceErrors(w http.ResponseWriter, r *http.Request, input SilenceFormInput, errs ValidationErrors) {
 	ctx := r.Context()
-	rules, err := h.repo.ListRules(ctx)
+	overview, err := h.overviewModel(ctx)
 	if err != nil {
-		renderError(w, h.deps, err, "Could not load alert rules", "The alert rules could not be loaded.")
-		return
-	}
-	channels, err := h.repo.ListChannels(ctx)
-	if err != nil {
-		renderError(w, h.deps, err, "Could not load channels", "The notification channels could not be loaded.")
-		return
-	}
-	silences, err := h.repo.ListSilences(ctx)
-	if err != nil {
-		renderError(w, h.deps, err, "Could not load silences", "The active silences could not be loaded.")
+		renderError(w, h.deps, err, "Could not load alerts", "The alerts page could not be loaded.")
 		return
 	}
 	refs, err := h.loadServerRefs(ctx)
@@ -369,8 +432,6 @@ func (h Handlers) renderOverviewWithSilenceErrors(w http.ResponseWriter, r *http
 		renderError(w, h.deps, err, "Could not load servers", "The server registry could not be loaded.")
 		return
 	}
-
-	overview := buildOverview(rules, channels, silences, refs, time.Now().UTC())
 	overview.SilenceForm = buildSilenceFormView(input, errs, refs)
 
 	renderOverview(w, r, h.deps, http.StatusUnprocessableEntity, overview, "error",

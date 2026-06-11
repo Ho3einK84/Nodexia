@@ -90,6 +90,10 @@
             <td>{{ if .HasTemplate }}custom{{ else }}default{{ end }}</td>
             <td>{{ if .Enabled }}<span class="badge badge--ok">enabled</span>{{ else }}<span class="badge badge--warn">disabled</span>{{ end }}</td>
             <td class="data-table__actions">
+              <form method="post" action="{{ .TestURL }}" class="inline-form">
+                <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+                <button type="submit" class="btn btn--ghost btn--sm" aria-label="Send test message" title="Send a test message to this channel"><i data-lucide="send-horizontal"></i></button>
+              </form>
               <a class="btn btn--ghost btn--sm" href="{{ .EditURL }}" aria-label="Edit channel"><i data-lucide="pencil"></i></a>
               <form method="post" action="{{ .DeleteURL }}" class="inline-form">
                 <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
