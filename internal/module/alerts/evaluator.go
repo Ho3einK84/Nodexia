@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/notify"
@@ -64,18 +63,13 @@ func (m Metrics) valueFor(metric string) (float64, bool) {
 }
 
 // Evaluator turns collected metrics into firing/resolved alert events and
-// dispatches notifications. Persisted alert_events are the source of truth for
-// open alerts and notification timing, so firing/resolved state and cooldown
-// survive restarts; only the consecutive-breach streak is kept in memory and is
-// allowed to reset on restart (an already-open event keeps re-notifying via the
-// persisted notified_at).
+// dispatches notifications. All state — events, cooldowns, and consecutive-breach
+// streaks — is persisted to the database so it survives restarts. The streaks
+// table (alert_rule_streaks) is updated on every evaluation cycle.
 type Evaluator struct {
 	repo     Repository
 	notifier notify.Notifier // nil when no Telegram token is configured
 	clock    func() time.Time
-
-	mu      sync.Mutex
-	streaks map[streakKey]int
 }
 
 type streakKey struct {
@@ -102,7 +96,6 @@ func NewEvaluator(repo Repository, notifier notify.Notifier, opts ...EvaluatorOp
 		repo:     repo,
 		notifier: notifier,
 		clock:    func() time.Time { return time.Now().UTC() },
-		streaks:  map[streakKey]int{},
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -164,7 +157,9 @@ func (e *Evaluator) evaluateRule(ctx context.Context, target Target, rule Rule, 
 	// Recovery: value is back below the threshold. Resolve any open event,
 	// regardless of silence (a silence suppresses firing, not resolution).
 	if !breach {
-		e.resetStreak(rule, target)
+		if err := e.resetStreak(ctx, rule, target); err != nil {
+			return err
+		}
 		if hasOpen {
 			slog.Info("alert: metric recovered — resolving open event",
 				slog.Int64("rule_id", rule.ID),
@@ -189,7 +184,9 @@ func (e *Evaluator) evaluateRule(ctx context.Context, target Target, rule Rule, 
 			slog.Int64("server_id", target.ID),
 			slog.String("metric", rule.Metric),
 		)
-		e.resetStreak(rule, target)
+		if err := e.resetStreak(ctx, rule, target); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -217,7 +214,10 @@ func (e *Evaluator) evaluateRule(ctx context.Context, target Target, rule Rule, 
 	}
 
 	// Not yet firing: accumulate consecutive breaches before transitioning.
-	streak := e.incStreak(rule, target)
+	streak, err := e.incStreak(ctx, rule, target)
+	if err != nil {
+		return err
+	}
 	if streak < rule.ConsecutiveHits {
 		slog.Info("alert: breach detected — waiting for consecutive hits",
 			slog.Int64("rule_id", rule.ID),
@@ -258,7 +258,9 @@ func (e *Evaluator) fire(ctx context.Context, target Target, rule Rule, value fl
 		return err
 	}
 
-	e.resetStreak(rule, target)
+	if err := e.resetStreak(ctx, rule, target); err != nil {
+		return err
+	}
 	e.dispatch(ctx, rule, target, e.message(rule, target, value, notify.StateFiring, now))
 	return nil
 }
@@ -348,18 +350,20 @@ func (e *Evaluator) message(rule Rule, target Target, value float64, state strin
 	}
 }
 
-func (e *Evaluator) incStreak(rule Rule, target Target) int {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	key := streakKey{ruleID: rule.ID, serverID: target.ID}
-	e.streaks[key]++
-	return e.streaks[key]
+func (e *Evaluator) incStreak(ctx context.Context, rule Rule, target Target) (int, error) {
+	current, err := e.repo.GetStreak(ctx, rule.ID, target.ID)
+	if err != nil {
+		return 0, err
+	}
+	next := current + 1
+	if err := e.repo.SetStreak(ctx, rule.ID, target.ID, next); err != nil {
+		return 0, err
+	}
+	return next, nil
 }
 
-func (e *Evaluator) resetStreak(rule Rule, target Target) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	delete(e.streaks, streakKey{ruleID: rule.ID, serverID: target.ID})
+func (e *Evaluator) resetStreak(ctx context.Context, rule Rule, target Target) error {
+	return e.repo.SetStreak(ctx, rule.ID, target.ID, 0)
 }
 
 // ruleEventID returns the rule id to persist on an event. Rules always have a

@@ -66,7 +66,17 @@ func (h Handlers) overviewModel(ctx context.Context) (view.AlertsOverviewView, e
 	if err != nil {
 		return view.AlertsOverviewView{}, err
 	}
-	return buildOverview(rules, channels, silences, events, refs, h.tokenConfigured(), time.Now().UTC()), nil
+
+	ruleIDs := make([]int64, len(rules))
+	for i, r := range rules {
+		ruleIDs[i] = r.ID
+	}
+	streaks, err := h.repo.ListStreaksForRules(ctx, ruleIDs)
+	if err != nil {
+		streaks = map[streakKey]int{} // non-fatal: overview renders without streak info
+	}
+
+	return buildOverview(rules, channels, silences, events, refs, streaks, h.tokenConfigured(), time.Now().UTC()), nil
 }
 
 // recentEventLimit caps how many alert history rows the overview shows.

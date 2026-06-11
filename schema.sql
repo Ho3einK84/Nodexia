@@ -209,3 +209,17 @@ CREATE INDEX IF NOT EXISTS idx_alert_events_server_id
 
 CREATE INDEX IF NOT EXISTS idx_alert_events_server_metric_state
   ON alert_events (server_id, metric, state);
+
+-- alert_rule_streaks tracks the in-progress consecutive-breach count per
+-- (rule, server) pair. Persisting this avoids streak loss on restart, which
+-- previously caused rules with consecutive_hits > 1 to silently reset and
+-- never reach the fire threshold when the app restarted between cycles.
+CREATE TABLE IF NOT EXISTS alert_rule_streaks (
+  rule_id   INTEGER NOT NULL,
+  server_id INTEGER NOT NULL,
+  streak    INTEGER NOT NULL DEFAULT 0,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (rule_id, server_id),
+  FOREIGN KEY (rule_id)   REFERENCES alert_rules(id)  ON DELETE CASCADE,
+  FOREIGN KEY (server_id) REFERENCES servers(id)      ON DELETE CASCADE
+);

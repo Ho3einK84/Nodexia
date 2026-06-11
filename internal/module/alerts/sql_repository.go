@@ -605,6 +605,119 @@ func (r SQLRepository) ListRecentEvents(ctx context.Context, limit int) ([]Event
 	return events, rows.Err()
 }
 
+// ── Streaks ──────────────────────────────────────────────────────────────────
+
+func (r SQLRepository) GetStreak(ctx context.Context, ruleID, serverID int64) (int, error) {
+	var streak int
+	err := r.conn.QueryRowContext(
+		ctx,
+		`SELECT streak FROM alert_rule_streaks WHERE rule_id = ? AND server_id = ? LIMIT 1`,
+		ruleID, serverID,
+	).Scan(&streak)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("alerts: get streak rule %d server %d: %w", ruleID, serverID, err)
+	}
+	return streak, nil
+}
+
+func (r SQLRepository) SetStreak(ctx context.Context, ruleID, serverID int64, streak int) error {
+	now := time.Now().UTC()
+
+	if streak <= 0 {
+		_, err := r.conn.ExecContext(
+			ctx,
+			`DELETE FROM alert_rule_streaks WHERE rule_id = ? AND server_id = ?`,
+			ruleID, serverID,
+		)
+		if err != nil {
+			return fmt.Errorf("alerts: delete streak rule %d server %d: %w", ruleID, serverID, err)
+		}
+		return nil
+	}
+
+	// Portable upsert: update if the row exists, insert otherwise. This works on
+	// both SQLite and MySQL without engine-specific ON CONFLICT / ON DUPLICATE KEY
+	// syntax, matching the pattern used in CreateSilence.
+	tx, err := r.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("alerts: begin set streak transaction: %w", err)
+	}
+
+	var existing int
+	scanErr := tx.QueryRowContext(
+		ctx,
+		`SELECT 1 FROM alert_rule_streaks WHERE rule_id = ? AND server_id = ? LIMIT 1`,
+		ruleID, serverID,
+	).Scan(&existing)
+
+	switch {
+	case scanErr == nil:
+		if _, err := tx.ExecContext(
+			ctx,
+			`UPDATE alert_rule_streaks SET streak = ?, updated_at = ? WHERE rule_id = ? AND server_id = ?`,
+			streak, now, ruleID, serverID,
+		); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("alerts: update streak rule %d server %d: %w", ruleID, serverID, err)
+		}
+	case errors.Is(scanErr, sql.ErrNoRows):
+		if _, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO alert_rule_streaks (rule_id, server_id, streak, updated_at) VALUES (?, ?, ?, ?)`,
+			ruleID, serverID, streak, now,
+		); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("alerts: insert streak rule %d server %d: %w", ruleID, serverID, err)
+		}
+	default:
+		_ = tx.Rollback()
+		return fmt.Errorf("alerts: check streak rule %d server %d: %w", ruleID, serverID, scanErr)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("alerts: commit set streak transaction: %w", err)
+	}
+	return nil
+}
+
+func (r SQLRepository) ListStreaksForRules(ctx context.Context, ruleIDs []int64) (map[streakKey]int, error) {
+	if len(ruleIDs) == 0 {
+		return map[streakKey]int{}, nil
+	}
+
+	placeholders := strings.Repeat("?,", len(ruleIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+
+	args := make([]any, len(ruleIDs))
+	for i, id := range ruleIDs {
+		args[i] = id
+	}
+
+	rows, err := r.conn.QueryContext(
+		ctx,
+		`SELECT rule_id, server_id, streak FROM alert_rule_streaks WHERE rule_id IN (`+placeholders+`)`,
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("alerts: list streaks: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[streakKey]int{}
+	for rows.Next() {
+		var ruleID, serverID int64
+		var streak int
+		if err := rows.Scan(&ruleID, &serverID, &streak); err != nil {
+			return nil, fmt.Errorf("alerts: scan streak: %w", err)
+		}
+		out[streakKey{ruleID: ruleID, serverID: serverID}] = streak
+	}
+	return out, rows.Err()
+}
+
 func rowsAffectedOrNotFound(result sql.Result) error {
 	affected, err := result.RowsAffected()
 	if err != nil {

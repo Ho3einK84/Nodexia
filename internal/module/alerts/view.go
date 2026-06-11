@@ -2,6 +2,7 @@ package alerts
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/view"
@@ -39,6 +40,7 @@ func buildOverview(
 	silences []Silence,
 	events []Event,
 	servers []serverRef,
+	streaks map[streakKey]int,
 	tokenConfigured bool,
 	now time.Time,
 ) view.AlertsOverviewView {
@@ -51,7 +53,7 @@ func buildOverview(
 	}
 
 	return view.AlertsOverviewView{
-		Rules:           buildRuleRows(rules, names, channelNames),
+		Rules:           buildRuleRows(rules, names, channelNames, streaks),
 		Channels:        buildChannelRows(channels),
 		Silences:        buildSilenceRows(silences, names, now),
 		Events:          buildEventRows(events, names),
@@ -98,7 +100,7 @@ func buildSilenceFormView(input SilenceFormInput, errs ValidationErrors, servers
 	}
 }
 
-func buildRuleRows(rules []Rule, serverNames, channelNames map[int64]string) []view.AlertRuleView {
+func buildRuleRows(rules []Rule, serverNames, channelNames map[int64]string, streaks map[streakKey]int) []view.AlertRuleView {
 	rows := make([]view.AlertRuleView, 0, len(rules))
 	for _, rule := range rules {
 		channelLabel := "All enabled channels"
@@ -107,6 +109,30 @@ func buildRuleRows(rules []Rule, serverNames, channelNames map[int64]string) []v
 				channelLabel = name
 			} else {
 				channelLabel = fmt.Sprintf("Channel #%d", *rule.ChannelID)
+			}
+		}
+
+		// Compute streak summary: show "N/M" when consecutive breaches are
+		// accumulating but the threshold hasn't been reached yet, so operators
+		// can see the rule is progressing toward firing.
+		streakSummary := ""
+		if rule.ConsecutiveHits > 1 {
+			maxStreak := 0
+			if rule.ServerID != nil {
+				// Server-specific rule: only one possible server.
+				if s, ok := streaks[streakKey{ruleID: rule.ID, serverID: *rule.ServerID}]; ok && s > 0 {
+					maxStreak = s
+				}
+			} else {
+				// Global rule: find the highest streak across all servers.
+				for k, s := range streaks {
+					if k.ruleID == rule.ID && s > maxStreak {
+						maxStreak = s
+					}
+				}
+			}
+			if maxStreak > 0 {
+				streakSummary = strconv.Itoa(maxStreak) + "/" + strconv.Itoa(rule.ConsecutiveHits)
 			}
 		}
 
@@ -119,6 +145,7 @@ func buildRuleRows(rules []Rule, serverNames, channelNames map[int64]string) []v
 			ComparatorSymbol: ComparatorSymbol(rule.Comparator),
 			ThresholdDisplay: FormatThresholdWithUnit(rule.Metric, rule.Threshold),
 			ConsecutiveHits:  rule.ConsecutiveHits,
+			StreakSummary:    streakSummary,
 			Cooldown:         humanizeDurationSeconds(rule.CooldownSeconds),
 			Severity:         rule.Severity,
 			ChannelLabel:     channelLabel,

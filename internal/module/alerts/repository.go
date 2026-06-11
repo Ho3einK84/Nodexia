@@ -128,4 +128,14 @@ type Repository interface {
 	MarkEventNotified(ctx context.Context, eventID int64, at time.Time) error
 	ResolveEvent(ctx context.Context, eventID int64, at time.Time) error
 	ListRecentEvents(ctx context.Context, limit int) ([]Event, error)
+
+	// Streaks track consecutive-breach counts per (rule, server) so they survive
+	// restarts. GetStreak returns 0 when no row exists yet.
+	GetStreak(ctx context.Context, ruleID, serverID int64) (int, error)
+	// SetStreak upserts the streak for (ruleID, serverID). A value of 0 deletes
+	// the row so the table stays small.
+	SetStreak(ctx context.Context, ruleID, serverID int64, streak int) error
+	// ListStreaksForRules returns the current streak for each (rule_id, server_id)
+	// pair. Used by the overview page to show pending breach counts.
+	ListStreaksForRules(ctx context.Context, ruleIDs []int64) (map[streakKey]int, error)
 }

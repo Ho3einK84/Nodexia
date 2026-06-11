@@ -38,7 +38,7 @@
             <td>{{ .MetricLabel }}</td>
             <td><code>{{ .ComparatorSymbol }} {{ .ThresholdDisplay }}</code></td>
             <td><span class="severity-badge severity-badge--{{ .Severity }}">{{ .Severity }}</span></td>
-            <td>{{ .ConsecutiveHits }}</td>
+            <td>{{ .ConsecutiveHits }}{{ if .StreakSummary }} <span class="badge badge--warn" title="Pending breach streak — alert fires when streak reaches {{ .ConsecutiveHits }}">{{ .StreakSummary }}</span>{{ end }}</td>
             <td>{{ .Cooldown }}</td>
             <td>{{ .ChannelLabel }}</td>
             <td>{{ if .Enabled }}<span class="badge badge--ok">enabled</span>{{ else }}<span class="badge badge--warn">disabled</span>{{ end }}</td>
@@ -299,7 +299,7 @@
           <label class="form-field">
             <span><i data-lucide="repeat" class="icon-in-button"></i> Consecutive hits</span>
             <input type="number" name="consecutive_hits" min="1" step="1" value="{{ .AlertRuleForm.ConsecutiveHits }}">
-            <small class="field-hint">Breaching samples in a row before firing (noise control).</small>
+            <small class="field-hint">Consecutive breaching cycles required before the first alert fires. 1 = alert on first breach (recommended). Higher values suppress noise but add delay — with a 15-min monitoring interval, 3 hits means a 45-min wait.</small>
             {{ with index .AlertRuleForm.Errors "consecutive_hits" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
 

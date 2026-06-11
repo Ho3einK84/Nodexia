@@ -526,6 +526,10 @@ type AlertRuleView struct {
 	ComparatorSymbol string
 	ThresholdDisplay string
 	ConsecutiveHits  int
+	// StreakSummary is a human-readable "N/M" pending-streak label shown when
+	// the rule is accumulating consecutive breaches but has not yet fired.
+	// Empty when there is no active streak or when ConsecutiveHits == 1.
+	StreakSummary    string
 	Cooldown         string
 	Severity         string
 	ChannelLabel     string
