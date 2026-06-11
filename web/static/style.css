@@ -279,6 +279,7 @@ body {
   border-radius: 16px;
   padding: 24px 28px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  min-width: 0; /* allow card to shrink inside CSS Grid so overflow-x: auto on children activates */
 }
 
 .card:hover {
@@ -2922,6 +2923,9 @@ body.drawer-open {
 .data-table-wrap {
   overflow-x: auto;
   margin-top: 12px;
+  /* Establish a containing block so the table scrolls inside the card */
+  min-width: 0;
+  max-width: 100%;
 }
 
 .data-table {
@@ -3056,4 +3060,13 @@ body.drawer-open {
   padding: 2px 6px;
   font-size: 0.8rem;
   border-radius: var(--radius-sm);
+}
+
+/* ── Alerts responsive ───────────────────────────────── */
+
+@media (max-width: 700px) {
+  /* Collapse the single-card grid wrapper used on alert rule / channel forms */
+  .grid {
+    grid-template-columns: 1fr;
+  }
 }
