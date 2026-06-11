@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -28,7 +29,10 @@ type Service struct {
 	commandTimeout time.Duration
 	hostKeyPolicy  string
 	knownHostsPath string
-	hostKeysMu     sync.Mutex
+	// hostKeysMu guards all reads and writes of the known-hosts file.
+	// IMPORTANT: Service methods use *Service (pointer) receivers so that this
+	// mutex is shared across all callers rather than copied per call.
+	hostKeysMu sync.Mutex
 }
 
 type ConnectionRequest struct {
@@ -98,7 +102,10 @@ func New(cfg config.SSHConfig, security config.SecurityConfig) *Service {
 	}
 }
 
-func (s Service) TestConnection(ctx context.Context, req ConnectionRequest) (ConnectionResult, error) {
+// All methods below use *Service (pointer receivers) so that hostKeysMu is
+// shared across callers rather than silently copied per call site.
+
+func (s *Service) TestConnection(ctx context.Context, req ConnectionRequest) (ConnectionResult, error) {
 	startedAt := time.Now()
 	client, address, err := s.connect(ctx, req)
 	if err != nil {
@@ -112,11 +119,11 @@ func (s Service) TestConnection(ctx context.Context, req ConnectionRequest) (Con
 	}, nil
 }
 
-func (s Service) RunCommand(ctx context.Context, req CommandRequest) (CommandResult, error) {
+func (s *Service) RunCommand(ctx context.Context, req CommandRequest) (CommandResult, error) {
 	return s.StreamCommand(ctx, req, StreamHandlers{})
 }
 
-func (s Service) StreamCommand(ctx context.Context, req CommandRequest, handlers StreamHandlers) (CommandResult, error) {
+func (s *Service) StreamCommand(ctx context.Context, req CommandRequest, handlers StreamHandlers) (CommandResult, error) {
 	command := strings.TrimSpace(req.Command)
 	if command == "" {
 		return CommandResult{}, errors.New("sshclient: command cannot be empty")
@@ -201,7 +208,7 @@ func (s Service) StreamCommand(ctx context.Context, req CommandRequest, handlers
 	}
 }
 
-func (s Service) ListDirectory(ctx context.Context, req ConnectionRequest, remotePath string) (DirectoryListing, error) {
+func (s *Service) ListDirectory(ctx context.Context, req ConnectionRequest, remotePath string) (DirectoryListing, error) {
 	_, sftpClient, cleanup, err := s.openSFTP(ctx, req)
 	if err != nil {
 		return DirectoryListing{}, err
@@ -231,7 +238,7 @@ func (s Service) ListDirectory(ctx context.Context, req ConnectionRequest, remot
 	}, nil
 }
 
-func (s Service) OpenFile(ctx context.Context, req ConnectionRequest, remotePath string) (RemoteFile, error) {
+func (s *Service) OpenFile(ctx context.Context, req ConnectionRequest, remotePath string) (RemoteFile, error) {
 	_, sftpClient, cleanup, err := s.openSFTP(ctx, req)
 	if err != nil {
 		return RemoteFile{}, err
@@ -260,9 +267,9 @@ func (s Service) OpenFile(ctx context.Context, req ConnectionRequest, remotePath
 		Mode:       info.Mode().String(),
 		ModifiedAt: info.ModTime().UTC(),
 		Content: &remoteReadCloser{
-			reader:   file,
-			cleanup:  cleanup,
-			closers:  nil,
+			reader:  file,
+			cleanup: cleanup,
+			closers: nil,
 		},
 	}, nil
 }
@@ -316,7 +323,7 @@ var (
 	}
 )
 
-func (s Service) connect(ctx context.Context, req ConnectionRequest) (*xssh.Client, string, error) {
+func (s *Service) connect(ctx context.Context, req ConnectionRequest) (*xssh.Client, string, error) {
 	host := strings.TrimSpace(req.Host)
 	username := strings.TrimSpace(req.Username)
 	if host == "" {
@@ -340,6 +347,8 @@ func (s Service) connect(ctx context.Context, req ConnectionRequest) (*xssh.Clie
 	dialCtx, cancel := context.WithTimeout(ctx, s.resolveConnectTimeout(req.ConnectTimeout))
 	defer cancel()
 
+	slog.Debug("sshclient: dialing", slog.String("address", address), slog.String("user", username))
+
 	conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", address)
 	if err != nil {
 		return nil, "", fmt.Errorf("sshclient: dial %s: %w", address, err)
@@ -353,6 +362,8 @@ func (s Service) connect(ctx context.Context, req ConnectionRequest) (*xssh.Clie
 		_ = conn.SetDeadline(deadline)
 	}
 	stopAbort := context.AfterFunc(dialCtx, func() { _ = conn.SetDeadline(time.Now()) })
+
+	slog.Debug("sshclient: starting handshake", slog.String("address", address))
 
 	clientConn, channels, requests, err := xssh.NewClientConn(conn, address, &xssh.ClientConfig{
 		User:              username,
@@ -368,6 +379,10 @@ func (s Service) connect(ctx context.Context, req ConnectionRequest) (*xssh.Clie
 	stopAbort()
 	if err != nil {
 		_ = conn.Close()
+		slog.Warn("sshclient: handshake failed",
+			slog.String("address", address),
+			slog.String("error", err.Error()),
+		)
 		return nil, "", fmt.Errorf("sshclient: handshake %s: %w", address, err)
 	}
 
@@ -375,11 +390,14 @@ func (s Service) connect(ctx context.Context, req ConnectionRequest) (*xssh.Clie
 	// by the connect timeout; commands enforce their own timeouts.
 	_ = conn.SetDeadline(time.Time{})
 
+	slog.Debug("sshclient: handshake complete", slog.String("address", address))
+
 	return xssh.NewClient(clientConn, channels, requests), address, nil
 }
 
-func (s Service) hostKeyCallback(address string) xssh.HostKeyCallback {
+func (s *Service) hostKeyCallback(address string) xssh.HostKeyCallback {
 	if strings.EqualFold(strings.TrimSpace(s.hostKeyPolicy), "insecure") {
+		slog.Warn("sshclient: host key verification disabled (insecure mode)", slog.String("address", address))
 		return xssh.InsecureIgnoreHostKey()
 	}
 
@@ -388,7 +406,7 @@ func (s Service) hostKeyCallback(address string) xssh.HostKeyCallback {
 	}
 }
 
-func (s Service) verifyOrTrustHostKey(address string, key xssh.PublicKey) error {
+func (s *Service) verifyOrTrustHostKey(address string, key xssh.PublicKey) error {
 	s.hostKeysMu.Lock()
 	defer s.hostKeysMu.Unlock()
 
@@ -402,13 +420,27 @@ func (s Service) verifyOrTrustHostKey(address string, key xssh.PublicKey) error 
 	entry, exists := store[address]
 	if exists {
 		if entry.AuthorizedKey == serializedKey {
+			slog.Debug("sshclient: host key verified",
+				slog.String("address", address),
+				slog.String("fingerprint", fingerprint),
+			)
 			entry.LastSeenAt = time.Now().UTC()
 			store[address] = entry
 			return s.saveKnownHosts(store)
 		}
+		slog.Warn("sshclient: host key mismatch — possible MITM or key rotation",
+			slog.String("address", address),
+			slog.String("expected_fingerprint", entry.Fingerprint),
+			slog.String("observed_fingerprint", fingerprint),
+		)
 		return fmt.Errorf("sshclient: host key mismatch for %s: expected %s, got %s", address, entry.Fingerprint, fingerprint)
 	}
 
+	slog.Info("sshclient: trusting new host key (TOFU)",
+		slog.String("address", address),
+		slog.String("fingerprint", fingerprint),
+		slog.String("key_type", key.Type()),
+	)
 	store[address] = knownHostEntry{
 		AuthorizedKey: serializedKey,
 		Fingerprint:   fingerprint,
@@ -418,7 +450,7 @@ func (s Service) verifyOrTrustHostKey(address string, key xssh.PublicKey) error 
 	return s.saveKnownHosts(store)
 }
 
-func (s Service) ForgetHostKey(address string) error {
+func (s *Service) ForgetHostKey(address string) error {
 	s.hostKeysMu.Lock()
 	defer s.hostKeysMu.Unlock()
 
@@ -432,10 +464,11 @@ func (s Service) ForgetHostKey(address string) error {
 	}
 
 	delete(store, address)
+	slog.Info("sshclient: host key forgotten", slog.String("address", address))
 	return s.saveKnownHosts(store)
 }
 
-func (s Service) openSFTP(ctx context.Context, req ConnectionRequest) (*xssh.Client, *sftp.Client, func(), error) {
+func (s *Service) openSFTP(ctx context.Context, req ConnectionRequest) (*xssh.Client, *sftp.Client, func(), error) {
 	client, _, err := s.connect(ctx, req)
 	if err != nil {
 		return nil, nil, func() {}, err
@@ -554,36 +587,83 @@ type knownHostEntry struct {
 	LastSeenAt    time.Time `json:"last_seen_at"`
 }
 
-func (s Service) loadKnownHosts() (map[string]knownHostEntry, error) {
+// loadKnownHosts reads and parses the known-hosts JSON file.
+//
+// Corruption recovery: if the file exists but cannot be parsed as valid JSON
+// (most likely from a previous concurrent-write race that left interleaved
+// bytes), the file is renamed to a timestamped backup and an empty store is
+// returned so that TOFU re-trust can proceed on the next connection.  The
+// backup lets an operator inspect or restore the original keys.
+//
+// Must be called with s.hostKeysMu held.
+func (s *Service) loadKnownHosts() (map[string]knownHostEntry, error) {
 	if strings.TrimSpace(s.knownHostsPath) == "" {
 		return nil, errors.New("sshclient: known hosts path is not configured")
 	}
 
+	slog.Debug("sshclient: loading known hosts", slog.String("path", s.knownHostsPath))
+
 	content, err := os.ReadFile(s.knownHostsPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			slog.Debug("sshclient: known hosts file does not exist, starting fresh",
+				slog.String("path", s.knownHostsPath))
 			return map[string]knownHostEntry{}, nil
 		}
 		return nil, fmt.Errorf("sshclient: read known hosts: %w", err)
 	}
 
 	if len(bytes.TrimSpace(content)) == 0 {
+		slog.Debug("sshclient: known hosts file is empty, starting fresh",
+			slog.String("path", s.knownHostsPath))
 		return map[string]knownHostEntry{}, nil
 	}
 
 	store := map[string]knownHostEntry{}
 	if err := json.Unmarshal(content, &store); err != nil {
-		return nil, fmt.Errorf("sshclient: parse known hosts: %w", err)
+		// The file is present but not valid JSON.  This is most commonly caused
+		// by a concurrent-write race (see saveKnownHosts for details).  Back up
+		// the corrupted file and start with an empty store so that subsequent
+		// connections can re-establish TOFU trust without crashing.
+		backup := s.knownHostsPath + ".corrupt." + strconv.FormatInt(time.Now().UnixNano(), 10)
+		if renameErr := os.Rename(s.knownHostsPath, backup); renameErr != nil {
+			slog.Error("sshclient: known hosts file is corrupted and backup failed — removing",
+				slog.String("path", s.knownHostsPath),
+				slog.String("backup", backup),
+				slog.String("parse_error", err.Error()),
+				slog.String("rename_error", renameErr.Error()),
+			)
+			_ = os.Remove(s.knownHostsPath)
+		} else {
+			slog.Warn("sshclient: known hosts file is corrupted — backed up and starting fresh",
+				slog.String("path", s.knownHostsPath),
+				slog.String("backup", backup),
+				slog.String("parse_error", err.Error()),
+			)
+		}
+		return map[string]knownHostEntry{}, nil
 	}
+
+	slog.Debug("sshclient: known hosts loaded", slog.String("path", s.knownHostsPath), slog.Int("entries", len(store)))
 	return store, nil
 }
 
-func (s Service) saveKnownHosts(store map[string]knownHostEntry) error {
+// saveKnownHosts writes the known-hosts store to disk atomically.
+//
+// The store is marshalled to a sibling temp file first, then renamed into
+// place.  os.Rename is atomic on Linux (same filesystem), so readers always
+// see either the old or the new file — never a partially-written one.  This
+// also eliminates the truncate-then-write race that the previous os.WriteFile
+// approach suffered under concurrent calls.
+//
+// Must be called with s.hostKeysMu held.
+func (s *Service) saveKnownHosts(store map[string]knownHostEntry) error {
 	if strings.TrimSpace(s.knownHostsPath) == "" {
 		return errors.New("sshclient: known hosts path is not configured")
 	}
 
-	if err := os.MkdirAll(filepath.Dir(s.knownHostsPath), 0o755); err != nil {
+	dir := filepath.Dir(s.knownHostsPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("sshclient: create known hosts directory: %w", err)
 	}
 
@@ -591,9 +671,23 @@ func (s Service) saveKnownHosts(store map[string]knownHostEntry) error {
 	if err != nil {
 		return fmt.Errorf("sshclient: marshal known hosts: %w", err)
 	}
-	if err := os.WriteFile(s.knownHostsPath, append(payload, '\n'), 0o600); err != nil {
-		return fmt.Errorf("sshclient: write known hosts: %w", err)
+
+	// Write to a temp file in the same directory so os.Rename is atomic.
+	tmp := filepath.Join(dir, "."+filepath.Base(s.knownHostsPath)+".tmp")
+	if err := os.WriteFile(tmp, append(payload, '\n'), 0o600); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("sshclient: write known hosts temp file: %w", err)
 	}
+
+	if err := os.Rename(tmp, s.knownHostsPath); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("sshclient: atomically replace known hosts file: %w", err)
+	}
+
+	slog.Debug("sshclient: known hosts saved",
+		slog.String("path", s.knownHostsPath),
+		slog.Int("entries", len(store)),
+	)
 	return nil
 }
 
@@ -601,7 +695,7 @@ func marshalAuthorizedKey(key xssh.PublicKey) string {
 	return strings.TrimSpace(string(xssh.MarshalAuthorizedKey(key)))
 }
 
-func (s Service) resolveConnectTimeout(override time.Duration) time.Duration {
+func (s *Service) resolveConnectTimeout(override time.Duration) time.Duration {
 	if override > 0 {
 		return override
 	}
@@ -611,7 +705,7 @@ func (s Service) resolveConnectTimeout(override time.Duration) time.Duration {
 	return 10 * time.Second
 }
 
-func (s Service) resolveCommandTimeout(override time.Duration) time.Duration {
+func (s *Service) resolveCommandTimeout(override time.Duration) time.Duration {
 	if override > 0 {
 		return override
 	}
