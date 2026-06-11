@@ -1137,6 +1137,22 @@ body {
   border-radius: 4px;
 }
 
+.dashboard-list__more {
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dashboard-list__more svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
 /* ── Misc ───────────────────────────────────────────── */
 
 ul {

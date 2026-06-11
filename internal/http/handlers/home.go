@@ -159,6 +159,11 @@ func schedulerOverviewView(s *scheduler.Runtime, page, perPage int, makePageURL 
 
 	totalPages, currentPage, start, end := paginateSlice(len(allJobs), page, perPage)
 
+	moreJobs := len(allJobs) - (end - start)
+	if moreJobs < 0 {
+		moreJobs = 0
+	}
+
 	return view.SchedulerOverviewView{
 		Enabled:            overview.Enabled,
 		StartupDelay:       formatDuration(overview.StartupDelay),
@@ -170,6 +175,7 @@ func schedulerOverviewView(s *scheduler.Runtime, page, perPage int, makePageURL 
 		BlockedJobs:        overview.BlockedJobs,
 		RunningJobs:        overview.RunningJobs,
 		Jobs:               allJobs[start:end],
+		MoreJobs:           moreJobs,
 		Pagination:         buildPaginationView(currentPage, totalPages, makePageURL),
 	}
 }

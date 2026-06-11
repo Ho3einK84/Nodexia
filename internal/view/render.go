@@ -278,6 +278,7 @@ type SchedulerOverviewView struct {
 	BlockedJobs        int
 	RunningJobs        int
 	Jobs               []ScheduledJobView
+	MoreJobs           int
 	Pagination         PaginationView
 }
 

@@ -135,6 +135,9 @@
           {{ if .LastError }}<p class="error-inline">{{ .LastError }}</p>{{ end }}
         </article>
         {{ end }}
+        {{ if gt .SchedulerOverview.MoreJobs 0 }}
+        <p class="dashboard-list__more"><i data-lucide="ellipsis"></i> And {{ .SchedulerOverview.MoreJobs }} more…</p>
+        {{ end }}
       </div>
       {{ else }}
       <div class="empty-state-card">
