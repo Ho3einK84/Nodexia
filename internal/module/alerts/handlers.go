@@ -58,12 +58,19 @@ func (h Handlers) overviewModel(ctx context.Context) (view.AlertsOverviewView, e
 	if err != nil {
 		return view.AlertsOverviewView{}, err
 	}
+	events, err := h.repo.ListRecentEvents(ctx, recentEventLimit)
+	if err != nil {
+		return view.AlertsOverviewView{}, err
+	}
 	refs, err := h.loadServerRefs(ctx)
 	if err != nil {
 		return view.AlertsOverviewView{}, err
 	}
-	return buildOverview(rules, channels, silences, refs, h.tokenConfigured(), time.Now().UTC()), nil
+	return buildOverview(rules, channels, silences, events, refs, h.tokenConfigured(), time.Now().UTC()), nil
 }
+
+// recentEventLimit caps how many alert history rows the overview shows.
+const recentEventLimit = 20
 
 // ── Rules ────────────────────────────────────────────────────────────────────
 

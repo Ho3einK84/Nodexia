@@ -6,9 +6,18 @@ import (
 	"text/template"
 )
 
+// Message state values, mirrored on AlertMessage.State so templates can vary
+// firing vs resolved text.
+const (
+	StateFiring   = "firing"
+	StateResolved = "resolved"
+)
+
 // AlertMessage is the data exposed to an alert message template. Values are
 // pre-formatted strings (for example "93%" or "≥ 90%") so templates stay simple
-// and need no numeric formatting.
+// and need no numeric formatting. State is "firing" or "resolved"; FiredAt
+// carries the fired time for firing messages and the resolved time for resolved
+// ones.
 type AlertMessage struct {
 	Server    string
 	Metric    string
@@ -16,13 +25,20 @@ type AlertMessage struct {
 	Threshold string
 	Severity  string
 	FiredAt   string
+	State     string
 }
 
 // DefaultMessageTemplate is used when a channel has no custom template. It is
 // plain text (no Telegram parse_mode) so message content never needs escaping.
-const DefaultMessageTemplate = `{{ icon .Severity }} {{ upper .Severity }} alert · {{ .Server }}
+const DefaultMessageTemplate = `{{ if eq .State "resolved" -}}
+✅ RESOLVED · {{ .Server }}
+{{ .Metric }} is back to normal (was {{ .Value }}, threshold {{ .Threshold }})
+Resolved at {{ .FiredAt }}
+{{- else -}}
+{{ icon .Severity }} {{ upper .Severity }} alert · {{ .Server }}
 {{ .Metric }} = {{ .Value }} (threshold {{ .Threshold }})
-Fired at {{ .FiredAt }}`
+Fired at {{ .FiredAt }}
+{{- end }}`
 
 var messageFuncs = template.FuncMap{
 	"upper": strings.ToUpper,

@@ -560,6 +560,18 @@ type AlertSilenceView struct {
 	DeleteURL   string
 }
 
+// AlertEventView renders one row in the alert history section.
+type AlertEventView struct {
+	ServerLabel string
+	MetricLabel string
+	Value       string
+	Threshold   string
+	Severity    string
+	State       string
+	FiredAt     string
+	ResolvedAt  string
+}
+
 // AlertSilenceFormView powers the inline "mute a metric" form on the overview.
 type AlertSilenceFormView struct {
 	Action        string
@@ -575,6 +587,7 @@ type AlertsOverviewView struct {
 	Rules           []AlertRuleView
 	Channels        []AlertChannelView
 	Silences        []AlertSilenceView
+	Events          []AlertEventView
 	SilenceForm     AlertSilenceFormView
 	HasServers      bool
 	NewRuleURL      string

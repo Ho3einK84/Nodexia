@@ -37,6 +37,7 @@ func buildOverview(
 	rules []Rule,
 	channels []Channel,
 	silences []Silence,
+	events []Event,
 	servers []serverRef,
 	tokenConfigured bool,
 	now time.Time,
@@ -53,6 +54,7 @@ func buildOverview(
 		Rules:           buildRuleRows(rules, names, channelNames),
 		Channels:        buildChannelRows(channels),
 		Silences:        buildSilenceRows(silences, names, now),
+		Events:          buildEventRows(events, names),
 		SilenceForm:     buildSilenceFormView(SilenceFormInput{}, ValidationErrors{}, servers),
 		HasServers:      len(servers) > 0,
 		NewRuleURL:      "/alerts/rules/new",
@@ -60,6 +62,29 @@ func buildOverview(
 		TokenConfigured: tokenConfigured,
 		TokenNotice:     notice,
 	}
+}
+
+func buildEventRows(events []Event, serverNames map[int64]string) []view.AlertEventView {
+	rows := make([]view.AlertEventView, 0, len(events))
+	for _, event := range events {
+		serverID := event.ServerID
+		resolvedAt := ""
+		if event.ResolvedAt != nil {
+			resolvedAt = formatTimestamp(*event.ResolvedAt)
+		}
+
+		rows = append(rows, view.AlertEventView{
+			ServerLabel: serverLabel(serverNames, &serverID),
+			MetricLabel: MetricLabel(event.Metric),
+			Value:       FormatThresholdWithUnit(event.Metric, event.ObservedValue),
+			Threshold:   FormatThresholdWithUnit(event.Metric, event.Threshold),
+			Severity:    event.Severity,
+			State:       event.State,
+			FiredAt:     formatTimestamp(event.FiredAt),
+			ResolvedAt:  resolvedAt,
+		})
+	}
+	return rows
 }
 
 func buildSilenceFormView(input SilenceFormInput, errs ValidationErrors, servers []serverRef) view.AlertSilenceFormView {

@@ -57,6 +57,29 @@ type Silence struct {
 	CreatedAt time.Time
 }
 
+// Event state values.
+const (
+	EventStateFiring   = "firing"
+	EventStateResolved = "resolved"
+)
+
+// Event is the persisted record of a firing/resolved transition. It is the
+// source of truth for open alerts across restarts. RuleID is nullable because a
+// rule may be deleted (ON DELETE SET NULL) while its history remains.
+type Event struct {
+	ID            int64
+	RuleID        *int64
+	ServerID      int64
+	Metric        string
+	ObservedValue float64
+	Threshold     float64
+	Severity      string
+	State         string
+	FiredAt       time.Time
+	ResolvedAt    *time.Time
+	NotifiedAt    *time.Time
+}
+
 // IsActive reports whether the silence is in effect at the given moment.
 func (s Silence) IsActive(now time.Time) bool {
 	if s.ExpiresAt == nil {
@@ -96,4 +119,13 @@ type Repository interface {
 	// IsSilenced reports whether the given metric is currently muted for the
 	// server, honoring expiry and the "all" wildcard.
 	IsSilenced(ctx context.Context, serverID int64, metric string) (bool, error)
+
+	// Events.
+	CreateEvent(ctx context.Context, event Event) (Event, error)
+	// GetOpenEvent returns the current firing (unresolved) event for a rule on a
+	// server, or ErrNotFound when none is open.
+	GetOpenEvent(ctx context.Context, ruleID, serverID int64) (Event, error)
+	MarkEventNotified(ctx context.Context, eventID int64, at time.Time) error
+	ResolveEvent(ctx context.Context, eventID int64, at time.Time) error
+	ListRecentEvents(ctx context.Context, limit int) ([]Event, error)
 }

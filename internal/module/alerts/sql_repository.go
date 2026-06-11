@@ -149,8 +149,9 @@ func (r SQLRepository) DeleteRule(ctx context.Context, id int64) error {
 		return fmt.Errorf("alerts: begin delete rule transaction: %w", err)
 	}
 
-	// alert_events.rule_id is ON DELETE SET NULL; apply it explicitly because
-	// SQLite foreign-key enforcement is not enabled.
+	// alert_events.rule_id is ON DELETE SET NULL (foreign keys are enforced);
+	// detach explicitly so the intent is clear and stays correct if the FK action
+	// ever changes, matching servers.Delete's explicit-cascade style.
 	if _, err := tx.ExecContext(ctx, `UPDATE alert_events SET rule_id = NULL WHERE rule_id = ?`, id); err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("alerts: detach events from rule %d: %w", id, err)
@@ -291,8 +292,9 @@ func (r SQLRepository) DeleteChannel(ctx context.Context, id int64) error {
 		return fmt.Errorf("alerts: begin delete channel transaction: %w", err)
 	}
 
-	// alert_rules.channel_id is ON DELETE SET NULL; apply it explicitly because
-	// SQLite foreign-key enforcement is not enabled.
+	// alert_rules.channel_id is ON DELETE SET NULL (foreign keys are enforced);
+	// detach explicitly so the intent is clear and stays correct if the FK action
+	// ever changes, matching servers.Delete's explicit-cascade style.
 	if _, err := tx.ExecContext(ctx, `UPDATE alert_rules SET channel_id = NULL WHERE channel_id = ?`, id); err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("alerts: detach rules from channel %d: %w", id, err)
@@ -474,6 +476,192 @@ func (r SQLRepository) IsSilenced(ctx context.Context, serverID int64, metric st
 		return false, fmt.Errorf("alerts: check silence for server %d metric %q: %w", serverID, metric, err)
 	}
 	return true, nil
+}
+
+// ── Events ───────────────────────────────────────────────────────────────────
+
+const eventColumns = `id, rule_id, server_id, metric, observed_value, threshold,
+	severity, state, fired_at, resolved_at, notified_at`
+
+func (r SQLRepository) CreateEvent(ctx context.Context, event Event) (Event, error) {
+	if event.FiredAt.IsZero() {
+		event.FiredAt = time.Now().UTC()
+	}
+	if event.State == "" {
+		event.State = EventStateFiring
+	}
+
+	result, err := r.conn.ExecContext(
+		ctx,
+		`INSERT INTO alert_events
+			(rule_id, server_id, metric, observed_value, threshold, severity, state, fired_at, resolved_at, notified_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		nullableInt64(event.RuleID),
+		event.ServerID,
+		event.Metric,
+		event.ObservedValue,
+		event.Threshold,
+		event.Severity,
+		event.State,
+		event.FiredAt.UTC(),
+		nullableTime(event.ResolvedAt),
+		nullableTime(event.NotifiedAt),
+	)
+	if err != nil {
+		return Event{}, fmt.Errorf("alerts: create event: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return Event{}, fmt.Errorf("alerts: create event last insert id: %w", err)
+	}
+
+	return r.getEvent(ctx, id)
+}
+
+func (r SQLRepository) getEvent(ctx context.Context, id int64) (Event, error) {
+	row := r.conn.QueryRowContext(ctx, `SELECT `+eventColumns+` FROM alert_events WHERE id = ? LIMIT 1`, id)
+	event, err := scanEvent(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Event{}, ErrNotFound
+		}
+		return Event{}, fmt.Errorf("alerts: get event %d: %w", id, err)
+	}
+	return event, nil
+}
+
+func (r SQLRepository) GetOpenEvent(ctx context.Context, ruleID, serverID int64) (Event, error) {
+	row := r.conn.QueryRowContext(
+		ctx,
+		`SELECT `+eventColumns+`
+		 FROM alert_events
+		 WHERE rule_id = ? AND server_id = ? AND state = ? AND resolved_at IS NULL
+		 ORDER BY id DESC
+		 LIMIT 1`,
+		ruleID,
+		serverID,
+		EventStateFiring,
+	)
+	event, err := scanEvent(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Event{}, ErrNotFound
+		}
+		return Event{}, fmt.Errorf("alerts: get open event for rule %d server %d: %w", ruleID, serverID, err)
+	}
+	return event, nil
+}
+
+func (r SQLRepository) MarkEventNotified(ctx context.Context, eventID int64, at time.Time) error {
+	result, err := r.conn.ExecContext(
+		ctx,
+		`UPDATE alert_events SET notified_at = ? WHERE id = ?`,
+		at.UTC(),
+		eventID,
+	)
+	if err != nil {
+		return fmt.Errorf("alerts: mark event %d notified: %w", eventID, err)
+	}
+	return rowsAffectedOrNotFound(result)
+}
+
+func (r SQLRepository) ResolveEvent(ctx context.Context, eventID int64, at time.Time) error {
+	result, err := r.conn.ExecContext(
+		ctx,
+		`UPDATE alert_events SET state = ?, resolved_at = ? WHERE id = ?`,
+		EventStateResolved,
+		at.UTC(),
+		eventID,
+	)
+	if err != nil {
+		return fmt.Errorf("alerts: resolve event %d: %w", eventID, err)
+	}
+	return rowsAffectedOrNotFound(result)
+}
+
+func (r SQLRepository) ListRecentEvents(ctx context.Context, limit int) ([]Event, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := r.conn.QueryContext(
+		ctx,
+		`SELECT `+eventColumns+` FROM alert_events ORDER BY id DESC LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("alerts: list recent events: %w", err)
+	}
+	defer rows.Close()
+
+	var events []Event
+	for rows.Next() {
+		event, err := scanEvent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("alerts: scan event: %w", err)
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
+func rowsAffectedOrNotFound(result sql.Result) error {
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("alerts: rows affected: %w", err)
+	}
+	if affected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func scanEvent(scanner rowScanner) (Event, error) {
+	var (
+		event       Event
+		ruleID      sql.NullInt64
+		resolvedRaw any
+		notifiedRaw any
+		firedRaw    any
+	)
+
+	if err := scanner.Scan(
+		&event.ID,
+		&ruleID,
+		&event.ServerID,
+		&event.Metric,
+		&event.ObservedValue,
+		&event.Threshold,
+		&event.Severity,
+		&event.State,
+		&firedRaw,
+		&resolvedRaw,
+		&notifiedRaw,
+	); err != nil {
+		return Event{}, err
+	}
+
+	if ruleID.Valid {
+		value := ruleID.Int64
+		event.RuleID = &value
+	}
+
+	var err error
+	if event.FiredAt, err = parseDatabaseTime(firedRaw); err != nil {
+		return Event{}, fmt.Errorf("parse fired_at: %w", err)
+	}
+	if resolvedAt, err := parseDatabaseTime(resolvedRaw); err != nil {
+		return Event{}, fmt.Errorf("parse resolved_at: %w", err)
+	} else if !resolvedAt.IsZero() {
+		event.ResolvedAt = &resolvedAt
+	}
+	if notifiedAt, err := parseDatabaseTime(notifiedRaw); err != nil {
+		return Event{}, fmt.Errorf("parse notified_at: %w", err)
+	} else if !notifiedAt.IsZero() {
+		event.NotifiedAt = &notifiedAt
+	}
+
+	return event, nil
 }
 
 // ── Scanning & helpers ───────────────────────────────────────────────────────

@@ -191,6 +191,39 @@
     <p class="empty-state">No active silences. Every server reports on every metric.</p>
     {{ end }}
   </article>
+
+  {{/* ── History ───────────────────────────────────────── */}}
+  <article class="card">
+    <div class="card__header">
+      <h3><i data-lucide="history"></i> Recent alert activity</h3>
+    </div>
+
+    {{ if .Events }}
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Server</th><th>Metric</th><th>Observed</th><th>Threshold</th><th>Severity</th><th>State</th><th>Fired</th><th>Resolved</th></tr>
+        </thead>
+        <tbody>
+          {{ range .Events }}
+          <tr>
+            <td>{{ .ServerLabel }}</td>
+            <td>{{ .MetricLabel }}</td>
+            <td><code>{{ .Value }}</code></td>
+            <td><code>{{ .Threshold }}</code></td>
+            <td><span class="severity-badge severity-badge--{{ .Severity }}">{{ .Severity }}</span></td>
+            <td>{{ if eq .State "firing" }}<span class="badge badge--warn">firing</span>{{ else }}<span class="badge badge--ok">resolved</span>{{ end }}</td>
+            <td>{{ .FiredAt }}</td>
+            <td>{{ if .ResolvedAt }}{{ .ResolvedAt }}{{ else }}<span class="muted">—</span>{{ end }}</td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+    {{ else }}
+    <p class="empty-state">No alerts have fired yet. Rules are evaluated after each background monitoring run.</p>
+    {{ end }}
+  </article>
   {{ end }}
 </section>
 {{ end }}

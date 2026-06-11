@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 	"strings"
@@ -11,9 +12,12 @@ import (
 	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/config"
+	"github.com/Ho3einK84/Nodexia/internal/module/alerts"
 	"github.com/Ho3einK84/Nodexia/internal/module/monitoring"
 	"github.com/Ho3einK84/Nodexia/internal/module/nodes"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
+	"github.com/Ho3einK84/Nodexia/internal/notify"
+	"github.com/Ho3einK84/Nodexia/internal/notify/telegram"
 	"github.com/Ho3einK84/Nodexia/internal/sshclient"
 )
 
@@ -61,6 +65,7 @@ type Runtime struct {
 	trafficRepo monitoring.TrafficRepository
 	nodeRepo    nodes.Repository
 	detectors   []nodes.Detector
+	evaluator   *alerts.Evaluator
 
 	mu     sync.RWMutex
 	jobs   map[string]*jobState
@@ -110,10 +115,23 @@ func New(cfg config.Config, conn *sql.DB, ssh *sshclient.Service) *Runtime {
 		trafficRepo: monitoring.NewSQLRepository(conn),
 		nodeRepo:    nodes.NewSQLRepository(conn),
 		detectors:   nodes.DefaultDetectors(),
+		evaluator:   alerts.NewEvaluator(alerts.NewSQLRepository(conn), schedulerNotifier(cfg)),
 		jobs:        map[string]*jobState{},
 	}
 	runtime.refresh(context.Background(), false)
 	return runtime
+}
+
+// schedulerNotifier builds a Telegram notifier when a bot token is configured,
+// or nil when it is not. A nil notifier keeps evaluation recording events while
+// skipping message delivery. A typed-nil is never returned as a non-nil
+// interface, so this only constructs the client when the token is present.
+func schedulerNotifier(cfg config.Config) notify.Notifier {
+	token := strings.TrimSpace(cfg.Notify.TelegramBotToken)
+	if token == "" {
+		return nil
+	}
+	return telegram.NewClient(token)
 }
 
 func (r *Runtime) Start() {
@@ -438,17 +456,68 @@ func (r *Runtime) executeMonitoringJob(ctx context.Context, server servers.Serve
 	}
 
 	trafficSnapshot, _, trafficErr := monitoring.CollectTraffic(ctx, r.ssh, req, preferredInterface)
+	trafficStored := false
 	if trafficErr == nil {
 		trafficSnapshot.ServerID = server.ID
 		if _, err := r.trafficRepo.AppendTraffic(ctx, trafficSnapshot); err == nil {
-			if trafficSnapshot.Available {
-				return "Stored resource and vnStat snapshots.", nil
-			}
-			return "Stored resource snapshot. vnStat is not available on this server yet.", nil
+			trafficStored = true
 		}
 	}
 
-	return "Stored resource snapshot. vnStat refresh did not complete.", nil
+	// Evaluate alert rules against the values just collected (no extra SSH). This
+	// must never fail or block the monitoring job, so errors are only logged.
+	r.evaluateAlerts(ctx, server, snapshot, trafficSnapshot, trafficStored && trafficSnapshot.Available)
+
+	switch {
+	case trafficStored && trafficSnapshot.Available:
+		return "Stored resource and vnStat snapshots.", nil
+	case trafficStored:
+		return "Stored resource snapshot. vnStat is not available on this server yet.", nil
+	default:
+		return "Stored resource snapshot. vnStat refresh did not complete.", nil
+	}
+}
+
+// evaluateAlerts runs the alert evaluator against the freshly collected values.
+// Evaluation errors are logged and never propagate to the monitoring job.
+func (r *Runtime) evaluateAlerts(ctx context.Context, server servers.Server, snapshot monitoring.Snapshot, traffic monitoring.TrafficSnapshot, trafficAvailable bool) {
+	if r.evaluator == nil {
+		return
+	}
+
+	metrics := alerts.Metrics{
+		CPU:              snapshot.CPUUsage,
+		RAM:              snapshot.RAMUsage,
+		Disk:             snapshot.DiskUsage,
+		Load1:            snapshot.LoadAverage1,
+		Load5:            snapshot.LoadAverage5,
+		Load15:           snapshot.LoadAverage15,
+		TrafficAvailable: trafficAvailable,
+		TrafficTotalGiB:  currentMonthTotalGiB(traffic),
+		PeakMbps:         traffic.PeakMbps,
+		AvgMbps:          traffic.AvgMbps,
+	}
+
+	if err := r.evaluator.Evaluate(ctx, alerts.Target{ID: server.ID, Name: server.Name}, metrics); err != nil {
+		slog.Warn("alert evaluation failed",
+			slog.Int64("server_id", server.ID),
+			slog.String("error", err.Error()),
+		)
+	}
+}
+
+const bytesPerGiB = 1024 * 1024 * 1024
+
+// currentMonthTotalGiB returns the current calendar month's total traffic in
+// GiB from the vnStat monthly rows, or 0 when the row is absent.
+func currentMonthTotalGiB(traffic monitoring.TrafficSnapshot) float64 {
+	label := time.Now().UTC().Format("2006-01")
+	for _, row := range traffic.MonthlyRows {
+		if row.Label == label {
+			return float64(row.TotalBytes) / bytesPerGiB
+		}
+	}
+	return 0
 }
 
 func (r *Runtime) executeNodesJob(ctx context.Context, server servers.Server, req sshclient.CommandRequest) (string, error) {
