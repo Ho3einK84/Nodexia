@@ -105,6 +105,61 @@ func TestLoadAcceptsValidProductionConfig(t *testing.T) {
 	}
 }
 
+func TestAdminPasswordWeakness(t *testing.T) {
+	strongPassword := "hunter2-but-longer-and-unique"
+	strongSecret := "a-sufficiently-long-secret-value"
+
+	tests := []struct {
+		name     string
+		env      string
+		password string
+		wantErr  bool
+	}{
+		{
+			name:     "weak 'admin' rejected in production",
+			env:      "production",
+			password: "admin",
+			wantErr:  true,
+		},
+		{
+			name:     "example placeholder rejected in production",
+			env:      "production",
+			password: "change-this-password",
+			wantErr:  true,
+		},
+		{
+			name:     "weak 'admin' accepted in development",
+			env:      "development",
+			password: "admin",
+			wantErr:  false,
+		},
+		{
+			name:     "strong password accepted in production",
+			env:      "production",
+			password: strongPassword,
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testutil.ClearNodexiaEnv(t)
+			t.Setenv("NODEXIA_ENV_FILE", filepath.Join(t.TempDir(), "missing.env"))
+			t.Setenv("NODEXIA_ENV", tt.env)
+			t.Setenv("NODEXIA_AUTH_PASSWORD", tt.password)
+			if tt.env == "production" || tt.env == "staging" {
+				t.Setenv("NODEXIA_SESSION_SECRET", strongSecret)
+				t.Setenv("NODEXIA_AUTH_USERNAME", "operator")
+			}
+
+			_, err := config.Load("v0.1.0")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Load() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestLoadReadsEnvFileOverrides(t *testing.T) {
 	testutil.ClearNodexiaEnv(t)
 	envFile := filepath.Join(t.TempDir(), ".env")

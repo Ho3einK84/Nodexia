@@ -24,6 +24,14 @@ const devSessionSecret = "nodexia-dev-session-secret-change-me"
 // by brute-forcing a short key.
 const minProductionSessionSecretLength = 16
 
+// weakAdminPassword is the trivial default used in development and test.
+// exampleAdminPassword is the .env.example placeholder.
+// Neither may be used as the admin password outside development or test.
+const (
+	weakAdminPassword   = "admin"
+	exampleAdminPassword = "change-this-password"
+)
+
 type Config struct {
 	Version     string
 	Environment string
@@ -293,6 +301,9 @@ func (c Config) Validate() error {
 		}
 		if strings.TrimSpace(c.Security.AdminPassword) == "" {
 			return errors.New("config: NODEXIA_AUTH_PASSWORD cannot be empty outside development or test")
+		}
+		if pw := strings.TrimSpace(c.Security.AdminPassword); pw == weakAdminPassword || pw == exampleAdminPassword {
+			return errors.New("config: NODEXIA_AUTH_PASSWORD must not use a known-weak password outside development or test")
 		}
 	}
 
