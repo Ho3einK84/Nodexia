@@ -55,6 +55,7 @@ type JobSnapshot struct {
 	NextRunAt           time.Time
 	LastDuration        time.Duration
 	ConsecutiveFailures int
+	Paused              bool
 }
 
 type Runtime struct {
@@ -69,6 +70,7 @@ type Runtime struct {
 
 	mu     sync.RWMutex
 	jobs   map[string]*jobState
+	paused map[string]struct{} // keys from jobKey(); protected by mu
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
@@ -117,9 +119,60 @@ func New(cfg config.Config, conn *sql.DB, ssh *sshclient.Service) *Runtime {
 		detectors:   nodes.DefaultDetectors(),
 		evaluator:   alerts.NewEvaluator(alerts.NewSQLRepository(conn), schedulerNotifier(cfg)),
 		jobs:        map[string]*jobState{},
+		paused:      map[string]struct{}{},
 	}
 	runtime.refresh(context.Background(), false)
 	return runtime
+}
+
+// PauseJob prevents the job for (serverID, jobType) from launching until
+// ResumeJob is called. A currently running job is not interrupted.
+func (r *Runtime) PauseJob(serverID int64, jobType JobType) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.paused[jobKey(serverID, jobType)] = struct{}{}
+	r.mu.Unlock()
+}
+
+// ResumeJob re-enables a previously paused job. If the job was due to run
+// while paused, it will run on the next scheduler sweep.
+func (r *Runtime) ResumeJob(serverID int64, jobType JobType) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	delete(r.paused, jobKey(serverID, jobType))
+	r.mu.Unlock()
+}
+
+// ToggleJob pauses the job if it is currently unpaused, or resumes it if it is
+// currently paused. Returns true when the job is now paused.
+func (r *Runtime) ToggleJob(serverID int64, jobType JobType) bool {
+	if r == nil {
+		return false
+	}
+	key := jobKey(serverID, jobType)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, paused := r.paused[key]; paused {
+		delete(r.paused, key)
+		return false
+	}
+	r.paused[key] = struct{}{}
+	return true
+}
+
+// IsJobPaused reports whether the job for (serverID, jobType) is currently paused.
+func (r *Runtime) IsJobPaused(serverID int64, jobType JobType) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.RLock()
+	_, paused := r.paused[jobKey(serverID, jobType)]
+	r.mu.RUnlock()
+	return paused
 }
 
 // schedulerNotifier builds a Telegram notifier when a bot token is configured,
@@ -184,6 +237,8 @@ func (r *Runtime) Overview(limit int) Overview {
 			overview.RunningJobs++
 		}
 
+		key := jobKey(state.ServerID, state.JobType)
+		_, isPaused := r.paused[key]
 		jobs = append(jobs, JobSnapshot{
 			ServerID:            state.ServerID,
 			ServerName:          state.ServerName,
@@ -198,6 +253,7 @@ func (r *Runtime) Overview(limit int) Overview {
 			NextRunAt:           state.NextRunAt,
 			LastDuration:        state.LastDuration,
 			ConsecutiveFailures: state.ConsecutiveFailures,
+			Paused:              isPaused,
 		})
 	}
 
@@ -279,7 +335,8 @@ func (r *Runtime) refresh(ctx context.Context, launchJobs bool) {
 			} else if state.NextRunAt.IsZero() {
 				state.NextRunAt = now
 			}
-			shouldLaunch := launchJobs && state.Allowed && !state.Running && !state.NextRunAt.After(now)
+			_, isPaused := r.paused[key]
+			shouldLaunch := launchJobs && state.Allowed && !state.Running && !state.NextRunAt.After(now) && !isPaused
 			r.mu.Unlock()
 
 			if shouldLaunch {

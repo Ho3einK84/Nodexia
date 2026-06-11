@@ -154,6 +154,8 @@ func schedulerOverviewView(s *scheduler.Runtime, page, perPage int, makePageURL 
 			LastSuccessAt:       monitoringFormatTimestamp(job.LastSuccessAt),
 			LastDuration:        formatDuration(job.LastDuration),
 			ConsecutiveFailures: job.ConsecutiveFailures,
+			Paused:              job.Paused,
+			ToggleURL:           fmt.Sprintf("/ops/scheduler/%d/%s/toggle", job.ServerID, job.JobType),
 		})
 	}
 

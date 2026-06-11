@@ -57,6 +57,25 @@ func (h DiagnosticsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// SchedulerToggle handles POST /ops/scheduler/{serverID}/{jobType}/toggle.
+// It pauses a running job or resumes a paused one, then redirects back.
+func (h DiagnosticsHandler) SchedulerToggle(w http.ResponseWriter, r *http.Request) {
+	serverIDStr := strings.TrimSpace(r.PathValue("serverID"))
+	jobTypeStr := strings.TrimSpace(r.PathValue("jobType"))
+
+	serverID, err := strconv.ParseInt(serverIDStr, 10, 64)
+	if err != nil || serverID < 1 {
+		http.Redirect(w, r, "/ops/diagnostics", http.StatusSeeOther)
+		return
+	}
+
+	if h.scheduler != nil {
+		h.scheduler.ToggleJob(serverID, scheduler.JobType(jobTypeStr))
+	}
+
+	http.Redirect(w, r, "/ops/diagnostics", http.StatusSeeOther)
+}
+
 func (h DiagnosticsHandler) buildDiagnostics(r *http.Request) view.DiagnosticsView {
 	uptime := time.Since(nodexiaruntime.StartedAt).Round(time.Second)
 	dbStatus := "unavailable"

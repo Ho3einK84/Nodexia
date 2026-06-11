@@ -299,6 +299,8 @@ type ScheduledJobView struct {
 	LastSuccessAt       string
 	LastDuration        string
 	ConsecutiveFailures int
+	Paused              bool
+	ToggleURL           string
 }
 
 type SystemTargetView struct {

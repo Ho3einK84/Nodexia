@@ -185,7 +185,21 @@
       <article class="dashboard-item">
         <div class="server-item__header">
           <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }} &middot; <span style="font-weight:400; color: var(--text-dim)">{{ .JobType }}</span></h4>
-          <span class="status-pill status-pill--{{ if or (eq .Status "running") (eq .Status "scheduled") }}ok{{ else if eq .Status "retrying" }}crit{{ else if eq .Status "blocked" }}warn{{ else }}idle{{ end }}">{{ .Status }}</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            {{ if .Paused }}
+            <span class="status-pill status-pill--idle">paused</span>
+            {{ else }}
+            <span class="status-pill status-pill--{{ if or (eq .Status "running") (eq .Status "scheduled") }}ok{{ else if eq .Status "retrying" }}crit{{ else if eq .Status "blocked" }}warn{{ else }}idle{{ end }}">{{ .Status }}</span>
+            {{ end }}
+            <form method="post" action="{{ .ToggleURL }}" class="inline-form">
+              <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+              {{ if .Paused }}
+              <button type="submit" class="btn btn--ghost btn--sm" title="Resume this job"><i data-lucide="play" class="icon-in-button"></i> Enable</button>
+              {{ else }}
+              <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" title="Pause this job"><i data-lucide="pause" class="icon-in-button"></i> Disable</button>
+              {{ end }}
+            </form>
+          </div>
         </div>
         {{ if .Detail }}<p style="margin:4px 0 0; font-size:0.85rem; color:var(--text-muted)">{{ .Detail }}</p>{{ end }}
         {{ if .LastError }}<p class="error-inline">{{ .LastError }}</p>{{ end }}

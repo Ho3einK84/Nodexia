@@ -52,7 +52,9 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 	mux.Handle("GET /logout", handlers.NewLogoutHandler(cfg.Security.SessionCookieSecure))
 
 	mux.Handle("GET /{$}", handlers.NewHomeHandler(cfg, database, renderer, backgroundScheduler, registry.RouteGroups(modules)))
-	mux.Handle("GET /ops/diagnostics", handlers.NewDiagnosticsHandler(cfg, database, renderer, backgroundScheduler, commandStreams))
+	diagHandler := handlers.NewDiagnosticsHandler(cfg, database, renderer, backgroundScheduler, commandStreams)
+	mux.Handle("GET /ops/diagnostics", diagHandler)
+	mux.HandleFunc("POST /ops/scheduler/{serverID}/{jobType}/toggle", diagHandler.SchedulerToggle)
 	mux.Handle("GET /errors/not-found", notFoundHandler)
 	mux.Handle("GET /errors/internal", internalErrorPreviewHandler)
 	mux.HandleFunc("GET /healthz", health.Liveness)
