@@ -7,10 +7,14 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 )
 
-type Module struct{}
+// Module owns the in-memory job store so the POST handler (which starts jobs)
+// and the GET handler (which renders their progress) share it.
+type Module struct {
+	jobs *jobStore
+}
 
 func New() Module {
-	return Module{}
+	return Module{jobs: newJobStore()}
 }
 
 func (Module) Name() string {
@@ -21,16 +25,19 @@ func (Module) RouteGroup() string {
 	return "/servers/bulk"
 }
 
-func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
+func (m Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	if deps.Database == nil || deps.Database.SQL == nil || deps.SSH == nil {
-		mux.Handle("POST /servers/bulk", module.NewPlaceholderHandler(deps, module.PlaceholderPage{
+		placeholder := module.NewPlaceholderHandler(deps, module.PlaceholderPage{
 			Title:       "Bulk actions",
 			RouteGroup:  "/servers/bulk",
 			Description: "Bulk server actions need the database and SSH runtime before they can run.",
-		}))
+		})
+		mux.Handle("POST /servers/bulk", placeholder)
+		mux.Handle("GET /servers/bulk/jobs/{job}", placeholder)
 		return
 	}
 
 	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
-	mux.Handle("POST /servers/bulk", NewActionHandler(deps, serverRepo))
+	mux.Handle("POST /servers/bulk", newActionHandler(deps, serverRepo, deps.SSH, m.jobs))
+	mux.Handle("GET /servers/bulk/jobs/{job}", newJobPageHandler(deps, m.jobs))
 }

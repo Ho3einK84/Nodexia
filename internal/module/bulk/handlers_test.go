@@ -68,6 +68,17 @@ func newDeps(t *testing.T) module.Dependencies {
 	}
 }
 
+// newBulkMux registers POST + job-page handlers (with a fake runner) on a mux
+// so PathValue routing works exactly as in production.
+func newBulkMux(t *testing.T, deps module.Dependencies, serverRepo servers.Repository, runner *fakeRunner) *http.ServeMux {
+	t.Helper()
+	action, page := bulk.NewTestHandlers(deps, serverRepo, runner)
+	mux := http.NewServeMux()
+	mux.Handle("POST /servers/bulk", action)
+	mux.Handle("GET /servers/bulk/jobs/{job}", page)
+	return mux
+}
+
 func seedServer(t *testing.T, repo servers.Repository, hasCreds bool) servers.Server {
 	t.Helper()
 	cred := servers.CredentialStrategyRuntime
@@ -91,20 +102,55 @@ func seedServer(t *testing.T, repo servers.Repository, hasCreds bool) servers.Se
 	return s
 }
 
-func postBulk(t *testing.T, handler http.Handler, action string, ids []int64) *httptest.ResponseRecorder {
+func postBulk(t *testing.T, mux *http.ServeMux, action string, ids []int64) *httptest.ResponseRecorder {
 	t.Helper()
 	form := url.Values{"action": {action}}
 	for _, id := range ids {
 		form.Add("server_ids", strconv.FormatInt(id, 10))
 	}
-	// Fake CSRF: the test bypasses middleware, so token is ignored.
-	form.Set("_csrf_token", "test")
+	form.Set("_csrf_token", "test") // middleware is bypassed in unit tests
 	req := httptest.NewRequest(http.MethodPost, "/servers/bulk", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	// Inject fake session/csrf into context so middleware helpers don't panic.
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
+	mux.ServeHTTP(w, req)
 	return w
+}
+
+// startJob posts the bulk form and returns the redirect target (the job page).
+func startJob(t *testing.T, mux *http.ServeMux, action string, ids []int64) string {
+	t.Helper()
+	w := postBulk(t, mux, action, ids)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("POST status = %d, want 303", w.Code)
+	}
+	location := w.Header().Get("Location")
+	if !strings.HasPrefix(location, "/servers/bulk/jobs/") {
+		t.Fatalf("redirect = %q, want a /servers/bulk/jobs/ URL", location)
+	}
+	return location
+}
+
+// waitForJob polls the job page until the background run finishes and returns
+// the final page body.
+func waitForJob(t *testing.T, mux *http.ServeMux, jobPath string) string {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		req := httptest.NewRequest(http.MethodGet, jobPath, nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s status = %d, want 200", jobPath, w.Code)
+		}
+		body := w.Body.String()
+		if !strings.Contains(body, "data-stream-refresh-url") {
+			return body // finished: no auto-refresh attribute rendered
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("bulk job did not finish within 5s")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -112,25 +158,29 @@ func postBulk(t *testing.T, handler http.Handler, action string, ids []int64) *h
 func TestBulkActionValidation(t *testing.T) {
 	deps := newDeps(t)
 	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
+	mux := newBulkMux(t, deps, serverRepo, &fakeRunner{})
 
-	t.Run("invalid action redirects", func(t *testing.T) {
-		h := bulk.NewActionHandler(deps, serverRepo)
-		w := postBulk(t, h, "launch-missiles", []int64{1})
+	t.Run("invalid action redirects to servers", func(t *testing.T) {
+		w := postBulk(t, mux, "launch-missiles", []int64{1})
 		if w.Code != http.StatusSeeOther {
 			t.Errorf("got status %d, want %d", w.Code, http.StatusSeeOther)
 		}
+		if loc := w.Header().Get("Location"); !strings.Contains(loc, "bulk-invalid-action") {
+			t.Errorf("redirect = %q, want bulk-invalid-action flash", loc)
+		}
 	})
 
-	t.Run("empty selection redirects", func(t *testing.T) {
-		h := bulk.NewActionHandler(deps, serverRepo)
-		w := postBulk(t, h, "reboot", nil)
+	t.Run("empty selection redirects to servers", func(t *testing.T) {
+		w := postBulk(t, mux, "reboot", nil)
 		if w.Code != http.StatusSeeOther {
 			t.Errorf("got status %d, want %d", w.Code, http.StatusSeeOther)
+		}
+		if loc := w.Header().Get("Location"); !strings.Contains(loc, "bulk-no-selection") {
+			t.Errorf("redirect = %q, want bulk-no-selection flash", loc)
 		}
 	})
 
 	t.Run("non-numeric ids are silently dropped", func(t *testing.T) {
-		h := bulk.NewActionHandler(deps, serverRepo)
 		form := url.Values{
 			"action":     {"reboot"},
 			"server_ids": {"abc", "0", "-1"},
@@ -138,12 +188,32 @@ func TestBulkActionValidation(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/servers/bulk", strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, req)
-		// All ids invalid → redirect (no-selection path).
+		mux.ServeHTTP(w, req)
+		// All ids invalid → no-selection redirect, not a job.
 		if w.Code != http.StatusSeeOther {
 			t.Errorf("got status %d, want %d", w.Code, http.StatusSeeOther)
 		}
+		if loc := w.Header().Get("Location"); !strings.Contains(loc, "bulk-no-selection") {
+			t.Errorf("redirect = %q, want bulk-no-selection flash", loc)
+		}
 	})
+}
+
+func TestBulkJobPageUnknownJobRedirects(t *testing.T) {
+	deps := newDeps(t)
+	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
+	mux := newBulkMux(t, deps, serverRepo, &fakeRunner{})
+
+	req := httptest.NewRequest(http.MethodGet, "/servers/bulk/jobs/no-such-job", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("got status %d, want 303", w.Code)
+	}
+	if loc := w.Header().Get("Location"); !strings.Contains(loc, "bulk-job-expired") {
+		t.Errorf("redirect = %q, want bulk-job-expired flash", loc)
+	}
 }
 
 func TestBulkDeleteLoopsOverIDs(t *testing.T) {
@@ -153,19 +223,18 @@ func TestBulkDeleteLoopsOverIDs(t *testing.T) {
 	s1 := seedServer(t, serverRepo, false)
 	s2 := seedServer(t, serverRepo, false)
 
-	h := bulk.NewActionHandler(deps, serverRepo)
-	w := postBulk(t, h, "delete", []int64{s1.ID, s2.ID})
+	mux := newBulkMux(t, deps, serverRepo, &fakeRunner{})
+	jobPath := startJob(t, mux, "delete", []int64{s1.ID, s2.ID})
+	body := waitForJob(t, mux, jobPath)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("got status %d, want 200", w.Code)
-	}
-
-	// Both servers should be gone.
 	for _, id := range []int64{s1.ID, s2.ID} {
 		_, err := serverRepo.GetByID(context.Background(), id)
 		if err == nil {
 			t.Errorf("server %d still exists after bulk delete", id)
 		}
+	}
+	if !strings.Contains(body, "2 ok") {
+		t.Error("expected '2 ok' summary on the finished job page")
 	}
 }
 
@@ -176,15 +245,10 @@ func TestBulkSkipsNoCreds(t *testing.T) {
 	withCreds := seedServer(t, serverRepo, true)
 	noCreds := seedServer(t, serverRepo, false)
 
-	runner := &fakeRunner{}
-	h := bulk.NewActionHandlerWithRunner(deps, serverRepo, runner)
+	mux := newBulkMux(t, deps, serverRepo, &fakeRunner{})
+	jobPath := startJob(t, mux, "reboot", []int64{withCreds.ID, noCreds.ID})
+	body := waitForJob(t, mux, jobPath)
 
-	w := postBulk(t, h, "reboot", []int64{withCreds.ID, noCreds.ID})
-	if w.Code != http.StatusOK {
-		t.Fatalf("got status %d, want 200", w.Code)
-	}
-
-	body := w.Body.String()
 	if !strings.Contains(body, "skipped") {
 		t.Error("expected 'skipped' in page body for no-creds server")
 	}
@@ -206,12 +270,9 @@ func TestBulkWorkerPoolCapsConcurrency(t *testing.T) {
 	}
 
 	runner := &fakeRunner{delay: 20 * time.Millisecond}
-	h := bulk.NewActionHandlerWithRunner(deps, serverRepo, runner)
-
-	w := postBulk(t, h, "reboot", ids)
-	if w.Code != http.StatusOK {
-		t.Fatalf("got status %d, want 200", w.Code)
-	}
+	mux := newBulkMux(t, deps, serverRepo, runner)
+	jobPath := startJob(t, mux, "reboot", ids)
+	waitForJob(t, mux, jobPath)
 
 	max := atomic.LoadInt64(&runner.maxObserved)
 	if max > bulk.BulkWorkers {
@@ -237,24 +298,13 @@ func TestBulkExitCodeMapping(t *testing.T) {
 			s := seedServer(t, serverRepo, true)
 
 			runner := &fakeRunner{exitCode: tc.exitCode}
-			h := bulk.NewActionHandlerWithRunner(deps, serverRepo, runner)
+			mux := newBulkMux(t, deps, serverRepo, runner)
+			jobPath := startJob(t, mux, "update", []int64{s.ID})
+			body := waitForJob(t, mux, jobPath)
 
-			w := postBulk(t, h, "update", []int64{s.ID})
-			if w.Code != http.StatusOK {
-				t.Fatalf("got status %d, want 200", w.Code)
-			}
-
-			body := w.Body.String()
 			if !strings.Contains(body, tc.wantText) {
-				t.Errorf("body does not contain %q\nbody snippet: %s", tc.wantText, body[:min(300, len(body))])
+				t.Errorf("finished job page does not contain %q", tc.wantText)
 			}
 		})
 	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

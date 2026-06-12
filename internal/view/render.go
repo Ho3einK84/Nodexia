@@ -651,22 +651,27 @@ type AlertChannelFormView struct {
 
 // ── Bulk actions ─────────────────────────────────────────────────────────────
 
-// BulkActionResultView backs the content-bulk-result template.
+// BulkActionResultView backs the content-bulk-result template.  Bulk actions
+// run as background jobs; while InProgressCount > 0 the page auto-refreshes
+// via RefreshURL until Finished.
 type BulkActionResultView struct {
-	Available    bool
-	Action       string
-	Results      []BulkServerResultView
-	OKCount      int
-	FailedCount  int
-	SkippedCount int
-	Total        int
+	Available       bool
+	Action          string
+	Results         []BulkServerResultView
+	OKCount         int
+	FailedCount     int
+	SkippedCount    int
+	InProgressCount int
+	Total           int
+	Finished        bool
+	RefreshURL      string
 }
 
 // BulkServerResultView is one row in the bulk result table.
 type BulkServerResultView struct {
 	ID       int64
 	Name     string
-	Status   string // "ok", "failed", "skipped"
+	Status   string // "pending", "running", "ok", "failed", "skipped"
 	ExitCode string
 	Reason   string
 }

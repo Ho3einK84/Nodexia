@@ -3,16 +3,22 @@
   {{ template "page-header" . }}
 
   {{ if .BulkActionResult.Available }}
-  <div class="card">
+  <div class="card"
+    {{ if not .BulkActionResult.Finished }}data-stream-refresh-url="{{ .BulkActionResult.RefreshURL }}" data-stream-refresh-ms="2000"{{ end }}>
     <div class="card__header">
       <h3 class="card__title">Results — {{ .BulkActionResult.Action }}</h3>
       <div class="bulk-summary">
+        {{ if .BulkActionResult.InProgressCount }}<span class="bulk-status bulk-status--running"><i data-lucide="loader-circle" class="icon-in-button"></i> {{ .BulkActionResult.InProgressCount }} in progress</span>{{ end }}
         <span class="bulk-status bulk-status--ok"><i data-lucide="check-circle-2" class="icon-in-button"></i> {{ .BulkActionResult.OKCount }} ok</span>
         {{ if .BulkActionResult.FailedCount }}<span class="bulk-status bulk-status--failed"><i data-lucide="x-circle" class="icon-in-button"></i> {{ .BulkActionResult.FailedCount }} failed</span>{{ end }}
         {{ if .BulkActionResult.SkippedCount }}<span class="bulk-status bulk-status--skipped"><i data-lucide="skip-forward" class="icon-in-button"></i> {{ .BulkActionResult.SkippedCount }} skipped</span>{{ end }}
         <span class="bulk-summary__total">{{ .BulkActionResult.Total }} total</span>
       </div>
     </div>
+
+    {{ if not .BulkActionResult.Finished }}
+    <p class="bulk-progress-note"><span class="live-dot"></span> Running in the background — this page refreshes automatically every 2 seconds.</p>
+    {{ end }}
 
     {{/* ── Desktop: data table ─────────────────────── */}}
     <div class="data-table-wrap bulk-result-table-wrap">
@@ -29,13 +35,7 @@
           {{ range .BulkActionResult.Results }}
           <tr>
             <td class="bulk-result__name">{{ .Name }}</td>
-            <td>
-              <span class="bulk-status bulk-status--{{ .Status }}">
-                {{ if eq .Status "ok" }}<i data-lucide="check-circle-2" class="icon-in-button"></i> ok
-                {{ else if eq .Status "skipped" }}<i data-lucide="skip-forward" class="icon-in-button"></i> skipped
-                {{ else }}<i data-lucide="x-circle" class="icon-in-button"></i> failed{{ end }}
-              </span>
-            </td>
+            <td>{{ template "bulk-status-chip" .Status }}</td>
             <td class="bulk-result__code">{{ if .ExitCode }}{{ .ExitCode }}{{ else }}—{{ end }}</td>
             <td class="bulk-result__reason">{{ if .Reason }}{{ .Reason }}{{ else }}—{{ end }}</td>
           </tr>
@@ -50,11 +50,7 @@
       <div class="bulk-result-card bulk-result-card--{{ .Status }}">
         <div class="bulk-result-card__header">
           <span class="bulk-result-card__name">{{ .Name }}</span>
-          <span class="bulk-status bulk-status--{{ .Status }}">
-            {{ if eq .Status "ok" }}<i data-lucide="check-circle-2" class="icon-in-button"></i> ok
-            {{ else if eq .Status "skipped" }}<i data-lucide="skip-forward" class="icon-in-button"></i> skipped
-            {{ else }}<i data-lucide="x-circle" class="icon-in-button"></i> failed{{ end }}
-          </span>
+          {{ template "bulk-status-chip" .Status }}
         </div>
         {{ if .Reason }}
         <p class="bulk-result-card__reason">{{ .Reason }}</p>
@@ -72,4 +68,15 @@
     <a href="/servers" class="btn btn--secondary"><i data-lucide="arrow-left" class="icon-in-button"></i> Back to servers</a>
   </div>
 </section>
+{{ end }}
+
+{{/* ── Status chip; dot is the row status string ───────── */}}
+{{ define "bulk-status-chip" }}
+<span class="bulk-status bulk-status--{{ . }}">
+  {{- if eq . "ok" }}<i data-lucide="check-circle-2" class="icon-in-button"></i> ok
+  {{- else if eq . "skipped" }}<i data-lucide="skip-forward" class="icon-in-button"></i> skipped
+  {{- else if eq . "pending" }}<i data-lucide="clock" class="icon-in-button"></i> pending
+  {{- else if eq . "running" }}<i data-lucide="loader-circle" class="icon-in-button"></i> running
+  {{- else }}<i data-lucide="x-circle" class="icon-in-button"></i> failed{{ end }}
+</span>
 {{ end }}

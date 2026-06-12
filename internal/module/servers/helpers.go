@@ -19,7 +19,7 @@ func flashKind(r *http.Request) string {
 	switch r.URL.Query().Get("flash") {
 	case "created", "updated", "deleted", "host-key-forgotten":
 		return "success"
-	case "bulk-no-selection", "bulk-invalid-action":
+	case "bulk-no-selection", "bulk-invalid-action", "bulk-job-expired":
 		return "error"
 	default:
 		return ""
@@ -40,6 +40,8 @@ func flashMessage(r *http.Request) string {
 		return "Select at least one server before running a bulk action."
 	case "bulk-invalid-action":
 		return "Choose a valid bulk action (reboot, update, or delete)."
+	case "bulk-job-expired":
+		return "That bulk action result is no longer available (it expired or the server restarted)."
 	default:
 		return ""
 	}

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/http/httperrors"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
@@ -17,6 +18,14 @@ import (
 )
 
 const bulkWorkers = 5
+
+// Bulk SSH actions run in a background job, so they can afford realistic
+// timeouts: package upgrades routinely take minutes.  The global SSH command
+// timeout (default 20 s) would abort them mid-flight.
+const (
+	bulkRebootTimeout = 2 * time.Minute
+	bulkUpdateTimeout = 20 * time.Minute
+)
 
 // Non-interactive SSH exit codes returned by the sudo preamble and pkg-manager
 // detection.  Both map to FAILED in the result summary.
@@ -47,20 +56,23 @@ type commandRunner interface {
 	RunCommand(ctx context.Context, req sshclient.CommandRequest) (sshclient.CommandResult, error)
 }
 
-// ActionHandler handles POST /servers/bulk.
+// bulkTarget pairs a resolved server with its row index in the job.
+type bulkTarget struct {
+	index  int
+	server servers.Server
+}
+
+// ActionHandler handles POST /servers/bulk: it resolves the targets, creates
+// a background job, and redirects to the live result page.
 type ActionHandler struct {
 	deps       module.Dependencies
 	serverRepo servers.Repository
 	runner     commandRunner
+	jobs       *jobStore
 }
 
-func NewActionHandler(deps module.Dependencies, serverRepo servers.Repository) ActionHandler {
-	return ActionHandler{deps: deps, serverRepo: serverRepo, runner: deps.SSH}
-}
-
-// newActionHandlerWithRunner is used by tests to inject a fake runner.
-func newActionHandlerWithRunner(deps module.Dependencies, serverRepo servers.Repository, runner commandRunner) ActionHandler {
-	return ActionHandler{deps: deps, serverRepo: serverRepo, runner: runner}
+func newActionHandler(deps module.Dependencies, serverRepo servers.Repository, runner commandRunner, jobs *jobStore) ActionHandler {
+	return ActionHandler{deps: deps, serverRepo: serverRepo, runner: runner, jobs: jobs}
 }
 
 func (h ActionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -95,113 +107,95 @@ func (h ActionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var results []view.BulkServerResultView
-
-	switch action {
-	case "delete":
-		results = h.runDelete(r.Context(), ids)
-	case "reboot":
-		results = h.runSSHBulk(r.Context(), ids, rebootCommand, action)
-	case "update":
-		results = h.runSSHBulk(r.Context(), ids, updateCommand, action)
-	}
-
-	page := view.NewPageData(h.deps.Config)
-	page.CSRFToken = middleware.GetCSRFToken(r.Context())
-	page.Title = "Bulk action results"
-	page.ActiveNav = "/servers"
-	page.ContentTemplate = "content-bulk-result"
-	page.PageTitle = "Bulk action results"
-	page.PageDescription = "Per-server outcome for the bulk " + action + " operation."
-	if h.deps.Database != nil {
-		page.MigrationCount = h.deps.Database.MigrationCount()
-	}
-	page.BulkActionResult = summarize(action, results)
-
-	if err := h.deps.Renderer.Render(w, http.StatusOK, page); err != nil {
-		http.Error(w, "render bulk result page", http.StatusInternalServerError)
-	}
-}
-
-// runDelete loops over IDs and deletes each from the database sequentially.
-func (h ActionHandler) runDelete(ctx context.Context, ids []int64) []view.BulkServerResultView {
-	results := make([]view.BulkServerResultView, 0, len(ids))
-	for _, id := range ids {
-		server, err := h.serverRepo.GetByID(ctx, id)
-		name := fmt.Sprintf("#%d", id)
-		if err == nil {
-			name = server.Name
-		}
-		if err := h.serverRepo.Delete(ctx, id); err != nil {
-			results = append(results, view.BulkServerResultView{
-				ID:     id,
-				Name:   name,
-				Status: "failed",
-				Reason: err.Error(),
-			})
-		} else {
-			results = append(results, view.BulkServerResultView{
-				ID:     id,
-				Name:   name,
-				Status: "ok",
-			})
-		}
-	}
-	return results
-}
-
-// workerJob carries per-server input for the bounded SSH worker pool.
-type workerJob struct {
-	index int
-	id    int64
-}
-
-// runSSHBulk runs cmd against each server in ids using a bounded pool of
-// bulkWorkers goroutines.  Servers without stored credentials are skipped.
-func (h ActionHandler) runSSHBulk(ctx context.Context, ids []int64, cmd, action string) []view.BulkServerResultView {
-	results := make([]view.BulkServerResultView, len(ids))
-
-	jobs := make(chan workerJob, len(ids))
+	// Resolve every target up front (fast DB reads) so the result page shows
+	// real names immediately, and rows that will never run (missing server,
+	// no stored credentials) are final before any SSH work starts.
+	rows := make([]view.BulkServerResultView, len(ids))
+	targets := make([]bulkTarget, 0, len(ids))
 	for i, id := range ids {
-		jobs <- workerJob{index: i, id: id}
+		server, err := h.serverRepo.GetByID(r.Context(), id)
+		if err != nil {
+			rows[i] = view.BulkServerResultView{
+				ID:     id,
+				Name:   fmt.Sprintf("#%d", id),
+				Status: statusFailed,
+				Reason: "server not found",
+			}
+			continue
+		}
+
+		rows[i] = view.BulkServerResultView{ID: id, Name: server.Name, Status: statusPending}
+
+		if action != "delete" && !servers.HasStoredCredentials(server) {
+			rows[i].Status = statusSkipped
+			rows[i].Reason = "no stored credentials"
+			continue
+		}
+
+		targets = append(targets, bulkTarget{index: i, server: server})
 	}
-	close(jobs)
+
+	job := h.jobs.create(action, rows)
+	go h.runJob(job, action, targets)
+
+	http.Redirect(w, r, jobURL(job.id), http.StatusSeeOther)
+}
+
+// runJob executes the bulk action in the background, updating the job rows as
+// each server completes.  It uses context.Background() deliberately: the work
+// must survive the (already redirected) HTTP request.
+func (h ActionHandler) runJob(job *job, action string, targets []bulkTarget) {
+	defer job.finish()
+	ctx := context.Background()
+
+	if action == "delete" {
+		for _, target := range targets {
+			job.setStatus(target.index, statusRunning)
+			job.setRow(target.index, h.deleteOne(ctx, target.server))
+		}
+		return
+	}
+
+	cmd, timeout := rebootCommand, bulkRebootTimeout
+	if action == "update" {
+		cmd, timeout = updateCommand, bulkUpdateTimeout
+	}
+
+	queue := make(chan bulkTarget, len(targets))
+	for _, target := range targets {
+		queue <- target
+	}
+	close(queue)
 
 	var wg sync.WaitGroup
 	for w := 0; w < bulkWorkers; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for job := range jobs {
-				results[job.index] = h.runOneServer(ctx, job.id, cmd)
+			for target := range queue {
+				job.setStatus(target.index, statusRunning)
+				job.setRow(target.index, h.execOne(ctx, target.server, cmd, timeout))
 			}
 		}()
 	}
 	wg.Wait()
-	return results
 }
 
-// runOneServer executes cmd on a single server and returns the result view.
-func (h ActionHandler) runOneServer(ctx context.Context, id int64, cmd string) view.BulkServerResultView {
-	server, err := h.serverRepo.GetByID(ctx, id)
-	if err != nil {
+// deleteOne removes a single server from the registry.
+func (h ActionHandler) deleteOne(ctx context.Context, server servers.Server) view.BulkServerResultView {
+	if err := h.serverRepo.Delete(ctx, server.ID); err != nil {
 		return view.BulkServerResultView{
-			ID:     id,
-			Name:   fmt.Sprintf("#%d", id),
-			Status: "failed",
-			Reason: "server not found",
-		}
-	}
-
-	if !servers.HasStoredCredentials(server) {
-		return view.BulkServerResultView{
-			ID:     id,
+			ID:     server.ID,
 			Name:   server.Name,
-			Status: "skipped",
-			Reason: "no stored credentials",
+			Status: statusFailed,
+			Reason: err.Error(),
 		}
 	}
+	return view.BulkServerResultView{ID: server.ID, Name: server.Name, Status: statusOK}
+}
 
+// execOne runs cmd on a single (already credential-checked) server.
+func (h ActionHandler) execOne(ctx context.Context, server servers.Server, cmd string, timeout time.Duration) view.BulkServerResultView {
 	password, privateKey, keyPassphrase := servers.ResolveCredentials(server)
 
 	result, runErr := h.runner.RunCommand(ctx, sshclient.CommandRequest{
@@ -216,26 +210,25 @@ func (h ActionHandler) runOneServer(ctx context.Context, id int64, cmd string) v
 			ConnectTimeout: h.deps.Config.SSH.ConnectTimeout,
 		},
 		Command:        cmd,
-		CommandTimeout: h.deps.Config.SSH.CommandTimeout,
+		CommandTimeout: timeout,
 	})
 
 	if runErr != nil {
 		return view.BulkServerResultView{
-			ID:     id,
+			ID:     server.ID,
 			Name:   server.Name,
-			Status: "failed",
+			Status: statusFailed,
 			Reason: runErr.Error(),
 		}
 	}
 
 	if result.ExitCode != nil && *result.ExitCode != 0 {
-		reason := mapExitCode(*result.ExitCode, result.Stderr)
 		return view.BulkServerResultView{
-			ID:       id,
+			ID:       server.ID,
 			Name:     server.Name,
-			Status:   "failed",
+			Status:   statusFailed,
 			ExitCode: strconv.Itoa(*result.ExitCode),
-			Reason:   reason,
+			Reason:   mapExitCode(*result.ExitCode, result.Stderr),
 		}
 	}
 
@@ -244,11 +237,61 @@ func (h ActionHandler) runOneServer(ctx context.Context, id int64, cmd string) v
 		exitStr = strconv.Itoa(*result.ExitCode)
 	}
 	return view.BulkServerResultView{
-		ID:       id,
+		ID:       server.ID,
 		Name:     server.Name,
-		Status:   "ok",
+		Status:   statusOK,
 		ExitCode: exitStr,
 	}
+}
+
+// JobPageHandler renders GET /servers/bulk/jobs/{job}: the live (auto
+// refreshing) or final result page for a background bulk job.
+type JobPageHandler struct {
+	deps module.Dependencies
+	jobs *jobStore
+}
+
+func newJobPageHandler(deps module.Dependencies, jobs *jobStore) JobPageHandler {
+	return JobPageHandler{deps: deps, jobs: jobs}
+}
+
+func (h JobPageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	job, ok := h.jobs.get(strings.TrimSpace(r.PathValue("job")))
+	if !ok {
+		http.Redirect(w, r, "/servers?flash=bulk-job-expired", http.StatusSeeOther)
+		return
+	}
+
+	rows, finished := job.snapshot()
+	result := summarize(job.action, rows)
+	result.Finished = finished
+	if !finished {
+		result.RefreshURL = jobURL(job.id)
+	}
+
+	page := view.NewPageData(h.deps.Config)
+	page.CSRFToken = middleware.GetCSRFToken(r.Context())
+	page.Title = "Bulk action results"
+	page.ActiveNav = "/servers"
+	page.ContentTemplate = "content-bulk-result"
+	page.PageTitle = "Bulk action results"
+	if finished {
+		page.PageDescription = "Per-server outcome for the bulk " + job.action + " operation."
+	} else {
+		page.PageDescription = "The bulk " + job.action + " operation is running — this page refreshes automatically."
+	}
+	if h.deps.Database != nil {
+		page.MigrationCount = h.deps.Database.MigrationCount()
+	}
+	page.BulkActionResult = result
+
+	if err := h.deps.Renderer.Render(w, http.StatusOK, page); err != nil {
+		http.Error(w, "render bulk result page", http.StatusInternalServerError)
+	}
+}
+
+func jobURL(id string) string {
+	return "/servers/bulk/jobs/" + id
 }
 
 // summarize tallies per-status counts for the result page header.
@@ -261,10 +304,12 @@ func summarize(action string, results []view.BulkServerResultView) view.BulkActi
 	}
 	for _, r := range results {
 		switch r.Status {
-		case "ok":
+		case statusOK:
 			out.OKCount++
-		case "skipped":
+		case statusSkipped:
 			out.SkippedCount++
+		case statusPending, statusRunning:
+			out.InProgressCount++
 		default:
 			out.FailedCount++
 		}

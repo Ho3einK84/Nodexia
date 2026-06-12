@@ -136,6 +136,35 @@
   border: 1px solid rgba(250, 204, 21, 0.2);
 }
 
+.bulk-status--pending {
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.bulk-status--running {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.bulk-status--running svg {
+  animation: bulk-spin 1s linear infinite;
+}
+
+@keyframes bulk-spin {
+  to { transform: rotate(360deg); }
+}
+
+.bulk-progress-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
 /* ── Bulk result table / cards ─────────────────────────── */
 
 .bulk-result-table-wrap {
