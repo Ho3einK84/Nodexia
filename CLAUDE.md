@@ -13,9 +13,9 @@ managing Rebecca and Pasarguard panel nodes**. The product priorities, in order:
 4. Server registry (SSH targets with labels + credential strategies)
 5. Background collection (scheduled monitoring + node discovery jobs)
 
-SSH command execution and SFTP browsing are **supporting tools only**, not the
-main direction. Do not expand them into general-purpose server management without
-being asked.
+SSH command execution, SFTP browsing, bulk server actions, and in-browser SSH
+terminal are **supporting tools only**, not the main direction. They have been
+explicitly added and must not be expanded further without being asked.
 
 ## Stack & hard constraints
 
@@ -24,7 +24,8 @@ being asked.
 - Rendering is **SSR with `html/template`**. No SPA, no JS framework, no client
   rendering. Keep `web/static` minimal.
 - Dependencies are deliberately few (sftp, mysql driver, modernc sqlite,
-  x/crypto). Justify any new module before adding it.
+  x/crypto, coder/websocket). Justify any new module before adding it.
+  `github.com/coder/websocket v1.8.14` is pinned for the WebSocket terminal.
 - DB: SQLite now (`modernc.org/sqlite`, pure-Go), MySQL migration planned.
   ALL SQL must stay portable across both:
   - explicit column lists
@@ -43,6 +44,7 @@ being asked.
 - `internal/scheduler/`  — background job runtime (monitoring, nodes)
 - `internal/sshclient/`  — shared SSH runtime
 - `internal/commandstream/` — in-memory live command output store
+- `internal/terminalticket/` — single-use ticket store for terminal sessions
 - `internal/ratelimit/`  — login throttle
 - `internal/view/`       — `Renderer`, `PageData`, nav
 - `web/templates/`, `web/static/` — SSR templates and assets
@@ -77,6 +79,49 @@ Every feature is a `module.Module`:
   `ContentTemplate`, `Title`, `ActiveNav`, etc. — match existing handlers.
 - Reuse existing middleware (request ID, logging, panic recovery, security,
   auth, login throttle). Don't reinvent them.
+
+## Bulk actions (`internal/module/bulk`)
+
+- Route: `POST /servers/bulk` with `server_ids[]` and `action` form fields.
+- Supported actions: `reboot`, `update` (packages), `delete`.
+- **Worker pool**: exactly `bulkWorkers = 5` goroutines; bounded by a closed
+  buffered channel consumed via `range`.
+- **Sudo preamble** (non-interactive): checks `id -u` first; if not root,
+  tries `sudo -n true`. Exit code **88** = sudo requires a password; exit
+  code **87** = no supported package manager found.
+- Servers without stored credentials are **skipped** (never silently dropped).
+- UI: form always visible (progressive enhancement); `bulk.js` only adds the
+  live count label and select-all indeterminate state.
+
+## Terminal (`internal/module/terminal`)
+
+- Route group: `/servers/{id}/terminal` (GET form / POST issue-ticket /
+  GET `/terminal/ws` WebSocket upgrade).
+- **Credential flow**: STORED strategy skips the form and creates a ticket on
+  GET. RUNTIME strategy shows a CSRF-protected POST form; credentials are
+  **never persisted, logged, or placed in any URL**.
+- **Ticket store** (`internal/terminalticket`): 30 s TTL, atomic single-use
+  consume, per-user concurrent session cap (max `maxTerminalSessionsPerUser =
+  3`). Ticket ID flows only via the `data-ticket` HTML attribute → JS.
+- **WebSocket protocol** (JSON text frames):
+  - Client → server: `{"type":"input","data":"..."}` or
+    `{"type":"resize","cols":N,"rows":N}`
+  - Server → client: `{"type":"output","data":"..."}` or
+    `{"type":"error","message":"..."}`
+- **Backpressure**: 5 s per-frame write deadline; slow clients cause the SSH
+  session to terminate rather than accumulating output in memory.
+- **Same-origin check**: `middleware.ValidateSameOriginRequest(r)` is called
+  before `cwebsocket.Accept`. The accept options set `InsecureSkipVerify:
+  true` only because we already validated origin manually.
+- **CSP**: `connect-src 'self'` was added to the security middleware to allow
+  the WebSocket upgrade from the same origin.
+- **Vendored assets** (served via `GET /static/`, `script-src 'self'`):
+  - `xterm v5.5.0` — `web/static/xterm.min.js`
+    sha256: `4196e242ef1cf4c2adead8d97f4a772a69576076f70b095e004b4abbb049e7bf`
+  - `xterm.css` — `web/static/xterm.min.css`
+    sha256: `f7f724aea2bb620a6482bfb8e4bdecfae1152b0c7facef55fbda61f3b6cfedb2`
+  - `@xterm/addon-fit v0.10.0` — `web/static/xterm-addon-fit.min.js`
+    sha256: `a6a7bbb33569f16aa3e18d71425e34d035fc89a0b7e8cba084f8855f91aa38f1`
 
 ## Secrets & SSH
 

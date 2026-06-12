@@ -19,6 +19,10 @@ supporting tools, but they are not the main direction of the product.
 - Rebecca / Pasarguard node discovery with runtime evidence.
 - Threshold-based alerting with Telegram delivery, silences, and history.
 - Background scheduler for recurring monitoring and discovery jobs.
+- **Bulk actions**: reboot, update packages, or delete multiple servers at once
+  with a bounded worker pool and per-server result summary.
+- **In-browser SSH terminal**: xterm.js PTY over WebSocket with one-time
+  tickets, a per-user session cap, and credentials that never touch disk or URLs.
 - Single admin account, signed-cookie sessions, and trust-on-first-use SSH host
   key pinning.
 
@@ -267,8 +271,10 @@ development the session cookie is not marked `Secure`, so plain HTTP works.
 | `/servers/{id}/nodes` | Rebecca / Pasarguard node discovery |
 | `/servers/{id}/system` | System facts |
 | `/alerts` | Alert rules, channels, silences, and history |
+| `/servers/{id}/terminal` | In-browser SSH terminal (xterm.js + WebSocket) |
 | `/servers/{id}/commands` | Supporting SSH command runner |
 | `/servers/{id}/files` | Supporting SFTP browser |
+| `/servers/bulk` | Bulk reboot / update / delete across multiple servers |
 | `/ops/diagnostics` | Operational diagnostics |
 | `/healthz` | Health check |
 
