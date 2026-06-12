@@ -36,7 +36,11 @@
   </p>
   {{ end }}
 
-  <form id="bulk-form" method="post" action="/servers/bulk">
+  {{/* Bulk-action form holds ONLY the toolbar. Per-server checkboxes live in
+       the cards below and associate with this form via form="bulk-form", so we
+       never nest the per-server delete forms inside it (nested forms are invalid
+       HTML and silently break the inner form). */}}
+  <form id="bulk-form" method="post" action="/servers/bulk" class="bulk-form">
     <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
 
     <div class="bulk-toolbar" id="bulk-toolbar">
@@ -45,66 +49,67 @@
         <span>Select all</span>
       </label>
       <span class="bulk-count" id="bulk-count" aria-live="polite">0 selected</span>
-      <select name="action" class="bulk-action-select" required aria-label="Bulk action">
+      <select name="action" id="bulk-action" class="bulk-action-select" required aria-label="Bulk action">
         <option value="">Choose action…</option>
         <option value="reboot">Reboot</option>
         <option value="update">Update packages</option>
         <option value="delete">Delete</option>
       </select>
       <button type="submit" id="bulk-submit" class="btn btn--primary"
-        data-confirm="Run this action on all selected servers? Destructive actions cannot be undone.">
+        data-confirm="Run this bulk action on the selected servers?">
         <i data-lucide="play" class="icon-in-button"></i> Run on selected
       </button>
     </div>
-
-    <div class="server-list">
-      {{ range .Servers }}
-      <article class="server-card server-card--{{ .AuthMode }}">
-        <div class="server-card__top">
-          <div class="server-card__checkbox-wrap">
-            <input type="checkbox" name="server_ids" value="{{ .ID }}"
-              class="bulk-server-checkbox"
-              aria-label="Select {{ .Name }}">
-          </div>
-          <div class="server-card__identity">
-            <h4 class="server-card__name"><i data-lucide="server" class="icon-in-button"></i> {{ .Name }}</h4>
-            <span class="server-card__host">{{ .Username }}@{{ .Host }}:{{ .Port }}</span>
-          </div>
-          <div class="server-card__badges">
-            <span class="badge badge--auth-{{ .AuthMode }}">{{ .AuthMode }}</span>
-            <span class="badge badge--strat-{{ .CredentialStrategy }}">{{ .CredentialStrategy }}</span>
-            <span class="badge badge--id">#{{ .ID }}</span>
-            {{ range .Tags }}<span class="tag">{{ . }}</span>{{ end }}
-          </div>
-        </div>
-        {{ if .Note }}
-        <p class="server-card__note">{{ .Note }}</p>
-        {{ end }}
-        <div class="server-card__actions">
-          <a class="btn btn--primary" href="/servers/{{ .ID }}/monitoring" aria-label="Monitoring"><i data-lucide="gauge" class="icon-in-button"></i><span class="btn-label"> Monitoring</span></a>
-          <a class="btn btn--secondary" href="/servers/{{ .ID }}/nodes" aria-label="Nodes"><i data-lucide="boxes" class="icon-in-button"></i><span class="btn-label"> Nodes</span></a>
-          <a class="btn btn--secondary" href="/servers/{{ .ID }}/system" aria-label="System"><i data-lucide="info" class="icon-in-button"></i><span class="btn-label"> System</span></a>
-          <div class="action-menu" data-action-menu>
-            <button type="button" class="btn btn--ghost action-menu__toggle" aria-haspopup="true" aria-expanded="false" aria-label="More actions for {{ .Name }}"><i data-lucide="ellipsis-vertical" class="icon-in-button"></i><span class="action-menu__label"> More</span></button>
-            <div class="action-menu__panel" role="menu">
-              <span class="action-menu__caption"><i data-lucide="calendar"></i> Created {{ .CreatedAt }}</span>
-              <div class="action-menu__divider" role="separator"></div>
-              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/terminal"><i data-lucide="terminal-square" class="icon-in-button"></i> Terminal</a>
-              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
-              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
-              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> Edit</a>
-              <div class="action-menu__divider" role="separator"></div>
-              <form method="post" action="/servers/{{ .ID }}/delete" class="action-menu__form">
-                <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-                <button type="submit" class="action-menu__item action-menu__item--danger" role="menuitem" data-confirm="Delete server &quot;{{ .Name }}&quot;? This cannot be undone."><i data-lucide="trash-2" class="icon-in-button"></i> Delete</button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </article>
-      {{ end }}
-    </div>
   </form>
+
+  <div class="server-list">
+    {{ range .Servers }}
+    <article class="server-card server-card--{{ .AuthMode }}">
+      <div class="server-card__top">
+        <div class="server-card__checkbox-wrap">
+          <input type="checkbox" name="server_ids" value="{{ .ID }}"
+            form="bulk-form"
+            class="bulk-server-checkbox"
+            aria-label="Select {{ .Name }}">
+        </div>
+        <div class="server-card__identity">
+          <h4 class="server-card__name"><i data-lucide="server" class="icon-in-button"></i> {{ .Name }}</h4>
+          <span class="server-card__host">{{ .Username }}@{{ .Host }}:{{ .Port }}</span>
+        </div>
+        <div class="server-card__badges">
+          <span class="badge badge--auth-{{ .AuthMode }}">{{ .AuthMode }}</span>
+          <span class="badge badge--strat-{{ .CredentialStrategy }}">{{ .CredentialStrategy }}</span>
+          <span class="badge badge--id">#{{ .ID }}</span>
+          {{ range .Tags }}<span class="tag">{{ . }}</span>{{ end }}
+        </div>
+      </div>
+      {{ if .Note }}
+      <p class="server-card__note">{{ .Note }}</p>
+      {{ end }}
+      <div class="server-card__actions">
+        <a class="btn btn--primary" href="/servers/{{ .ID }}/monitoring" aria-label="Monitoring"><i data-lucide="gauge" class="icon-in-button"></i><span class="btn-label"> Monitoring</span></a>
+        <a class="btn btn--secondary" href="/servers/{{ .ID }}/nodes" aria-label="Nodes"><i data-lucide="boxes" class="icon-in-button"></i><span class="btn-label"> Nodes</span></a>
+        <a class="btn btn--secondary" href="/servers/{{ .ID }}/system" aria-label="System"><i data-lucide="info" class="icon-in-button"></i><span class="btn-label"> System</span></a>
+        <div class="action-menu" data-action-menu>
+          <button type="button" class="btn btn--ghost action-menu__toggle" aria-haspopup="true" aria-expanded="false" aria-label="More actions for {{ .Name }}"><i data-lucide="ellipsis-vertical" class="icon-in-button"></i><span class="action-menu__label"> More</span></button>
+          <div class="action-menu__panel" role="menu">
+            <span class="action-menu__caption"><i data-lucide="calendar"></i> Created {{ .CreatedAt }}</span>
+            <div class="action-menu__divider" role="separator"></div>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/terminal"><i data-lucide="terminal-square" class="icon-in-button"></i> Terminal</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> Edit</a>
+            <div class="action-menu__divider" role="separator"></div>
+            <form method="post" action="/servers/{{ .ID }}/delete" class="action-menu__form">
+              <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+              <button type="submit" class="action-menu__item action-menu__item--danger" role="menuitem" data-confirm="Delete server &quot;{{ .Name }}&quot;? This cannot be undone."><i data-lucide="trash-2" class="icon-in-button"></i> Delete</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </article>
+    {{ end }}
+  </div>
 
   {{ template "pagination" .ServerPagination }}
 

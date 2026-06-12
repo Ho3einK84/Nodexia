@@ -19,6 +19,8 @@ func flashKind(r *http.Request) string {
 	switch r.URL.Query().Get("flash") {
 	case "created", "updated", "deleted", "host-key-forgotten":
 		return "success"
+	case "bulk-no-selection", "bulk-invalid-action":
+		return "error"
 	default:
 		return ""
 	}
@@ -34,6 +36,10 @@ func flashMessage(r *http.Request) string {
 		return "Server record deleted successfully."
 	case "host-key-forgotten":
 		return "Stored host key removed. The next connection will trust and pin the new key."
+	case "bulk-no-selection":
+		return "Select at least one server before running a bulk action."
+	case "bulk-invalid-action":
+		return "Choose a valid bulk action (reboot, update, or delete)."
 	default:
 		return ""
 	}

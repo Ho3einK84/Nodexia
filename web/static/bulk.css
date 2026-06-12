@@ -1,5 +1,9 @@
 /* ── Bulk action toolbar ─────────────────────────────── */
 
+.bulk-form {
+  margin: 0 0 12px;
+}
+
 .bulk-toolbar {
   display: flex;
   align-items: center;
@@ -9,7 +13,11 @@
   border: 1px solid rgba(59, 130, 246, 0.2);
   border-radius: var(--radius-md);
   padding: 10px 16px;
-  margin-bottom: 4px;
+}
+
+#bulk-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .bulk-select-all {
@@ -64,6 +72,21 @@
   align-items: flex-start;
   padding-top: 2px;
   flex-shrink: 0;
+}
+
+/* ── Bulk result summary ───────────────────────────────── */
+
+.bulk-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bulk-summary__total {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 /* ── Bulk result status badges ─────────────────────────── */
