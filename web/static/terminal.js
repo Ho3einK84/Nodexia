@@ -19,6 +19,7 @@
 
   var ticket  = card.getAttribute('data-ticket');
   var wsBase  = card.getAttribute('data-ws-url');
+  var initCmd = card.getAttribute('data-init-cmd') || '';
   if (!ticket || !wsBase) return;
 
   var container = document.getElementById('terminal-container');
@@ -85,6 +86,16 @@
     setStatus('connected', 'connected');
     fitAndResize();
     term.focus();
+
+    // Auto-run an initial command (e.g. an interactive command forwarded from
+    // the command center). Defer briefly so the shell prompt is ready.
+    if (initCmd) {
+      setTimeout(function () {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'input', data: initCmd + '\n' }));
+        }
+      }, 350);
+    }
   };
 
   ws.onmessage = function (event) {

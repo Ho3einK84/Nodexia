@@ -17,8 +17,16 @@
       {{ end }}
     </p>
 
+    {{ if .TerminalForm.InitCommand }}
+    <p class="terminal-init-hint">
+      <i data-lucide="play" class="icon-in-button"></i>
+      This terminal will run <code>{{ .TerminalForm.InitCommand }}</code> once connected.
+    </p>
+    {{ end }}
+
     <form method="post" action="{{ .TerminalForm.Action }}" class="terminal-form">
       <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+      {{ if .TerminalForm.InitCommand }}<input type="hidden" name="init" value="{{ .TerminalForm.InitCommand }}">{{ end }}
 
       {{ if not .TerminalForm.StoredCredentialsAvailable }}
       {{ if or (eq .TerminalTarget.AuthMode "password") (eq .TerminalTarget.AuthMode "hybrid") (eq .TerminalTarget.AuthMode "") }}
@@ -70,7 +78,8 @@
   <div class="card terminal-card"
     id="terminal-card"
     data-ticket="{{ .TerminalTicket }}"
-    data-ws-url="{{ .TerminalTarget.WSURL }}">
+    data-ws-url="{{ .TerminalTarget.WSURL }}"
+    data-init-cmd="{{ .TerminalTarget.InitCommand }}">
 
     <div class="terminal-card__header">
       <span class="terminal-card__host">

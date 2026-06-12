@@ -96,6 +96,33 @@
   scrollbar-color: rgba(148, 163, 184, 0.22) transparent;
 }
 
+/* ── Init-command hint ───────────────────────────────── */
+
+.terminal-init-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.terminal-init-hint code {
+  color: var(--text);
+  word-break: break-all;
+}
+
+.terminal-init-hint svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
 /* ── Credential form ─────────────────────────────────── */
 
 .terminal-form {

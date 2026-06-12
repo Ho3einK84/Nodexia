@@ -42,6 +42,7 @@ package terminal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -98,14 +99,16 @@ func (h pageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	initCmd := sanitizeInitCommand(r.URL.Query().Get("init"))
 	form := view.TerminalFormView{
 		Action:                     terminalURL(serverID),
 		ConnectTimeout:             h.deps.Config.SSH.ConnectTimeout.String(),
 		StoredCredentialsAvailable: servers.HasStoredCredentials(server),
+		InitCommand:                initCmd,
 		Errors:                     map[string]string{},
 	}
 
-	renderTerminalPage(w, r, h.deps, server, form, "")
+	renderTerminalPage(w, r, h.deps, server, form, "", initCmd)
 }
 
 // ── POST handler (credential collection + ticket creation) ────────────────────
@@ -139,6 +142,7 @@ func (h postHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	hasCreds := servers.HasStoredCredentials(server)
 
+	initCmd := sanitizeInitCommand(r.FormValue("init"))
 	password := r.FormValue("password")
 	privateKey := r.FormValue("private_key")
 	keyPassphrase := r.FormValue("key_passphrase")
@@ -187,9 +191,10 @@ func (h postHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Password:                   password,
 			PrivateKey:                 privateKey,
 			StoredCredentialsAvailable: hasCreds,
+			InitCommand:                initCmd,
 			Errors:                     formErrors,
 		}
-		renderTerminalPage(w, r, h.deps, server, form, "")
+		renderTerminalPage(w, r, h.deps, server, form, "", initCmd)
 		return
 	}
 
@@ -212,7 +217,7 @@ func (h postHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ticketID := h.deps.TerminalTickets.Create(serverID, req)
-	renderTerminalPage(w, r, h.deps, server, view.TerminalFormView{}, ticketID)
+	renderTerminalPage(w, r, h.deps, server, view.TerminalFormView{}, ticketID, initCmd)
 }
 
 // ── WebSocket handler ─────────────────────────────────────────────────────────
@@ -285,24 +290,28 @@ func (h wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	shellDone := make(chan error, 1)
 	go func() {
-		err := h.deps.SSH.OpenShell(ctx, ticket.Req, pio)
-		shellDone <- err
-		cancel() // cancel ctx so the read loop exits too
+		shellDone <- h.deps.SSH.OpenShell(ctx, ticket.Req, pio)
+		cancel() // unblock the read loop when the shell exits
 	}()
 
-	// WS read loop.
-	readErr := h.runReadLoop(ctx, conn, stdinW, resizeCh)
+	// WS read loop runs until the client disconnects or the shell ends.
+	_ = h.runReadLoop(ctx, conn, stdinW, resizeCh)
 
-	// Signal shell to stop (in case read loop ended first).
+	// Stop the shell if the read loop ended first, then wait for it.
 	cancel()
-	stdinW.Close()
-
-	// Surface non-context errors to the client before closing.
+	_ = stdinW.Close()
 	shellErr := <-shellDone
-	if shellErr != nil && shellErr != context.Canceled && shellErr != context.DeadlineExceeded {
-		if readErr == nil {
-			_ = writeWSError(ctx, conn, shellErr.Error())
-		}
+
+	// Surface a real SSH/shell failure (auth rejected, host unreachable, PTY
+	// refused, …) to the client.  ctx is already cancelled here, so the final
+	// frame must use a fresh context — otherwise the write is dropped and the
+	// user sees an unexplained disconnect with no reason.
+	if shellErr != nil &&
+		!errors.Is(shellErr, context.Canceled) &&
+		!errors.Is(shellErr, context.DeadlineExceeded) {
+		errCtx, errCancel := context.WithTimeout(context.Background(), wsWriteTimeout)
+		_ = writeWSError(errCtx, conn, "ssh: "+shellErr.Error())
+		errCancel()
 	}
 }
 
@@ -410,6 +419,7 @@ func renderTerminalPage(
 	server servers.Server,
 	form view.TerminalFormView,
 	ticketID string,
+	initCommand string,
 ) {
 	page := view.NewPageData(deps.Config)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
@@ -430,6 +440,7 @@ func renderTerminalPage(
 		AuthMode:           server.AuthMode,
 		CredentialStrategy: server.CredentialStrategy,
 		WSURL:              wsURL(server.ID),
+		InitCommand:        initCommand,
 	}
 	page.TerminalForm = form
 	page.TerminalTicket = ticketID
@@ -463,4 +474,28 @@ func terminalURL(serverID int64) string {
 
 func wsURL(serverID int64) string {
 	return "/servers/" + strconv.FormatInt(serverID, 10) + "/terminal/ws"
+}
+
+// maxInitCommandLen bounds the optional auto-run command carried from the
+// command center.
+const maxInitCommandLen = 512
+
+// sanitizeInitCommand normalises the optional init command: single line only,
+// control characters stripped (so it cannot inject extra shell input), and
+// length-capped.  The command itself is not secret, but it must stay benign.
+func sanitizeInitCommand(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	s = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == 0 {
+			return -1
+		}
+		return r
+	}, s)
+	if len(s) > maxInitCommandLen {
+		s = s[:maxInitCommandLen]
+	}
+	return strings.TrimSpace(s)
 }
