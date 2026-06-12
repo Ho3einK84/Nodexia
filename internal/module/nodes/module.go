@@ -22,18 +22,22 @@ func (Module) RouteGroup() string {
 }
 
 func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
-	if deps.Database == nil || deps.Database.SQL == nil || deps.SSH == nil {
+	if deps.Database == nil || deps.Database.SQL == nil || deps.SSH == nil || deps.CommandStreams == nil {
 		mux.Handle("GET /servers/{id}/nodes", module.NewPlaceholderHandler(deps, module.PlaceholderPage{
 			Title:       "Nodes",
 			RouteGroup:  "/servers/{id}/nodes",
-			Description: "This module requires a database runtime and SSH service to collect node discovery evidence.",
+			Description: "This module requires a database runtime, SSH service, and the live stream store to discover and manage nodes.",
 		}))
 		return
 	}
 
 	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
 	repo := NewSQLRepository(deps.Database.SQL)
-	detectors := DefaultDetectors()
-	mux.Handle("GET /servers/{id}/nodes", NewPageHandler(deps, serverRepo, repo, detectors))
-	mux.Handle("POST /servers/{id}/nodes", NewRefreshHandler(deps, serverRepo, repo, detectors))
+	handlers := NewHandlers(deps, serverRepo, repo, DefaultProviders())
+
+	mux.HandleFunc("GET /servers/{id}/nodes", handlers.Page)
+	mux.HandleFunc("POST /servers/{id}/nodes", handlers.Refresh)
+	mux.HandleFunc("POST /servers/{id}/nodes/actions", handlers.Action)
+	mux.HandleFunc("POST /servers/{id}/nodes/install", handlers.InstallStart)
+	mux.HandleFunc("GET /servers/{id}/nodes/install/{job}", handlers.InstallJob)
 }

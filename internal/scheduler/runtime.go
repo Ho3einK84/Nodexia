@@ -65,7 +65,7 @@ type Runtime struct {
 	monitorRepo monitoring.Repository
 	trafficRepo monitoring.TrafficRepository
 	nodeRepo    nodes.Repository
-	detectors   []nodes.Detector
+	providers   []nodes.Provider
 	evaluator   *alerts.Evaluator
 
 	mu     sync.RWMutex
@@ -116,7 +116,7 @@ func New(cfg config.Config, conn *sql.DB, ssh *sshclient.Service) *Runtime {
 		monitorRepo: monitoring.NewSQLRepository(conn),
 		trafficRepo: monitoring.NewSQLRepository(conn),
 		nodeRepo:    nodes.NewSQLRepository(conn),
-		detectors:   nodes.DefaultDetectors(),
+		providers:   nodes.DefaultProviders(),
 		evaluator:   alerts.NewEvaluator(alerts.NewSQLRepository(conn), schedulerNotifier(cfg)),
 		jobs:        map[string]*jobState{},
 		paused:      map[string]struct{}{},
@@ -578,7 +578,7 @@ func currentMonthTotalGiB(traffic monitoring.TrafficSnapshot) float64 {
 }
 
 func (r *Runtime) executeNodesJob(ctx context.Context, server servers.Server, req sshclient.CommandRequest) (string, error) {
-	snapshots, probes, err := nodes.Collect(ctx, r.ssh, req, r.detectors)
+	snapshots, probes, err := nodes.Collect(ctx, r.ssh, req, r.providers)
 	if err != nil {
 		return "", err
 	}

@@ -102,6 +102,41 @@ Every feature is a `module.Module`:
 - UI: form always visible (progressive enhancement); `bulk.js` only adds the
   live count label and select-all indeterminate state.
 
+## Nodes (`internal/module/nodes`)
+
+- **Provider/driver architecture**: each node family implements
+  `nodes.Provider` (discovery probe + parser, official-CLI action commands,
+  install support). New node types are added by implementing the interface
+  and registering it in `DefaultProviders()` — never assume a single node or
+  hardcode node names; instance names come from remote configuration.
+- **PasarGuard** (`pasarguard.go`): Docker based, multi-instance. Each
+  instance `<name>` owns `/opt/<name>` (compose + `.env`) and
+  `/var/lib/<name>` (certs, xray core). Discovery scans
+  `/opt/*/docker-compose.yml` + `docker ps -a`. Actions run
+  `pg-node --name <name> <op>` with non-interactive flags (`-n`/`--no-follow`
+  to avoid log tailing, `--yes` for confirmations); if the `pg-node` command
+  is missing, the per-instance CLI `/usr/local/bin/<name>` is used (the
+  official script installs it under the custom name).
+- **PasarGuard install wizard**: `POST /servers/{id}/nodes/install` runs the
+  official script (`install --name <name> --yes`) as a background job
+  (`install.go`, in-memory store, 30 min TTL). The script tails container
+  logs forever after installing, so the remote command is bounded with
+  `timeout` and exit 124 is NOT a failure — success is decided by the
+  post-install verification probe that reads `/opt/<name>/.env` (API key)
+  and `/var/lib/<name>/certs/ssl_cert.pem`. The API key and certificate are
+  shown once on the job page for panel registration and are never persisted.
+- **Rebecca** (`rebecca.go`): detect and manage only — no install option.
+  Config from `/opt/rebecca-node/.env`, version from `.binary-release.json`
+  (`tag` field), health from systemd/docker. Actions run the `rebecca-node`
+  CLI; confirm prompts are answered with `yes |`.
+- **Node actions** (`POST /servers/{id}/nodes/actions`) run as background
+  `commandstream` sessions (303 → `?stream=` polling page). They require
+  stored credentials, and the submitted (type, name) pair must exist in the
+  latest stored discovery sweep. Any node name interpolated into a shell
+  command MUST pass `ValidateNodeName`.
+- Discovery snapshots persist in `node_snapshots` (one batch per sweep via
+  `ReplaceLatest`); the scheduler's nodes job uses the same providers.
+
 ## Commands (`internal/module/commands`)
 
 - Intents on `POST /servers/{id}/commands`: `run`/`stream` (both start a

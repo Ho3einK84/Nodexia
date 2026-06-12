@@ -1,0 +1,49 @@
+package nodes
+
+import (
+	"os/exec"
+	"strings"
+	"testing"
+)
+
+// TestGeneratedShellSyntax pipes every generated command through `sh -n` to
+// catch quoting mistakes.
+func TestGeneratedShellSyntax(t *testing.T) {
+	commands := []string{
+		PasarGuardProvider{}.DiscoveryCommand(),
+		RebeccaProvider{}.DiscoveryCommand(),
+	}
+	for _, p := range DefaultProviders() {
+		for _, a := range p.Actions() {
+			cmd, _, err := p.ActionCommand("node2", a.Key)
+			if err != nil {
+				t.Fatalf("%s %s: %v", p.Type(), a.Key, err)
+			}
+			commands = append(commands, cmd)
+		}
+	}
+	install, err := PasarGuardProvider{}.InstallCommand("node2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commands = append(commands, install)
+	info, err := PasarGuardProvider{}.RegistrationInfoCommand("node2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commands = append(commands, info)
+
+	for _, command := range commands {
+		// Each command is "sh -c '<script>'" — extract the script and syntax-check it.
+		inner := strings.TrimSuffix(strings.TrimPrefix(command, "sh -c '"), "'")
+		if strings.Contains(inner, "'") {
+			t.Errorf("command contains an unescaped single quote (would break sh -c wrapping):\n%s", command)
+			continue
+		}
+		check := exec.Command("sh", "-n", "-c", inner)
+		out, err := check.CombinedOutput()
+		if err != nil {
+			t.Errorf("sh -n failed: %v\n%s\ncommand:\n%s", err, out, inner)
+		}
+	}
+}

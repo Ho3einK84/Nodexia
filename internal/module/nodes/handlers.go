@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Ho3einK84/Nodexia/internal/commandstream"
 	"github.com/Ho3einK84/Nodexia/internal/http/httperrors"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
 	"github.com/Ho3einK84/Nodexia/internal/module"
@@ -17,18 +19,29 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
 
-type PageHandler struct {
+const streamRefreshMillis = 2000
+
+// Handlers serves the nodes route group.  All node knowledge (discovery,
+// action commands, install support) comes from the configured providers.
+type Handlers struct {
 	deps       module.Dependencies
 	serverRepo servers.Repository
 	repo       Repository
-	detectors  []Detector
+	providers  []Provider
+	installs   *installStore
 }
 
-type RefreshHandler struct {
-	deps       module.Dependencies
-	serverRepo servers.Repository
-	repo       Repository
-	detectors  []Detector
+func NewHandlers(deps module.Dependencies, serverRepo servers.Repository, repo Repository, providers []Provider) *Handlers {
+	if len(providers) == 0 {
+		providers = DefaultProviders()
+	}
+	return &Handlers{
+		deps:       deps,
+		serverRepo: serverRepo,
+		repo:       repo,
+		providers:  providers,
+		installs:   newInstallStore(),
+	}
 }
 
 type FormInput struct {
@@ -41,27 +54,39 @@ type FormInput struct {
 
 type ValidationErrors map[string]string
 
-func NewPageHandler(deps module.Dependencies, serverRepo servers.Repository, repo Repository, detectors []Detector) PageHandler {
-	return PageHandler{deps: deps, serverRepo: serverRepo, repo: repo, detectors: detectors}
+func (v ValidationErrors) HasAny() bool {
+	return len(v) > 0
 }
 
-func NewRefreshHandler(deps module.Dependencies, serverRepo servers.Repository, repo Repository, detectors []Detector) RefreshHandler {
-	return RefreshHandler{deps: deps, serverRepo: serverRepo, repo: repo, detectors: detectors}
+// pageView bundles everything the nodes page template renders.
+type pageView struct {
+	status       int
+	form         view.NodeFormView
+	snapshots    []view.NodeSnapshotView
+	collection   view.NodeCollectionResultView
+	stream       view.CommandStreamView
+	installForm  view.NodeInstallFormView
+	flashKind    string
+	flashMessage string
 }
 
-func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	server, ok := loadServer(w, r, h.deps, h.serverRepo)
+// ── GET /servers/{id}/nodes ───────────────────────────────────────────────────
+
+func (h *Handlers) Page(w http.ResponseWriter, r *http.Request) {
+	server, ok := h.loadServer(w, r)
 	if !ok {
 		return
 	}
 
 	hasStoredCreds := servers.HasStoredCredentials(server)
+	streamID := strings.TrimSpace(r.URL.Query().Get("stream"))
 	wantRefresh := strings.TrimSpace(r.URL.Query().Get("refresh")) == "1"
-	shouldCollect := hasStoredCreds && wantRefresh
 
-	if hasStoredCreds && !wantRefresh {
-		hasStored, _ := h.repo.HasAny(r.Context(), server.ID)
-		if !hasStored {
+	// Never kick off an SSH discovery sweep while the page is polling a live
+	// action stream — only explicit refreshes or the first-ever visit collect.
+	shouldCollect := hasStoredCreds && wantRefresh && streamID == ""
+	if hasStoredCreds && !wantRefresh && streamID == "" {
+		if hasStored, _ := h.repo.HasAny(r.Context(), server.ID); !hasStored {
 			shouldCollect = true
 		}
 	}
@@ -71,24 +96,28 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	snapshots := make([]view.NodeSnapshotView, 0)
-	if latest, err := h.repo.GetLatestByServer(r.Context(), server.ID); err == nil {
-		for _, snapshot := range latest {
-			snapshots = append(snapshots, snapshotViewFromModel(snapshot))
-		}
-	} else if !errors.Is(err, ErrNotFound) {
+	snapshots, err := h.storedSnapshotViews(r.Context(), server, hasStoredCreds)
+	if err != nil {
 		httperrors.RenderPage(w, r, h.deps, err, "/servers", "Could not load node snapshots", "The latest node discovery snapshot could not be loaded.")
 		return
 	}
 
-	renderPage(w, r, h.deps, http.StatusOK, server, defaultFormView(h.deps, server, hasStoredCreds), snapshots, view.NodeCollectionResultView{}, "", "")
+	page := pageView{
+		status:      http.StatusOK,
+		form:        h.defaultFormView(server, hasStoredCreds),
+		snapshots:   snapshots,
+		installForm: h.installFormView(server, hasStoredCreds, "", nil),
+	}
+	page.stream, page.flashKind, page.flashMessage = h.loadStreamView(streamID, server.ID)
+	if page.flashKind == "" {
+		page.flashKind, page.flashMessage = queryFlash(r)
+	}
+
+	h.renderPage(w, r, server, page)
 }
 
-func (h PageHandler) collectAndRender(w http.ResponseWriter, r *http.Request, server servers.Server) {
+func (h *Handlers) collectAndRender(w http.ResponseWriter, r *http.Request, server servers.Server) {
 	password, privateKey, keyPassphrase := servers.ResolveCredentials(server)
-	connectTimeout := h.deps.Config.SSH.ConnectTimeout
-	commandTimeout := h.deps.Config.SSH.CommandTimeout
-
 	connReq := sshclient.ConnectionRequest{
 		Host:           server.Host,
 		Port:           server.Port,
@@ -97,74 +126,15 @@ func (h PageHandler) collectAndRender(w http.ResponseWriter, r *http.Request, se
 		Password:       password,
 		PrivateKeyPEM:  privateKey,
 		KeyPassphrase:  keyPassphrase,
-		ConnectTimeout: connectTimeout,
+		ConnectTimeout: h.deps.Config.SSH.ConnectTimeout,
 	}
-
-	collectCtx, cancelCollect := boundedCollectCtx(r.Context(), h.deps)
-	defer cancelCollect()
-
-	snapshots, probes, err := Collect(collectCtx, h.deps.SSH, sshclient.CommandRequest{
-		ConnectionRequest: connReq,
-		CommandTimeout:    commandTimeout,
-	}, h.detectors)
-	if err != nil {
-		renderPage(
-			w,
-			r,
-			h.deps,
-			http.StatusBadGateway,
-			server,
-			defaultFormView(h.deps, server, true),
-			nil,
-			view.NodeCollectionResultView{
-				Available: true,
-				Error:     err.Error(),
-			},
-			"error",
-			"Node discovery failed.",
-		)
-		return
-	}
-
-	collectedAt := latestCollectedAt(snapshots, probes)
-	if err := h.repo.ReplaceLatest(r.Context(), server.ID, snapshots, collectedAt); err != nil {
-		httperrors.RenderPage(w, r, h.deps, err, "/servers", "Could not persist node snapshots", "Node discovery ran but the latest snapshot could not be stored.")
-		return
-	}
-
-	stored, err := h.repo.GetLatestByServer(r.Context(), server.ID)
-	if err != nil {
-		httperrors.RenderPage(w, r, h.deps, err, "/servers", "Could not reload node snapshots", "Node discovery completed but the latest snapshot could not be reloaded.")
-		return
-	}
-
-	snapshotViews := make([]view.NodeSnapshotView, 0, len(stored))
-	for _, snapshot := range stored {
-		snapshotViews = append(snapshotViews, snapshotViewFromModel(snapshot))
-	}
-
-	collectionView := collectionViewFromProbes(probes, collectedAt)
-	flashMessage := "Node discovery evidence was collected and stored successfully."
-	if len(stored) == 1 && stored[0].NodeType == "none" {
-		flashMessage = "Node discovery finished, but no generic detector matched the collected evidence yet."
-	}
-
-	renderPage(
-		w,
-		r,
-		h.deps,
-		http.StatusOK,
-		server,
-		defaultFormView(h.deps, server, true),
-		snapshotViews,
-		collectionView,
-		"success",
-		flashMessage,
-	)
+	h.collectWith(w, r, server, connReq, h.deps.Config.SSH.CommandTimeout, true)
 }
 
-func (h RefreshHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	server, ok := loadServer(w, r, h.deps, h.serverRepo)
+// ── POST /servers/{id}/nodes (discovery refresh) ──────────────────────────────
+
+func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
+	server, ok := h.loadServer(w, r)
 	if !ok {
 		return
 	}
@@ -182,53 +152,51 @@ func (h RefreshHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	form := formInputFromRequest(r, h.deps)
 	validationErrors, connectTimeout, commandTimeout := validateForm(form, server, h.deps)
 	if validationErrors.HasAny() {
-		renderPage(
-			w,
-			r,
-			h.deps,
-			http.StatusUnprocessableEntity,
-			server,
-			formViewFromInput(form, validationErrors, server.ID),
-			nil,
-			view.NodeCollectionResultView{},
-			"error",
-			"Please fix the highlighted fields before refreshing node discovery.",
-		)
+		h.renderPage(w, r, server, pageView{
+			status:       http.StatusUnprocessableEntity,
+			form:         formViewFromInput(form, validationErrors, server.ID),
+			installForm:  h.installFormView(server, false, "", nil),
+			flashKind:    "error",
+			flashMessage: "Please fix the highlighted fields before refreshing node discovery.",
+		})
 		return
 	}
 
+	connReq := sshclient.ConnectionRequest{
+		Host:           server.Host,
+		Port:           server.Port,
+		Username:       server.Username,
+		AuthMode:       server.AuthMode,
+		Password:       form.Password,
+		PrivateKeyPEM:  form.PrivateKey,
+		KeyPassphrase:  form.KeyPassphrase,
+		ConnectTimeout: connectTimeout,
+	}
+	h.collectWith(w, r, server, connReq, commandTimeout, servers.HasStoredCredentials(server))
+}
+
+// collectWith runs provider discovery, persists the snapshot batch, and
+// renders the refreshed page.
+func (h *Handlers) collectWith(w http.ResponseWriter, r *http.Request, server servers.Server, connReq sshclient.ConnectionRequest, commandTimeout time.Duration, hasStoredCreds bool) {
 	collectCtx, cancelCollect := boundedCollectCtx(r.Context(), h.deps)
 	defer cancelCollect()
 
 	snapshots, probes, err := Collect(collectCtx, h.deps.SSH, sshclient.CommandRequest{
-		ConnectionRequest: sshclient.ConnectionRequest{
-			Host:           server.Host,
-			Port:           server.Port,
-			Username:       server.Username,
-			AuthMode:       server.AuthMode,
-			Password:       form.Password,
-			PrivateKeyPEM:  form.PrivateKey,
-			KeyPassphrase:  form.KeyPassphrase,
-			ConnectTimeout: connectTimeout,
-		},
-		CommandTimeout: commandTimeout,
-	}, h.detectors)
+		ConnectionRequest: connReq,
+		CommandTimeout:    commandTimeout,
+	}, h.providers)
 	if err != nil {
-		renderPage(
-			w,
-			r,
-			h.deps,
-			http.StatusBadGateway,
-			server,
-			defaultFormView(h.deps, server, servers.HasStoredCredentials(server)),
-			nil,
-			view.NodeCollectionResultView{
+		h.renderPage(w, r, server, pageView{
+			status:      http.StatusBadGateway,
+			form:        h.defaultFormView(server, hasStoredCreds),
+			installForm: h.installFormView(server, hasStoredCreds, "", nil),
+			collection: view.NodeCollectionResultView{
 				Available: true,
 				Error:     err.Error(),
 			},
-			"error",
-			"Node discovery failed.",
-		)
+			flashKind:    "error",
+			flashMessage: "Node discovery failed.",
+		})
 		return
 	}
 
@@ -238,75 +206,413 @@ func (h RefreshHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stored, err := h.repo.GetLatestByServer(r.Context(), server.ID)
+	snapshotViews, err := h.storedSnapshotViews(r.Context(), server, hasStoredCreds)
 	if err != nil {
 		httperrors.RenderPage(w, r, h.deps, err, "/servers", "Could not reload node snapshots", "Node discovery completed but the latest snapshot could not be reloaded.")
 		return
 	}
 
-	snapshotViews := make([]view.NodeSnapshotView, 0, len(stored))
-	for _, snapshot := range stored {
-		snapshotViews = append(snapshotViews, snapshotViewFromModel(snapshot))
+	flashMessage := fmt.Sprintf("Node discovery finished: %d node(s) found.", len(snapshots))
+	if len(snapshots) == 0 {
+		flashMessage = "Node discovery finished — no PasarGuard or Rebecca installation was found on this server."
 	}
 
-	collectionView := collectionViewFromProbes(probes, collectedAt)
-	flashMessage := "Node discovery evidence was collected and stored successfully."
-	if len(stored) == 1 && stored[0].NodeType == "none" {
-		flashMessage = "Node discovery finished, but no generic detector matched the collected evidence yet."
-	}
-
-	renderPage(
-		w,
-		r,
-		h.deps,
-		http.StatusOK,
-		server,
-		defaultFormView(h.deps, server, servers.HasStoredCredentials(server)),
-		snapshotViews,
-		collectionView,
-		"success",
-		flashMessage,
-	)
+	h.renderPage(w, r, server, pageView{
+		status:       http.StatusOK,
+		form:         h.defaultFormView(server, hasStoredCreds),
+		snapshots:    snapshotViews,
+		collection:   collectionViewFromProbes(probes, collectedAt),
+		installForm:  h.installFormView(server, hasStoredCreds, "", nil),
+		flashKind:    "success",
+		flashMessage: flashMessage,
+	})
 }
 
-func loadServer(w http.ResponseWriter, r *http.Request, deps module.Dependencies, serverRepo servers.Repository) (servers.Server, bool) {
+// ── POST /servers/{id}/nodes/actions ──────────────────────────────────────────
+
+func (h *Handlers) Action(w http.ResponseWriter, r *http.Request) {
+	server, ok := h.loadServer(w, r)
+	if !ok {
+		return
+	}
+
+	if !servers.HasStoredCredentials(server) {
+		http.Redirect(w, r, nodesURL(server.ID)+"?flash=nodes-no-credentials", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		httperrors.RenderPage(w, r, h.deps, err, "/servers", "Invalid node action request", "The submitted node action could not be parsed.")
+		return
+	}
+
+	nodeType := strings.TrimSpace(r.FormValue("node_type"))
+	nodeName := strings.TrimSpace(r.FormValue("node_name"))
+	actionKey := strings.TrimSpace(r.FormValue("action"))
+
+	provider, ok := ProviderByType(h.providers, nodeType)
+	if !ok {
+		http.Redirect(w, r, nodesURL(server.ID)+"?flash=nodes-invalid-action", http.StatusSeeOther)
+		return
+	}
+	if err := ValidateNodeName(nodeName); err != nil {
+		http.Redirect(w, r, nodesURL(server.ID)+"?flash=nodes-invalid-action", http.StatusSeeOther)
+		return
+	}
+
+	// Only act on nodes the latest discovery sweep actually found: the
+	// (type, name) pair must come from stored evidence, not from a forged form.
+	if !h.nodeDiscovered(r.Context(), server.ID, nodeType, nodeName) {
+		http.Redirect(w, r, nodesURL(server.ID)+"?flash=nodes-unknown-node", http.StatusSeeOther)
+		return
+	}
+
+	command, timeout, err := provider.ActionCommand(nodeName, actionKey)
+	if err != nil {
+		http.Redirect(w, r, nodesURL(server.ID)+"?flash=nodes-invalid-action", http.StatusSeeOther)
+		return
+	}
+
+	password, privateKey, keyPassphrase := servers.ResolveCredentials(server)
+	connReq := sshclient.ConnectionRequest{
+		Host:           server.Host,
+		Port:           server.Port,
+		Username:       server.Username,
+		AuthMode:       server.AuthMode,
+		Password:       password,
+		PrivateKeyPEM:  privateKey,
+		KeyPassphrase:  keyPassphrase,
+		ConnectTimeout: h.deps.Config.SSH.ConnectTimeout,
+	}
+
+	// Node actions run as background stream sessions (same pattern as the
+	// command center): the POST redirects immediately and the page polls, so
+	// long operations (update, uninstall) can never outlive the HTTP write
+	// timeout.
+	label := fmt.Sprintf("%s %s — %s", provider.DisplayName(), nodeName, actionKey)
+	session := h.deps.CommandStreams.Create(server.ID, label)
+	go h.runActionSession(session.ID, sshclient.CommandRequest{
+		ConnectionRequest: connReq,
+		Command:           command,
+		CommandTimeout:    timeout,
+	})
+
+	http.Redirect(w, r, nodesURL(server.ID)+"?stream="+url.QueryEscape(session.ID), http.StatusSeeOther)
+}
+
+func (h *Handlers) runActionSession(sessionID string, request sshclient.CommandRequest) {
+	ctx := context.Background()
+	result, runErr := h.deps.SSH.StreamCommand(ctx, request, sshclient.StreamHandlers{
+		OnStdout: func(chunk string) { h.deps.CommandStreams.AppendStdout(sessionID, chunk) },
+		OnStderr: func(chunk string) { h.deps.CommandStreams.AppendStderr(sessionID, chunk) },
+	})
+	if runErr != nil {
+		h.deps.CommandStreams.Fail(sessionID, result.ExitCode, result.CompletedAt, runErr, 0)
+		return
+	}
+	h.deps.CommandStreams.Complete(sessionID, result.ExitCode, result.CompletedAt, 0)
+}
+
+// nodeDiscovered reports whether the latest stored discovery sweep contains a
+// node with the given type and name.
+func (h *Handlers) nodeDiscovered(ctx context.Context, serverID int64, nodeType, nodeName string) bool {
+	latest, err := h.repo.GetLatestByServer(ctx, serverID)
+	if err != nil {
+		return false
+	}
+	for _, snapshot := range latest {
+		if snapshot.NodeType == nodeType && strings.EqualFold(snapshot.ServiceName, nodeName) {
+			return true
+		}
+	}
+	return false
+}
+
+// ── POST /servers/{id}/nodes/install ──────────────────────────────────────────
+
+func (h *Handlers) InstallStart(w http.ResponseWriter, r *http.Request) {
+	server, ok := h.loadServer(w, r)
+	if !ok {
+		return
+	}
+
+	if !servers.HasStoredCredentials(server) {
+		http.Redirect(w, r, nodesURL(server.ID)+"?flash=nodes-no-credentials", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		httperrors.RenderPage(w, r, h.deps, err, "/servers", "Invalid install request", "The submitted node install request could not be parsed.")
+		return
+	}
+
+	nodeName := strings.TrimSpace(r.FormValue("node_name"))
+	installErrors := ValidationErrors{}
+	if err := ValidateNodeName(nodeName); err != nil {
+		installErrors["node_name"] = "Use letters, digits, dot, dash, or underscore (max 64 characters)."
+	} else if h.nodeNameTaken(r.Context(), server.ID, nodeName) {
+		installErrors["node_name"] = "A node with this name already exists on this server — pick another name."
+	}
+
+	if installErrors.HasAny() {
+		snapshots, err := h.storedSnapshotViews(r.Context(), server, true)
+		if err != nil {
+			httperrors.RenderPage(w, r, h.deps, err, "/servers", "Could not load node snapshots", "The latest node discovery snapshot could not be loaded.")
+			return
+		}
+		h.renderPage(w, r, server, pageView{
+			status:       http.StatusUnprocessableEntity,
+			form:         h.defaultFormView(server, true),
+			snapshots:    snapshots,
+			installForm:  h.installFormView(server, true, nodeName, installErrors),
+			flashKind:    "error",
+			flashMessage: "Please fix the install form before starting the installation.",
+		})
+		return
+	}
+
+	password, privateKey, keyPassphrase := servers.ResolveCredentials(server)
+	connReq := sshclient.ConnectionRequest{
+		Host:           server.Host,
+		Port:           server.Port,
+		Username:       server.Username,
+		AuthMode:       server.AuthMode,
+		Password:       password,
+		PrivateKeyPEM:  privateKey,
+		KeyPassphrase:  keyPassphrase,
+		ConnectTimeout: h.deps.Config.SSH.ConnectTimeout,
+	}
+
+	job := h.installs.create(server.ID, nodeName)
+	go runInstall(job, h.deps.SSH, connReq, PasarGuardProvider{}, server.Host)
+
+	http.Redirect(w, r, installJobURL(server.ID, job.id), http.StatusSeeOther)
+}
+
+// nodeNameTaken guards against re-running the install script over an existing
+// instance, which would reinstall it.
+func (h *Handlers) nodeNameTaken(ctx context.Context, serverID int64, nodeName string) bool {
+	latest, err := h.repo.GetLatestByServer(ctx, serverID)
+	if err != nil {
+		return false
+	}
+	for _, snapshot := range latest {
+		if snapshot.NodeType == "none" {
+			continue
+		}
+		if strings.EqualFold(snapshot.ServiceName, nodeName) {
+			return true
+		}
+	}
+	return false
+}
+
+// ── GET /servers/{id}/nodes/install/{job} ─────────────────────────────────────
+
+func (h *Handlers) InstallJob(w http.ResponseWriter, r *http.Request) {
+	server, ok := h.loadServer(w, r)
+	if !ok {
+		return
+	}
+
+	job, found := h.installs.get(strings.TrimSpace(r.PathValue("job")))
+	if !found || job.serverID != server.ID {
+		http.Redirect(w, r, nodesURL(server.ID)+"?flash=nodes-install-expired", http.StatusSeeOther)
+		return
+	}
+
+	snap := job.snapshot()
+	installView := view.NodeInstallView{
+		Available:     true,
+		JobID:         snap.ID,
+		NodeName:      snap.NodeName,
+		Status:        snap.Status,
+		IsRunning:     snap.Status == installStatusRunning,
+		StartedAt:     formatTimestamp(snap.CreatedAt),
+		FinishedAt:    formatTimestamp(snap.FinishedAt),
+		Output:        strings.TrimSpace(snap.Output),
+		Error:         snap.Error,
+		RefreshURL:    installJobURL(server.ID, snap.ID),
+		RefreshMillis: streamRefreshMillis,
+		NodesURL:      nodesURL(server.ID),
+	}
+	durationEnd := snap.FinishedAt
+	if durationEnd.IsZero() {
+		durationEnd = time.Now().UTC()
+	}
+	installView.Duration = formatDuration(durationEnd.Sub(snap.CreatedAt))
+	if snap.Info != nil {
+		installView.Info = view.NodeRegistrationView{
+			Available:   true,
+			NodeName:    snap.Info.NodeName,
+			NodeIP:      snap.Info.NodeIP,
+			ServicePort: snap.Info.ServicePort,
+			Protocol:    snap.Info.Protocol,
+			APIKey:      snap.Info.APIKey,
+			Certificate: snap.Info.Certificate,
+		}
+	}
+
+	page := view.NewPageData(h.deps.Config)
+	page.CSRFToken = middleware.GetCSRFToken(r.Context())
+	page.Title = "Install node"
+	page.ActiveNav = "/servers"
+	page.ContentTemplate = "content-node-install"
+	page.PageTitle = "Installing PasarGuard node on " + server.Name
+	page.PageDescription = "The official PasarGuard install script is running over SSH. After it finishes, the API key and SSL certificate needed to register the node in the panel are shown here."
+	if h.deps.Database != nil {
+		page.MigrationCount = h.deps.Database.MigrationCount()
+	}
+	page.NodeTarget = nodeTargetView(server)
+	page.NodeInstall = installView
+	page.PageStyles = []string{"/static/nodes.css"}
+
+	if err := h.deps.Renderer.Render(w, http.StatusOK, page); err != nil {
+		http.Error(w, "render node install page", http.StatusInternalServerError)
+	}
+}
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
+
+func (h *Handlers) loadServer(w http.ResponseWriter, r *http.Request) (servers.Server, bool) {
 	serverID, ok := pathID(r)
 	if !ok {
-		httperrors.RenderPage(w, r, deps, servers.ErrNotFound, "/servers", "Server not found", "The requested server record does not exist.")
+		httperrors.RenderPage(w, r, h.deps, servers.ErrNotFound, "/servers", "Server not found", "The requested server record does not exist.")
 		return servers.Server{}, false
 	}
 
-	server, err := serverRepo.GetByID(r.Context(), serverID)
+	server, err := h.serverRepo.GetByID(r.Context(), serverID)
 	if err != nil {
-		httperrors.RenderPage(w, r, deps, err, "/servers", "Could not load server", "The node discovery page could not load the selected server.")
+		httperrors.RenderPage(w, r, h.deps, err, "/servers", "Could not load server", "The nodes page could not load the selected server.")
 		return servers.Server{}, false
 	}
 	return server, true
 }
 
-func renderPage(
-	w http.ResponseWriter,
-	r *http.Request,
-	deps module.Dependencies,
-	statusCode int,
-	server servers.Server,
-	form view.NodeFormView,
-	snapshots []view.NodeSnapshotView,
-	collection view.NodeCollectionResultView,
-	flashKind string,
-	flashMessage string,
-) {
-	page := view.NewPageData(deps.Config)
+func (h *Handlers) storedSnapshotViews(ctx context.Context, server servers.Server, actionsEnabled bool) ([]view.NodeSnapshotView, error) {
+	snapshots := make([]view.NodeSnapshotView, 0)
+	latest, err := h.repo.GetLatestByServer(ctx, server.ID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return snapshots, nil
+		}
+		return nil, err
+	}
+	for _, snapshot := range latest {
+		snapshots = append(snapshots, h.snapshotView(snapshot, actionsEnabled))
+	}
+	return snapshots, nil
+}
+
+func (h *Handlers) snapshotView(snapshot Snapshot, actionsEnabled bool) view.NodeSnapshotView {
+	snapshotView := view.NodeSnapshotView{
+		Name:           fallbackDisplay(snapshot.ServiceName),
+		NodeType:       fallbackDisplay(snapshot.NodeType),
+		TypeLabel:      fallbackDisplay(snapshot.NodeType),
+		InstallMode:    fallbackDisplay(snapshot.InstallMode),
+		Version:        fallbackDisplay(snapshot.Version),
+		HealthStatus:   fallbackDisplay(snapshot.HealthStatus),
+		ActivePorts:    snapshot.ActivePorts,
+		XrayPorts:      snapshot.XrayPorts,
+		ServicePort:    fallbackDisplay(snapshot.ServicePort),
+		APIPort:        fallbackDisplay(snapshot.APIPort),
+		Protocol:       fallbackDisplay(snapshot.Protocol),
+		DataDir:        fallbackDisplay(snapshot.DataDir),
+		Confidence:     fallbackDisplay(snapshot.Confidence),
+		Dependencies:   snapshot.Dependencies,
+		Evidence:       snapshot.Evidence,
+		CollectedAt:    formatTimestamp(snapshot.CollectedAt),
+		ActionsEnabled: actionsEnabled,
+	}
+	if provider, ok := ProviderByType(h.providers, snapshot.NodeType); ok {
+		snapshotView.TypeLabel = provider.DisplayName()
+		for _, action := range provider.Actions() {
+			snapshotView.Actions = append(snapshotView.Actions, view.NodeActionView{
+				Key:    action.Key,
+				Label:  action.Label,
+				Icon:   action.Icon,
+				Danger: action.Danger,
+			})
+		}
+	}
+	return snapshotView
+}
+
+func (h *Handlers) loadStreamView(streamID string, serverID int64) (view.CommandStreamView, string, string) {
+	if streamID == "" || h.deps.CommandStreams == nil {
+		return view.CommandStreamView{}, "", ""
+	}
+
+	snapshot, ok := h.deps.CommandStreams.Get(streamID)
+	if !ok || snapshot.ServerID != serverID {
+		return view.CommandStreamView{}, "error", "The requested node action session is no longer available."
+	}
+
+	flashKind := "success"
+	flashMessage := "The node action is running — output refreshes automatically."
+	if snapshot.Status == commandstream.StatusFailed {
+		flashKind = "error"
+		flashMessage = "The node action ended with an error."
+	} else if snapshot.Status == commandstream.StatusCompleted {
+		flashMessage = "Node action completed."
+	}
+
+	durationEnd := snapshot.CompletedAt
+	if snapshot.Status == commandstream.StatusRunning {
+		durationEnd = time.Now().UTC()
+	}
+
+	return view.CommandStreamView{
+		Available:     true,
+		ID:            snapshot.ID,
+		Status:        snapshot.Status,
+		IsRunning:     snapshot.Status == commandstream.StatusRunning,
+		Command:       snapshot.Command,
+		ExitCode:      formatExitCode(snapshot.ExitCode),
+		StartedAt:     formatTimestamp(snapshot.StartedAt),
+		UpdatedAt:     formatTimestamp(snapshot.UpdatedAt),
+		CompletedAt:   formatTimestamp(snapshot.CompletedAt),
+		Duration:      formatDuration(durationEnd.Sub(snapshot.StartedAt)),
+		Stdout:        snapshot.Stdout,
+		Stderr:        snapshot.Stderr,
+		Error:         snapshot.Error,
+		RefreshURL:    nodesURL(serverID) + "?stream=" + url.QueryEscape(snapshot.ID),
+		RefreshMillis: streamRefreshMillis,
+	}, flashKind, flashMessage
+}
+
+func (h *Handlers) renderPage(w http.ResponseWriter, r *http.Request, server servers.Server, state pageView) {
+	page := view.NewPageData(h.deps.Config)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = "Nodes"
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-nodes"
-	page.PageTitle = "Node discovery for " + server.Name
-	page.PageDescription = "Detect Rebecca and PasarGuard nodes over SSH, classify the likely install mode, and summarize occupied ports, API visibility, and matched runtime evidence."
-	if deps.Database != nil {
-		page.MigrationCount = deps.Database.MigrationCount()
+	page.PageTitle = "Nodes on " + server.Name
+	page.PageDescription = "Discover PasarGuard and Rebecca node installations over SSH, manage them through their official CLIs, and install new PasarGuard nodes."
+	if h.deps.Database != nil {
+		page.MigrationCount = h.deps.Database.MigrationCount()
 	}
-	page.NodeTarget = view.NodeTargetView{
+	page.NodeTarget = nodeTargetView(server)
+	page.NodeForm = state.form
+	page.NodeSnapshots = state.snapshots
+	page.NodeCollection = state.collection
+	page.NodeStream = state.stream
+	page.NodeInstallForm = state.installForm
+	page.FlashKind = state.flashKind
+	page.FlashMessage = state.flashMessage
+	page.PageStyles = []string{"/static/nodes.css"}
+
+	status := state.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	if err := h.deps.Renderer.Render(w, status, page); err != nil {
+		http.Error(w, "render nodes page", http.StatusInternalServerError)
+	}
+}
+
+func nodeTargetView(server servers.Server) view.NodeTargetView {
+	return view.NodeTargetView{
 		ID:                 server.ID,
 		Name:               server.Name,
 		Host:               server.Host,
@@ -318,31 +624,52 @@ func renderPage(
 		CredentialRef:      server.CredentialRef,
 		UpdatedAt:          formatTimestamp(server.UpdatedAt),
 	}
-	page.NodeForm = form
-	page.NodeSnapshots = snapshots
-	page.NodeCollection = collection
-	page.FlashKind = flashKind
-	page.FlashMessage = flashMessage
-	page.PageStyles = []string{"/static/nodes.css"}
+}
 
-	if err := deps.Renderer.Render(w, statusCode, page); err != nil {
-		http.Error(w, "render nodes page", http.StatusInternalServerError)
+func (h *Handlers) defaultFormView(server servers.Server, hasStoredCreds bool) view.NodeFormView {
+	return view.NodeFormView{
+		Action:                     nodesURL(server.ID),
+		ConnectTimeout:             h.deps.Config.SSH.ConnectTimeout.String(),
+		CommandTimeout:             h.deps.Config.SSH.CommandTimeout.String(),
+		StoredCredentialsAvailable: hasStoredCreds,
+		RefreshURL:                 nodesURL(server.ID),
+		Errors:                     map[string]string{},
 	}
 }
 
-func defaultFormView(deps module.Dependencies, server servers.Server, hasStoredCreds bool) view.NodeFormView {
-	return view.NodeFormView{
-		Action:                    "/servers/" + formatID(server.ID) + "/nodes",
-		ConnectTimeout:            deps.Config.SSH.ConnectTimeout.String(),
-		CommandTimeout:            deps.Config.SSH.CommandTimeout.String(),
-		StoredCredentialsAvailable: hasStoredCreds,
-		RefreshURL:                nodesURL(server.ID),
-		Errors:                    map[string]string{},
+func (h *Handlers) installFormView(server servers.Server, enabled bool, nodeName string, formErrors ValidationErrors) view.NodeInstallFormView {
+	if formErrors == nil {
+		formErrors = ValidationErrors{}
+	}
+	return view.NodeInstallFormView{
+		Action:   nodesURL(server.ID) + "/install",
+		NodeName: nodeName,
+		Enabled:  enabled,
+		Errors:   formErrors,
+	}
+}
+
+func queryFlash(r *http.Request) (string, string) {
+	switch r.URL.Query().Get("flash") {
+	case "nodes-no-credentials":
+		return "error", "Node actions need stored SSH credentials. Edit the server and store credentials first."
+	case "nodes-invalid-action":
+		return "error", "That node action is not supported."
+	case "nodes-unknown-node":
+		return "error", "That node is not part of the latest discovery sweep. Run discovery again first."
+	case "nodes-install-expired":
+		return "error", "That install session is no longer available (it expired or the panel restarted)."
+	default:
+		return "", ""
 	}
 }
 
 func nodesURL(serverID int64) string {
 	return "/servers/" + formatID(serverID) + "/nodes"
+}
+
+func installJobURL(serverID int64, jobID string) string {
+	return nodesURL(serverID) + "/install/" + url.PathEscape(jobID)
 }
 
 func formInputFromRequest(r *http.Request, deps module.Dependencies) FormInput {
@@ -357,9 +684,10 @@ func formInputFromRequest(r *http.Request, deps module.Dependencies) FormInput {
 
 func formViewFromInput(input FormInput, validationErrors ValidationErrors, serverID int64) view.NodeFormView {
 	return view.NodeFormView{
-		Action:         "/servers/" + formatID(serverID) + "/nodes",
+		Action:         nodesURL(serverID),
 		ConnectTimeout: input.ConnectTimeout,
 		CommandTimeout: input.CommandTimeout,
+		RefreshURL:     nodesURL(serverID),
 		Errors:         validationErrors,
 	}
 }
@@ -400,25 +728,6 @@ func validateForm(input FormInput, server servers.Server, deps module.Dependenci
 	}
 
 	return validationErrors, connectTimeout, commandTimeout
-}
-
-func snapshotViewFromModel(snapshot Snapshot) view.NodeSnapshotView {
-	return view.NodeSnapshotView{
-		NodeType:     fallbackDisplay(snapshot.NodeType),
-		ServiceName:  fallbackDisplay(snapshot.ServiceName),
-		InstallMode:  fallbackDisplay(snapshot.InstallMode),
-		Version:      fallbackDisplay(snapshot.Version),
-		HealthStatus: fallbackDisplay(snapshot.HealthStatus),
-		ActivePorts:  snapshot.ActivePorts,
-		XrayPorts:    snapshot.XrayPorts,
-		ServicePort:  fallbackDisplay(snapshot.ServicePort),
-		APIPort:      fallbackDisplay(snapshot.APIPort),
-		Protocol:     fallbackDisplay(snapshot.Protocol),
-		Confidence:   fallbackDisplay(snapshot.Confidence),
-		Dependencies: snapshot.Dependencies,
-		Evidence:     snapshot.Evidence,
-		CollectedAt:  formatTimestamp(snapshot.CollectedAt),
-	}
 }
 
 func collectionViewFromProbes(probes []ProbeReport, collectedAt time.Time) view.NodeCollectionResultView {
@@ -519,6 +828,13 @@ func formatTimestamp(value time.Time) string {
 	return value.UTC().Format("2006-01-02 15:04:05 UTC")
 }
 
+func formatExitCode(value *int) string {
+	if value == nil {
+		return "n/a"
+	}
+	return strconv.Itoa(*value)
+}
+
 func fallbackString(value, fallback string) string {
 	if value == "" {
 		return fallback
@@ -536,8 +852,4 @@ func fallbackDisplay(value string) string {
 
 func formatID(id int64) string {
 	return strconv.FormatInt(id, 10)
-}
-
-func (v ValidationErrors) HasAny() bool {
-	return len(v) > 0
 }
