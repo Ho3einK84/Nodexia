@@ -132,8 +132,12 @@ func Load(version string) (Config, error) {
 		},
 		HTTP: HTTPConfig{
 			Address:         envOrDefault("NODEXIA_HTTP_ADDR", ":8080"),
-			ReadTimeout:     durationFromEnv("NODEXIA_HTTP_READ_TIMEOUT", 15*time.Second),
-			WriteTimeout:    durationFromEnv("NODEXIA_HTTP_WRITE_TIMEOUT", 15*time.Second),
+			ReadTimeout: durationFromEnv("NODEXIA_HTTP_READ_TIMEOUT", 15*time.Second),
+			// The write timeout must comfortably exceed the slowest synchronous
+			// handler (an SSH connection test bounded by the 10 s connect
+			// timeout); long-running work (command runs, bulk actions) executes
+			// in background jobs, never inside a request.
+			WriteTimeout: durationFromEnv("NODEXIA_HTTP_WRITE_TIMEOUT", 60*time.Second),
 			IdleTimeout:     durationFromEnv("NODEXIA_HTTP_IDLE_TIMEOUT", 30*time.Second),
 			ShutdownTimeout: durationFromEnv("NODEXIA_HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
 		},
