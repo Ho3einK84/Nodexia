@@ -35,13 +35,14 @@
     <div class="cmd-main">
 
       <article class="card">
-        <form method="post" action="{{ .CommandForm.Action }}" class="cmd-form" id="cmd-form">
+        <form method="post" action="{{ .CommandForm.Action }}" class="cmd-form" id="cmd-form"
+          data-interactive-programs="{{ .CommandForm.InteractivePrograms }}">
           <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
 
           <label class="form-field">
             <div class="cmd-label-row">
               <span><i data-lucide="terminal" class="icon-in-button"></i> Command</span>
-              <span class="cmd-hint">Ctrl+Enter to run · interactive commands (top, vim, ssh…) open in the Terminal</span>
+              <span class="cmd-hint">Ctrl+Enter to run</span>
             </div>
             <textarea
               name="command"
@@ -60,8 +61,8 @@
               <button type="submit" name="intent" value="run" class="btn btn--primary" id="cmd-run-btn">
                 <i data-lucide="play" class="icon-in-button"></i> Run
               </button>
-              <button type="submit" name="intent" value="stream" class="btn btn--secondary">
-                <i data-lucide="radio" class="icon-in-button"></i> Stream
+              <button type="submit" name="intent" value="terminal" class="btn btn--secondary" id="cmd-terminal-btn">
+                <i data-lucide="terminal-square" class="icon-in-button"></i> Run in terminal
               </button>
               <button type="submit" name="intent" value="test" class="btn btn--ghost">
                 <i data-lucide="wifi" class="icon-in-button"></i> Test SSH
@@ -71,6 +72,11 @@
               <i data-lucide="settings-2" class="icon-in-button"></i> Advanced
             </button>
           </div>
+
+          <p class="cmd-terminal-note" id="cmd-terminal-note" hidden>
+            <i data-lucide="terminal-square" class="icon-in-button"></i>
+            Interactive command detected — it will open in the Terminal with a real PTY.
+          </p>
 
           {{ with index .CommandForm.Errors "intent" }}<small class="field-error">{{ . }}</small>{{ end }}
 

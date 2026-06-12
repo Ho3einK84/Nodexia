@@ -163,6 +163,18 @@ func (h ActionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			form.KeyPassphrase = keyPassphrase
 		}
 	}
+	// "Run in terminal" submits — and interactive/TUI commands (top, vim,
+	// ssh, mysql, …) that would hang the non-interactive runner — go to the
+	// in-browser terminal, which runs them in a real PTY.  This happens
+	// before credential validation: the terminal collects its own credentials.
+	command := strings.TrimSpace(form.Command)
+	if command != "" &&
+		(form.Intent == "terminal" ||
+			((form.Intent == "run" || form.Intent == "stream") && isInteractiveCommand(command))) {
+		http.Redirect(w, r, terminalRunURL(server.ID, command), http.StatusSeeOther)
+		return
+	}
+
 	validationErrors, connectTimeout, commandTimeout := validateForm(form, server, h.deps)
 	if validationErrors.HasAny() {
 		history, historyErr := h.historyRepo.ListByServer(r.Context(), serverID, defaultHistoryLimit)
@@ -189,14 +201,6 @@ func (h ActionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Interactive/TUI commands (top, vim, ssh, mysql, …) cannot run in the
-	// non-interactive runner — they would hang until the command timeout.
-	// Route them to the in-browser terminal, which runs them in a real PTY.
-	if (form.Intent == "run" || form.Intent == "stream") && isInteractiveCommand(form.Command) {
-		http.Redirect(w, r, terminalRunURL(server.ID, form.Command), http.StatusSeeOther)
-		return
-	}
-
 	request := sshclient.ConnectionRequest{
 		Host:           server.Host,
 		Port:           server.Port,
@@ -209,10 +213,14 @@ func (h ActionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch form.Intent {
-	case "stream":
+	case "run", "stream":
+		// All command execution goes through the background stream session:
+		// the POST redirects immediately and the live page polls for output,
+		// so a slow command (apt upgrade, …) can never outlive the server's
+		// write timeout or the reverse proxy and surface as a 502.
 		h.handleStreamStart(w, r, server, request, form, commandTimeout)
 		return
-	case "test", "run":
+	case "test":
 	default:
 		history, historyErr := h.historyRepo.ListByServer(r.Context(), serverID, defaultHistoryLimit)
 		if historyErr != nil {
@@ -239,72 +247,33 @@ func (h ActionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SSH connection test: synchronous on purpose — it is bounded by the
+	// connect timeout, which is far below the server's write timeout.
 	var (
-		commandResult    view.CommandResultView
 		connectionResult view.ConnectionTestView
 		flashKind        string
 		flashMessage     string
 		statusCode       = http.StatusOK
 	)
 
-	switch form.Intent {
-	case "test":
-		result, err := h.deps.SSH.TestConnection(r.Context(), request)
-		if err != nil {
-			statusCode = http.StatusBadGateway
-			connectionResult = view.ConnectionTestView{
-				Available: true,
-				Duration:  formatDuration(result.Duration),
-				Error:     err.Error(),
-			}
-			flashKind = "error"
-			flashMessage = "SSH connection test failed."
-		} else {
-			connectionResult = view.ConnectionTestView{
-				Available: true,
-				Duration:  formatDuration(result.Duration),
-				Message:   "Connected to " + result.RemoteAddress + " successfully.",
-			}
-			flashKind = "success"
-			flashMessage = "SSH connection test completed successfully."
+	result, err := h.deps.SSH.TestConnection(r.Context(), request)
+	if err != nil {
+		statusCode = http.StatusBadGateway
+		connectionResult = view.ConnectionTestView{
+			Available: true,
+			Duration:  formatDuration(result.Duration),
+			Error:     err.Error(),
 		}
-	case "run":
-		result, err := h.deps.SSH.RunCommand(r.Context(), sshclient.CommandRequest{
-			ConnectionRequest: request,
-			Command:           form.Command,
-			CommandTimeout:    commandTimeout,
-		})
-		commandResult = commandResultView(form.Command, result)
-
-		historyEntry := HistoryEntry{
-			ServerID:   server.ID,
-			Command:    strings.TrimSpace(form.Command),
-			ExitCode:   result.ExitCode,
-			Stdout:     result.Stdout,
-			Stderr:     result.Stderr,
-			ExecutedAt: result.CompletedAt,
+		flashKind = "error"
+		flashMessage = "SSH connection test failed."
+	} else {
+		connectionResult = view.ConnectionTestView{
+			Available: true,
+			Duration:  formatDuration(result.Duration),
+			Message:   "Connected to " + result.RemoteAddress + " successfully.",
 		}
-		if err != nil {
-			statusCode = http.StatusBadGateway
-			commandResult.Error = err.Error()
-			if commandResult.Stderr == "" {
-				commandResult.Stderr = err.Error()
-				historyEntry.Stderr = err.Error()
-			}
-			flashKind = "error"
-			flashMessage = "Remote command execution failed."
-		} else if result.ExitCode != nil && *result.ExitCode != 0 {
-			flashKind = "error"
-			flashMessage = "Command finished with a non-zero exit code."
-		} else {
-			flashKind = "success"
-			flashMessage = "Remote command executed successfully."
-		}
-
-		if _, appendErr := h.historyRepo.Append(r.Context(), historyEntry); appendErr != nil {
-			httperrors.RenderPage(w, r, h.deps, appendErr, "/servers", "Could not persist command history", "The command ran but its history entry could not be stored.")
-			return
-		}
+		flashKind = "success"
+		flashMessage = "SSH connection test completed successfully."
 	}
 
 	history, err := h.historyRepo.ListByServer(r.Context(), serverID, defaultHistoryLimit)
@@ -324,7 +293,7 @@ func (h ActionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		history,
 		nextForm,
 		presetViews(server.ID),
-		commandResult,
+		view.CommandResultView{},
 		connectionResult,
 		view.CommandStreamView{},
 		flashKind,
@@ -485,6 +454,7 @@ func renderPage(
 	if form.Action == "" {
 		form.Action = "/servers/" + formatID(server.ID) + "/commands"
 	}
+	form.InteractivePrograms = interactiveProgramsAttr()
 	page.CommandForm = form
 	page.CommandPresets = presets
 	page.CommandResult = commandResult
@@ -577,7 +547,7 @@ func validateForm(input FormInput, server servers.Server, deps module.Dependenci
 
 	switch input.Intent {
 	case "test":
-	case "run", "stream":
+	case "run", "stream", "terminal":
 		command := strings.TrimSpace(input.Command)
 		if command == "" {
 			validationErrors["command"] = "Enter a shell command to execute."
@@ -593,25 +563,29 @@ func validateForm(input FormInput, server servers.Server, deps module.Dependenci
 		validationErrors["intent"] = "Choose a valid remote action."
 	}
 
-	password := strings.TrimSpace(input.Password)
-	privateKey := strings.TrimSpace(input.PrivateKey)
-	switch server.AuthMode {
-	case "password":
-		if password == "" {
-			validationErrors["password"] = "Enter the SSH password for this runtime session."
-		}
-	case "key":
-		if privateKey == "" {
-			validationErrors["private_key"] = "Paste the SSH private key for this runtime session."
-		}
-	case "hybrid":
-		if password == "" && privateKey == "" {
-			validationErrors["password"] = "Provide a password or private key for hybrid authentication."
-			validationErrors["private_key"] = "Provide a private key or password for hybrid authentication."
-		}
-	default:
-		if password == "" && privateKey == "" {
-			validationErrors["password"] = "Provide runtime SSH credentials before continuing."
+	// The terminal page collects its own credentials, so a "Run in terminal"
+	// submit does not require them here.
+	if input.Intent != "terminal" {
+		password := strings.TrimSpace(input.Password)
+		privateKey := strings.TrimSpace(input.PrivateKey)
+		switch server.AuthMode {
+		case "password":
+			if password == "" {
+				validationErrors["password"] = "Enter the SSH password for this runtime session."
+			}
+		case "key":
+			if privateKey == "" {
+				validationErrors["private_key"] = "Paste the SSH private key for this runtime session."
+			}
+		case "hybrid":
+			if password == "" && privateKey == "" {
+				validationErrors["password"] = "Provide a password or private key for hybrid authentication."
+				validationErrors["private_key"] = "Provide a private key or password for hybrid authentication."
+			}
+		default:
+			if password == "" && privateKey == "" {
+				validationErrors["password"] = "Provide runtime SSH credentials before continuing."
+			}
 		}
 	}
 
@@ -639,18 +613,6 @@ func presetByKey(key string) (commandPreset, bool) {
 		}
 	}
 	return commandPreset{}, false
-}
-
-func commandResultView(command string, result sshclient.CommandResult) view.CommandResultView {
-	return view.CommandResultView{
-		Available:  true,
-		Command:    strings.TrimSpace(command),
-		ExitCode:   formatExitCode(result.ExitCode),
-		Duration:   formatDuration(result.Duration),
-		ExecutedAt: formatTimestamp(result.CompletedAt),
-		Stdout:     result.Stdout,
-		Stderr:     result.Stderr,
-	}
 }
 
 func commandStreamView(serverID int64, snapshot commandstream.Snapshot) view.CommandStreamView {

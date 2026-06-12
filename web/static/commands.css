@@ -275,3 +275,31 @@
     gap: 4px;
   }
 }
+
+/* ── Interactive-command terminal hint ───────────────────────────────────── */
+
+.cmd-terminal-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.cmd-terminal-note svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+/* Emphasise the terminal button while an interactive command is typed. */
+.cmd-terminal-btn--suggested {
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}

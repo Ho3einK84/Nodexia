@@ -1,6 +1,10 @@
 package commands
 
-import "strings"
+import (
+	"sort"
+	"strings"
+	"sync"
+)
 
 // interactivePrograms are programs that require a TTY/PTY and therefore cannot
 // run in the non-interactive command runner — they would just hang until the
@@ -44,6 +48,17 @@ var commandWrappers = map[string]bool{
 	"time": true, "exec": true, "command": true, "stdbuf": true,
 	"setsid": true, "doas": true, "xargs": true,
 }
+
+// interactiveProgramsAttr returns the sorted, space-separated program list for
+// the page's data attribute, so client-side hinting shares this single list.
+var interactiveProgramsAttr = sync.OnceValue(func() string {
+	names := make([]string, 0, len(interactivePrograms))
+	for name := range interactivePrograms {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, " ")
+})
 
 // isInteractiveCommand reports whether command would require an interactive
 // terminal.  It inspects each segment of a pipeline / compound command and the

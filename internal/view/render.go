@@ -172,7 +172,12 @@ type CommandFormView struct {
 	CommandTimeout            string
 	StoredCredentialsAvailable bool
 	RefreshURL                string
-	Errors                    map[string]string
+	// InteractivePrograms is a space-separated list of program names that need
+	// a PTY; the page JS uses it to hint that a command will open in the
+	// terminal.  Generated from the server-side detector (single source of
+	// truth) — the server still performs the authoritative redirect.
+	InteractivePrograms string
+	Errors              map[string]string
 }
 
 type CommandPresetView struct {
