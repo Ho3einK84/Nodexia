@@ -189,6 +189,14 @@ func (h ActionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Interactive/TUI commands (top, vim, ssh, mysql, …) cannot run in the
+	// non-interactive runner — they would hang until the command timeout.
+	// Route them to the in-browser terminal, which runs them in a real PTY.
+	if (form.Intent == "run" || form.Intent == "stream") && isInteractiveCommand(form.Command) {
+		http.Redirect(w, r, terminalRunURL(server.ID, form.Command), http.StatusSeeOther)
+		return
+	}
+
 	request := sshclient.ConnectionRequest{
 		Host:           server.Host,
 		Port:           server.Port,
@@ -673,6 +681,12 @@ func commandStreamView(serverID int64, snapshot commandstream.Snapshot) view.Com
 
 func commandPageURL(serverID int64, streamID string) string {
 	return fmt.Sprintf("/servers/%s/commands?stream=%s", formatID(serverID), url.QueryEscape(streamID))
+}
+
+// terminalRunURL points at the interactive terminal with an init command that
+// auto-runs once the shell connects.
+func terminalRunURL(serverID int64, command string) string {
+	return fmt.Sprintf("/servers/%s/terminal?init=%s", formatID(serverID), url.QueryEscape(strings.TrimSpace(command)))
 }
 
 func (v ValidationErrors) HasAny() bool {

@@ -8,6 +8,7 @@
     <span class="badge badge--auth-{{ .CommandTarget.AuthMode }}">{{ .CommandTarget.AuthMode }}</span>
     {{ range .CommandTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
     <div class="info-strip__actions">
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/terminal"><i data-lucide="terminal-square" class="icon-in-button"></i> Terminal</a>
       <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
       <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> Edit</a>
       <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> Servers</a>
@@ -40,7 +41,7 @@
           <label class="form-field">
             <div class="cmd-label-row">
               <span><i data-lucide="terminal" class="icon-in-button"></i> Command</span>
-              <span class="cmd-hint">Ctrl+Enter to run</span>
+              <span class="cmd-hint">Ctrl+Enter to run · interactive commands (top, vim, ssh…) open in the Terminal</span>
             </div>
             <textarea
               name="command"
