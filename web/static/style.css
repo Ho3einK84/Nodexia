@@ -1309,6 +1309,15 @@ code {
     margin-right: 5px;
   }
 
+  /* When the three equal-width buttons get tight, truncate the label with an
+     ellipsis rather than letting the (longest) label crush its icon. */
+  .server-card__actions > .btn .btn-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
   /* Kebab wrapper: fixed size, does not grow */
   .server-card__actions > .action-menu {
     flex: 0 0 auto;
@@ -1592,6 +1601,9 @@ h4 svg {
   height: 16px;
   vertical-align: middle;
   margin-right: 4px;
+  /* Icons are flex items inside .btn (inline-flex): never let them shrink
+     when a long label squeezes the button — truncate the label instead. */
+  flex-shrink: 0;
 }
 
 /* ── Load badge ──────────────────────────────────────── */
