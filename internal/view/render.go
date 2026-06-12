@@ -93,6 +93,9 @@ type PageData struct {
 	AlertChannelForm      AlertChannelFormView
 	IsEditingAlertRule    bool
 	IsEditingAlertChannel bool
+
+	// Bulk actions result page.
+	BulkActionResult BulkActionResultView
 }
 
 // PaginationView describes a rendered pagination control. It is reusable across
@@ -634,6 +637,24 @@ type AlertChannelFormView struct {
 	TokenConfigured bool
 	TokenNotice     string
 	Errors          map[string]string
+}
+
+// ── Bulk actions ─────────────────────────────────────────────────────────────
+
+// BulkActionResultView backs the content-bulk-result template.
+type BulkActionResultView struct {
+	Available bool
+	Action    string
+	Results   []BulkServerResultView
+}
+
+// BulkServerResultView is one row in the bulk result table.
+type BulkServerResultView struct {
+	ID       int64
+	Name     string
+	Status   string // "ok", "failed", "skipped"
+	ExitCode string
+	Reason   string
 }
 
 type Renderer struct {

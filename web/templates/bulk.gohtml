@@ -1,0 +1,69 @@
+{{ define "content-bulk-result" }}
+<section class="hero">
+  {{ template "page-header" . }}
+
+  {{ if .BulkActionResult.Available }}
+  <div class="card">
+    <div class="card__header">
+      <h3 class="card__title">Results — {{ .BulkActionResult.Action }}</h3>
+    </div>
+
+    {{/* ── Desktop: data table ─────────────────────── */}}
+    <div class="data-table-wrap bulk-result-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Server</th>
+            <th>Status</th>
+            <th>Exit code</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ range .BulkActionResult.Results }}
+          <tr>
+            <td class="bulk-result__name">{{ .Name }}</td>
+            <td>
+              <span class="bulk-status bulk-status--{{ .Status }}">
+                {{ if eq .Status "ok" }}<i data-lucide="check-circle-2" class="icon-in-button"></i> ok
+                {{ else if eq .Status "skipped" }}<i data-lucide="skip-forward" class="icon-in-button"></i> skipped
+                {{ else }}<i data-lucide="x-circle" class="icon-in-button"></i> failed{{ end }}
+              </span>
+            </td>
+            <td class="bulk-result__code">{{ if .ExitCode }}{{ .ExitCode }}{{ else }}—{{ end }}</td>
+            <td class="bulk-result__reason">{{ if .Reason }}{{ .Reason }}{{ else }}—{{ end }}</td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+
+    {{/* ── Mobile: stacked cards ───────────────────── */}}
+    <div class="bulk-result-cards">
+      {{ range .BulkActionResult.Results }}
+      <div class="bulk-result-card bulk-result-card--{{ .Status }}">
+        <div class="bulk-result-card__header">
+          <span class="bulk-result-card__name">{{ .Name }}</span>
+          <span class="bulk-status bulk-status--{{ .Status }}">
+            {{ if eq .Status "ok" }}<i data-lucide="check-circle-2" class="icon-in-button"></i> ok
+            {{ else if eq .Status "skipped" }}<i data-lucide="skip-forward" class="icon-in-button"></i> skipped
+            {{ else }}<i data-lucide="x-circle" class="icon-in-button"></i> failed{{ end }}
+          </span>
+        </div>
+        {{ if .Reason }}
+        <p class="bulk-result-card__reason">{{ .Reason }}</p>
+        {{ end }}
+        {{ if .ExitCode }}
+        <p class="bulk-result-card__code">Exit code: {{ .ExitCode }}</p>
+        {{ end }}
+      </div>
+      {{ end }}
+    </div>
+  </div>
+  {{ end }}
+
+  <div class="bulk-result-actions">
+    <a href="/servers" class="btn btn--secondary"><i data-lucide="arrow-left" class="icon-in-button"></i> Back to servers</a>
+  </div>
+</section>
+{{ end }}

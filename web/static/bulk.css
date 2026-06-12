@@ -1,0 +1,202 @@
+/* ── Bulk action toolbar ─────────────────────────────── */
+
+.bulk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: rgba(59, 130, 246, 0.07);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  margin-bottom: 4px;
+}
+
+.bulk-select-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.bulk-select-all input[type="checkbox"],
+.bulk-server-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.bulk-count {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.bulk-action-select {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.88rem;
+  padding: 6px 10px;
+  flex: 1 1 auto;
+  min-width: 160px;
+  max-width: 240px;
+  cursor: pointer;
+}
+
+.bulk-action-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ── Server card checkbox ──────────────────────────────── */
+
+.server-card__checkbox-wrap {
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Bulk result status badges ─────────────────────────── */
+
+.bulk-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.bulk-status svg {
+  width: 13px;
+  height: 13px;
+}
+
+.bulk-status--ok {
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--ok);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+}
+
+.bulk-status--failed {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--crit);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+.bulk-status--skipped {
+  background: rgba(250, 204, 21, 0.1);
+  color: var(--warn);
+  border: 1px solid rgba(250, 204, 21, 0.2);
+}
+
+/* ── Bulk result table / cards ─────────────────────────── */
+
+.bulk-result-table-wrap {
+  display: block;
+}
+
+.bulk-result-cards {
+  display: none;
+}
+
+.bulk-result__name {
+  font-weight: 500;
+  max-width: 180px;
+  word-break: break-word;
+}
+
+.bulk-result__code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.bulk-result__reason {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 320px;
+  word-break: break-word;
+}
+
+.bulk-result-actions {
+  margin-top: 16px;
+}
+
+/* ── Responsive ────────────────────────────────────────── */
+
+/* Switch to stacked cards below 640px */
+@media (max-width: 640px) {
+  .bulk-result-table-wrap {
+    display: none;
+  }
+
+  .bulk-result-cards {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .bulk-result-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    min-width: 0;
+  }
+
+  .bulk-result-card--failed {
+    border-color: rgba(248, 113, 113, 0.25);
+  }
+
+  .bulk-result-card--skipped {
+    border-color: rgba(250, 204, 21, 0.2);
+  }
+
+  .bulk-result-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .bulk-result-card__name {
+    font-weight: 600;
+    font-size: 0.92rem;
+    min-width: 0;
+    word-break: break-word;
+  }
+
+  .bulk-result-card__reason,
+  .bulk-result-card__code {
+    margin: 4px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+}
+
+/* Toolbar wraps on small screens; action select goes full-width */
+@media (max-width: 520px) {
+  .bulk-action-select {
+    max-width: none;
+    width: 100%;
+  }
+
+  .bulk-toolbar .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
