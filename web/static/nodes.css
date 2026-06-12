@@ -30,8 +30,6 @@
 
 .node-card--pasarguard-node { --node-accent: #38bdf8; }
 .node-card--rebecca-node    { --node-accent: #a78bfa; }
-.node-card--runtime-signature { --node-accent: #fbbf24; }
-.node-card--port-signature  { --node-accent: #fb923c; }
 
 .node-card__head {
   display: flex;
@@ -53,8 +51,6 @@
 
 .node-card--pasarguard-node .node-card__icon  { background: rgba(56, 189, 248, 0.13); }
 .node-card--rebecca-node .node-card__icon     { background: rgba(167, 139, 250, 0.13); }
-.node-card--runtime-signature .node-card__icon { background: rgba(251, 191, 36, 0.13); }
-.node-card--port-signature .node-card__icon   { background: rgba(251, 146, 60, 0.13); }
 
 .node-card__icon svg {
   width: 22px;
@@ -506,4 +502,71 @@
   .node-facts {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+/* ── Node actions ────────────────────────────────────────────────────────── */
+
+.node-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.node-action-btn {
+  flex-shrink: 0;
+}
+
+.node-actions-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.node-fact--wide {
+  grid-column: 1 / -1;
+}
+
+.node-path {
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.node-pill--health-stopped {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.node-pill--health-unknown,
+.node-pill--health-not_detected {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+/* ── Install node ────────────────────────────────────────────────────────── */
+
+.node-install-note {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-muted, #94a3b8);
+}
+
+.field-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.node-register-card .node-section {
+  margin-top: 12px;
+}
+
+.node-secret-block {
+  font-size: 0.8rem;
+  word-break: break-all;
+  white-space: pre-wrap;
 }

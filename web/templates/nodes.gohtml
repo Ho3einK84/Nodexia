@@ -22,7 +22,42 @@
   </div>
   {{ end }}
 
-  {{/* ── Discovery results ─────────────────────────────── */}}
+  {{/* ── Live node action output ───────────────────────── */}}
+  {{ if .NodeStream.Available }}
+  <article class="card cmd-result-card{{ if .NodeStream.IsRunning }} cmd-result-card--live{{ end }}"
+    {{ if .NodeStream.IsRunning }}data-stream-refresh-url="{{ .NodeStream.RefreshURL }}" data-stream-refresh-ms="{{ .NodeStream.RefreshMillis }}"{{ end }}
+  >
+    <div class="result-header">
+      <span class="result-header__label">
+        {{ if .NodeStream.IsRunning }}<span class="live-dot"></span> Node action running{{ else }}<i data-lucide="terminal" class="icon-in-button"></i> Node action complete{{ end }}
+      </span>
+      <div class="result-header__meta">
+        {{ if not .NodeStream.IsRunning }}
+        <span class="result-exit {{ if eq .NodeStream.ExitCode "0" }}result-exit--ok{{ else }}result-exit--err{{ end }}">exit {{ .NodeStream.ExitCode }}</span>
+        {{ end }}
+        <code class="result-duration">{{ .NodeStream.Duration }}</code>
+        {{ if .NodeStream.IsRunning }}
+        <a class="btn btn--ghost btn--sm" href="{{ .NodeStream.RefreshURL }}"><i data-lucide="refresh-cw" class="icon-in-button"></i> Refresh</a>
+        {{ end }}
+      </div>
+    </div>
+    <div class="result-cmd"><code>{{ .NodeStream.Command }}</code></div>
+    {{ if .NodeStream.Error }}<pre class="output-block output-block--error">{{ .NodeStream.Error }}</pre>{{ end }}
+    {{ if .NodeStream.Stdout }}
+    <pre class="output-block scrollable">{{ .NodeStream.Stdout }}</pre>
+    {{ else }}
+    <p class="empty-state">No output captured yet.</p>
+    {{ end }}
+    {{ if .NodeStream.Stderr }}
+    <pre class="output-block output-block--error scrollable">{{ .NodeStream.Stderr }}</pre>
+    {{ end }}
+    {{ if .NodeStream.IsRunning }}
+    <p class="result-message"><span class="live-dot"></span> Refreshing automatically every {{ .NodeStream.RefreshMillis }}ms.</p>
+    {{ end }}
+  </article>
+  {{ end }}
+
+  {{/* ── Discovered nodes ──────────────────────────────── */}}
   {{ $noneOnly := and (eq (len .NodeSnapshots) 1) (eq (index .NodeSnapshots 0).NodeType "none") }}
 
   {{ if and .NodeSnapshots (not $noneOnly) }}
@@ -36,8 +71,8 @@
           <i data-lucide="{{ template "node-icon" .NodeType }}"></i>
         </span>
         <div class="node-card__title">
-          <span class="node-card__name">{{ template "node-display-name" . }}</span>
-          <code class="node-card__type">{{ .NodeType }}</code>
+          <span class="node-card__name">{{ .Name }}</span>
+          <code class="node-card__type">{{ .TypeLabel }}</code>
         </div>
         <div class="node-confidence node-confidence--{{ .Confidence }}" title="Detection confidence: {{ .Confidence }}">
           <span class="node-confidence__meter">
@@ -59,11 +94,6 @@
         {{ if and (ne .Protocol "-") (ne .Protocol "") }}
         <span class="node-pill node-pill--proto-{{ .Protocol }}">
           <i data-lucide="{{ if eq .Protocol "grpc" }}layers{{ else }}globe{{ end }}"></i>{{ .Protocol }}
-        </span>
-        {{ end }}
-        {{ if ne .ServiceName "-" }}
-        <span class="node-pill node-pill--service" title="Container / service name">
-          <i data-lucide="{{ if eq .InstallMode "docker" }}box{{ else }}cog{{ end }}"></i>{{ .ServiceName }}
         </span>
         {{ end }}
       </div>
@@ -89,7 +119,38 @@
             {{ else }}-{{ end }}
           </span>
         </div>
+        <div class="node-fact node-fact--wide">
+          <span class="node-fact__label"><i data-lucide="folder"></i> Data directory</span>
+          <span class="node-fact__value"><code class="node-path">{{ .DataDir }}</code></span>
+        </div>
       </div>
+
+      {{ if .Actions }}
+      <div class="node-section">
+        <span class="node-section__label"><i data-lucide="wrench"></i> Actions</span>
+        {{ if .ActionsEnabled }}
+        <form method="post" action="/servers/{{ $.NodeTarget.ID }}/nodes/actions" class="node-actions">
+          <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+          <input type="hidden" name="node_type" value="{{ .NodeType }}">
+          <input type="hidden" name="node_name" value="{{ .Name }}">
+          {{ $node := . }}
+          {{ range .Actions }}
+          <button
+            type="submit"
+            name="action"
+            value="{{ .Key }}"
+            class="btn btn--ghost btn--sm node-action-btn{{ if .Danger }} btn--danger{{ end }}"
+            {{ if .Danger }}data-confirm="Really {{ .Label }} {{ $node.Name }}? This runs the official CLI with auto-confirm and cannot be undone."{{ end }}
+          >
+            <i data-lucide="{{ .Icon }}" class="icon-in-button"></i> {{ .Label }}
+          </button>
+          {{ end }}
+        </form>
+        {{ else }}
+        <p class="node-actions-note"><i data-lucide="key-round" class="icon-in-button"></i> Store SSH credentials for this server to manage nodes from the panel.</p>
+        {{ end }}
+      </div>
+      {{ end }}
 
       {{ if .ActivePorts }}
       {{ $apiPort := .APIPort }}{{ $servicePort := .ServicePort }}
@@ -123,7 +184,7 @@
 
       {{ if .Evidence }}
       <div class="node-evidence collapsible">
-        <button class="collapsible__toggle" data-collapse-key="evidence_{{ .NodeType }}_{{ .ServiceName }}">
+        <button class="collapsible__toggle" data-collapse-key="evidence_{{ .NodeType }}_{{ .Name }}">
           <i data-lucide="chevron-right" class="collapsible__icon"></i>
           <span>Evidence</span>
           <span class="node-evidence__count">{{ len .Evidence }}</span>
@@ -147,18 +208,18 @@
   {{ else if $noneOnly }}
   <div class="empty-state-card">
     <span class="empty-state-icon"><i data-lucide="search-x"></i></span>
-    <p class="empty-state-title">No node runtime detected</p>
-    <p class="empty-state-desc">Discovery ran but no Rebecca or PasarGuard signatures matched. Inspect the raw probe output below for clues.</p>
+    <p class="empty-state-title">No node installation detected</p>
+    <p class="empty-state-desc">Discovery ran but no PasarGuard or Rebecca installation was found. Install a PasarGuard node below, or inspect the raw probe output for clues.</p>
   </div>
   {{ else }}
   <div class="empty-state-card">
     <span class="empty-state-icon"><i data-lucide="radar"></i></span>
     <p class="empty-state-title">No discovery snapshot yet</p>
-    <p class="empty-state-desc">Run a discovery sweep to detect node runtimes, classify the install mode, and map occupied ports over SSH.</p>
+    <p class="empty-state-desc">Run a discovery sweep to find PasarGuard and Rebecca node installations and manage them from here.</p>
   </div>
   {{ end }}
 
-  {{/* ── Workspace: refresh + collector ────────────────── */}}
+  {{/* ── Workspace: discovery + install ────────────────── */}}
   <div class="sys-workspace">
 
     <article class="card">
@@ -228,6 +289,32 @@
       </form>
     </article>
 
+    <article class="card node-install-card">
+      <div class="card__header">
+        <h3><i data-lucide="plus-circle"></i> Install PasarGuard node</h3>
+      </div>
+
+      {{ if .NodeInstallForm.Enabled }}
+      <form method="post" action="{{ .NodeInstallForm.Action }}">
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+        <label class="form-field">
+          <span>Node name</span>
+          <input type="text" name="node_name" value="{{ .NodeInstallForm.NodeName }}" placeholder="node" maxlength="64" required>
+          {{ with index .NodeInstallForm.Errors "node_name" }}<small class="field-error">{{ . }}</small>{{ end }}
+          <small class="field-hint">Each instance gets its own <code>/opt/&lt;name&gt;</code> and <code>/var/lib/&lt;name&gt;</code>, so several nodes can run side by side (node, node2, …).</small>
+        </label>
+        <div class="sys-form__actions">
+          <button type="submit" class="btn btn--primary" data-confirm="Run the official PasarGuard install script on this server? This installs Docker-based services and may take several minutes.">
+            <i data-lucide="download" class="icon-in-button"></i> Install node
+          </button>
+        </div>
+        <p class="node-install-note">Runs the official installer non-interactively and then shows the API key and SSL certificate needed to register the node in the PasarGuard panel. Rebecca nodes are detect-and-manage only.</p>
+      </form>
+      {{ else }}
+      <p class="empty-state">Installing a node needs stored SSH credentials. Edit the server and store credentials first.</p>
+      {{ end }}
+    </article>
+
     {{ if .NodeCollection.Available }}
     <article class="card sys-result-card{{ if .NodeCollection.Error }} sys-result-card--error{{ else }} sys-result-card--ok{{ end }}">
       <div class="result-header">
@@ -276,20 +363,20 @@
 
   </div>
 
-  {{/* ── How discovery works ───────────────────────────── */}}
+  {{/* ── How node management works ─────────────────────── */}}
   <article class="card node-scope">
     <div class="collapsible">
       <button class="collapsible__toggle" data-collapse-key="node_scope">
         <i data-lucide="chevron-right" class="collapsible__icon"></i>
-        <span><i data-lucide="book-open" class="icon-in-button"></i> How node discovery works</span>
+        <span><i data-lucide="book-open" class="icon-in-button"></i> How node management works</span>
       </button>
       <div class="collapsible__content">
         <ul class="node-scope__list">
-          <li>Seven probes run over SSH: <code>systemctl</code>, <code>ps</code>, <code>ss</code>, <code>docker ps</code>, filesystem paths, and dedicated config-file readers for each node type.</li>
-          <li><strong>PasarGuard</strong> runs as Docker (<code>pasarguard/node</code> image). Multiple instances with different container names are detected and shown as separate cards. Config is read from <code>/opt/{name}/.env</code> to get the real service port and protocol.</li>
-          <li><strong>Rebecca</strong> runs as a binary under <code>/opt/rebecca-node/</code>. Version is read from <code>.binary-release.json</code>; ports and protocol from <code>.env</code>.</li>
-          <li><strong>Service port</strong> is the port the panel uses to reach the node API. <strong>API port</strong> is the Xray management API. <strong>Xray proxy ports</strong> carry tunnelled traffic.</li>
-          <li>Runtime credentials stay request-scoped and are never stored.</li>
+          <li>Each node family has a <strong>provider</strong> that knows how to discover instances from configuration files and drive the official CLI — node names are never hardcoded and any number of instances is supported.</li>
+          <li><strong>PasarGuard</strong> nodes are Docker based: every instance owns <code>/opt/&lt;name&gt;</code> (compose + <code>.env</code>) and <code>/var/lib/&lt;name&gt;</code> (certs, xray core). Actions run through <code>pg-node --name &lt;name&gt;</code>; new nodes are installed with the official install script.</li>
+          <li><strong>Rebecca</strong> nodes live under <code>/opt/rebecca-node</code>; the version comes from <code>.binary-release.json</code> and ports from <code>.env</code>. Actions run through the <code>rebecca-node</code> CLI. Existing installs are detected and managed — Nodexia does not install Rebecca nodes.</li>
+          <li><strong>Service port</strong> is what the panel uses to reach the node API; <strong>API port</strong> is the Xray management API; <strong>Xray proxy ports</strong> carry tunnelled traffic.</li>
+          <li>Long actions (update, uninstall, install) run as background sessions with live output — runtime credentials stay request-scoped and the API key / certificate shown after an install are never stored.</li>
         </ul>
       </div>
     </div>
@@ -298,15 +385,102 @@
 </section>
 {{ end }}
 
+{{/* ── Install job page ─────────────────────────────────── */}}
+{{ define "content-node-install" }}
+<section class="hero">
+
+  <div class="info-strip">
+    <i data-lucide="server" class="info-strip__icon"></i>
+    <span class="info-strip__name">{{ .NodeTarget.Name }}</span>
+    <span class="info-strip__addr">{{ .NodeTarget.Username }}@{{ .NodeTarget.Host }}:{{ .NodeTarget.Port }}</span>
+    <div class="info-strip__actions">
+      <a class="btn btn--ghost btn--sm" href="{{ .NodeInstall.NodesURL }}"><i data-lucide="arrow-left" class="icon-in-button"></i> Back to nodes</a>
+    </div>
+  </div>
+
+  <article class="card cmd-result-card{{ if .NodeInstall.IsRunning }} cmd-result-card--live{{ else if .NodeInstall.Error }} cmd-result-card--error{{ end }}"
+    {{ if .NodeInstall.IsRunning }}data-stream-refresh-url="{{ .NodeInstall.RefreshURL }}" data-stream-refresh-ms="{{ .NodeInstall.RefreshMillis }}"{{ end }}
+  >
+    <div class="result-header">
+      <span class="result-header__label">
+        {{ if .NodeInstall.IsRunning }}<span class="live-dot"></span> Installing node "{{ .NodeInstall.NodeName }}"
+        {{ else if .NodeInstall.Error }}<i data-lucide="x-circle" class="icon-in-button"></i> Install failed
+        {{ else }}<i data-lucide="check-circle" class="icon-in-button"></i> Node "{{ .NodeInstall.NodeName }}" installed
+        {{ end }}
+      </span>
+      <div class="result-header__meta">
+        <code class="result-duration">{{ .NodeInstall.Duration }}</code>
+        {{ if .NodeInstall.IsRunning }}
+        <a class="btn btn--ghost btn--sm" href="{{ .NodeInstall.RefreshURL }}"><i data-lucide="refresh-cw" class="icon-in-button"></i> Refresh</a>
+        {{ end }}
+      </div>
+    </div>
+
+    {{ if .NodeInstall.Error }}<pre class="output-block output-block--error">{{ .NodeInstall.Error }}</pre>{{ end }}
+    {{ if .NodeInstall.Output }}
+    <pre class="output-block scrollable">{{ .NodeInstall.Output }}</pre>
+    {{ else }}
+    <p class="empty-state">Waiting for installer output…</p>
+    {{ end }}
+    {{ if .NodeInstall.IsRunning }}
+    <p class="result-message"><span class="live-dot"></span> The official PasarGuard install script is running — this page refreshes automatically every 2 seconds.</p>
+    {{ end }}
+  </article>
+
+  {{ if .NodeInstall.Info.Available }}
+  <article class="card node-register-card">
+    <div class="card__header">
+      <h3><i data-lucide="badge-check"></i> Register this node in the PasarGuard panel</h3>
+    </div>
+    <p class="node-install-note">Copy the API key and SSL certificate below into the panel's node registration form. These values are shown once and are not stored by Nodexia.</p>
+
+    <div class="node-facts">
+      <div class="node-fact">
+        <span class="node-fact__label"><i data-lucide="box"></i> Node name</span>
+        <span class="node-fact__value"><code>{{ .NodeInstall.Info.NodeName }}</code></span>
+      </div>
+      <div class="node-fact">
+        <span class="node-fact__label"><i data-lucide="globe"></i> Node IP</span>
+        <span class="node-fact__value"><code>{{ .NodeInstall.Info.NodeIP }}</code></span>
+      </div>
+      <div class="node-fact">
+        <span class="node-fact__label"><i data-lucide="plug"></i> Service port</span>
+        <span class="node-fact__value"><code class="node-port node-port--service">{{ .NodeInstall.Info.ServicePort }}</code></span>
+      </div>
+      <div class="node-fact">
+        <span class="node-fact__label"><i data-lucide="layers"></i> Protocol</span>
+        <span class="node-fact__value"><code>{{ .NodeInstall.Info.Protocol }}</code></span>
+      </div>
+    </div>
+
+    <div class="node-section">
+      <span class="node-section__label"><i data-lucide="key-round"></i> API key</span>
+      <pre class="output-block node-secret-block">{{ .NodeInstall.Info.APIKey }}</pre>
+    </div>
+
+    <div class="node-section">
+      <span class="node-section__label"><i data-lucide="shield-check"></i> SSL certificate</span>
+      {{ if .NodeInstall.Info.Certificate }}
+      <pre class="output-block scrollable node-secret-block">{{ .NodeInstall.Info.Certificate }}</pre>
+      {{ else }}
+      <p class="empty-state">The certificate could not be read from /var/lib/{{ .NodeInstall.Info.NodeName }}/certs/ssl_cert.pem — fetch it manually or run "Renew cert" on the node card.</p>
+      {{ end }}
+    </div>
+
+    <div class="sys-form__actions">
+      <a class="btn btn--primary" href="{{ .NodeInstall.NodesURL }}?refresh=1"><i data-lucide="radar" class="icon-in-button"></i> Re-run discovery</a>
+    </div>
+  </article>
+  {{ end }}
+
+</section>
+{{ end }}
+
 {{/* ── Node type → presentation helpers ────────────────── */}}
 {{ define "node-icon" -}}
-{{ if eq . "pasarguard-node" }}container{{ else if eq . "rebecca-node" }}package{{ else if eq . "runtime-signature" }}radar{{ else if eq . "port-signature" }}plug-zap{{ else }}help-circle{{ end }}
-{{- end }}
-
-{{ define "node-display-name" -}}
-{{ if eq .NodeType "pasarguard-node" }}PasarGuard{{ else if eq .NodeType "rebecca-node" }}Rebecca{{ else if eq .NodeType "runtime-signature" }}Runtime signature{{ else if eq .NodeType "port-signature" }}Port signature{{ else }}{{ .NodeType }}{{ end }}
+{{ if eq . "pasarguard-node" }}container{{ else if eq . "rebecca-node" }}package{{ else }}help-circle{{ end }}
 {{- end }}
 
 {{ define "node-health-label" -}}
-{{ if eq . "running" }}Running{{ else if eq . "detected" }}Detected{{ else if eq . "not_detected" }}Not detected{{ else }}Unknown{{ end }}
+{{ if eq . "running" }}Running{{ else if eq . "stopped" }}Stopped{{ else if eq . "detected" }}Detected{{ else if eq . "not_detected" }}Not detected{{ else }}Unknown{{ end }}
 {{- end }}

@@ -223,3 +223,8 @@ CREATE TABLE IF NOT EXISTS alert_rule_streaks (
   FOREIGN KEY (rule_id)   REFERENCES alert_rules(id)  ON DELETE CASCADE,
   FOREIGN KEY (server_id) REFERENCES servers(id)      ON DELETE CASCADE
 );
+
+-- node_snapshots.data_dir records each discovered node's data directory
+-- (e.g. /var/lib/<name>). Appended as a standalone statement so existing
+-- databases pick it up as a new bootstrap migration.
+ALTER TABLE node_snapshots ADD COLUMN data_dir TEXT NOT NULL DEFAULT '';

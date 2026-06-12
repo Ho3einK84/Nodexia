@@ -12,6 +12,9 @@ import (
 
 var ErrNotFound = errors.New("nodes: not found")
 
+// Snapshot is one discovered node instance.  ServiceName carries the dynamic
+// node name (e.g. "node", "node2", "rebecca-node") read from the remote
+// configuration during discovery.
 type Snapshot struct {
 	ID           int64
 	ServerID     int64
@@ -25,6 +28,7 @@ type Snapshot struct {
 	ServicePort  string
 	APIPort      string
 	Protocol     string
+	DataDir      string
 	Confidence   string
 	Dependencies []string
 	Evidence     []string
@@ -112,10 +116,11 @@ func (r SQLRepository) ReplaceLatest(ctx context.Context, serverID int64, snapsh
 				service_port,
 				api_port,
 				protocol,
+				data_dir,
 				confidence,
 				evidence_json,
 				created_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			snapshot.ServerID,
 			snapshot.NodeType,
 			snapshot.ServiceName,
@@ -128,6 +133,7 @@ func (r SQLRepository) ReplaceLatest(ctx context.Context, serverID int64, snapsh
 			snapshot.ServicePort,
 			snapshot.APIPort,
 			snapshot.Protocol,
+			snapshot.DataDir,
 			snapshot.Confidence,
 			string(evidenceJSON),
 			snapshot.CollectedAt,
@@ -168,7 +174,7 @@ func (r SQLRepository) GetLatestByServer(ctx context.Context, serverID int64) ([
 
 	rows, err := r.conn.QueryContext(
 		ctx,
-		`SELECT id, server_id, node_type, service_name, version, health_status, active_ports, xray_ports, dependencies_json, install_mode, service_port, api_port, protocol, confidence, evidence_json, created_at
+		`SELECT id, server_id, node_type, service_name, version, health_status, active_ports, xray_ports, dependencies_json, install_mode, service_port, api_port, protocol, data_dir, confidence, evidence_json, created_at
 		 FROM node_snapshots
 		 WHERE server_id = ? AND created_at = ?
 		 ORDER BY id ASC`,
@@ -224,6 +230,7 @@ func scanSnapshot(scanner rowScanner) (Snapshot, error) {
 		&snapshot.ServicePort,
 		&snapshot.APIPort,
 		&snapshot.Protocol,
+		&snapshot.DataDir,
 		&snapshot.Confidence,
 		&evidenceJSON,
 		&createdAtRaw,
@@ -256,6 +263,7 @@ func normalizeSnapshot(snapshot Snapshot) Snapshot {
 	snapshot.ServicePort = strings.TrimSpace(snapshot.ServicePort)
 	snapshot.APIPort = strings.TrimSpace(snapshot.APIPort)
 	snapshot.Protocol = strings.TrimSpace(snapshot.Protocol)
+	snapshot.DataDir = strings.TrimSpace(snapshot.DataDir)
 	snapshot.Confidence = strings.TrimSpace(snapshot.Confidence)
 	snapshot.ActivePorts = normalizeStringSlice(snapshot.ActivePorts)
 	snapshot.XrayPorts = normalizeStringSlice(snapshot.XrayPorts)

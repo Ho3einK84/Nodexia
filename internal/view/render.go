@@ -88,6 +88,9 @@ type PageData struct {
 	NodeForm             NodeFormView
 	NodeSnapshots        []NodeSnapshotView
 	NodeCollection       NodeCollectionResultView
+	NodeStream           CommandStreamView
+	NodeInstallForm      NodeInstallFormView
+	NodeInstall          NodeInstallView
 	AlertsOverview        AlertsOverviewView
 	AlertRuleForm         AlertRuleFormView
 	AlertChannelForm      AlertChannelFormView
@@ -486,21 +489,76 @@ type NodeFormView struct {
 	Errors                    map[string]string
 }
 
+// NodeSnapshotView renders one discovered node card.  Name carries the
+// dynamic instance name (e.g. "node", "node2", "rebecca-node") and Actions
+// the provider's management operations.
 type NodeSnapshotView struct {
-	NodeType     string
-	ServiceName  string
-	InstallMode  string
-	Version      string
-	HealthStatus string
-	ActivePorts  []string
-	XrayPorts    []string
-	ServicePort  string
-	APIPort      string
-	Protocol     string
-	Confidence   string
-	Dependencies []string
-	Evidence     []string
-	CollectedAt  string
+	Name           string
+	NodeType       string
+	TypeLabel      string
+	InstallMode    string
+	Version        string
+	HealthStatus   string
+	ActivePorts    []string
+	XrayPorts      []string
+	ServicePort    string
+	APIPort        string
+	Protocol       string
+	DataDir        string
+	Confidence     string
+	Dependencies   []string
+	Evidence       []string
+	CollectedAt    string
+	Actions        []NodeActionView
+	ActionsEnabled bool
+}
+
+// NodeActionView is one management action button on a node card.
+type NodeActionView struct {
+	Key    string
+	Label  string
+	Icon   string
+	Danger bool
+}
+
+// NodeInstallFormView powers the "Install PasarGuard node" form.
+type NodeInstallFormView struct {
+	Action   string
+	NodeName string
+	Enabled  bool
+	Errors   map[string]string
+}
+
+// NodeInstallView backs the live install job page.  While IsRunning the page
+// auto-refreshes via RefreshURL; once completed, Info carries the values the
+// PasarGuard panel needs to register the node.
+type NodeInstallView struct {
+	Available     bool
+	JobID         string
+	NodeName      string
+	Status        string
+	IsRunning     bool
+	StartedAt     string
+	FinishedAt    string
+	Duration      string
+	Output        string
+	Error         string
+	RefreshURL    string
+	RefreshMillis int
+	NodesURL      string
+	Info          NodeRegistrationView
+}
+
+// NodeRegistrationView holds the panel registration values shown after a
+// successful install. These values are kept in memory only.
+type NodeRegistrationView struct {
+	Available   bool
+	NodeName    string
+	NodeIP      string
+	ServicePort string
+	Protocol    string
+	APIKey      string
+	Certificate string
 }
 
 type NodeCollectionResultView struct {
