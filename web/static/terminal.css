@@ -1,0 +1,125 @@
+/* ── Terminal card ───────────────────────────────────── */
+
+.terminal-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.terminal-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(2, 6, 23, 0.5);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.terminal-card__host {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-family: ui-monospace, monospace;
+  color: var(--text-muted);
+}
+
+.terminal-card__host svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+/* ── Status chip ─────────────────────────────────────── */
+
+.terminal-status {
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.terminal-status--connecting {
+  background: rgba(250, 204, 21, 0.1);
+  color: var(--warn);
+  border: 1px solid rgba(250, 204, 21, 0.2);
+}
+
+.terminal-status--connected {
+  background: rgba(74, 222, 128, 0.1);
+  color: var(--ok);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+}
+
+.terminal-status--disconnected {
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.terminal-status--error {
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--crit);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+/* ── Error banner ────────────────────────────────────── */
+
+.terminal-error {
+  padding: 10px 16px;
+  background: rgba(248, 113, 113, 0.08);
+  border-bottom: 1px solid rgba(248, 113, 113, 0.2);
+  color: var(--crit);
+  font-size: 0.88rem;
+}
+
+/* ── xterm.js container ──────────────────────────────── */
+
+.terminal-container {
+  /* xterm.js fills this; min-width: 0 lets the card shrink on narrow screens. */
+  min-width: 0;
+  padding: 8px;
+  background: #000;
+}
+
+/* Prevent xterm's internal canvas from overflowing on small screens. */
+.terminal-container .xterm {
+  overflow: hidden;
+}
+
+/* xterm viewport should scroll within its container, never the page. */
+.terminal-container .xterm-viewport {
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.22) transparent;
+}
+
+/* ── Credential form ─────────────────────────────────── */
+
+.terminal-form {
+  display: grid;
+  gap: 16px;
+  max-width: 560px;
+}
+
+.terminal-form__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── Responsive ──────────────────────────────────────── */
+
+@media (max-width: 520px) {
+  .terminal-card__header {
+    gap: 8px;
+  }
+
+  .terminal-form__actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}

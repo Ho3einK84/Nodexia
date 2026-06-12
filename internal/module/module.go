@@ -9,15 +9,17 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/db"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
 	"github.com/Ho3einK84/Nodexia/internal/sshclient"
+	"github.com/Ho3einK84/Nodexia/internal/terminalticket"
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
 
 type Dependencies struct {
-	Config         config.Config
-	Database       *db.Runtime
-	SSH            *sshclient.Service
-	CommandStreams *commandstream.Store
-	Renderer       *view.Renderer
+	Config          config.Config
+	Database        *db.Runtime
+	SSH             *sshclient.Service
+	CommandStreams   *commandstream.Store
+	TerminalTickets *terminalticket.Store
+	Renderer        *view.Renderer
 }
 
 type Module interface {

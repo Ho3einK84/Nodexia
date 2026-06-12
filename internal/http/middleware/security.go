@@ -36,7 +36,7 @@ func SecurityHeaders() Middleware {
 			w.Header().Set("X-Frame-Options", "DENY")
 			w.Header().Set("Referrer-Policy", "same-origin")
 			w.Header().Set("Cache-Control", "no-store")
-			w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; script-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; script-src 'self'; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -245,6 +245,12 @@ func parseSignedSession(value string, secret []byte) (string, time.Time, error) 
 	}
 
 	return parts[0], time.Unix(issuedUnix, 0).UTC(), nil
+}
+
+// ValidateSameOriginRequest is exported for WebSocket handlers that must perform
+// their own same-origin check outside the CSRF middleware.
+func ValidateSameOriginRequest(r *http.Request) error {
+	return validateSameOriginRequest(r)
 }
 
 func validateSameOriginRequest(r *http.Request) error {

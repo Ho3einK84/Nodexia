@@ -21,7 +21,7 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
-	handler := apphttp.NewRouter(bootstrap.Config, bootstrap.Database, bootstrap.SSH, bootstrap.CommandStreams, bootstrap.Renderer, bootstrap.StaticFiles, bootstrap.Scheduler, bootstrap.Modules)
+	handler := apphttp.NewRouter(bootstrap.Config, bootstrap.Database, bootstrap.SSH, bootstrap.CommandStreams, bootstrap.TerminalTickets, bootstrap.Renderer, bootstrap.StaticFiles, bootstrap.Scheduler, bootstrap.Modules)
 
 	server := &http.Server{
 		Addr:         bootstrap.Config.HTTP.Address,

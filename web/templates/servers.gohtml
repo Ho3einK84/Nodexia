@@ -89,6 +89,7 @@
             <div class="action-menu__panel" role="menu">
               <span class="action-menu__caption"><i data-lucide="calendar"></i> Created {{ .CreatedAt }}</span>
               <div class="action-menu__divider" role="separator"></div>
+              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/terminal"><i data-lucide="terminal-square" class="icon-in-button"></i> Terminal</a>
               <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
               <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
               <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> Edit</a>

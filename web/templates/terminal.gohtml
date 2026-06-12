@@ -1,0 +1,90 @@
+{{ define "content-terminal" }}
+<section class="hero">
+  {{ template "page-header" . }}
+
+  {{/* ── Credential form (shown when no ticket yet) ─────────────────────── */}}
+  {{ if eq .TerminalTicket "" }}
+  <div class="card">
+    <div class="card__header">
+      <h3 class="card__title"><i data-lucide="terminal-square" class="icon-in-button"></i> Open terminal</h3>
+    </div>
+    <p class="page-description" style="margin-bottom:16px">
+      Connecting to <code>{{ .TerminalTarget.Username }}@{{ .TerminalTarget.Host }}:{{ .TerminalTarget.Port }}</code>
+      {{ if .TerminalForm.StoredCredentialsAvailable }}
+      — stored credentials will be used automatically.
+      {{ else }}
+      — enter your SSH credentials below.
+      {{ end }}
+    </p>
+
+    <form method="post" action="{{ .TerminalForm.Action }}" class="terminal-form">
+      <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+
+      {{ if not .TerminalForm.StoredCredentialsAvailable }}
+      {{ if or (eq .TerminalTarget.AuthMode "password") (eq .TerminalTarget.AuthMode "hybrid") (eq .TerminalTarget.AuthMode "") }}
+      <div class="form-field{{ if index .TerminalForm.Errors "password" }} form-field--error{{ end }}">
+        <label class="form-label" for="term-password">Password</label>
+        <input type="password" id="term-password" name="password" class="form-input"
+          autocomplete="current-password" placeholder="SSH password">
+        {{ if index .TerminalForm.Errors "password" }}
+        <span class="form-error">{{ index .TerminalForm.Errors "password" }}</span>
+        {{ end }}
+      </div>
+      {{ end }}
+
+      {{ if or (eq .TerminalTarget.AuthMode "key") (eq .TerminalTarget.AuthMode "hybrid") }}
+      <div class="form-field{{ if index .TerminalForm.Errors "private_key" }} form-field--error{{ end }}">
+        <label class="form-label" for="term-key">Private key (PEM)</label>
+        <textarea id="term-key" name="private_key" class="form-input form-input--mono" rows="5"
+          placeholder="-----BEGIN ... PRIVATE KEY-----"></textarea>
+        {{ if index .TerminalForm.Errors "private_key" }}
+        <span class="form-error">{{ index .TerminalForm.Errors "private_key" }}</span>
+        {{ end }}
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="term-passphrase">Key passphrase (optional)</label>
+        <input type="password" id="term-passphrase" name="key_passphrase" class="form-input"
+          autocomplete="off" placeholder="Leave blank if not encrypted">
+      </div>
+      {{ end }}
+      {{ end }}
+
+      <div class="form-field">
+        <label class="form-label" for="term-timeout">Connect timeout</label>
+        <input type="text" id="term-timeout" name="connect_timeout" class="form-input form-input--narrow"
+          value="{{ .TerminalForm.ConnectTimeout }}" placeholder="e.g. 10s">
+      </div>
+
+      <div class="terminal-form__actions">
+        <button type="submit" class="btn btn--primary">
+          <i data-lucide="terminal-square" class="icon-in-button"></i> Open terminal
+        </button>
+        <a href="/servers" class="btn btn--ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+  {{ end }}
+
+  {{/* ── xterm.js terminal (shown once a ticket is issued) ──────────────── */}}
+  {{ if .TerminalTicket }}
+  <div class="card terminal-card"
+    id="terminal-card"
+    data-ticket="{{ .TerminalTicket }}"
+    data-ws-url="{{ .TerminalTarget.WSURL }}">
+
+    <div class="terminal-card__header">
+      <span class="terminal-card__host">
+        <i data-lucide="monitor" class="icon-in-button"></i>
+        {{ .TerminalTarget.Username }}@{{ .TerminalTarget.Host }}:{{ .TerminalTarget.Port }}
+      </span>
+      <span id="terminal-status" class="terminal-status terminal-status--connecting">connecting…</span>
+    </div>
+
+    <div id="terminal-error" class="terminal-error" style="display:none"></div>
+
+    <div id="terminal-container" class="terminal-container"></div>
+  </div>
+  {{ end }}
+
+</section>
+{{ end }}

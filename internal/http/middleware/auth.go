@@ -162,3 +162,10 @@ func IsAuthenticated(ctx context.Context) bool {
 	_, ok := ctx.Value(authTokenKey).(string)
 	return ok
 }
+
+// GetAuthenticatedUser returns the username stored in ctx by RequireAuth.
+// Returns an empty string when called outside an authenticated request.
+func GetAuthenticatedUser(ctx context.Context) string {
+	v, _ := ctx.Value(authTokenKey).(string)
+	return v
+}

@@ -13,18 +13,20 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/module/registry"
 	"github.com/Ho3einK84/Nodexia/internal/scheduler"
 	"github.com/Ho3einK84/Nodexia/internal/sshclient"
+	"github.com/Ho3einK84/Nodexia/internal/terminalticket"
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
 
 type Bootstrap struct {
-	Config         config.Config
-	Database       *db.Runtime
-	SSH            *sshclient.Service
-	CommandStreams *commandstream.Store
-	Renderer       *view.Renderer
-	StaticFiles    fs.FS
-	Scheduler      *scheduler.Runtime
-	Modules        []module.Module
+	Config          config.Config
+	Database        *db.Runtime
+	SSH             *sshclient.Service
+	CommandStreams   *commandstream.Store
+	TerminalTickets *terminalticket.Store
+	Renderer        *view.Renderer
+	StaticFiles     fs.FS
+	Scheduler       *scheduler.Runtime
+	Modules         []module.Module
 }
 
 func NewBootstrap(cfg config.Config) (Bootstrap, error) {
@@ -47,19 +49,21 @@ func NewBootstrap(cfg config.Config) (Bootstrap, error) {
 
 	sshService := sshclient.New(cfg.SSH, cfg.Security)
 	commandStreams := commandstream.New(45 * time.Minute)
+	terminalTickets := terminalticket.New(terminalticket.DefaultTTL)
 	backgroundScheduler := scheduler.New(cfg, dbRuntime.SQL, sshService)
 	if backgroundScheduler != nil {
 		backgroundScheduler.Start()
 	}
 
 	return Bootstrap{
-		Config:         cfg,
-		Database:       dbRuntime,
-		SSH:            sshService,
-		CommandStreams: commandStreams,
-		Renderer:       renderer,
-		StaticFiles:    staticFiles,
-		Scheduler:      backgroundScheduler,
-		Modules:        registry.DefaultModules(),
+		Config:          cfg,
+		Database:        dbRuntime,
+		SSH:             sshService,
+		CommandStreams:   commandStreams,
+		TerminalTickets: terminalTickets,
+		Renderer:        renderer,
+		StaticFiles:     staticFiles,
+		Scheduler:       backgroundScheduler,
+		Modules:         registry.DefaultModules(),
 	}, nil
 }

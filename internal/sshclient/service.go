@@ -208,6 +208,102 @@ func (s *Service) StreamCommand(ctx context.Context, req CommandRequest, handler
 	}
 }
 
+// ResizeRequest carries a PTY window-change request.
+type ResizeRequest struct {
+	Rows uint32
+	Cols uint32
+}
+
+// InteractiveIO wires the I/O streams and resize channel for an OpenShell
+// call.  Resize must be a non-nil, readable channel; callers should close it
+// or cancel the context when they are done with the session.
+type InteractiveIO struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+	Rows   uint32
+	Cols   uint32
+	Resize <-chan ResizeRequest
+}
+
+// OpenShell dials the server, opens a PTY-backed interactive shell, and blocks
+// until the remote shell exits or ctx is cancelled.
+//
+// Connect timeout applies only to the initial dial; the shell session is
+// long-lived.  Command timeouts are intentionally NOT applied here — use
+// ctx cancellation to bound the session lifetime.
+func (s *Service) OpenShell(ctx context.Context, req ConnectionRequest, pio InteractiveIO) error {
+	client, _, err := s.connect(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	session, err := client.NewSession()
+	if err != nil {
+		client.Close()
+		return fmt.Errorf("sshclient: create shell session: %w", err)
+	}
+
+	modes := xssh.TerminalModes{
+		xssh.ECHO:          1,
+		xssh.TTY_OP_ISPEED: 38400,
+		xssh.TTY_OP_OSPEED: 38400,
+	}
+	rows, cols := pio.Rows, pio.Cols
+	if rows == 0 {
+		rows = 24
+	}
+	if cols == 0 {
+		cols = 80
+	}
+	if err := session.RequestPty("xterm-256color", int(rows), int(cols), modes); err != nil {
+		session.Close()
+		client.Close()
+		return fmt.Errorf("sshclient: request pty: %w", err)
+	}
+
+	session.Stdin = pio.Stdin
+	session.Stdout = pio.Stdout
+	session.Stderr = pio.Stderr
+
+	if err := session.Shell(); err != nil {
+		session.Close()
+		client.Close()
+		return fmt.Errorf("sshclient: start shell: %w", err)
+	}
+
+	// Forward resize requests until ctx ends.
+	if pio.Resize != nil {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case r, ok := <-pio.Resize:
+					if !ok {
+						return
+					}
+					_ = session.WindowChange(int(r.Rows), int(r.Cols))
+				}
+			}
+		}()
+	}
+
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- session.Wait() }()
+
+	select {
+	case <-ctx.Done():
+		_ = session.Close()
+		_ = client.Close()
+		<-waitDone
+		return ctx.Err()
+	case err := <-waitDone:
+		_ = client.Close()
+		return err
+	}
+}
+
 func (s *Service) ListDirectory(ctx context.Context, req ConnectionRequest, remotePath string) (DirectoryListing, error) {
 	_, sftpClient, cleanup, err := s.openSFTP(ctx, req)
 	if err != nil {

@@ -96,6 +96,11 @@ type PageData struct {
 
 	// Bulk actions result page.
 	BulkActionResult BulkActionResultView
+
+	// Interactive SSH terminal.
+	TerminalTarget TerminalTargetView
+	TerminalTicket string
+	TerminalForm   TerminalFormView
 }
 
 // PaginationView describes a rendered pagination control. It is reusable across
@@ -655,6 +660,31 @@ type BulkServerResultView struct {
 	Status   string // "ok", "failed", "skipped"
 	ExitCode string
 	Reason   string
+}
+
+// ── Interactive terminal ──────────────────────────────────────────────────────
+
+// TerminalTargetView identifies the server the terminal connects to.
+type TerminalTargetView struct {
+	ID                 int64
+	Name               string
+	Host               string
+	Port               int
+	Username           string
+	AuthMode           string
+	CredentialStrategy string
+	WSURL              string
+}
+
+// TerminalFormView powers the credential-collection form.
+type TerminalFormView struct {
+	Action                     string
+	ConnectTimeout             string
+	Password                   string
+	PrivateKey                 string
+	KeyPassphrase              string
+	StoredCredentialsAvailable bool
+	Errors                     map[string]string
 }
 
 type Renderer struct {

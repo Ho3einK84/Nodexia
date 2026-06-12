@@ -15,10 +15,11 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/ratelimit"
 	"github.com/Ho3einK84/Nodexia/internal/scheduler"
 	"github.com/Ho3einK84/Nodexia/internal/sshclient"
+	"github.com/Ho3einK84/Nodexia/internal/terminalticket"
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
 
-func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Service, commandStreams *commandstream.Store, renderer *view.Renderer, staticFiles fs.FS, backgroundScheduler *scheduler.Runtime, modules []module.Module) http.Handler {
+func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Service, commandStreams *commandstream.Store, terminalTickets *terminalticket.Store, renderer *view.Renderer, staticFiles fs.FS, backgroundScheduler *scheduler.Runtime, modules []module.Module) http.Handler {
 	mux := http.NewServeMux()
 	notFoundHandler := handlers.NewErrorHandler(
 		cfg,
@@ -36,11 +37,12 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 	)
 
 	deps := module.Dependencies{
-		Config:         cfg,
-		Database:       database,
-		SSH:            sshService,
-		CommandStreams: commandStreams,
-		Renderer:       renderer,
+		Config:          cfg,
+		Database:        database,
+		SSH:             sshService,
+		CommandStreams:   commandStreams,
+		TerminalTickets: terminalTickets,
+		Renderer:        renderer,
 	}
 
 	health := handlers.NewHealthHandler(cfg, database)

@@ -10,6 +10,7 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/module/nodes"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 	"github.com/Ho3einK84/Nodexia/internal/module/system"
+	"github.com/Ho3einK84/Nodexia/internal/module/terminal"
 )
 
 func DefaultModules() []module.Module {
@@ -22,6 +23,7 @@ func DefaultModules() []module.Module {
 		system.New(),
 		alerts.New(),
 		bulk.New(),
+		terminal.New(),
 	}
 }
 

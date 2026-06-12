@@ -3,6 +3,7 @@ module github.com/Ho3einK84/Nodexia
 go 1.25.0
 
 require (
+	github.com/coder/websocket v1.8.14
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/pkg/sftp v1.13.10
 	golang.org/x/crypto v0.43.0
