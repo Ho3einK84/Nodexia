@@ -145,3 +145,87 @@ func TestAlertsServerSilenceRedirects(t *testing.T) {
 		t.Fatal("expected cpu silenced for server after one-click silence")
 	}
 }
+
+func TestAlertsOverviewPaginatesEvents(t *testing.T) {
+	mux, repo, serverID := newAlertsMux(t)
+	ctx := context.Background()
+
+	// Seed 12 events with recognisable observed values (101..112): page 1
+	// must show the newest ten (112..103), page 2 the oldest two (102, 101).
+	for i := 101; i <= 112; i++ {
+		if _, err := repo.CreateEvent(ctx, alerts.Event{
+			ServerID:      serverID,
+			Metric:        alerts.MetricCPU,
+			ObservedValue: float64(i),
+			Threshold:     90,
+			Severity:      alerts.SeverityWarning,
+		}); err != nil {
+			t.Fatalf("seed event %d: %v", i, err)
+		}
+	}
+
+	page1 := httptest.NewRecorder()
+	mux.ServeHTTP(page1, httptest.NewRequest(http.MethodGet, "/alerts", nil))
+	if page1.Code != http.StatusOK {
+		t.Fatalf("GET /alerts = %d, want 200", page1.Code)
+	}
+	body1 := page1.Body.String()
+	if !strings.Contains(body1, "events_page=2") {
+		t.Error("page 1 should link to events_page=2")
+	}
+	if !strings.Contains(body1, "112") {
+		t.Error("page 1 should contain the newest event (112)")
+	}
+	if strings.Contains(body1, "<code>101") {
+		t.Error("page 1 should not contain the oldest event (101)")
+	}
+
+	page2 := httptest.NewRecorder()
+	mux.ServeHTTP(page2, httptest.NewRequest(http.MethodGet, "/alerts?events_page=2", nil))
+	if page2.Code != http.StatusOK {
+		t.Fatalf("GET /alerts?events_page=2 = %d, want 200", page2.Code)
+	}
+	body2 := page2.Body.String()
+	if !strings.Contains(body2, "<code>101") {
+		t.Error("page 2 should contain the oldest event (101)")
+	}
+	if strings.Contains(body2, "<code>112") {
+		t.Error("page 2 should not contain the newest event (112)")
+	}
+
+	// Out-of-range pages clamp instead of erroring.
+	clamped := httptest.NewRecorder()
+	mux.ServeHTTP(clamped, httptest.NewRequest(http.MethodGet, "/alerts?events_page=99", nil))
+	if clamped.Code != http.StatusOK {
+		t.Fatalf("GET /alerts?events_page=99 = %d, want 200", clamped.Code)
+	}
+	if !strings.Contains(clamped.Body.String(), "<code>101") {
+		t.Error("out-of-range page should clamp to the last page (containing 101)")
+	}
+}
+
+func TestAlertsOverviewFewEventsNoPagination(t *testing.T) {
+	mux, repo, serverID := newAlertsMux(t)
+	ctx := context.Background()
+
+	for i := 0; i < 3; i++ {
+		if _, err := repo.CreateEvent(ctx, alerts.Event{
+			ServerID:      serverID,
+			Metric:        alerts.MetricCPU,
+			ObservedValue: 95,
+			Threshold:     90,
+			Severity:      alerts.SeverityWarning,
+		}); err != nil {
+			t.Fatalf("seed event: %v", err)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/alerts", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /alerts = %d, want 200", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "events_page=") {
+		t.Error("pagination links should not render with a single page of events")
+	}
+}

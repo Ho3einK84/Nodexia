@@ -603,16 +603,20 @@ type AlertSilenceFormView struct {
 
 // AlertsOverviewView is the data backing the /alerts management page.
 type AlertsOverviewView struct {
-	Rules           []AlertRuleView
-	Channels        []AlertChannelView
-	Silences        []AlertSilenceView
-	Events          []AlertEventView
-	SilenceForm     AlertSilenceFormView
-	HasServers      bool
-	NewRuleURL      string
-	NewChannelURL   string
-	TokenConfigured bool
-	TokenNotice     string
+	Rules    []AlertRuleView
+	Channels []AlertChannelView
+	Silences []AlertSilenceView
+	// Events holds one page of alert history; EventsTotal is the full count
+	// and EventsPagination drives the page control under the table.
+	Events           []AlertEventView
+	EventsTotal      int
+	EventsPagination PaginationView
+	SilenceForm      AlertSilenceFormView
+	HasServers       bool
+	NewRuleURL       string
+	NewChannelURL    string
+	TokenConfigured  bool
+	TokenNotice      string
 }
 
 // AlertRuleFormView powers the rule create/edit form.

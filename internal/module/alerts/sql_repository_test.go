@@ -273,3 +273,65 @@ func TestSilenceLifecycle(t *testing.T) {
 		t.Fatalf("GetSilence() after delete = %v, want ErrNotFound", err)
 	}
 }
+
+func TestCountEventsAndListEventsPage(t *testing.T) {
+	runtime := testutil.OpenTestDB(t)
+	ctx := context.Background()
+	repo := alerts.NewSQLRepository(runtime.SQL)
+	serverID := newTestServer(t, ctx, runtime, "lab-events")
+
+	if total, err := repo.CountEvents(ctx); err != nil || total != 0 {
+		t.Fatalf("CountEvents() = %d, %v; want 0, nil", total, err)
+	}
+
+	// Seed 12 events with distinct observed values 1..12 (ids ascend with i).
+	for i := 1; i <= 12; i++ {
+		_, err := repo.CreateEvent(ctx, alerts.Event{
+			ServerID:      serverID,
+			Metric:        alerts.MetricCPU,
+			ObservedValue: float64(i),
+			Threshold:     90,
+			Severity:      alerts.SeverityWarning,
+		})
+		if err != nil {
+			t.Fatalf("CreateEvent(%d) error = %v", i, err)
+		}
+	}
+
+	total, err := repo.CountEvents(ctx)
+	if err != nil {
+		t.Fatalf("CountEvents() error = %v", err)
+	}
+	if total != 12 {
+		t.Fatalf("CountEvents() = %d, want 12", total)
+	}
+
+	// Page 1: newest first → observed values 12..3.
+	page1, err := repo.ListEventsPage(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("ListEventsPage(10, 0) error = %v", err)
+	}
+	if len(page1) != 10 {
+		t.Fatalf("page 1 length = %d, want 10", len(page1))
+	}
+	if page1[0].ObservedValue != 12 || page1[9].ObservedValue != 3 {
+		t.Errorf("page 1 order = %v..%v, want 12..3", page1[0].ObservedValue, page1[9].ObservedValue)
+	}
+
+	// Page 2: the remaining two oldest events.
+	page2, err := repo.ListEventsPage(ctx, 10, 10)
+	if err != nil {
+		t.Fatalf("ListEventsPage(10, 10) error = %v", err)
+	}
+	if len(page2) != 2 {
+		t.Fatalf("page 2 length = %d, want 2", len(page2))
+	}
+	if page2[0].ObservedValue != 2 || page2[1].ObservedValue != 1 {
+		t.Errorf("page 2 = %v, %v; want 2, 1", page2[0].ObservedValue, page2[1].ObservedValue)
+	}
+
+	// Past the end → empty, not an error.
+	if rest, err := repo.ListEventsPage(ctx, 10, 20); err != nil || len(rest) != 0 {
+		t.Errorf("ListEventsPage(10, 20) = %d rows, %v; want 0, nil", len(rest), err)
+	}
+}

@@ -3,6 +3,8 @@ package alerts
 import (
 	"context"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/module"
@@ -35,7 +37,8 @@ func (h Handlers) tokenConfigured() bool {
 // ── Overview ─────────────────────────────────────────────────────────────────
 
 func (h Handlers) Overview(w http.ResponseWriter, r *http.Request) {
-	overview, err := h.overviewModel(r.Context())
+	eventsPage, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("events_page")))
+	overview, err := h.overviewModel(r.Context(), eventsPage)
 	if err != nil {
 		renderError(w, h.deps, err, "Could not load alerts", "The alerts page could not be loaded.")
 		return
@@ -45,7 +48,9 @@ func (h Handlers) Overview(w http.ResponseWriter, r *http.Request) {
 
 // overviewModel loads every section of the alerts overview in one place so the
 // page, the inline-error path, and the channel test action share one builder.
-func (h Handlers) overviewModel(ctx context.Context) (view.AlertsOverviewView, error) {
+// eventsPage selects which page of the alert history renders (clamped to the
+// available range; pass 1 for the first page).
+func (h Handlers) overviewModel(ctx context.Context, eventsPage int) (view.AlertsOverviewView, error) {
 	rules, err := h.repo.ListRules(ctx)
 	if err != nil {
 		return view.AlertsOverviewView{}, err
@@ -58,10 +63,26 @@ func (h Handlers) overviewModel(ctx context.Context) (view.AlertsOverviewView, e
 	if err != nil {
 		return view.AlertsOverviewView{}, err
 	}
-	events, err := h.repo.ListRecentEvents(ctx, recentEventLimit)
+
+	eventsTotal, err := h.repo.CountEvents(ctx)
 	if err != nil {
 		return view.AlertsOverviewView{}, err
 	}
+	totalPages := (eventsTotal + recentEventsPerPage - 1) / recentEventsPerPage
+	if totalPages < 1 {
+		totalPages = 1
+	}
+	if eventsPage < 1 {
+		eventsPage = 1
+	}
+	if eventsPage > totalPages {
+		eventsPage = totalPages
+	}
+	events, err := h.repo.ListEventsPage(ctx, recentEventsPerPage, (eventsPage-1)*recentEventsPerPage)
+	if err != nil {
+		return view.AlertsOverviewView{}, err
+	}
+
 	refs, err := h.loadServerRefs(ctx)
 	if err != nil {
 		return view.AlertsOverviewView{}, err
@@ -76,11 +97,14 @@ func (h Handlers) overviewModel(ctx context.Context) (view.AlertsOverviewView, e
 		streaks = map[streakKey]int{} // non-fatal: overview renders without streak info
 	}
 
-	return buildOverview(rules, channels, silences, events, refs, streaks, h.tokenConfigured(), time.Now().UTC()), nil
+	overview := buildOverview(rules, channels, silences, events, refs, streaks, h.tokenConfigured(), time.Now().UTC())
+	overview.EventsTotal = eventsTotal
+	overview.EventsPagination = buildEventsPagination(eventsPage, totalPages)
+	return overview, nil
 }
 
-// recentEventLimit caps how many alert history rows the overview shows.
-const recentEventLimit = 20
+// recentEventsPerPage caps how many alert history rows render per page.
+const recentEventsPerPage = 10
 
 // ── Rules ────────────────────────────────────────────────────────────────────
 
@@ -317,7 +341,7 @@ func (h Handlers) ChannelTest(w http.ResponseWriter, r *http.Request) {
 
 	kind, message, statusCode := h.sendTestMessage(r.Context(), channel)
 
-	overview, err := h.overviewModel(r.Context())
+	overview, err := h.overviewModel(r.Context(), 1)
 	if err != nil {
 		renderError(w, h.deps, err, "Could not load alerts", "The alerts page could not be loaded.")
 		return
@@ -439,7 +463,7 @@ func (h Handlers) ServerSilence(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) renderOverviewWithSilenceErrors(w http.ResponseWriter, r *http.Request, input SilenceFormInput, errs ValidationErrors) {
 	ctx := r.Context()
-	overview, err := h.overviewModel(ctx)
+	overview, err := h.overviewModel(ctx, 1)
 	if err != nil {
 		renderError(w, h.deps, err, "Could not load alerts", "The alerts page could not be loaded.")
 		return

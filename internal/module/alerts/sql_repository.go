@@ -605,6 +605,44 @@ func (r SQLRepository) ListRecentEvents(ctx context.Context, limit int) ([]Event
 	return events, rows.Err()
 }
 
+func (r SQLRepository) CountEvents(ctx context.Context) (int, error) {
+	var total int
+	err := r.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM alert_events`).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf("alerts: count events: %w", err)
+	}
+	return total, nil
+}
+
+func (r SQLRepository) ListEventsPage(ctx context.Context, limit, offset int) ([]Event, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	rows, err := r.conn.QueryContext(
+		ctx,
+		`SELECT `+eventColumns+` FROM alert_events ORDER BY id DESC LIMIT ? OFFSET ?`,
+		limit,
+		offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("alerts: list events page: %w", err)
+	}
+	defer rows.Close()
+
+	var events []Event
+	for rows.Next() {
+		event, err := scanEvent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("alerts: scan event: %w", err)
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
 // ── Streaks ──────────────────────────────────────────────────────────────────
 
 func (r SQLRepository) GetStreak(ctx context.Context, ruleID, serverID int64) (int, error) {

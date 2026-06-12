@@ -193,9 +193,10 @@
   </article>
 
   {{/* ── History ───────────────────────────────────────── */}}
-  <article class="card">
+  <article class="card" id="alert-history">
     <div class="card__header">
       <h3><i data-lucide="history"></i> Recent alert activity</h3>
+      {{ if .EventsTotal }}<span class="badge badge--id">{{ .EventsTotal }}</span>{{ end }}
     </div>
 
     {{ if .Events }}
@@ -220,6 +221,7 @@
         </tbody>
       </table>
     </div>
+    {{ template "pagination" .EventsPagination }}
     {{ else }}
     <p class="empty-state">No alerts have fired yet. Rules are evaluated after each background monitoring run.</p>
     {{ end }}

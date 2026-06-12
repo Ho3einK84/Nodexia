@@ -128,6 +128,11 @@ type Repository interface {
 	MarkEventNotified(ctx context.Context, eventID int64, at time.Time) error
 	ResolveEvent(ctx context.Context, eventID int64, at time.Time) error
 	ListRecentEvents(ctx context.Context, limit int) ([]Event, error)
+	// CountEvents returns the total number of recorded alert events; paired
+	// with ListEventsPage to paginate the overview history.
+	CountEvents(ctx context.Context) (int, error)
+	// ListEventsPage returns one page of events, newest first.
+	ListEventsPage(ctx context.Context, limit, offset int) ([]Event, error)
 
 	// Streaks track consecutive-breach counts per (rule, server) so they survive
 	// restarts. GetStreak returns 0 when no row exists yet.
