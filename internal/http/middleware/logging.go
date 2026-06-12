@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"bufio"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,6 +18,41 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(statusCode int) {
 	r.statusCode = statusCode
 	r.ResponseWriter.WriteHeader(statusCode)
+}
+
+// Unwrap lets http.ResponseController reach the underlying writer.
+func (r *statusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
+
+// Flush forwards streaming writes when the underlying writer supports them.
+func (r *statusRecorder) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+// Hijack exposes the underlying connection so WebSocket upgrades work through
+// the logging wrapper (without it, coder/websocket's Accept fails and every
+// terminal connection dies during the handshake).
+//
+// net/http arms the connection with the server's ReadTimeout/WriteTimeout
+// deadlines before the handler runs, and a hijack does NOT clear them — a
+// long-lived WebSocket would be killed as soon as those deadlines elapse. The
+// hijacked connection belongs to the handler, so clear the deadlines here;
+// the WebSocket library applies its own per-frame deadlines.
+func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := r.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("middleware: underlying ResponseWriter does not implement http.Hijacker")
+	}
+	conn, rw, err := hijacker.Hijack()
+	if err != nil {
+		return nil, nil, err
+	}
+	r.statusCode = http.StatusSwitchingProtocols
+	_ = conn.SetDeadline(time.Time{})
+	return conn, rw, nil
 }
 
 func Logging() Middleware {

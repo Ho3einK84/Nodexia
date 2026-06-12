@@ -79,7 +79,11 @@
   }
 
   /* ── WebSocket ────────────────────────────────────────── */
-  var wsURL = wsBase + '?ticket=' + encodeURIComponent(ticket);
+  // Build an absolute ws(s):// URL: relative URLs in the WebSocket
+  // constructor are not supported by all browsers.
+  var wsScheme = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+  var wsURL = wsScheme + window.location.host + wsBase +
+    '?ticket=' + encodeURIComponent(ticket);
   var ws = new WebSocket(wsURL);
 
   ws.onopen = function () {
