@@ -91,13 +91,13 @@
       <div class="server-card__actions">
         <a class="btn btn--primary" href="/servers/{{ .ID }}/monitoring" aria-label="Monitoring"><i data-lucide="gauge" class="icon-in-button"></i><span class="btn-label"> Monitoring</span></a>
         <a class="btn btn--secondary" href="/servers/{{ .ID }}/nodes" aria-label="Nodes"><i data-lucide="boxes" class="icon-in-button"></i><span class="btn-label"> Nodes</span></a>
-        <a class="btn btn--secondary" href="/servers/{{ .ID }}/system" aria-label="System"><i data-lucide="info" class="icon-in-button"></i><span class="btn-label"> System</span></a>
+        <a class="btn btn--secondary" href="/servers/{{ .ID }}/terminal" aria-label="Terminal"><i data-lucide="terminal-square" class="icon-in-button"></i><span class="btn-label"> Terminal</span></a>
         <div class="action-menu" data-action-menu>
           <button type="button" class="btn btn--ghost action-menu__toggle" aria-haspopup="true" aria-expanded="false" aria-label="More actions for {{ .Name }}"><i data-lucide="ellipsis-vertical" class="icon-in-button"></i><span class="action-menu__label"> More</span></button>
           <div class="action-menu__panel" role="menu">
             <span class="action-menu__caption"><i data-lucide="calendar"></i> Created {{ .CreatedAt }}</span>
             <div class="action-menu__divider" role="separator"></div>
-            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/terminal"><i data-lucide="terminal-square" class="icon-in-button"></i> Terminal</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/system"><i data-lucide="info" class="icon-in-button"></i> System</a>
             <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
             <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
             <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> Edit</a>
