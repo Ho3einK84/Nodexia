@@ -6,6 +6,12 @@
   <div class="card">
     <div class="card__header">
       <h3 class="card__title">Results — {{ .BulkActionResult.Action }}</h3>
+      <div class="bulk-summary">
+        <span class="bulk-status bulk-status--ok"><i data-lucide="check-circle-2" class="icon-in-button"></i> {{ .BulkActionResult.OKCount }} ok</span>
+        {{ if .BulkActionResult.FailedCount }}<span class="bulk-status bulk-status--failed"><i data-lucide="x-circle" class="icon-in-button"></i> {{ .BulkActionResult.FailedCount }} failed</span>{{ end }}
+        {{ if .BulkActionResult.SkippedCount }}<span class="bulk-status bulk-status--skipped"><i data-lucide="skip-forward" class="icon-in-button"></i> {{ .BulkActionResult.SkippedCount }} skipped</span>{{ end }}
+        <span class="bulk-summary__total">{{ .BulkActionResult.Total }} total</span>
+      </div>
     </div>
 
     {{/* ── Desktop: data table ─────────────────────── */}}

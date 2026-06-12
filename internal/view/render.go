@@ -648,9 +648,13 @@ type AlertChannelFormView struct {
 
 // BulkActionResultView backs the content-bulk-result template.
 type BulkActionResultView struct {
-	Available bool
-	Action    string
-	Results   []BulkServerResultView
+	Available    bool
+	Action       string
+	Results      []BulkServerResultView
+	OKCount      int
+	FailedCount  int
+	SkippedCount int
+	Total        int
 }
 
 // BulkServerResultView is one row in the bulk result table.
@@ -674,6 +678,9 @@ type TerminalTargetView struct {
 	AuthMode           string
 	CredentialStrategy string
 	WSURL              string
+	// InitCommand is an optional command auto-run once the shell connects
+	// (e.g. an interactive command forwarded from the command center).
+	InitCommand string
 }
 
 // TerminalFormView powers the credential-collection form.
@@ -684,7 +691,10 @@ type TerminalFormView struct {
 	PrivateKey                 string
 	KeyPassphrase              string
 	StoredCredentialsAvailable bool
-	Errors                     map[string]string
+	// InitCommand carries the optional auto-run command across the credential
+	// POST so it survives the form round-trip.
+	InitCommand string
+	Errors      map[string]string
 }
 
 type Renderer struct {

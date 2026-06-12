@@ -116,11 +116,7 @@ func (h ActionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.deps.Database != nil {
 		page.MigrationCount = h.deps.Database.MigrationCount()
 	}
-	page.BulkActionResult = view.BulkActionResultView{
-		Available: true,
-		Action:    action,
-		Results:   results,
-	}
+	page.BulkActionResult = summarize(action, results)
 
 	if err := h.deps.Renderer.Render(w, http.StatusOK, page); err != nil {
 		http.Error(w, "render bulk result page", http.StatusInternalServerError)
@@ -253,6 +249,27 @@ func (h ActionHandler) runOneServer(ctx context.Context, id int64, cmd string) v
 		Status:   "ok",
 		ExitCode: exitStr,
 	}
+}
+
+// summarize tallies per-status counts for the result page header.
+func summarize(action string, results []view.BulkServerResultView) view.BulkActionResultView {
+	out := view.BulkActionResultView{
+		Available: true,
+		Action:    action,
+		Results:   results,
+		Total:     len(results),
+	}
+	for _, r := range results {
+		switch r.Status {
+		case "ok":
+			out.OKCount++
+		case "skipped":
+			out.SkippedCount++
+		default:
+			out.FailedCount++
+		}
+	}
+	return out
 }
 
 // mapExitCode converts well-known non-zero exit codes to human messages.
