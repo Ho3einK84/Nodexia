@@ -361,10 +361,21 @@ body {
   margin-bottom: 10px;
 }
 
+/* Checkbox + identity travel together on the left as one unit, so the
+   badges stay pinned to the right (space-between sees only two children). */
+.server-card__lead {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .server-card__identity {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .server-card__name {
@@ -372,12 +383,14 @@ body {
   font-size: 1.05rem;
   font-weight: 600;
   color: #f1f5f9;
+  word-break: break-word;
 }
 
 .server-card__host {
   font-size: 0.85rem;
   color: #64748b;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  word-break: break-all;
 }
 
 .server-card__badges {

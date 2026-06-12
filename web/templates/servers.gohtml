@@ -66,15 +66,17 @@
     {{ range .Servers }}
     <article class="server-card server-card--{{ .AuthMode }}">
       <div class="server-card__top">
-        <div class="server-card__checkbox-wrap">
-          <input type="checkbox" name="server_ids" value="{{ .ID }}"
-            form="bulk-form"
-            class="bulk-server-checkbox"
-            aria-label="Select {{ .Name }}">
-        </div>
-        <div class="server-card__identity">
-          <h4 class="server-card__name"><i data-lucide="server" class="icon-in-button"></i> {{ .Name }}</h4>
-          <span class="server-card__host">{{ .Username }}@{{ .Host }}:{{ .Port }}</span>
+        <div class="server-card__lead">
+          <div class="server-card__checkbox-wrap">
+            <input type="checkbox" name="server_ids" value="{{ .ID }}"
+              form="bulk-form"
+              class="bulk-server-checkbox"
+              aria-label="Select {{ .Name }}">
+          </div>
+          <div class="server-card__identity">
+            <h4 class="server-card__name"><i data-lucide="server" class="icon-in-button"></i> {{ .Name }}</h4>
+            <span class="server-card__host">{{ .Username }}@{{ .Host }}:{{ .Port }}</span>
+          </div>
         </div>
         <div class="server-card__badges">
           <span class="badge badge--auth-{{ .AuthMode }}">{{ .AuthMode }}</span>

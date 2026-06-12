@@ -70,8 +70,19 @@
 .server-card__checkbox-wrap {
   display: flex;
   align-items: flex-start;
-  padding-top: 2px;
+  /* nudge the box down so it lines up with the server name, not above it */
+  padding-top: 4px;
   flex-shrink: 0;
+}
+
+/* Highlight a card while it is selected for a bulk action. */
+.server-card:has(.bulk-server-checkbox:checked) {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.server-card:has(.bulk-server-checkbox:checked)::before {
+  background: var(--accent);
 }
 
 /* ── Bulk result summary ───────────────────────────────── */
