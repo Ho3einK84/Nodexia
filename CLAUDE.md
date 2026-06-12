@@ -82,8 +82,17 @@ Every feature is a `module.Module`:
 
 ## Bulk actions (`internal/module/bulk`)
 
-- Route: `POST /servers/bulk` with `server_ids[]` and `action` form fields.
+- Routes: `POST /servers/bulk` (starts a job, 303-redirects) and
+  `GET /servers/bulk/jobs/{job}` (live result page).
 - Supported actions: `reboot`, `update` (packages), `delete`.
+- **Background jobs**: the POST never executes SSH work inline — it resolves
+  targets, creates an in-memory job (`jobs.go`, 30 min TTL after finish), and
+  redirects to the job page, which auto-refreshes every 2 s while rows are
+  `pending`/`running`. Synchronous execution previously outlived the HTTP
+  write timeout and surfaced as 502s — do not reintroduce it.
+- **Timeouts**: bulk SSH commands use their own generous limits
+  (`bulkRebootTimeout = 2m`, `bulkUpdateTimeout = 20m`), NOT the global SSH
+  command timeout (20 s default — far too short for package upgrades).
 - **Worker pool**: exactly `bulkWorkers = 5` goroutines; bounded by a closed
   buffered channel consumed via `range`.
 - **Sudo preamble** (non-interactive): checks `id -u` first; if not root,
@@ -92,6 +101,19 @@ Every feature is a `module.Module`:
 - Servers without stored credentials are **skipped** (never silently dropped).
 - UI: form always visible (progressive enhancement); `bulk.js` only adds the
   live count label and select-all indeterminate state.
+
+## Commands (`internal/module/commands`)
+
+- Intents on `POST /servers/{id}/commands`: `run`/`stream` (both start a
+  background stream session and 303-redirect to the polling live page —
+  never run a command inside the request), `test` (synchronous SSH
+  connection test, bounded by the connect timeout), and `terminal`
+  (303-redirect to `/servers/{id}/terminal?init=<cmd>`).
+- **Interactive detection** (`interactive.go`): TUI/REPL commands (top, vim,
+  ssh, mysql, `tail -f`, …) are detected server-side and redirected to the
+  terminal even when submitted as `run`/`stream`. The program list is also
+  exposed to the page via `data-interactive-programs` for the client-side
+  hint — keep that single source of truth.
 
 ## Terminal (`internal/module/terminal`)
 
@@ -113,6 +135,11 @@ Every feature is a `module.Module`:
 - **Same-origin check**: `middleware.ValidateSameOriginRequest(r)` is called
   before `cwebsocket.Accept`. The accept options set `InsecureSkipVerify:
   true` only because we already validated origin manually.
+- **Hijack passthrough**: any middleware that wraps `http.ResponseWriter`
+  (currently the logging `statusRecorder`) MUST implement `http.Hijacker`
+  (clearing connection deadlines after hijack), `http.Flusher`, and
+  `Unwrap()` — otherwise the WebSocket upgrade fails (client sees close
+  code 1006) or the connection dies when the server write timeout elapses.
 - **CSP**: `connect-src 'self'` was added to the security middleware to allow
   the WebSocket upgrade from the same origin.
 - **Vendored assets** (served via `GET /static/`, `script-src 'self'`):
