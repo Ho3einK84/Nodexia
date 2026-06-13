@@ -12,9 +12,9 @@
  *     {"type":"error","message":"<string>"}
  *
  * Mobile enhancements (only active under the same 700px breakpoint the rest of
- * the UI uses): a scrollable key toolbar, visualViewport-driven reflow so the
- * grid never gets squished by the soft keyboard, and a persisted font size.
- * Desktop behaviour is unchanged.
+ * the UI uses): a scrollable key toolbar (with Copy/Paste), visualViewport-driven
+ * reflow so the grid never gets squished by the soft keyboard, native long-press
+ * text selection, and a persisted font size. Desktop behaviour is unchanged.
  */
 (function () {
   'use strict';
@@ -247,6 +247,38 @@
     }).catch(function () { /* permission denied / unavailable */ });
   }
 
+  /* ── Clipboard copy ───────────────────────────────────── */
+  function canWriteClipboard() {
+    return !!(navigator.clipboard && navigator.clipboard.writeText);
+  }
+
+  // Prefer the user's native long-press selection over the DOM-rendered rows;
+  // fall back to xterm's own selection (a desktop mouse drag, say).
+  function currentSelection() {
+    var sel = '';
+    try { sel = window.getSelection ? String(window.getSelection()) : ''; } catch (e) { /* ignore */ }
+    if (sel) return sel;
+    try { return term.hasSelection() ? term.getSelection() : ''; } catch (e) { return ''; }
+  }
+
+  function flashCopied(btn) {
+    if (!btn) return;
+    btn.textContent = 'Copied!';
+    btn.classList.add('is-copied');
+    setTimeout(function () {
+      btn.textContent = 'Copy';
+      btn.classList.remove('is-copied');
+    }, 1000);
+  }
+
+  function doCopy(btn) {
+    var text = currentSelection();
+    if (!text || !canWriteClipboard()) return;
+    navigator.clipboard.writeText(text).then(function () {
+      flashCopied(btn);
+    }).catch(function () { /* permission denied / unavailable */ });
+  }
+
   /* ── Mobile key toolbar ───────────────────────────────── */
   var SEQ = {
     esc:   '\x1b',
@@ -271,15 +303,17 @@
     { label: 'Home',  kind: 'seq', key: 'home' },
     { label: 'End',   kind: 'seq', key: 'end' },
     { label: 'Del',   kind: 'seq', key: 'del' },
+    { label: 'Copy',  kind: 'copy' },
     { label: 'Paste', kind: 'paste' },
     { label: 'A−',    kind: 'font', key: 'dec', aria: 'Smaller font' },
     { label: 'A+',    kind: 'font', key: 'inc', aria: 'Larger font' },
   ];
 
-  function handleKey(def) {
+  function handleKey(def, btn) {
     switch (def.kind) {
       case 'seq':   sendInput(SEQ[def.key]); break;
       case 'ctrl':  setCtrl(!ctrlPending); break;
+      case 'copy':  doCopy(btn); break;
       case 'paste': doPaste(); break;
       case 'font':  setFontSize(term.options.fontSize + (def.key === 'inc' ? 1 : -1)); break;
     }
@@ -293,6 +327,7 @@
 
     BUTTONS.forEach(function (def) {
       if (def.kind === 'paste' && !clipboardAvailable()) return;
+      if (def.kind === 'copy' && !canWriteClipboard()) return;
 
       var btn = document.createElement('button');
       btn.type = 'button';
@@ -312,8 +347,10 @@
       btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
       btn.addEventListener('click', function (e) {
         e.preventDefault();
-        handleKey(def);
-        term.focus();
+        handleKey(def, btn);
+        // Copy must keep the user's selection and not pop the keyboard, so it
+        // is the one action that does not pull focus back to the terminal.
+        if (def.kind !== 'copy') term.focus();
       });
 
       bar.appendChild(btn);

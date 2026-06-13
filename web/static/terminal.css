@@ -215,6 +215,13 @@
   color: #03070f;
 }
 
+/* Brief confirmation after the Copy key writes the selection to the clipboard. */
+.terminal-key.is-copied {
+  background: rgba(74, 222, 128, 0.16);
+  border-color: rgba(74, 222, 128, 0.4);
+  color: var(--ok);
+}
+
 /* ── Mobile full-screen layout (toggled by terminal.js) ── */
 /* top/height are set inline from window.visualViewport so the terminal tracks
    the area above the soft keyboard instead of being squished. */
@@ -242,6 +249,19 @@
    gradient behind the full-screen terminal bleed through on mobile. */
 .terminal-card--mobile .terminal-card__header {
   background: #0b1120;
+}
+
+/* Enable native text selection on mobile. xterm renders text as real DOM (its
+   v5 default renderer) but ships `user-select: none` on `.xterm` for desktop
+   mouse-drag selection, which blocks the touch long-press → Copy gesture.
+   Re-enable it (and the iOS callout) on the full-screen terminal only, so the
+   user can long-press to select and copy natively; desktop is untouched. */
+.terminal-card--mobile .xterm,
+.terminal-card--mobile .xterm .xterm-screen,
+.terminal-card--mobile .xterm .xterm-rows {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 /* Lock the page behind the full-screen terminal so the xterm viewport is the
