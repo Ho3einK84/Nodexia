@@ -79,7 +79,7 @@
             {{ if .IsOnline }}
             <span class="server-card__status server-status--online"><span class="status-pulse"></span>Online</span>
             {{ else if .LastSeenAt }}
-            <span class="server-card__status server-status--stale"><span class="status-pulse"></span>Last seen {{ .LastSeenAt }}</span>
+            <span class="server-card__status server-status--stale"><span class="status-pulse"></span>Last checked {{ .LastSeenAt }}</span>
             {{ else }}
             <span class="server-card__status server-status--unknown"><span class="status-pulse"></span>No data</span>
             {{ end }}
