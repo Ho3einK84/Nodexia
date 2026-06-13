@@ -586,6 +586,31 @@
   border-color: rgba(248, 113, 113, 0.4);
 }
 
+/* ── On-demand node credentials (API key + certificate) ──────────────────── */
+
+.node-credentials {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.node-credentials__btn {
+  align-self: flex-start;
+}
+
+.node-credentials__out {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.node-cred-block {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
 .node-secret-block {
   font-size: 0.8rem;
   word-break: break-all;

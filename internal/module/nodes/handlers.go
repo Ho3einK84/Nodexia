@@ -2,6 +2,7 @@ package nodes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -326,6 +327,93 @@ func (h *Handlers) nodeDiscovered(ctx context.Context, serverID int64, nodeType,
 		}
 	}
 	return false
+}
+
+// ── GET /servers/{id}/nodes/credentials ───────────────────────────────────────
+
+// Credentials reads a PasarGuard node's API key and SSL certificate live over
+// SSH (from /opt/<name>/.env and /var/lib/<name>/certs/ssl_cert.pem) and returns
+// them as JSON for the copy-to-clipboard UI. The values are fetched on demand
+// and never persisted — same security stance as the install flow. Read-only, so
+// it's a GET (no CSRF) but still gated by auth + stored credentials.
+func (h *Handlers) Credentials(w http.ResponseWriter, r *http.Request) {
+	serverID, ok := pathID(r)
+	if !ok {
+		writeNodeJSONError(w, http.StatusNotFound, "Server not found.")
+		return
+	}
+	server, err := h.serverRepo.GetByID(r.Context(), serverID)
+	if err != nil {
+		writeNodeJSONError(w, http.StatusNotFound, "Server not found.")
+		return
+	}
+	if !servers.HasStoredCredentials(server) {
+		writeNodeJSONError(w, http.StatusBadRequest, "Stored SSH credentials are required to read node credentials.")
+		return
+	}
+
+	nodeType := strings.TrimSpace(r.URL.Query().Get("type"))
+	nodeName := strings.TrimSpace(r.URL.Query().Get("name"))
+	if nodeType != pasarguardType {
+		writeNodeJSONError(w, http.StatusBadRequest, "Credentials are only available for PasarGuard nodes.")
+		return
+	}
+	if err := ValidateNodeName(nodeName); err != nil {
+		writeNodeJSONError(w, http.StatusBadRequest, "Invalid node name.")
+		return
+	}
+	// Only read credentials for a node the latest discovery sweep actually found.
+	if !h.nodeDiscovered(r.Context(), server.ID, nodeType, nodeName) {
+		writeNodeJSONError(w, http.StatusNotFound, "That node is not part of the latest discovery sweep. Run discovery again first.")
+		return
+	}
+
+	command, err := PasarGuardProvider{}.RegistrationInfoCommand(nodeName)
+	if err != nil {
+		writeNodeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	password, privateKey, keyPassphrase := servers.ResolveCredentials(server)
+	ctx, cancel := context.WithTimeout(r.Context(), installInfoTimeout)
+	defer cancel()
+	result, runErr := h.deps.SSH.RunCommand(ctx, sshclient.CommandRequest{
+		ConnectionRequest: sshclient.ConnectionRequest{
+			Host:           server.Host,
+			Port:           server.Port,
+			Username:       server.Username,
+			AuthMode:       server.AuthMode,
+			Password:       password,
+			PrivateKeyPEM:  privateKey,
+			KeyPassphrase:  keyPassphrase,
+			ConnectTimeout: h.deps.Config.SSH.ConnectTimeout,
+		},
+		Command:        command,
+		CommandTimeout: installInfoTimeout,
+	})
+	if runErr != nil {
+		writeNodeJSONError(w, http.StatusBadGateway, "Could not read node credentials over SSH: "+runErr.Error())
+		return
+	}
+
+	info, hasAPIKey := ParseRegistrationInfo(nodeName, result.Stdout)
+	writeNodeJSON(w, http.StatusOK, map[string]any{
+		"node_name":   nodeName,
+		"api_key":     info.APIKey,
+		"has_api_key": hasAPIKey,
+		"certificate": info.Certificate,
+		"has_cert":    info.Certificate != "",
+	})
+}
+
+func writeNodeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeNodeJSONError(w http.ResponseWriter, status int, msg string) {
+	writeNodeJSON(w, status, map[string]string{"error": msg})
 }
 
 // ── POST /servers/{id}/nodes/install ──────────────────────────────────────────

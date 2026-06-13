@@ -258,6 +258,114 @@
       });
     });
   }
+  /* ── On-demand PasarGuard node credentials (API key + certificate) ────────
+     Fetches the secrets live over SSH and renders masked, copyable blocks that
+     reuse initSecrets (masking) and initCopyTargets (copy). Nothing is stored. */
+  function initNodeCredentials() {
+    document.querySelectorAll('[data-node-credentials]').forEach(function (btn) {
+      if (btn.dataset.credReady === '1') return;
+      btn.dataset.credReady = '1';
+      var out = btn.parentNode.querySelector('.node-credentials__out');
+      var showLabel = '<i data-lucide="key-round" class="icon-in-button"></i> Show API key &amp; certificate';
+      btn.addEventListener('click', function () {
+        if (out && !out.hidden) {
+          out.hidden = true;
+          out.innerHTML = '';
+          btn.innerHTML = showLabel;
+          renderIcons();
+          return;
+        }
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader"></i> Loading…';
+        renderIcons();
+        fetch(btn.getAttribute('data-url'), { headers: { Accept: 'application/json' } })
+          .then(function (resp) {
+            return resp.json().then(function (data) { return { ok: resp.ok, data: data }; });
+          })
+          .then(function (res) {
+            btn.disabled = false;
+            if (!res.ok) {
+              showCredError(out, btn, showLabel, (res.data && res.data.error) || 'Failed to load credentials.');
+              return;
+            }
+            renderNodeCredentials(out, btn, res.data);
+          })
+          .catch(function () {
+            btn.disabled = false;
+            showCredError(out, btn, showLabel, 'Failed to load credentials.');
+          });
+      });
+    });
+  }
+
+  function showCredError(out, btn, showLabel, message) {
+    if (out) {
+      out.hidden = false;
+      out.innerHTML = '';
+      var p = document.createElement('p');
+      p.className = 'node-actions-note';
+      p.textContent = message;
+      out.appendChild(p);
+    }
+    btn.innerHTML = showLabel;
+    renderIcons();
+  }
+
+  function renderNodeCredentials(out, btn, data) {
+    if (!out) return;
+    out.innerHTML = '';
+    out.hidden = false;
+    var name = String(data.node_name || 'node').replace(/[^a-zA-Z0-9._-]/g, '') || 'node';
+
+    if (data.has_api_key) {
+      out.appendChild(credentialBlock('key-round', 'API key', 'cred-key-' + name, data.api_key, true));
+    } else {
+      var miss = document.createElement('p');
+      miss.className = 'node-actions-note';
+      miss.textContent = 'API key not found in /opt/' + name + '/.env.';
+      out.appendChild(miss);
+    }
+    if (data.has_cert) {
+      out.appendChild(credentialBlock('shield-check', 'SSL certificate', 'cred-cert-' + name, data.certificate, false));
+    }
+
+    // Wire masking + copy on the freshly inserted blocks.
+    initSecrets();
+    initCopyTargets();
+    btn.innerHTML = '<i data-lucide="eye-off" class="icon-in-button"></i> Hide';
+    renderIcons();
+  }
+
+  function credentialBlock(icon, label, id, value, mask) {
+    var section = document.createElement('div');
+    section.className = 'node-section node-cred-block';
+
+    var head = document.createElement('div');
+    head.className = 'node-section__head';
+    var lab = document.createElement('span');
+    lab.className = 'node-section__label';
+    lab.innerHTML = '<i data-lucide="' + icon + '"></i> ' + label;
+    var copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'btn btn--ghost btn--sm copy-inline';
+    copyBtn.setAttribute('data-copy-target', '#' + id);
+    copyBtn.setAttribute('aria-label', 'Copy ' + label);
+    copyBtn.innerHTML = '<i data-lucide="copy"></i> Copy';
+    head.appendChild(lab);
+    head.appendChild(copyBtn);
+
+    var pre = document.createElement('pre');
+    pre.id = id;
+    pre.className = 'output-block node-secret-block' + (mask ? '' : ' scrollable');
+    pre.setAttribute('data-no-auto-copy', '');
+    if (mask) pre.setAttribute('data-secret', '');
+    pre.textContent = value; // full raw value — never truncated
+
+    section.appendChild(head);
+    section.appendChild(pre);
+    return section;
+  }
+
   function copyText(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       return navigator.clipboard.writeText(text).then(function () { return true; },
@@ -660,6 +768,7 @@
     initSecrets();
     initCopyButtons();
     initCopyTargets();
+    initNodeCredentials();
     initProgressBars();
     initReveal();
     initAutoRefresh();

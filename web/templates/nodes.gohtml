@@ -152,6 +152,22 @@
       </div>
       {{ end }}
 
+      {{ if eq .NodeType "pasarguard-node" }}
+      <div class="node-section node-credentials">
+        <span class="node-section__label"><i data-lucide="key-round"></i> Credentials</span>
+        {{ if .ActionsEnabled }}
+        <button type="button" class="btn btn--ghost btn--sm node-credentials__btn"
+                data-node-credentials
+                data-url="/servers/{{ $.NodeTarget.ID }}/nodes/credentials?type={{ .NodeType }}&amp;name={{ .Name }}">
+          <i data-lucide="key-round" class="icon-in-button"></i> Show API key &amp; certificate
+        </button>
+        <div class="node-credentials__out" hidden></div>
+        {{ else }}
+        <p class="node-actions-note"><i data-lucide="key-round" class="icon-in-button"></i> Store SSH credentials to view this node's API key and certificate.</p>
+        {{ end }}
+      </div>
+      {{ end }}
+
       {{ if .ActivePorts }}
       {{ $apiPort := .APIPort }}{{ $servicePort := .ServicePort }}
       <div class="node-section">
