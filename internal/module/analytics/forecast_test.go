@@ -158,6 +158,31 @@ func TestForecastServiceSmokeTest(t *testing.T) {
 	}
 }
 
+func TestForecastUsesDownloadOnly(t *testing.T) {
+	svc := NewForecastService()
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	const rx = 3 * 1024 * 1024 * 1024 // 3 GiB/day download
+
+	// Same RX every day, but wildly different TX/Total between the two sets.
+	low := make([]TrafficDay, 30)
+	high := make([]TrafficDay, 30)
+	for i := range low {
+		label := base.AddDate(0, 0, i).Format("2006-01-02")
+		low[i] = TrafficDay{Label: label, RX: rx, TX: 0, Total: rx}
+		high[i] = TrafficDay{Label: label, RX: rx, TX: 99 * rx, Total: 100 * rx}
+	}
+
+	lo := svc.Compute(low, nil)
+	hi := svc.Compute(high, nil)
+	if lo.ThisMonth.PredictedBytes != hi.ThisMonth.PredictedBytes {
+		t.Errorf("forecast must depend only on download (RX): low=%d high=%d",
+			lo.ThisMonth.PredictedBytes, hi.ThisMonth.PredictedBytes)
+	}
+	if lo.ThisMonth.PredictedBytes <= 0 {
+		t.Errorf("expected positive download forecast, got %d", lo.ThisMonth.PredictedBytes)
+	}
+}
+
 func TestRollupHelpers(t *testing.T) {
 	t.Run("truncateToHour", func(t *testing.T) {
 		ts := time.Date(2026, 3, 15, 14, 35, 22, 0, time.UTC)

@@ -389,7 +389,7 @@
       : '';
     return `
       <div class="forecast-card">
-        <div class="forecast-card__label">${label}</div>
+        <div class="forecast-card__label">${label} <span class="forecast-card__scope">↓ download</span></div>
         <div class="forecast-card__current">${period.current_human}</div>
         <div class="forecast-card__predicted">
           Predicted end: <strong>${period.predicted_human}</strong>

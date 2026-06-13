@@ -166,14 +166,15 @@ func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth) Fore
 		}
 	}
 
-	// Sort days chronologically and extract byte totals.
+	// Sort days chronologically and extract download (RX) bytes. The forecast is
+	// based on DOWNLOAD traffic only — not the combined RX+TX total.
 	sorted := make([]TrafficDay, len(days))
 	copy(sorted, days)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Label < sorted[j].Label })
 
 	history := make([]int64, len(sorted))
 	for i, d := range sorted {
-		history[i] = d.Total
+		history[i] = d.RX
 	}
 
 	// Select provider: use WeightedMA when we have ≥14 days, else SimpleMA.
@@ -231,11 +232,13 @@ func (s *ForecastService) selectProvider(history []int64) ForecastProvider {
 	return s.providers[2] // LinearTrend (handles tiny datasets)
 }
 
+// currentDayBytes and sumDaysSince both sum DOWNLOAD (RX) bytes only, to match
+// the download-only forecast history.
 func currentDayBytes(days []TrafficDay, now time.Time) int64 {
 	todayLabel := now.Format("2006-01-02")
 	for _, d := range days {
 		if d.Label == todayLabel {
-			return d.Total
+			return d.RX
 		}
 	}
 	return 0
@@ -246,7 +249,7 @@ func sumDaysSince(days []TrafficDay, since time.Time) int64 {
 	var total int64
 	for _, d := range days {
 		if d.Label >= sinceLabel {
-			total += d.Total
+			total += d.RX
 		}
 	}
 	return total

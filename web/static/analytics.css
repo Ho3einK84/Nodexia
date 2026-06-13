@@ -342,6 +342,31 @@
   margin: 36px 0 20px;
 }
 
+.forecast-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent-bright);
+  vertical-align: middle;
+  /* The title clips a gradient to transparent text; opt this badge back in. */
+  -webkit-text-fill-color: var(--accent-bright);
+}
+
+.forecast-scope svg {
+  width: 14px;
+  height: 14px;
+}
+
+.forecast-card__scope {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--accent-bright);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .forecast-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
