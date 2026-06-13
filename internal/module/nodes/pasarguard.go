@@ -368,14 +368,29 @@ func (p PasarGuardProvider) ActionCommand(nodeName, actionKey string) (string, t
 const pasarguardInstallScriptTimeout = "600"
 
 // InstallCommand downloads and runs the official PasarGuard install script for
-// a new instance named nodeName, answering the port prompt with cfg.ServicePort.
+// a new instance named nodeName, feeding cfg.ServicePort to the port prompt.
 //
 // We do NOT pass --yes to the script: --yes locks the port to 62050 regardless
 // of what is free and fails with "Port 62050 is already in use" when another
-// node instance already occupies that port. Without --yes the script reads from
-// stdin; we pipe the service port then empty lines so the remaining prompts
-// (protocol, API key) fall back to their defaults — ConfigureCommand overwrites
-// those values after the install completes anyway.
+// node instance already occupies that port. Without --yes the script reads its
+// prompts from stdin, and because the script runs under `set -e`, a `read` that
+// hits EOF returns non-zero and aborts the whole install with no error message.
+// So stdin MUST answer every prompt, in the script's exact order, each newline
+// terminated — otherwise the install dies silently right after the prompt we
+// stop short of (historically: right after "No API Key provided…").
+//
+// The official install_command / install_node prompt order (AUTO_CONFIRM off):
+//  1. "use your own public certificate?"  -> "" (default: self-signed cert)
+//  2. "enter your API Key"                -> "" (default: auto-generated UUID)
+//  3. "use REST protocol instead?"        -> "" (default: gRPC)
+//  4. "enter the SERVICE_PORT"            -> cfg.ServicePort
+//  5. "install the systemd service?"      -> "n" (Nodexia drives the node via
+//     the pg-node CLI / docker-compose, never systemd; answering "n" also
+//     avoids the service's own API_PORT prompt and the require_systemd exit on
+//     hosts without systemd)
+//
+// Protocol, API key and API port are deliberately left at their script defaults
+// here and overwritten afterwards by ConfigureCommand patching /opt/<name>/.env.
 func (PasarGuardProvider) InstallCommand(nodeName string, cfg InstallConfig) (string, error) {
 	if err := ValidateNodeName(nodeName); err != nil {
 		return "", err
@@ -391,8 +406,14 @@ func (PasarGuardProvider) InstallCommand(nodeName string, cfg InstallConfig) (st
 		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + pasarguardScriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`else echo "curl or wget is required to install" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
 		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + pasarguardInstallScriptTimeout + `"; fi; ` +
-		`printf "` + servicePort + `\n\n\n" | $TMO $SUDO bash "$SCRIPT" install --name ` + nodeName + `; ` +
-		`STATUS=$?; rm -f "$SCRIPT"; exit $STATUS'`
+		`printf "\n\n\n` + servicePort + `\nn\n" | $TMO $SUDO bash "$SCRIPT" install --name ` + nodeName + `; ` +
+		`STATUS=$?; rm -f "$SCRIPT"; ` +
+		// The script runs under `set -e` and dies without a message on the
+		// first failed command; emit the exact exit code so the stream never
+		// ends silently. 124 is GNU timeout cutting off the post-install log
+		// tail and is treated as success by the runner, so it is not flagged.
+		`if [ "$STATUS" -ne 0 ] && [ "$STATUS" -ne 124 ]; then echo "[pg-node install script exited with status $STATUS]" >&2; fi; ` +
+		`exit $STATUS'`
 	return command, nil
 }
 
