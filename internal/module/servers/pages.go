@@ -228,14 +228,22 @@ func pageWindow(current, total int) []int {
 	return append(nums, total)
 }
 
-// serverLastSeenMap returns a map of server_id → last snapshot time by querying
-// system_snapshots. Returns nil when the database is unavailable or the query fails.
+// serverLastSeenMap returns a map of server_id → last snapshot time by joining
+// system_snapshots against a per-server MAX(id) subquery so that created_at is
+// a regular column (not a GROUP-BY aggregate), which the SQLite driver returns
+// as a typed time.Time rather than a raw string whose format may vary.
 func serverLastSeenMap(ctx context.Context, deps module.Dependencies) map[int64]time.Time {
 	if deps.Database == nil || deps.Database.SQL == nil {
 		return nil
 	}
 	rows, err := deps.Database.SQL.QueryContext(ctx,
-		`SELECT server_id, MAX(created_at) FROM system_snapshots GROUP BY server_id`)
+		`SELECT ss.server_id, ss.created_at
+		 FROM system_snapshots ss
+		 JOIN (
+		   SELECT server_id, MAX(id) AS latest_id
+		   FROM system_snapshots
+		   GROUP BY server_id
+		 ) latest ON latest.latest_id = ss.id`)
 	if err != nil {
 		return nil
 	}
@@ -254,26 +262,31 @@ func serverLastSeenMap(ctx context.Context, deps module.Dependencies) map[int64]
 	return result
 }
 
-// parseSnapshotTime decodes the flexible datetime values SQLite returns for
-// aggregated datetime columns (string, []byte, or time.Time).
+// parseSnapshotTime decodes the flexible datetime values returned by the SQLite
+// driver for the created_at column: time.Time, RFC3339(Nano), space-separated
+// datetime with optional timezone, and plain "YYYY-MM-DD HH:MM:SS".
 func parseSnapshotTime(value any) time.Time {
-	var s string
 	switch v := value.(type) {
 	case time.Time:
 		return v.UTC()
 	case string:
-		s = strings.TrimSpace(v)
+		return parseSnapshotTimeString(strings.TrimSpace(v))
 	case []byte:
-		s = strings.TrimSpace(string(v))
+		return parseSnapshotTimeString(strings.TrimSpace(string(v)))
 	default:
 		return time.Time{}
 	}
+}
+
+func parseSnapshotTimeString(s string) time.Time {
 	if s == "" {
 		return time.Time{}
 	}
 	for _, layout := range []string{
 		time.RFC3339Nano,
+		time.RFC3339,
 		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05Z07:00",
 		"2006-01-02 15:04:05.999999999",
 		"2006-01-02 15:04:05",
 	} {
