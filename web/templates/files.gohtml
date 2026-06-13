@@ -74,8 +74,6 @@
 
       {{ with index .FileForm.Errors "intent" }}<small class="field-error">{{ . }}</small>{{ end }}
 
-      <button type="submit" name="intent" value="download" class="btn btn--ghost" id="file-download-btn" hidden aria-hidden="true">Download</button>
-
     </form>
 
     {{ if .FileDownload.Available }}
@@ -90,21 +88,50 @@
     </div>
     {{ end }}
 
-    <div class="file-listing" id="file-listing">
+    <div class="file-listing" id="file-listing" data-current-path="{{ .FileListing.Path }}">
       {{ if .FileListing.Available }}
+        <div class="file-toolbar">
+          <div class="file-search">
+            <i data-lucide="search" class="file-search__icon"></i>
+            <input type="text" id="file-filter" placeholder="Filter by name…" autocomplete="off" spellcheck="false" aria-label="Filter files by name">
+          </div>
+          <div class="file-toolbar__group">
+            <label class="file-sort">
+              <span class="file-sort__label">Sort</span>
+              <select id="file-sort" aria-label="Sort files by">
+                <option value="name">Name</option>
+                <option value="size">Size</option>
+                <option value="date">Modified</option>
+              </select>
+            </label>
+            <button type="button" class="file-sort__dir" id="file-sort-dir" data-dir="asc" aria-label="Toggle sort direction" title="Ascending">
+              <i data-lucide="arrow-up-narrow-wide"></i>
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm" id="file-mkdir-btn">
+              <i data-lucide="folder-plus" class="icon-in-button"></i> New folder
+            </button>
+            <button type="button" class="btn btn--secondary btn--sm" id="file-upload-btn">
+              <i data-lucide="upload" class="icon-in-button"></i> Upload
+            </button>
+            <input type="file" id="file-upload-input" multiple hidden aria-hidden="true">
+          </div>
+        </div>
+
+        <div class="file-uploads" id="file-uploads" hidden aria-live="polite"></div>
+
         {{ if or .FileListing.Entries .FileListing.Parent }}
         <div class="file-table-wrap">
-          <div class="file-table">
+          <div class="file-table" id="file-table">
             <div class="file-table__head">
-              <span>Name</span>
+              <span class="file-th" data-sort-key="name">Name</span>
               <span>Mode</span>
-              <span>Size</span>
-              <span>Modified</span>
+              <span class="file-th" data-sort-key="size">Size</span>
+              <span class="file-th" data-sort-key="date">Modified</span>
               <span></span>
             </div>
 
             {{ if .FileListing.Parent }}
-            <div class="file-row file-row--dir" data-nav-path="{{ .FileListing.Parent }}" title="Go up to {{ .FileListing.Parent }}">
+            <div class="file-row file-row--dir file-row--parent" data-nav-path="{{ .FileListing.Parent }}" title="Go up to {{ .FileListing.Parent }}">
               <div class="file-row__name">
                 <i data-lucide="arrow-up" class="file-row__icon"></i>
                 <span class="file-row__name-text">..</span>
@@ -118,7 +145,9 @@
 
             {{ range .FileListing.Entries }}
             {{ if eq .Kind "directory" }}
-            <div class="file-row file-row--dir" data-nav-path="{{ .Path }}" title="{{ .Path }}">
+            <div class="file-row file-row--dir" data-nav-path="{{ .Path }}" title="{{ .Path }}"
+              data-entry-kind="directory" data-entry-name="{{ .Name }}" data-entry-path="{{ .Path }}"
+              data-entry-size="{{ .SizeBytes }}" data-entry-mtime="{{ .ModUnix }}">
               <div class="file-row__name">
                 <i data-lucide="folder" class="file-row__icon"></i>
                 <span class="file-row__name-text">{{ .Name }}</span>
@@ -126,10 +155,17 @@
               <span class="file-row__mode">{{ .Mode }}</span>
               <span class="file-row__size">—</span>
               <span class="file-row__date">{{ .ModifiedAt }}</span>
-              <div class="file-row__actions"></div>
+              <div class="file-row__actions">
+                <button type="button" class="file-row__menu-btn" data-menu-trigger
+                  aria-label="Actions for {{ .Name }}" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="more-vertical"></i>
+                </button>
+              </div>
             </div>
             {{ else }}
-            <div class="file-row file-row--file" data-file-path="{{ .Path }}">
+            <div class="file-row file-row--file" data-file-path="{{ .Path }}"
+              data-entry-kind="file" data-entry-name="{{ .Name }}" data-entry-path="{{ .Path }}"
+              data-entry-size="{{ .SizeBytes }}" data-entry-mtime="{{ .ModUnix }}">
               <div class="file-row__name">
                 <i data-lucide="{{ if hasSuffix .Name ".log" }}scroll-text{{ else if hasSuffix .Name ".conf" }}settings{{ else if hasSuffix .Name ".sh" }}terminal{{ else if hasSuffix .Name ".json" }}braces{{ else if hasSuffix .Name ".yaml" }}file-code{{ else if hasSuffix .Name ".yml" }}file-code{{ else if or (hasSuffix .Name ".gz") (hasSuffix .Name ".zip") (hasSuffix .Name ".tar") }}archive{{ else }}file{{ end }}" class="file-row__icon"></i>
                 <span class="file-row__name-text" title="{{ .Name }}">{{ .Name }}</span>
@@ -138,14 +174,16 @@
               <span class="file-row__size">{{ .Size }}</span>
               <span class="file-row__date">{{ .ModifiedAt }}</span>
               <div class="file-row__actions">
-                <button type="button" class="file-row__download" data-download-path="{{ .Path }}" title="Download {{ .Name }}">
-                  <i data-lucide="download"></i> Download
+                <button type="button" class="file-row__menu-btn" data-menu-trigger
+                  aria-label="Actions for {{ .Name }}" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="more-vertical"></i>
                 </button>
               </div>
             </div>
             {{ end }}
             {{ end }}
 
+            <p class="file-no-match" id="file-no-match" hidden>No files match your filter.</p>
           </div>
         </div>
         {{ else }}

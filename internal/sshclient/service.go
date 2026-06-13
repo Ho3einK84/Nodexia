@@ -370,6 +370,101 @@ func (s *Service) OpenFile(ctx context.Context, req ConnectionRequest, remotePat
 	}, nil
 }
 
+// UploadFile streams content into remotePath over SFTP, creating or truncating
+// the destination. It refuses to overwrite an existing directory and returns
+// the number of bytes written. The copy is bounded by ctx cancellation via the
+// caller-supplied reader (e.g. an aborted HTTP request body unblocks the read).
+func (s *Service) UploadFile(ctx context.Context, req ConnectionRequest, remotePath string, content io.Reader) (int64, error) {
+	_, sftpClient, cleanup, err := s.openSFTP(ctx, req)
+	if err != nil {
+		return 0, err
+	}
+	defer cleanup()
+
+	if info, statErr := sftpClient.Stat(remotePath); statErr == nil && info.IsDir() {
+		return 0, fmt.Errorf("sshclient: %s is a directory", remotePath)
+	}
+
+	remoteFile, err := sftpClient.Create(remotePath)
+	if err != nil {
+		return 0, fmt.Errorf("sshclient: create remote file %s: %w", remotePath, err)
+	}
+
+	written, copyErr := io.Copy(remoteFile, content)
+	closeErr := remoteFile.Close()
+	if copyErr != nil {
+		return written, fmt.Errorf("sshclient: write remote file %s: %w", remotePath, copyErr)
+	}
+	if closeErr != nil {
+		return written, fmt.Errorf("sshclient: finalize remote file %s: %w", remotePath, closeErr)
+	}
+	return written, nil
+}
+
+// RemovePath deletes a file or directory over SFTP. Directories are removed
+// recursively when recursive is true, otherwise only empty directories succeed.
+func (s *Service) RemovePath(ctx context.Context, req ConnectionRequest, remotePath string, recursive bool) error {
+	_, sftpClient, cleanup, err := s.openSFTP(ctx, req)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	info, err := sftpClient.Stat(remotePath)
+	if err != nil {
+		return fmt.Errorf("sshclient: stat %s: %w", remotePath, err)
+	}
+
+	switch {
+	case info.IsDir() && recursive:
+		err = sftpClient.RemoveAll(remotePath)
+	case info.IsDir():
+		err = sftpClient.RemoveDirectory(remotePath)
+	default:
+		err = sftpClient.Remove(remotePath)
+	}
+	if err != nil {
+		return fmt.Errorf("sshclient: remove %s: %w", remotePath, err)
+	}
+	return nil
+}
+
+// RenamePath renames or moves oldPath to newPath over SFTP. It refuses to
+// clobber an existing destination so renames never silently overwrite data.
+func (s *Service) RenamePath(ctx context.Context, req ConnectionRequest, oldPath, newPath string) error {
+	_, sftpClient, cleanup, err := s.openSFTP(ctx, req)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	if _, err := sftpClient.Stat(newPath); err == nil {
+		return fmt.Errorf("sshclient: %s already exists", newPath)
+	}
+	if err := sftpClient.Rename(oldPath, newPath); err != nil {
+		return fmt.Errorf("sshclient: rename %s to %s: %w", oldPath, newPath, err)
+	}
+	return nil
+}
+
+// MakeDirectory creates a single directory over SFTP. It refuses to act when a
+// file or directory already exists at the target.
+func (s *Service) MakeDirectory(ctx context.Context, req ConnectionRequest, remotePath string) error {
+	_, sftpClient, cleanup, err := s.openSFTP(ctx, req)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	if _, err := sftpClient.Stat(remotePath); err == nil {
+		return fmt.Errorf("sshclient: %s already exists", remotePath)
+	}
+	if err := sftpClient.Mkdir(remotePath); err != nil {
+		return fmt.Errorf("sshclient: create directory %s: %w", remotePath, err)
+	}
+	return nil
+}
+
 // Algorithm preferences pinned to a modern, OpenSSH-compatible set. We set
 // these explicitly instead of relying on x/crypto/ssh defaults: the defaults
 // lead with mlkem768x25519-sha256, and offering a post-quantum key exchange

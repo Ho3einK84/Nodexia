@@ -404,13 +404,19 @@ func listingViewFromResult(listing sshclient.DirectoryListing) view.FileListingV
 		if entry.IsDir {
 			kind = "directory"
 		}
+		modUnix := int64(0)
+		if !entry.ModifiedAt.IsZero() {
+			modUnix = entry.ModifiedAt.Unix()
+		}
 		items = append(items, view.FileEntryView{
 			Name:       entry.Name,
 			Path:       entry.Path,
 			Kind:       kind,
 			Size:       formatSize(entry.Size),
+			SizeBytes:  entry.Size,
 			Mode:       entry.Mode,
 			ModifiedAt: formatTimestamp(entry.ModifiedAt),
+			ModUnix:    modUnix,
 		})
 	}
 

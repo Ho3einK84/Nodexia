@@ -34,4 +34,5 @@ func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
 	mux.Handle("GET /servers/{id}/files", NewPageHandler(deps, serverRepo))
 	mux.Handle("POST /servers/{id}/files", NewActionHandler(deps, serverRepo))
+	mux.Handle("POST /servers/{id}/files/ops", NewOpsHandler(deps, serverRepo))
 }

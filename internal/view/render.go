@@ -277,8 +277,10 @@ type FileEntryView struct {
 	Path       string
 	Kind       string
 	Size       string
+	SizeBytes  int64
 	Mode       string
 	ModifiedAt string
+	ModUnix    int64
 }
 
 type FileListingView struct {
