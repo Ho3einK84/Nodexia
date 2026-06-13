@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Ho3einK84/Nodexia/internal/ansi"
 	"github.com/Ho3einK84/Nodexia/internal/sshclient"
 )
 
@@ -51,6 +52,7 @@ type installJob struct {
 }
 
 func (j *installJob) appendOutput(chunk string) {
+	chunk = ansi.Strip(chunk)
 	if chunk == "" {
 		return
 	}

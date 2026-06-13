@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"sync"
 	"time"
+
+	"github.com/Ho3einK84/Nodexia/internal/ansi"
 )
 
 const (
@@ -78,6 +80,7 @@ func (s *Store) Create(serverID int64, command string) Snapshot {
 }
 
 func (s *Store) AppendStdout(id string, chunk string) {
+	chunk = ansi.Strip(chunk)
 	if chunk == "" {
 		return
 	}
@@ -87,6 +90,7 @@ func (s *Store) AppendStdout(id string, chunk string) {
 }
 
 func (s *Store) AppendStderr(id string, chunk string) {
+	chunk = ansi.Strip(chunk)
 	if chunk == "" {
 		return
 	}
