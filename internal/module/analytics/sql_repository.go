@@ -302,10 +302,12 @@ func (r SQLRepository) ListServerMetricSummaries(ctx context.Context, limit int)
 	return summaries, rows.Err()
 }
 
+// ListServerTrafficSummaries returns the current-month RX/TX/total for every
+// server with vnstat data. It does NOT apply a SQL LIMIT: the "top N" ordering
+// is by monthly total, which lives inside the JSON blob and can't be sorted in
+// SQL, so the caller sorts and truncates. (The previous LIMIT picked an
+// arbitrary N rows before sorting, so the real top consumers could be dropped.)
 func (r SQLRepository) ListServerTrafficSummaries(ctx context.Context, limit int) ([]ServerTrafficSummary, error) {
-	if limit <= 0 {
-		limit = 10
-	}
 	rows, err := r.conn.QueryContext(ctx,
 		`SELECT vs.server_id, s.name, vs.monthly_rows_json
 		 FROM vnstat_snapshots vs
@@ -315,8 +317,7 @@ func (r SQLRepository) ListServerTrafficSummaries(ctx context.Context, limit int
 		   FROM vnstat_snapshots
 		   WHERE available = 1
 		   GROUP BY server_id
-		 ) latest ON latest.latest_id = vs.id
-		 LIMIT ?`, limit,
+		 ) latest ON latest.latest_id = vs.id`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("analytics: list server traffic summaries: %w", err)
@@ -341,9 +342,10 @@ func (r SQLRepository) ListServerTrafficSummaries(ctx context.Context, limit int
 		var monthlyRows []rawRow
 		_ = json.Unmarshal([]byte(monthlyJSON), &monthlyRows)
 
-		var monthBytes int64
+		var rx, tx, monthBytes int64
 		for _, m := range monthlyRows {
 			if m.Label == currentMonth {
+				rx, tx = m.RX, m.TX
 				monthBytes = m.Total
 				if monthBytes == 0 {
 					monthBytes = m.RX + m.TX
@@ -354,6 +356,8 @@ func (r SQLRepository) ListServerTrafficSummaries(ctx context.Context, limit int
 		summaries = append(summaries, ServerTrafficSummary{
 			ServerID:   serverID,
 			ServerName: serverName,
+			MonthRX:    rx,
+			MonthTX:    tx,
 			MonthBytes: monthBytes,
 			MonthLabel: currentMonth,
 		})

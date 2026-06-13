@@ -588,6 +588,85 @@
   color: var(--ok);
   font-size: 0.75rem;
   font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Download = blue, Upload = purple — matches the Network Traffic chart legend. */
+.traffic-badge--dl {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-bright);
+}
+
+.traffic-badge--ul {
+  background: rgba(139, 92, 246, 0.15);
+  color: #c4b5fd;
+}
+
+.th-icon {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+}
+
+.th-icon--dl { color: var(--accent-bright); }
+.th-icon--ul { color: #c4b5fd; }
+
+/* ── Per-server traffic summary (download / upload / total) ───────────────── */
+
+.traffic-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 768px) {
+  .traffic-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+.traffic-summary__card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  backdrop-filter: blur(8px);
+}
+
+.traffic-summary__card--dl { border-left-color: #3b82f6; }
+.traffic-summary__card--ul { border-left-color: #8b5cf6; }
+.traffic-summary__card--total { border-left-color: var(--ok); }
+
+.traffic-summary__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.traffic-summary__label svg {
+  width: 14px;
+  height: 14px;
+}
+
+.traffic-summary__value {
+  margin-top: 8px;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.traffic-summary__sub {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
 }
 
 /* ── Card empty state (used in global analytics) ─────────────────────────── */

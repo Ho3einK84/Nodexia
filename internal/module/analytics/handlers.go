@@ -19,10 +19,10 @@ import (
 // ── Chart data types ──────────────────────────────────────────────────────────
 
 type ChartSeries struct {
-	Label  string    `json:"label"`
-	Color  string    `json:"color"`
-	Fill   string    `json:"fill,omitempty"`
-	Data   []float64 `json:"data"`
+	Label string    `json:"label"`
+	Color string    `json:"color"`
+	Fill  string    `json:"fill,omitempty"`
+	Data  []float64 `json:"data"`
 }
 
 type ChartDataResponse struct {
@@ -99,12 +99,42 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Tags:               server.Tags,
 		CredentialStrategy: server.CredentialStrategy,
 	}
+	page.AnalyticsTrafficMonth = h.currentMonthTraffic(r, server.ID)
 	page.PageStyles = []string{"/static/analytics.css"}
 	page.PageScripts = []string{"/static/analytics.js"}
 
 	if err := h.deps.Renderer.Render(w, http.StatusOK, page); err != nil {
 		http.Error(w, "render analytics page", http.StatusInternalServerError)
 	}
+}
+
+// currentMonthTraffic reads the server's latest vnstat snapshot and pulls out
+// the current month's download/upload/total. Returns HasData=false (rendered as
+// an empty state) on any error or when the current month is missing, so the
+// page never fails just because traffic hasn't been collected yet.
+func (h PageHandler) currentMonthTraffic(r *http.Request, serverID int64) view.AnalyticsTrafficSummaryView {
+	currentMonth := time.Now().UTC().Format("2006-01")
+	summary := view.AnalyticsTrafficSummaryView{MonthLabel: currentMonth}
+
+	_, months, err := h.repo.GetLatestTrafficForServer(r.Context(), serverID)
+	if err != nil {
+		return summary
+	}
+	for _, m := range months {
+		if m.Label != currentMonth {
+			continue
+		}
+		total := m.Total
+		if total == 0 {
+			total = m.RX + m.TX
+		}
+		summary.HasData = true
+		summary.Download = formatBytes(m.RX)
+		summary.Upload = formatBytes(m.TX)
+		summary.Total = formatBytes(total)
+		break
+	}
+	return summary
 }
 
 // ── Global overview handler ───────────────────────────────────────────────────
@@ -133,17 +163,23 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// Sort traffic descending by monthly bytes.
+	// Sort traffic descending by monthly total, then keep the top 10 (the repo
+	// returns every server because the total can't be sorted in SQL).
 	sort.Slice(topTraffic, func(i, j int) bool {
 		return topTraffic[i].MonthBytes > topTraffic[j].MonthBytes
 	})
+	if len(topTraffic) > 10 {
+		topTraffic = topTraffic[:10]
+	}
 	trafficViews := make([]view.TopServerTrafficView, 0, len(topTraffic))
 	for _, s := range topTraffic {
 		trafficViews = append(trafficViews, view.TopServerTrafficView{
-			ServerID:    s.ServerID,
-			ServerName:  s.ServerName,
-			MonthBytes:  formatBytes(s.MonthBytes),
-			MonthLabel:  s.MonthLabel,
+			ServerID:   s.ServerID,
+			ServerName: s.ServerName,
+			Download:   formatBytes(s.MonthRX),
+			Upload:     formatBytes(s.MonthTX),
+			MonthBytes: formatBytes(s.MonthBytes),
+			MonthLabel: s.MonthLabel,
 		})
 	}
 

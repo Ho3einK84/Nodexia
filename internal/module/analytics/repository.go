@@ -76,10 +76,13 @@ type ServerMetricSummary struct {
 	AvgSwap    float64
 }
 
-// ServerTrafficSummary holds the current-month traffic totals for one server.
+// ServerTrafficSummary holds the current-month traffic totals for one server,
+// split into download (RX) and upload (TX) plus the combined total.
 type ServerTrafficSummary struct {
 	ServerID   int64
 	ServerName string
+	MonthRX    int64
+	MonthTX    int64
 	MonthBytes int64
 	MonthLabel string
 }

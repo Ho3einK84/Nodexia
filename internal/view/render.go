@@ -15,87 +15,87 @@ type PageData struct {
 	// form as a hidden field named "_csrf_token".  Handlers populate this field
 	// by calling middleware.GetCSRFToken(r.Context()) after the Session middleware
 	// has run.
-	CSRFToken   string
+	CSRFToken string
 	// PageStyles / PageScripts are per-page asset URLs injected by the layout.
-	PageStyles  []string
-	PageScripts []string
-	Title       string
-	Description       string
-	ContentTemplate   string
-	MainHTML          template.HTML
-	AppName           string
-	Environment       string
-	Version           string
-	HTTPAddress       string
-	DatabaseDriver    string
-	DatabaseTarget    string
-	MigrationCount    int
-	EnvFile           string
-	ActiveNav         string
-	NavigationItems   []NavItem
-	PageTitle         string
-	PageDescription   string
-	StatusCode        int
-	ErrorTitle        string
-	ErrorMessage      string
-	RequestID         string
-	ErrorDetail       string
-	Diagnostics       DiagnosticsView
-	FooterNote        string
-	RouteGroups       []string
-	ModuleName        string
-	ModuleRouteGroup  string
-	ModuleDescription string
-	FlashKind         string
-	FlashMessage      string
-	ServerCount       int
-	Servers           []ServerSummary
-	ServerSearch      string
-	ServerMatchCount  int
-	ServerShowingFrom int
-	ServerShowingTo   int
-	ServerPagination  PaginationView
-	ServerForm        ServerFormView
-	IsEditingServer   bool
-	ServerFormAction  string
-	ServerDeleteAction string
-	CommandTarget     CommandTargetView
-	CommandForm       CommandFormView
-	CommandPresets    []CommandPresetView
-	CommandHistory    []CommandHistoryView
-	CommandResult     CommandResultView
-	ConnectionResult  ConnectionTestView
-	CommandStream     CommandStreamView
-	FileTarget        FileTargetView
-	FileForm          FileFormView
-	FileListing       FileListingView
-	FileDownload      FileDownloadView
-	SystemTarget      SystemTargetView
-	SystemForm        SystemFormView
-	SystemFacts       SystemSnapshotView
-	SystemCollection  SystemCollectionResultView
-	MonitoringTarget     MonitoringTargetView
-	MonitoringForm       MonitoringFormView
-	MonitoringSnapshot   MonitoringSnapshotView
-	MonitoringCollection MonitoringCollectionResultView
+	PageStyles                  []string
+	PageScripts                 []string
+	Title                       string
+	Description                 string
+	ContentTemplate             string
+	MainHTML                    template.HTML
+	AppName                     string
+	Environment                 string
+	Version                     string
+	HTTPAddress                 string
+	DatabaseDriver              string
+	DatabaseTarget              string
+	MigrationCount              int
+	EnvFile                     string
+	ActiveNav                   string
+	NavigationItems             []NavItem
+	PageTitle                   string
+	PageDescription             string
+	StatusCode                  int
+	ErrorTitle                  string
+	ErrorMessage                string
+	RequestID                   string
+	ErrorDetail                 string
+	Diagnostics                 DiagnosticsView
+	FooterNote                  string
+	RouteGroups                 []string
+	ModuleName                  string
+	ModuleRouteGroup            string
+	ModuleDescription           string
+	FlashKind                   string
+	FlashMessage                string
+	ServerCount                 int
+	Servers                     []ServerSummary
+	ServerSearch                string
+	ServerMatchCount            int
+	ServerShowingFrom           int
+	ServerShowingTo             int
+	ServerPagination            PaginationView
+	ServerForm                  ServerFormView
+	IsEditingServer             bool
+	ServerFormAction            string
+	ServerDeleteAction          string
+	CommandTarget               CommandTargetView
+	CommandForm                 CommandFormView
+	CommandPresets              []CommandPresetView
+	CommandHistory              []CommandHistoryView
+	CommandResult               CommandResultView
+	ConnectionResult            ConnectionTestView
+	CommandStream               CommandStreamView
+	FileTarget                  FileTargetView
+	FileForm                    FileFormView
+	FileListing                 FileListingView
+	FileDownload                FileDownloadView
+	SystemTarget                SystemTargetView
+	SystemForm                  SystemFormView
+	SystemFacts                 SystemSnapshotView
+	SystemCollection            SystemCollectionResultView
+	MonitoringTarget            MonitoringTargetView
+	MonitoringForm              MonitoringFormView
+	MonitoringSnapshot          MonitoringSnapshotView
+	MonitoringCollection        MonitoringCollectionResultView
 	MonitoringTraffic           MonitoringTrafficSnapshotView
 	MonitoringTrafficCollection MonitoringTrafficCollectionResultView
 	DashboardSnapshots          []DashboardMonitoringView
 	DashboardSnapshotTotal      int
 	DashboardSnapshotPagination PaginationView
 	SchedulerOverview           SchedulerOverviewView
-	NodeTarget           NodeTargetView
-	NodeForm             NodeFormView
-	NodeSnapshots        []NodeSnapshotView
-	NodeCollection       NodeCollectionResultView
-	NodeStream           CommandStreamView
-	NodeInstallForm      NodeInstallFormView
-	NodeInstall          NodeInstallView
-	AlertsOverview        AlertsOverviewView
-	AlertRuleForm         AlertRuleFormView
-	AlertChannelForm      AlertChannelFormView
-	IsEditingAlertRule    bool
-	IsEditingAlertChannel bool
+	NodeTarget                  NodeTargetView
+	NodeForm                    NodeFormView
+	NodeSnapshots               []NodeSnapshotView
+	NodeCollection              NodeCollectionResultView
+	NodeStream                  CommandStreamView
+	NodeInstallForm             NodeInstallFormView
+	NodeInstall                 NodeInstallView
+	AlertsOverview              AlertsOverviewView
+	AlertRuleForm               AlertRuleFormView
+	AlertChannelForm            AlertChannelFormView
+	IsEditingAlertRule          bool
+	IsEditingAlertChannel       bool
 
 	// Bulk actions result page.
 	BulkActionResult BulkActionResultView
@@ -106,8 +106,9 @@ type PageData struct {
 	TerminalForm   TerminalFormView
 
 	// Analytics & forecasting.
-	AnalyticsTarget  AnalyticsTargetView
-	GlobalAnalytics  GlobalAnalyticsView
+	AnalyticsTarget       AnalyticsTargetView
+	AnalyticsTrafficMonth AnalyticsTrafficSummaryView
+	GlobalAnalytics       GlobalAnalyticsView
 }
 
 // PaginationView describes a rendered pagination control. It is reusable across
@@ -177,13 +178,13 @@ type CommandTargetView struct {
 }
 
 type CommandFormView struct {
-	Action                    string
-	Intent                    string
-	Command                   string
-	ConnectTimeout            string
-	CommandTimeout            string
+	Action                     string
+	Intent                     string
+	Command                    string
+	ConnectTimeout             string
+	CommandTimeout             string
 	StoredCredentialsAvailable bool
-	RefreshURL                string
+	RefreshURL                 string
 	// InteractivePrograms is a space-separated list of program names that need
 	// a PTY; the page JS uses it to hint that a command will open in the
 	// terminal.  Generated from the server-side detector (single source of
@@ -260,15 +261,15 @@ type FileTargetView struct {
 }
 
 type FileFormView struct {
-	Action                    string
-	Path                      string
-	ConnectTimeout            string
-	Password                  string
-	PrivateKey                string
-	KeyPassphrase             string
+	Action                     string
+	Path                       string
+	ConnectTimeout             string
+	Password                   string
+	PrivateKey                 string
+	KeyPassphrase              string
 	StoredCredentialsAvailable bool
-	RefreshURL                string
-	Errors                    map[string]string
+	RefreshURL                 string
+	Errors                     map[string]string
 }
 
 type FileEntryView struct {
@@ -342,12 +343,12 @@ type SystemTargetView struct {
 }
 
 type SystemFormView struct {
-	Action                    string
-	ConnectTimeout            string
-	CommandTimeout            string
+	Action                     string
+	ConnectTimeout             string
+	CommandTimeout             string
 	StoredCredentialsAvailable bool
-	RefreshURL                string
-	Errors                    map[string]string
+	RefreshURL                 string
+	Errors                     map[string]string
 }
 
 type SystemSnapshotView struct {
@@ -396,13 +397,13 @@ type MonitoringTargetView struct {
 }
 
 type MonitoringFormView struct {
-	Action                    string
-	ConnectTimeout            string
-	CommandTimeout            string
-	TrafficInterface          string
+	Action                     string
+	ConnectTimeout             string
+	CommandTimeout             string
+	TrafficInterface           string
 	StoredCredentialsAvailable bool
-	RefreshURL                string
-	Errors                    map[string]string
+	RefreshURL                 string
+	Errors                     map[string]string
 }
 
 type MonitoringSnapshotView struct {
@@ -463,17 +464,17 @@ type MonitoringTrafficRowView struct {
 }
 
 type DashboardMonitoringView struct {
-	ServerID        int64
-	ServerName      string
-	CPUUsage        string
-	RAMUsage        string
-	DiskUsage       string
-	LoadAverage     string
-	UptimeHuman     string
-	NetworkSummary  string
-	CollectedAt     string
-	CurrentMonthDL  string
-	PeakBandwidth   string
+	ServerID       int64
+	ServerName     string
+	CPUUsage       string
+	RAMUsage       string
+	DiskUsage      string
+	LoadAverage    string
+	UptimeHuman    string
+	NetworkSummary string
+	CollectedAt    string
+	CurrentMonthDL string
+	PeakBandwidth  string
 }
 
 type NodeTargetView struct {
@@ -490,12 +491,12 @@ type NodeTargetView struct {
 }
 
 type NodeFormView struct {
-	Action                    string
-	ConnectTimeout            string
-	CommandTimeout            string
+	Action                     string
+	ConnectTimeout             string
+	CommandTimeout             string
 	StoredCredentialsAvailable bool
-	RefreshURL                string
-	Errors                    map[string]string
+	RefreshURL                 string
+	Errors                     map[string]string
 }
 
 // NodeSnapshotView renders one discovered node card.  Name carries the
@@ -616,14 +617,14 @@ type AlertRuleView struct {
 	// StreakSummary is a human-readable "N/M" pending-streak label shown when
 	// the rule is accumulating consecutive breaches but has not yet fired.
 	// Empty when there is no active streak or when ConsecutiveHits == 1.
-	StreakSummary    string
-	Cooldown         string
-	Severity         string
-	ChannelLabel     string
-	Enabled          bool
-	Note             string
-	EditURL          string
-	DeleteURL        string
+	StreakSummary string
+	Cooldown      string
+	Severity      string
+	ChannelLabel  string
+	Enabled       bool
+	Note          string
+	EditURL       string
+	DeleteURL     string
 }
 
 // AlertChannelView renders one row in the channels section.
@@ -807,7 +808,9 @@ type TopServerMetricView struct {
 type TopServerTrafficView struct {
 	ServerID   int64
 	ServerName string
-	MonthBytes string
+	Download   string // current-month RX, human-readable
+	Upload     string // current-month TX, human-readable
+	MonthBytes string // current-month total, human-readable
 	MonthLabel string
 }
 
@@ -815,6 +818,17 @@ type GlobalAnalyticsView struct {
 	ServerCount int
 	TopMetrics  []TopServerMetricView
 	TopTraffic  []TopServerTrafficView
+}
+
+// AnalyticsTrafficSummaryView is the current-month download/upload/total strip
+// shown on a single server's analytics page. HasData is false when the server
+// has no vnstat row for the current month.
+type AnalyticsTrafficSummaryView struct {
+	HasData    bool
+	MonthLabel string
+	Download   string
+	Upload     string
+	Total      string
 }
 
 type Renderer struct {

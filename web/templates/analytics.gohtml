@@ -118,6 +118,29 @@
 
   </div>
 
+  <!-- This month's traffic split (download vs upload) -->
+  {{ with .AnalyticsTrafficMonth }}
+  {{ if .HasData }}
+  <div class="traffic-summary">
+    <div class="traffic-summary__card traffic-summary__card--dl">
+      <div class="traffic-summary__label"><i data-lucide="arrow-down"></i> Download</div>
+      <div class="traffic-summary__value">{{ .Download }}</div>
+      <div class="traffic-summary__sub">This month · {{ .MonthLabel }}</div>
+    </div>
+    <div class="traffic-summary__card traffic-summary__card--ul">
+      <div class="traffic-summary__label"><i data-lucide="arrow-up"></i> Upload</div>
+      <div class="traffic-summary__value">{{ .Upload }}</div>
+      <div class="traffic-summary__sub">This month · {{ .MonthLabel }}</div>
+    </div>
+    <div class="traffic-summary__card traffic-summary__card--total">
+      <div class="traffic-summary__label"><i data-lucide="arrows-up-down"></i> Total</div>
+      <div class="traffic-summary__value">{{ .Total }}</div>
+      <div class="traffic-summary__sub">This month · {{ .MonthLabel }}</div>
+    </div>
+  </div>
+  {{ end }}
+  {{ end }}
+
   <!-- Network Traffic (always 30d from vnstat) -->
   <article class="chart-card chart-card--wide" id="card-traffic">
     <div class="chart-card__header">
@@ -233,7 +256,9 @@
         <thead>
           <tr>
             <th>Server</th>
-            <th class="text-right">This Month ({{ (index .GlobalAnalytics.TopTraffic 0).MonthLabel }})</th>
+            <th class="text-right"><i data-lucide="arrow-down" class="th-icon th-icon--dl"></i> Download</th>
+            <th class="text-right"><i data-lucide="arrow-up" class="th-icon th-icon--ul"></i> Upload</th>
+            <th class="text-right">Total ({{ (index .GlobalAnalytics.TopTraffic 0).MonthLabel }})</th>
             <th></th>
           </tr>
         </thead>
@@ -243,6 +268,12 @@
             <td class="server-name-cell">
               <i data-lucide="server" class="table-icon"></i>
               {{ .ServerName }}
+            </td>
+            <td class="text-right">
+              <span class="traffic-badge traffic-badge--dl">{{ .Download }}</span>
+            </td>
+            <td class="text-right">
+              <span class="traffic-badge traffic-badge--ul">{{ .Upload }}</span>
             </td>
             <td class="text-right">
               <span class="traffic-badge">{{ .MonthBytes }}</span>
