@@ -84,9 +84,14 @@
     <div class="terminal-card__header">
       <span class="terminal-card__host">
         <i data-lucide="monitor" class="icon-in-button"></i>
-        {{ .TerminalTarget.Username }}@{{ .TerminalTarget.Host }}:{{ .TerminalTarget.Port }}
+        <span class="terminal-card__addr">{{ .TerminalTarget.Username }}@{{ .TerminalTarget.Host }}:{{ .TerminalTarget.Port }}</span>
       </span>
-      <span id="terminal-status" class="terminal-status terminal-status--connecting">connecting…</span>
+      <div class="terminal-card__actions">
+        <span id="terminal-status" class="terminal-status terminal-status--connecting">connecting…</span>
+        <button type="button" id="terminal-back" class="terminal-back" aria-label="Close terminal and go back">
+          <i data-lucide="chevron-left"></i><span>Back</span>
+        </button>
+      </div>
     </div>
 
     <div id="terminal-error" class="terminal-error" style="display:none"></div>

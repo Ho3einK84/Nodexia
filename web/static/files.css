@@ -319,6 +319,13 @@
   animation: file-menu-in 0.12s ease;
 }
 
+/* The hidden attribute must win over display:flex above, otherwise closing the
+   menu (toggle, outside-click, Escape) sets [hidden] but never visually hides
+   it. The attribute selector outranks the bare class, so this re-hides it. */
+.file-menu[hidden] {
+  display: none;
+}
+
 @keyframes file-menu-in {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }

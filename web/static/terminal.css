@@ -20,6 +20,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   font-size: 0.85rem;
   font-family: ui-monospace, monospace;
   color: var(--text-muted);
@@ -29,6 +30,26 @@
   width: 15px;
   height: 15px;
   flex-shrink: 0;
+}
+
+/* Truncate the address rather than letting the header wrap on narrow screens. */
+.terminal-card__addr {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.terminal-card__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* Back button: mobile-only, so the desktop header is byte-for-byte unchanged. */
+.terminal-back {
+  display: none;
 }
 
 /* ── Status chip ─────────────────────────────────────── */
@@ -143,12 +164,15 @@
 
 .terminal-toolbar {
   display: flex;
+  flex-wrap: nowrap;
   gap: 6px;
   padding: 8px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
   background: rgba(2, 6, 23, 0.6);
   border-top: 1px solid var(--border);
   overflow-x: auto;
   overflow-y: hidden;
+  overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
@@ -159,25 +183,30 @@
 
 .terminal-key {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 44px;
-  min-height: 40px;
-  padding: 0 12px;
+  min-height: 44px;
+  padding: 0 13px;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: rgba(148, 163, 184, 0.08);
   color: var(--text);
   font-family: ui-monospace, monospace;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
+  transition: background 0.1s ease, border-color 0.1s ease;
 }
 
 .terminal-key:active {
   background: rgba(148, 163, 184, 0.18);
+  border-color: rgba(148, 163, 184, 0.3);
 }
 
 .terminal-key--ctrl.is-active {
@@ -220,11 +249,57 @@ body.terminal-mobile-active .bottom-nav {
 
 /* ── Responsive ──────────────────────────────────────── */
 
-@media (max-width: 520px) {
+@media (max-width: 700px) {
+  /* Keep the header on one line: the address truncates, controls stay put. */
   .terminal-card__header {
+    flex-wrap: nowrap;
     gap: 8px;
   }
 
+  .terminal-card__host {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .terminal-card__actions {
+    gap: 8px;
+  }
+
+  #terminal-status {
+    flex-shrink: 0;
+  }
+
+  .terminal-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    min-height: 36px;
+    padding: 0 11px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: rgba(148, 163, 184, 0.08);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background 0.1s ease, border-color 0.1s ease;
+  }
+
+  .terminal-back:active {
+    background: rgba(148, 163, 184, 0.18);
+    border-color: rgba(148, 163, 184, 0.3);
+  }
+
+  .terminal-back svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+@media (max-width: 520px) {
   .terminal-form__actions .btn {
     flex: 1 1 auto;
     justify-content: center;

@@ -50,15 +50,15 @@
   }
 
   /* ── Initial font size ────────────────────────────────── */
-  // Desktop stays pinned at 14 (unchanged). On mobile a smaller default fits
-  // more columns, and the user's A-/A+ choice is restored from localStorage.
+  // Desktop stays pinned at 14 (unchanged). Mobile defaults larger for legible
+  // taps; the user's A-/A+ choice is restored from localStorage when present.
   function initialFontSize() {
     if (!isMobile) return 14;
     try {
       var stored = parseInt(window.localStorage.getItem(FONT_KEY), 10);
       if (stored >= FONT_MIN && stored <= FONT_MAX) return stored;
     } catch (e) { /* localStorage unavailable */ }
-    return 13;
+    return 15;
   }
 
   /* ── Init xterm.js ────────────────────────────────────── */
@@ -154,6 +154,22 @@
       showError('Connection closed unexpectedly (code ' + event.code + ').');
     }
   };
+
+  /* ── Back button ──────────────────────────────────────── */
+  // Critical on mobile where the terminal owns the screen and browser chrome is
+  // often hidden. Close the socket cleanly, then return to the previous page
+  // (falling back to the server list when there is no history to go back to).
+  var backBtn = document.getElementById('terminal-back');
+  if (backBtn) {
+    backBtn.addEventListener('click', function () {
+      try { if (ws) ws.close(1000, 'closed by user'); } catch (e) { /* ignore */ }
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = '/servers';
+      }
+    });
+  }
 
   /* ── Ctrl-pending modifier ────────────────────────────── */
   // Tapping the toolbar's Ctrl key arms a one-shot modifier: the next character
