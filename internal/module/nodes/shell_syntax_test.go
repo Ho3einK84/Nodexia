@@ -22,7 +22,7 @@ func TestGeneratedShellSyntax(t *testing.T) {
 			commands = append(commands, cmd)
 		}
 	}
-	install, err := PasarGuardProvider{}.InstallCommand("node2")
+	install, err := PasarGuardProvider{}.InstallCommand("node2", InstallConfig{ServicePort: "62011", Protocol: "grpc"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -180,7 +180,7 @@ func randomInstallJobID() string {
 func runInstall(job *installJob, ssh *sshclient.Service, conn sshclient.ConnectionRequest, provider PasarGuardProvider, nodeHost string) {
 	ctx := context.Background()
 
-	installCmd, err := provider.InstallCommand(job.nodeName)
+	installCmd, err := provider.InstallCommand(job.nodeName, job.config)
 	if err != nil {
 		job.fail(err.Error())
 		return
@@ -216,9 +216,9 @@ func runInstall(job *installJob, ssh *sshclient.Service, conn sshclient.Connecti
 		job.appendOutput("\n[log streaming stopped — applying configuration]\n")
 	}
 
-	// The official installer only writes defaults (port 62050, gRPC,
-	// auto-generated key). Apply the panel's chosen ports/protocol/key by
-	// patching /opt/<name>/.env and restarting through the official CLI.
+	// The service port was already piped to the install script. Apply
+	// the protocol and API key (and confirm the port) by patching
+	// /opt/<name>/.env and restarting through the official CLI.
 	configureCmd, timeout, err := provider.ConfigureCommand(job.nodeName, job.config)
 	if err != nil {
 		job.fail(err.Error())

@@ -367,29 +367,40 @@ func (p PasarGuardProvider) ActionCommand(nodeName, actionKey string) (string, t
 // installed configuration (RegistrationInfoCommand).
 const pasarguardInstallScriptTimeout = "600"
 
-// InstallCommand downloads and runs the official PasarGuard install script
-// non-interactively for a new instance named nodeName.
-func (PasarGuardProvider) InstallCommand(nodeName string) (string, error) {
+// InstallCommand downloads and runs the official PasarGuard install script for
+// a new instance named nodeName, answering the port prompt with cfg.ServicePort.
+//
+// We do NOT pass --yes to the script: --yes locks the port to 62050 regardless
+// of what is free and fails with "Port 62050 is already in use" when another
+// node instance already occupies that port. Without --yes the script reads from
+// stdin; we pipe the service port then empty lines so the remaining prompts
+// (protocol, API key) fall back to their defaults — ConfigureCommand overwrites
+// those values after the install completes anyway.
+func (PasarGuardProvider) InstallCommand(nodeName string, cfg InstallConfig) (string, error) {
 	if err := ValidateNodeName(nodeName); err != nil {
 		return "", err
 	}
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		return "", err
+	}
+	servicePort := normalized.ServicePort
 	command := `sh -c '` + sudoPreamble +
 		`SCRIPT="$(mktemp /tmp/nodexia-pg-node.XXXXXX)" || exit 1; ` +
 		`if command -v curl >/dev/null 2>&1; then curl -fsSL ` + pasarguardScriptURL + ` -o "$SCRIPT" || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + pasarguardScriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`else echo "curl or wget is required to install" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
 		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + pasarguardInstallScriptTimeout + `"; fi; ` +
-		`$TMO $SUDO bash "$SCRIPT" install --name ` + nodeName + ` --yes </dev/null; ` +
+		`printf "` + servicePort + `\n\n\n" | $TMO $SUDO bash "$SCRIPT" install --name ` + nodeName + `; ` +
 		`STATUS=$?; rm -f "$SCRIPT"; exit $STATUS'`
 	return command, nil
 }
 
-// InstallConfig carries the pre-install choices the panel collects.  The
-// official install script accepts no flags or environment variables for these
-// (only interactive prompts that --yes skips with defaults of 62050 / grpc /
-// auto-generated key), so they are applied after install by patching
-// /opt/<name>/.env the same way the script itself does and restarting through
-// the official CLI.
+// InstallConfig carries the pre-install choices the panel collects.
+// ServicePort is piped to the script's interactive port prompt so the node
+// binds the correct port from the first start. Protocol and APIKey are applied
+// after install via ConfigureCommand (the script's interactive defaults — grpc
+// and auto-generated key — are used during the install run itself).
 type InstallConfig struct {
 	ServicePort string // numeric, defaults to 62050 when empty
 	APIPort     string // numeric, optional

@@ -187,17 +187,21 @@ func TestPasarGuardActionCommand(t *testing.T) {
 }
 
 func TestPasarGuardInstallCommand(t *testing.T) {
-	command, err := PasarGuardProvider{}.InstallCommand("node3")
+	cfg := InstallConfig{ServicePort: "62011", Protocol: "grpc"}
+	command, err := PasarGuardProvider{}.InstallCommand("node3", cfg)
 	if err != nil {
 		t.Fatalf("InstallCommand: %v", err)
 	}
-	for _, want := range []string{pasarguardScriptURL, "install --name node3 --yes", "timeout"} {
+	for _, want := range []string{pasarguardScriptURL, "install --name node3", "timeout", "62011"} {
 		if !strings.Contains(command, want) {
 			t.Errorf("install command missing %q:\n%s", want, command)
 		}
 	}
+	if strings.Contains(command, "--yes") {
+		t.Errorf("install command must not pass --yes (it locks port to 62050):\n%s", command)
+	}
 
-	if _, err := (PasarGuardProvider{}).InstallCommand("$(reboot)"); err == nil {
+	if _, err := (PasarGuardProvider{}).InstallCommand("$(reboot)", cfg); err == nil {
 		t.Fatalf("InstallCommand must reject unsafe node names")
 	}
 }
