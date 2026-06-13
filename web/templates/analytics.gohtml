@@ -177,13 +177,7 @@
 {{ define "content-analytics-global" }}
 <section class="hero">
 
-  <div class="shell-header">
-    <div>
-      <p class="eyebrow">Infrastructure Analytics</p>
-      <h1>Analytics Overview</h1>
-      <p class="shell-subtitle">{{ .PageDescription }}</p>
-    </div>
-  </div>
+  {{ template "page-header" . }}
 
   {{ if eq .GlobalAnalytics.ServerCount 0 }}
   <article class="card card--empty">
