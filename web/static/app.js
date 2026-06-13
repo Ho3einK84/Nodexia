@@ -197,6 +197,8 @@
   function initCopyButtons() {
     document.querySelectorAll('pre.output-block').forEach(function (pre) {
       if (pre.parentElement && pre.parentElement.classList.contains('output-wrap')) return;
+      // Blocks with their own explicit Copy control opt out of the auto button.
+      if (pre.hasAttribute('data-no-auto-copy')) return;
       if (!pre.textContent.trim()) return;
 
       var wrap = document.createElement('div');
@@ -224,6 +226,36 @@
         });
       });
       wrap.appendChild(btn);
+    });
+  }
+  /* ── Explicit labeled copy buttons (data-copy-target="#id") ───────────────
+     Copies the FULL value of the referenced element, including the real value
+     when that element is masked by initSecrets (data-secret). Shows an inline
+     "Copied!" confirmation that reverts after a moment. */
+  function initCopyTargets() {
+    document.querySelectorAll('[data-copy-target]').forEach(function (btn) {
+      if (btn.dataset.copyReady === '1') return;
+      btn.dataset.copyReady = '1';
+      var label = btn.innerHTML;
+      btn.addEventListener('click', function () {
+        var target = document.querySelector(btn.getAttribute('data-copy-target'));
+        if (!target) return;
+        // secretValue holds the unmasked value when initSecrets has masked it.
+        var value = target.dataset.secretValue != null ? target.dataset.secretValue : target.textContent;
+        // Strip only a trailing newline from the <pre>; never alter inner content.
+        copyText(value.replace(/\n$/, '')).then(function (ok) {
+          btn.classList.add(ok ? 'is-copied' : 'is-failed');
+          btn.innerHTML = ok
+            ? '<i data-lucide="check"></i> Copied!'
+            : '<i data-lucide="x"></i> Failed';
+          renderIcons();
+          setTimeout(function () {
+            btn.classList.remove('is-copied', 'is-failed');
+            btn.innerHTML = label;
+            renderIcons();
+          }, 1600);
+        });
+      });
     });
   }
   function copyText(text) {
@@ -627,6 +659,7 @@
     initFlash();
     initSecrets();
     initCopyButtons();
+    initCopyTargets();
     initProgressBars();
     initReveal();
     initAutoRefresh();

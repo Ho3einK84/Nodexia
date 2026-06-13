@@ -490,14 +490,22 @@
     </div>
 
     <div class="node-section">
-      <span class="node-section__label"><i data-lucide="key-round"></i> API key</span>
-      <pre class="output-block node-secret-block">{{ .NodeInstall.Info.APIKey }}</pre>
+      <div class="node-section__head">
+        <span class="node-section__label"><i data-lucide="key-round"></i> API key</span>
+        <button type="button" class="btn btn--ghost btn--sm copy-inline" data-copy-target="#nodeApiKeyValue" aria-label="Copy API key"><i data-lucide="copy" class="icon-in-button"></i> Copy</button>
+      </div>
+      <pre id="nodeApiKeyValue" class="output-block node-secret-block" data-secret data-no-auto-copy>{{ .NodeInstall.Info.APIKey }}</pre>
     </div>
 
     <div class="node-section">
-      <span class="node-section__label"><i data-lucide="shield-check"></i> SSL certificate</span>
+      <div class="node-section__head">
+        <span class="node-section__label"><i data-lucide="shield-check"></i> SSL certificate</span>
+        {{ if .NodeInstall.Info.Certificate }}
+        <button type="button" class="btn btn--ghost btn--sm copy-inline" data-copy-target="#nodeCertValue" aria-label="Copy certificate"><i data-lucide="copy" class="icon-in-button"></i> Copy</button>
+        {{ end }}
+      </div>
       {{ if .NodeInstall.Info.Certificate }}
-      <pre class="output-block scrollable node-secret-block">{{ .NodeInstall.Info.Certificate }}</pre>
+      <pre id="nodeCertValue" class="output-block scrollable node-secret-block" data-no-auto-copy>{{ .NodeInstall.Info.Certificate }}</pre>
       {{ else }}
       <p class="empty-state">The certificate could not be read from /var/lib/{{ .NodeInstall.Info.NodeName }}/certs/ssl_cert.pem — fetch it manually or run "Renew cert" on the node card.</p>
       {{ end }}

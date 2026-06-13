@@ -1742,6 +1742,14 @@ h4 svg {
   transform: translateY(0);
 }
 
+/* Touch devices have no hover, so keep the copy button always visible there. */
+@media (hover: none) {
+  .copy-btn {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .copy-btn:hover {
   color: #e2e8f0;
   border-color: rgba(148, 163, 184, 0.4);
