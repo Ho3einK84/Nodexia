@@ -138,6 +138,86 @@
   align-items: center;
 }
 
+/* ── Mobile key toolbar ──────────────────────────────── */
+/* Built by terminal.js only on mobile; absent from the desktop DOM. */
+
+.terminal-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(2, 6, 23, 0.6);
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.terminal-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-key {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.terminal-key:active {
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.terminal-key--ctrl.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+  color: #03070f;
+}
+
+/* ── Mobile full-screen layout (toggled by terminal.js) ── */
+/* top/height are set inline from window.visualViewport so the terminal tracks
+   the area above the soft keyboard instead of being squished. */
+
+.terminal-card--mobile {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  z-index: 1300;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-card--mobile .terminal-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 6px;
+}
+
+body.terminal-mobile-active {
+  overflow: hidden;
+}
+
+/* Hide the fixed bottom navigation while the terminal owns the screen. */
+body.terminal-mobile-active .bottom-nav {
+  display: none;
+}
+
 /* ── Responsive ──────────────────────────────────────── */
 
 @media (max-width: 520px) {

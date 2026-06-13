@@ -10,6 +10,11 @@
  *   Server → client:
  *     {"type":"output","data":"<utf-8 string>"}
  *     {"type":"error","message":"<string>"}
+ *
+ * Mobile enhancements (only active under the same 700px breakpoint the rest of
+ * the UI uses): a scrollable key toolbar, visualViewport-driven reflow so the
+ * grid never gets squished by the soft keyboard, and a persisted font size.
+ * Desktop behaviour is unchanged.
  */
 (function () {
   'use strict';
@@ -26,6 +31,11 @@
   var statusEl  = document.getElementById('terminal-status');
   var errorEl   = document.getElementById('terminal-error');
 
+  var isMobile = window.matchMedia('(max-width: 700px)').matches;
+  var FONT_KEY = 'nodexia.terminal.fontSize';
+  var FONT_MIN = 10;
+  var FONT_MAX = 24;
+
   /* ── Status helpers ───────────────────────────────────── */
   function setStatus(state, text) {
     if (!statusEl) return;
@@ -39,6 +49,18 @@
     errorEl.style.display = 'block';
   }
 
+  /* ── Initial font size ────────────────────────────────── */
+  // Desktop stays pinned at 14 (unchanged). On mobile a smaller default fits
+  // more columns, and the user's A-/A+ choice is restored from localStorage.
+  function initialFontSize() {
+    if (!isMobile) return 14;
+    try {
+      var stored = parseInt(window.localStorage.getItem(FONT_KEY), 10);
+      if (stored >= FONT_MIN && stored <= FONT_MAX) return stored;
+    } catch (e) { /* localStorage unavailable */ }
+    return 13;
+  }
+
   /* ── Init xterm.js ────────────────────────────────────── */
   if (typeof Terminal === 'undefined') {
     showError('xterm.js failed to load. Please reload the page.');
@@ -48,7 +70,7 @@
   var term = new Terminal({
     cursorBlink: true,
     fontFamily: 'ui-monospace, "Cascadia Code", "Fira Code", monospace',
-    fontSize: 14,
+    fontSize: initialFontSize(),
     theme: {
       background: '#000000',
       foreground: '#e2e8f0',
@@ -75,6 +97,13 @@
         cols: term.cols,
         rows: term.rows,
       }));
+    }
+  }
+
+  /* ── Input helper ─────────────────────────────────────── */
+  function sendInput(data) {
+    if (data && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'input', data: data }));
     }
   }
 
@@ -126,23 +155,216 @@
     }
   };
 
+  /* ── Ctrl-pending modifier ────────────────────────────── */
+  // Tapping the toolbar's Ctrl key arms a one-shot modifier: the next character
+  // typed on the physical/soft keyboard is folded into its control code and the
+  // modifier disarms itself. Tapping Ctrl again disarms it manually.
+  var ctrlPending = false;
+  var ctrlBtn = null;
+
+  function setCtrl(on) {
+    ctrlPending = on;
+    if (ctrlBtn) {
+      ctrlBtn.classList.toggle('is-active', on);
+      ctrlBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+  }
+
+  // Map a single typed character to its Ctrl-combined control code, or null
+  // when the character has no meaningful control form.
+  function ctrlCombine(data) {
+    if (!data || data.length !== 1) return null;
+    var code = data.toLowerCase().charCodeAt(0);
+    if (code >= 97 && code <= 122) return String.fromCharCode(code - 96); // a-z → 0x01-0x1a
+    switch (data) {
+      case ' ': case '@': return '\x00';
+      case '[': return '\x1b';
+      case '\\': return '\x1c';
+      case ']': return '\x1d';
+      case '^': return '\x1e';
+      case '_': return '\x1f';
+      case '?': return '\x7f';
+    }
+    return null;
+  }
+
   /* ── Forward keystrokes ───────────────────────────────── */
   term.onData(function (data) {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'input', data: data }));
+    if (ctrlPending) {
+      var combined = ctrlCombine(data);
+      setCtrl(false);
+      if (combined !== null) {
+        sendInput(combined);
+        return;
+      }
+      // Not combinable — fall through and send the original keystroke.
     }
+    sendInput(data);
   });
+
+  /* ── Font size control ────────────────────────────────── */
+  function setFontSize(px) {
+    px = Math.max(FONT_MIN, Math.min(FONT_MAX, px));
+    if (px === term.options.fontSize) return;
+    term.options.fontSize = px;
+    if (isMobile) {
+      try { window.localStorage.setItem(FONT_KEY, String(px)); } catch (e) { /* ignore */ }
+    }
+    fitAndResize();
+  }
+
+  /* ── Clipboard paste ──────────────────────────────────── */
+  function clipboardAvailable() {
+    return !!(navigator.clipboard && navigator.clipboard.readText);
+  }
+
+  function doPaste() {
+    if (!clipboardAvailable()) return;
+    navigator.clipboard.readText().then(function (text) {
+      sendInput(text);
+    }).catch(function () { /* permission denied / unavailable */ });
+  }
+
+  /* ── Mobile key toolbar ───────────────────────────────── */
+  var SEQ = {
+    esc:   '\x1b',
+    tab:   '\x09',
+    up:    '\x1b[A',
+    down:  '\x1b[B',
+    right: '\x1b[C',
+    left:  '\x1b[D',
+    home:  '\x1b[H',
+    end:   '\x1b[F',
+    del:   '\x1b[3~',
+  };
+
+  var BUTTONS = [
+    { label: 'Ctrl',  kind: 'ctrl' },
+    { label: 'Esc',   kind: 'seq', key: 'esc' },
+    { label: 'Tab',   kind: 'seq', key: 'tab' },
+    { label: '←',     kind: 'seq', key: 'left',  aria: 'Left' },
+    { label: '↑',     kind: 'seq', key: 'up',    aria: 'Up' },
+    { label: '↓',     kind: 'seq', key: 'down',  aria: 'Down' },
+    { label: '→',     kind: 'seq', key: 'right', aria: 'Right' },
+    { label: 'Home',  kind: 'seq', key: 'home' },
+    { label: 'End',   kind: 'seq', key: 'end' },
+    { label: 'Del',   kind: 'seq', key: 'del' },
+    { label: 'Paste', kind: 'paste' },
+    { label: 'A−',    kind: 'font', key: 'dec', aria: 'Smaller font' },
+    { label: 'A+',    kind: 'font', key: 'inc', aria: 'Larger font' },
+  ];
+
+  function handleKey(def) {
+    switch (def.kind) {
+      case 'seq':   sendInput(SEQ[def.key]); break;
+      case 'ctrl':  setCtrl(!ctrlPending); break;
+      case 'paste': doPaste(); break;
+      case 'font':  setFontSize(term.options.fontSize + (def.key === 'inc' ? 1 : -1)); break;
+    }
+  }
+
+  function buildToolbar() {
+    var bar = document.createElement('div');
+    bar.className = 'terminal-toolbar';
+    bar.setAttribute('role', 'toolbar');
+    bar.setAttribute('aria-label', 'Terminal keys');
+
+    BUTTONS.forEach(function (def) {
+      if (def.kind === 'paste' && !clipboardAvailable()) return;
+
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'terminal-key';
+      btn.textContent = def.label;
+      btn.tabIndex = -1;
+      btn.setAttribute('aria-label', def.aria || def.label);
+
+      if (def.kind === 'ctrl') {
+        btn.classList.add('terminal-key--ctrl');
+        btn.setAttribute('aria-pressed', 'false');
+        ctrlBtn = btn;
+      }
+
+      // Prevent the button from stealing focus from the xterm textarea, which
+      // would dismiss the soft keyboard.
+      btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        handleKey(def);
+        term.focus();
+      });
+
+      bar.appendChild(btn);
+    });
+
+    card.appendChild(bar);
+  }
+
+  /* ── Mobile full-screen layout + keyboard reflow ──────── */
+  // The soft keyboard does not fire `window.resize` on iOS Safari; it only
+  // changes window.visualViewport. We pin the card to the visible viewport so
+  // the grid reflows above the keyboard instead of being squished or hidden.
+  var vv = window.visualViewport;
+  var rafPending = false;
+
+  function updateMobileViewport() {
+    if (!card.classList.contains('terminal-card--mobile')) return;
+    if (vv) {
+      card.style.top = vv.offsetTop + 'px';
+      card.style.height = vv.height + 'px';
+    } else {
+      card.style.top = '0px';
+      card.style.height = window.innerHeight + 'px';
+    }
+    fitAndResize();
+  }
+
+  function scheduleViewportUpdate() {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(function () {
+      rafPending = false;
+      updateMobileViewport();
+    });
+  }
+
+  function enableMobile() {
+    buildToolbar();
+    card.classList.add('terminal-card--mobile');
+    document.body.classList.add('terminal-mobile-active');
+    updateMobileViewport();
+
+    if (vv) {
+      vv.addEventListener('resize', scheduleViewportUpdate);
+      vv.addEventListener('scroll', scheduleViewportUpdate);
+    }
+    window.addEventListener('orientationchange', function () {
+      setTimeout(scheduleViewportUpdate, 250);
+    });
+  }
 
   /* ── Resize handling ──────────────────────────────────── */
   var resizeTimer = null;
   window.addEventListener('resize', function () {
+    if (isMobile) {
+      scheduleViewportUpdate();
+      return;
+    }
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(fitAndResize, 80);
   });
 
+  if (isMobile) {
+    enableMobile();
+  }
+
   /* ── Initial fit after fonts load ────────────────────── */
   // defer to next frame so the layout has settled
   requestAnimationFrame(function () {
-    fitAndResize();
+    if (isMobile) {
+      updateMobileViewport();
+    } else {
+      fitAndResize();
+    }
   });
 })();
