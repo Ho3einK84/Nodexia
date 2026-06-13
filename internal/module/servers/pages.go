@@ -1,12 +1,15 @@
 package servers
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
 	"github.com/Ho3einK84/Nodexia/internal/module"
@@ -30,9 +33,10 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 	matched := filterServers(servers, query)
 	pageItems, currentPage, totalPages := paginateServers(matched, page, serversPerPage)
 
+	lastSeen := serverLastSeenMap(r.Context(), deps)
 	items := make([]view.ServerSummary, 0, len(pageItems))
 	for _, server := range pageItems {
-		items = append(items, view.ServerSummary{
+		item := view.ServerSummary{
 			ID:                 server.ID,
 			Name:               server.Name,
 			Host:               server.Host,
@@ -45,7 +49,16 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 			CredentialRef:      server.CredentialRef,
 			CreatedAt:          formatTimestamp(server.CreatedAt),
 			UpdatedAt:          formatTimestamp(server.UpdatedAt),
-		})
+		}
+		if ts, ok := lastSeen[server.ID]; ok {
+			age := time.Since(ts)
+			if age < 10*time.Minute {
+				item.IsOnline = true
+			} else {
+				item.LastSeenAt = formatAge(age)
+			}
+		}
+		items = append(items, item)
 	}
 
 	showingFrom, showingTo := 0, 0
@@ -213,6 +226,80 @@ func pageWindow(current, total int) []int {
 		nums = append(nums, 0)
 	}
 	return append(nums, total)
+}
+
+// serverLastSeenMap returns a map of server_id → last snapshot time by querying
+// system_snapshots. Returns nil when the database is unavailable or the query fails.
+func serverLastSeenMap(ctx context.Context, deps module.Dependencies) map[int64]time.Time {
+	if deps.Database == nil || deps.Database.SQL == nil {
+		return nil
+	}
+	rows, err := deps.Database.SQL.QueryContext(ctx,
+		`SELECT server_id, MAX(created_at) FROM system_snapshots GROUP BY server_id`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	result := make(map[int64]time.Time)
+	for rows.Next() {
+		var serverID int64
+		var raw any
+		if err := rows.Scan(&serverID, &raw); err != nil {
+			continue
+		}
+		if t := parseSnapshotTime(raw); !t.IsZero() {
+			result[serverID] = t
+		}
+	}
+	return result
+}
+
+// parseSnapshotTime decodes the flexible datetime values SQLite returns for
+// aggregated datetime columns (string, []byte, or time.Time).
+func parseSnapshotTime(value any) time.Time {
+	var s string
+	switch v := value.(type) {
+	case time.Time:
+		return v.UTC()
+	case string:
+		s = strings.TrimSpace(v)
+	case []byte:
+		s = strings.TrimSpace(string(v))
+	default:
+		return time.Time{}
+	}
+	if s == "" {
+		return time.Time{}
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC()
+		}
+	}
+	return time.Time{}
+}
+
+// formatAge converts a duration to a compact human-readable age string.
+func formatAge(d time.Duration) string {
+	if d < time.Minute {
+		return "just now"
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	}
+	days := int(d.Hours() / 24)
+	if days == 1 {
+		return "1 day ago"
+	}
+	return fmt.Sprintf("%d days ago", days)
 }
 
 func renderFormPage(

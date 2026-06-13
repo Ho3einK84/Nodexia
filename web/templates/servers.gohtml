@@ -76,6 +76,13 @@
           <div class="server-card__identity">
             <h4 class="server-card__name"><i data-lucide="server" class="icon-in-button"></i> {{ .Name }}</h4>
             <span class="server-card__host">{{ .Username }}@{{ .Host }}:{{ .Port }}</span>
+            {{ if .IsOnline }}
+            <span class="server-card__status server-status--online"><span class="status-pulse"></span>Online</span>
+            {{ else if .LastSeenAt }}
+            <span class="server-card__status server-status--stale"><span class="status-pulse"></span>Last seen {{ .LastSeenAt }}</span>
+            {{ else }}
+            <span class="server-card__status server-status--unknown"><span class="status-pulse"></span>No data</span>
+            {{ end }}
           </div>
         </div>
         <div class="server-card__badges">
@@ -100,6 +107,7 @@
             <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/system"><i data-lucide="info" class="icon-in-button"></i> System</a>
             <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
             <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> Analytics</a>
             <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> Edit</a>
             <div class="action-menu__divider" role="separator"></div>
             <form method="post" action="/servers/{{ .ID }}/delete" class="action-menu__form">

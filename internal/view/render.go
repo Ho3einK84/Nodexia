@@ -142,6 +142,11 @@ type ServerSummary struct {
 	CredentialRef      string
 	CreatedAt          string
 	UpdatedAt          string
+	// IsOnline is true when a monitoring snapshot was collected within the last
+	// 10 minutes. LastSeenAt carries a human-readable age string when there is
+	// older snapshot data; both are empty when no snapshots exist.
+	IsOnline   bool
+	LastSeenAt string
 }
 
 type ServerFormView struct {
