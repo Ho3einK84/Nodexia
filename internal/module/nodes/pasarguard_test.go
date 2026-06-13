@@ -174,8 +174,13 @@ func TestPasarGuardActionCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ActionCommand uninstall: %v", err)
 	}
-	if !strings.Contains(command, "uninstall --yes") {
-		t.Errorf("uninstall command = %q, want auto-confirmed uninstall", command)
+	// uninstall must NOT use --yes (the script's confirm is broken under --yes);
+	// instead it pipes "y" to the uninstall + remove-data prompts.
+	if strings.Contains(command, "--yes") {
+		t.Errorf("uninstall command = %q, must not use --yes", command)
+	}
+	if !strings.Contains(command, `printf "y\ny\n" |`) || !strings.Contains(command, "--name node uninstall") {
+		t.Errorf("uninstall command = %q, want piped y answers to uninstall", command)
 	}
 
 	if _, _, err := provider.ActionCommand("node; rm -rf /", "status"); err == nil {

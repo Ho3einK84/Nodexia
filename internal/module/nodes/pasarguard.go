@@ -334,7 +334,10 @@ var pasarguardOps = map[string]string{
 	"update":      "update --yes",
 	"core-update": "core-update --yes",
 	"renew-cert":  "renew-cert --yes",
-	"uninstall":   "uninstall --yes",
+	// uninstall runs WITHOUT --yes: the script's uninstall confirm is broken
+	// under --yes (it sets REPLY="" then requires ^[Yy]$, so --yes always prints
+	// "Aborted" and exits 1). ActionCommand pipes "y" to its prompts instead.
+	"uninstall": "uninstall",
 }
 
 // ActionCommand builds `pg-node --name <node> <op>`.  The install script
@@ -351,11 +354,22 @@ func (p PasarGuardProvider) ActionCommand(nodeName, actionKey string) (string, t
 	}
 	op := pasarguardOps[action.Key]
 
+	// Most actions take no input, so stdin is /dev/null. uninstall is the
+	// exception: it runs without --yes (see pasarguardOps) and the script asks
+	// two questions — "uninstall node?" and "remove data files?" — so pipe "y"
+	// to both for a clean, complete removal.
+	invocation := `$SUDO "$PG_CLI" --name ` + nodeName + ` ` + op
+	if action.Key == "uninstall" {
+		invocation = `printf "y\ny\n" | ` + invocation
+	} else {
+		invocation += ` </dev/null`
+	}
+
 	command := `sh -c '` + sudoPreamble +
 		`if command -v pg-node >/dev/null 2>&1; then PG_CLI="pg-node"; ` +
 		`elif command -v ` + nodeName + ` >/dev/null 2>&1; then PG_CLI="` + nodeName + `"; ` +
 		`else echo "pg-node CLI not found on this server" >&2; exit 86; fi; ` +
-		`$SUDO "$PG_CLI" --name ` + nodeName + ` ` + op + ` </dev/null'`
+		invocation + `'`
 	return command, action.Timeout, nil
 }
 
