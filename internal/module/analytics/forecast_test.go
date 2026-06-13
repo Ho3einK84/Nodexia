@@ -183,6 +183,34 @@ func TestForecastUsesDownloadOnly(t *testing.T) {
 	}
 }
 
+func TestForecastMonthMatchesMonthlyRX(t *testing.T) {
+	svc := NewForecastService()
+	now := time.Now().UTC()
+	monthLabel := now.Format("2006-01")
+
+	const monthlyRX = 7 * 1024 * 1024 * 1024 * 1024 // 7 TiB authoritative month RX
+
+	// Daily rows for the current month deliberately sum to a DIFFERENT (smaller)
+	// value than the monthly row — mirroring the 7-day daily cap. The forecast's
+	// "This Month" current value must follow the monthly row, not the daily sum.
+	var days []TrafficDay
+	for d := 1; d <= now.Day(); d++ {
+		label := time.Date(now.Year(), now.Month(), d, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+		days = append(days, TrafficDay{Label: label, RX: 100 * 1024 * 1024, TX: 0, Total: 100 * 1024 * 1024})
+	}
+	months := []TrafficMonth{{Label: monthLabel, RX: monthlyRX, TX: 1 << 30, Total: monthlyRX + (1 << 30)}}
+
+	out := svc.Compute(days, months)
+	if out.ThisMonth.CurrentBytes != monthlyRX {
+		t.Errorf("ThisMonth.CurrentBytes = %d, want monthly RX %d (must match Analytics Overview)",
+			out.ThisMonth.CurrentBytes, monthlyRX)
+	}
+	if out.ThisMonth.PredictedBytes < out.ThisMonth.CurrentBytes {
+		t.Errorf("predicted month-end %d must be >= current %d",
+			out.ThisMonth.PredictedBytes, out.ThisMonth.CurrentBytes)
+	}
+}
+
 func TestRollupHelpers(t *testing.T) {
 	t.Run("truncateToHour", func(t *testing.T) {
 		ts := time.Date(2026, 3, 15, 14, 35, 22, 0, time.UTC)

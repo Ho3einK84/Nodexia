@@ -201,9 +201,16 @@ func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth) Fore
 	remainingWeekDays := float64(7 - weekdayOffset - 1) // full days left after today
 	weekPredicted := weekCurrent + int64(todayRemaining) + int64(remainingWeekDays*float64(dayPrediction))
 
-	// This month: sum month-to-date + predict remaining days.
-	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	monthCurrent := sumDaysSince(sorted, monthStart)
+	// This month: use the authoritative current-month download (RX) from the
+	// monthly vnstat row — the SAME value the Analytics Overview shows. Summing
+	// the daily rows would undercount: the stored daily history is capped at the
+	// last 7 days, so it can't cover a full month-to-date. Fall back to the daily
+	// sum only when no monthly row exists.
+	monthCurrent := currentMonthRX(months, now)
+	if monthCurrent == 0 {
+		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		monthCurrent = sumDaysSince(sorted, monthStart)
+	}
 	daysInMonth := float64(daysInMonth(now.Year(), now.Month()))
 	dayOfMonth := float64(now.Day())
 	remainingMonthDays := daysInMonth - dayOfMonth
@@ -230,6 +237,19 @@ func (s *ForecastService) selectProvider(history []int64) ForecastProvider {
 		return s.providers[1] // MovingAverage
 	}
 	return s.providers[2] // LinearTrend (handles tiny datasets)
+}
+
+// currentMonthRX returns the current month's download (RX) bytes from the
+// monthly vnstat rows — the exact metric the Analytics Overview displays, so the
+// "This Month" forecast value matches the overview for the same period.
+func currentMonthRX(months []TrafficMonth, now time.Time) int64 {
+	label := now.Format("2006-01")
+	for _, m := range months {
+		if m.Label == label {
+			return m.RX
+		}
+	}
+	return 0
 }
 
 // currentDayBytes and sumDaysSince both sum DOWNLOAD (RX) bytes only, to match
