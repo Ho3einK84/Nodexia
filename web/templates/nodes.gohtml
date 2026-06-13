@@ -303,12 +303,48 @@
           {{ with index .NodeInstallForm.Errors "node_name" }}<small class="field-error">{{ . }}</small>{{ end }}
           <small class="field-hint">Each instance gets its own <code>/opt/&lt;name&gt;</code> and <code>/var/lib/&lt;name&gt;</code>, so several nodes can run side by side (node, node2, …).</small>
         </label>
+
+        <div class="form-grid">
+          <label class="form-field">
+            <span>Service port</span>
+            <input type="number" name="service_port" value="{{ .NodeInstallForm.ServicePort }}" placeholder="62050" min="1" max="65535">
+            {{ with index .NodeInstallForm.Errors "service_port" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+          <label class="form-field">
+            <span>API port <small class="field-optional">(optional)</small></span>
+            <input type="number" name="api_port" value="{{ .NodeInstallForm.APIPort }}" placeholder="62051" min="1" max="65535">
+            {{ with index .NodeInstallForm.Errors "api_port" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+        </div>
+
+        <fieldset class="form-field node-proto-choice">
+          <span>Connection type</span>
+          <div class="node-proto-options">
+            <label class="node-proto-option">
+              <input type="radio" name="protocol" value="grpc" {{ if ne .NodeInstallForm.Protocol "rest" }}checked{{ end }}>
+              <span><i data-lucide="layers" class="icon-in-button"></i> gRPC <small>recommended</small></span>
+            </label>
+            <label class="node-proto-option">
+              <input type="radio" name="protocol" value="rest" {{ if eq .NodeInstallForm.Protocol "rest" }}checked{{ end }}>
+              <span><i data-lucide="globe" class="icon-in-button"></i> REST</span>
+            </label>
+          </div>
+          {{ with index .NodeInstallForm.Errors "protocol" }}<small class="field-error">{{ . }}</small>{{ end }}
+        </fieldset>
+
+        <label class="form-field">
+          <span>API key <small class="field-optional">(optional)</small></span>
+          <input type="text" name="api_key" value="{{ .NodeInstallForm.APIKey }}" placeholder="Leave blank to auto-generate a UUID" autocomplete="off" spellcheck="false">
+          {{ with index .NodeInstallForm.Errors "api_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+          <small class="field-hint">Must be a valid UUID. Leave blank and the installer generates one for you.</small>
+        </label>
+
         <div class="sys-form__actions">
           <button type="submit" class="btn btn--primary" data-confirm="Run the official PasarGuard install script on this server? This installs Docker-based services and may take several minutes.">
             <i data-lucide="download" class="icon-in-button"></i> Install node
           </button>
         </div>
-        <p class="node-install-note">Runs the official installer non-interactively and then shows the API key and SSL certificate needed to register the node in the PasarGuard panel. Rebecca nodes are detect-and-manage only.</p>
+        <p class="node-install-note">Runs the official installer, applies your ports and connection type to <code>/opt/&lt;name&gt;/.env</code>, restarts the node through its CLI, and then shows the API key and SSL certificate needed to register it in the PasarGuard panel. Rebecca nodes are detect-and-manage only.</p>
       </form>
       {{ else }}
       <p class="empty-state">Installing a node needs stored SSH credentials. Edit the server and store credentials first.</p>

@@ -106,7 +106,7 @@ func (h *Handlers) Page(w http.ResponseWriter, r *http.Request) {
 		status:      http.StatusOK,
 		form:        h.defaultFormView(server, hasStoredCreds),
 		snapshots:   snapshots,
-		installForm: h.installFormView(server, hasStoredCreds, "", nil),
+		installForm: h.installFormView(server, hasStoredCreds),
 	}
 	page.stream, page.flashKind, page.flashMessage = h.loadStreamView(streamID, server.ID)
 	if page.flashKind == "" {
@@ -155,7 +155,7 @@ func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
 		h.renderPage(w, r, server, pageView{
 			status:       http.StatusUnprocessableEntity,
 			form:         formViewFromInput(form, validationErrors, server.ID),
-			installForm:  h.installFormView(server, false, "", nil),
+			installForm:  h.installFormView(server, false),
 			flashKind:    "error",
 			flashMessage: "Please fix the highlighted fields before refreshing node discovery.",
 		})
@@ -189,7 +189,7 @@ func (h *Handlers) collectWith(w http.ResponseWriter, r *http.Request, server se
 		h.renderPage(w, r, server, pageView{
 			status:      http.StatusBadGateway,
 			form:        h.defaultFormView(server, hasStoredCreds),
-			installForm: h.installFormView(server, hasStoredCreds, "", nil),
+			installForm: h.installFormView(server, hasStoredCreds),
 			collection: view.NodeCollectionResultView{
 				Available: true,
 				Error:     err.Error(),
@@ -222,7 +222,7 @@ func (h *Handlers) collectWith(w http.ResponseWriter, r *http.Request, server se
 		form:         h.defaultFormView(server, hasStoredCreds),
 		snapshots:    snapshotViews,
 		collection:   collectionViewFromProbes(probes, collectedAt),
-		installForm:  h.installFormView(server, hasStoredCreds, "", nil),
+		installForm:  h.installFormView(server, hasStoredCreds),
 		flashKind:    "success",
 		flashMessage: flashMessage,
 	})
@@ -347,11 +347,26 @@ func (h *Handlers) InstallStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nodeName := strings.TrimSpace(r.FormValue("node_name"))
+	input := installFormInput{
+		NodeName:    nodeName,
+		ServicePort: strings.TrimSpace(r.FormValue("service_port")),
+		APIPort:     strings.TrimSpace(r.FormValue("api_port")),
+		Protocol:    strings.TrimSpace(r.FormValue("protocol")),
+		APIKey:      strings.TrimSpace(r.FormValue("api_key")),
+	}
+
 	installErrors := ValidationErrors{}
 	if err := ValidateNodeName(nodeName); err != nil {
 		installErrors["node_name"] = "Use letters, digits, dot, dash, or underscore (max 64 characters)."
 	} else if h.nodeNameTaken(r.Context(), server.ID, nodeName) {
 		installErrors["node_name"] = "A node with this name already exists on this server — pick another name."
+	}
+
+	config, cfgErr := PasarGuardProvider{}.normalizeInstallInput(input)
+	if cfgErr != nil {
+		for field, message := range cfgErr {
+			installErrors[field] = message
+		}
 	}
 
 	if installErrors.HasAny() {
@@ -364,7 +379,7 @@ func (h *Handlers) InstallStart(w http.ResponseWriter, r *http.Request) {
 			status:       http.StatusUnprocessableEntity,
 			form:         h.defaultFormView(server, true),
 			snapshots:    snapshots,
-			installForm:  h.installFormView(server, true, nodeName, installErrors),
+			installForm:  h.installFormViewFromInput(server, true, input, installErrors),
 			flashKind:    "error",
 			flashMessage: "Please fix the install form before starting the installation.",
 		})
@@ -383,7 +398,7 @@ func (h *Handlers) InstallStart(w http.ResponseWriter, r *http.Request) {
 		ConnectTimeout: h.deps.Config.SSH.ConnectTimeout,
 	}
 
-	job := h.installs.create(server.ID, nodeName)
+	job := h.installs.create(server.ID, nodeName, config)
 	go runInstall(job, h.deps.SSH, connReq, PasarGuardProvider{}, server.Host)
 
 	http.Redirect(w, r, installJobURL(server.ID, job.id), http.StatusSeeOther)
@@ -637,15 +652,42 @@ func (h *Handlers) defaultFormView(server servers.Server, hasStoredCreds bool) v
 	}
 }
 
-func (h *Handlers) installFormView(server servers.Server, enabled bool, nodeName string, formErrors ValidationErrors) view.NodeInstallFormView {
+// installFormInput is the raw pre-install configuration submitted by the user.
+type installFormInput struct {
+	NodeName    string
+	ServicePort string
+	APIPort     string
+	Protocol    string
+	APIKey      string
+}
+
+// installFormView returns the default install form (fresh page load).
+func (h *Handlers) installFormView(server servers.Server, enabled bool) view.NodeInstallFormView {
+	return h.installFormViewFromInput(server, enabled, installFormInput{
+		ServicePort: pasarguardDefaultPort,
+		Protocol:    pasarguardDefaultProtocol,
+	}, nil)
+}
+
+// installFormViewFromInput re-renders the install form preserving the user's
+// entries and surfacing field errors.
+func (h *Handlers) installFormViewFromInput(server servers.Server, enabled bool, input installFormInput, formErrors ValidationErrors) view.NodeInstallFormView {
 	if formErrors == nil {
 		formErrors = ValidationErrors{}
 	}
+	protocol := strings.ToLower(strings.TrimSpace(input.Protocol))
+	if protocol == "" {
+		protocol = pasarguardDefaultProtocol
+	}
 	return view.NodeInstallFormView{
-		Action:   nodesURL(server.ID) + "/install",
-		NodeName: nodeName,
-		Enabled:  enabled,
-		Errors:   formErrors,
+		Action:      nodesURL(server.ID) + "/install",
+		NodeName:    input.NodeName,
+		ServicePort: input.ServicePort,
+		APIPort:     input.APIPort,
+		Protocol:    protocol,
+		APIKey:      input.APIKey,
+		Enabled:     enabled,
+		Errors:      formErrors,
 	}
 }
 

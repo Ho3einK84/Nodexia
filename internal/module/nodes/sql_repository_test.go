@@ -68,3 +68,55 @@ func TestSQLRepositoryReplaceAndGetLatest(t *testing.T) {
 		t.Fatalf("HasAny = %v, %v; want true, nil", hasAny, err)
 	}
 }
+
+// TestSQLRepositoryMixedTimestampsStaySingleBatch reproduces the listing bug:
+// providers run as separate probes that finish at different instants, so the
+// snapshots arrive carrying different CollectedAt values. ReplaceLatest must
+// collapse them onto the single batch timestamp, otherwise GetLatestByServer
+// (which groups by one created_at) returns only one node family.
+func TestSQLRepositoryMixedTimestampsStaySingleBatch(t *testing.T) {
+	runtime := testutil.OpenTestDB(t)
+	ctx := context.Background()
+
+	if _, err := runtime.SQL.ExecContext(
+		ctx,
+		`INSERT INTO servers (name, host, port, auth_mode, username) VALUES (?, ?, ?, ?, ?)`,
+		"mixed", "192.0.2.20", 22, "password", "root",
+	); err != nil {
+		t.Fatalf("insert server: %v", err)
+	}
+
+	repo := nodes.NewSQLRepository(runtime.SQL)
+	batchTime := time.Date(2026, 6, 13, 4, 0, 0, 0, time.UTC)
+
+	// Two PasarGuard instances and one Rebecca node, each stamped with a
+	// DIFFERENT time (as the live Collect path used to do).
+	snapshots := []nodes.Snapshot{
+		{NodeType: "pasarguard-node", ServiceName: "node", InstallMode: "docker", HealthStatus: "running", CollectedAt: batchTime.Add(-2 * time.Second)},
+		{NodeType: "pasarguard-node", ServiceName: "node2", InstallMode: "docker", HealthStatus: "stopped", CollectedAt: batchTime.Add(-1 * time.Second)},
+		{NodeType: "rebecca-node", ServiceName: "rebecca-node", InstallMode: "binary", HealthStatus: "running", CollectedAt: batchTime},
+	}
+
+	if err := repo.ReplaceLatest(ctx, 1, snapshots, batchTime); err != nil {
+		t.Fatalf("ReplaceLatest: %v", err)
+	}
+
+	stored, err := repo.GetLatestByServer(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetLatestByServer: %v", err)
+	}
+	if len(stored) != 3 {
+		t.Fatalf("len(stored) = %d, want 3 (all nodes, both families)", len(stored))
+	}
+
+	types := map[string]int{}
+	for _, s := range stored {
+		types[s.NodeType]++
+		if !s.CollectedAt.Equal(batchTime) {
+			t.Errorf("snapshot %s/%s CollectedAt = %s, want unified %s", s.NodeType, s.ServiceName, s.CollectedAt, batchTime)
+		}
+	}
+	if types["pasarguard-node"] != 2 || types["rebecca-node"] != 1 {
+		t.Fatalf("type counts = %v, want 2 pasarguard + 1 rebecca", types)
+	}
+}

@@ -33,6 +33,15 @@ func TestGeneratedShellSyntax(t *testing.T) {
 	}
 	commands = append(commands, info)
 
+	configure, _, err := PasarGuardProvider{}.ConfigureCommand("node2", InstallConfig{
+		ServicePort: "62055", APIPort: "62056", Protocol: "rest",
+		APIKey: "11111111-2222-3333-4444-555555555555",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commands = append(commands, configure)
+
 	for _, command := range commands {
 		// Each command is "sh -c '<script>'" — extract the script and syntax-check it.
 		inner := strings.TrimSuffix(strings.TrimPrefix(command, "sh -c '"), "'")

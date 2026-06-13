@@ -125,6 +125,16 @@ Every feature is a `module.Module`:
   post-install verification probe that reads `/opt/<name>/.env` (API key)
   and `/var/lib/<name>/certs/ssl_cert.pem`. The API key and certificate are
   shown once on the job page for panel registration and are never persisted.
+- **Pre-install config**: the official script takes NO flags/env for ports,
+  protocol, or API key (only `-y`-skipped prompts defaulting to 62050 / gRPC /
+  auto-UUID). So the wizard collects name + service port + API port +
+  connection type (rest/grpc) + optional API key, installs with `--yes`, then
+  `ConfigureCommand` patches `/opt/<name>/.env` (delete any commented/active
+  line for each key, append the canonical value — mirroring the script's own
+  `sed`) and restarts via the official CLI. All values are validated, so
+  interpolation is injection-safe; keep generated shell free of single quotes
+  inside the `sh -c '...'` wrapper (use escaped double quotes) — the
+  `TestGeneratedShellSyntax` guard enforces this.
 - **Rebecca** (`rebecca.go`): detect and manage only — no install option.
   Config from `/opt/rebecca-node/.env`, version from `.binary-release.json`
   (`tag` field), health from systemd/docker. Actions run the `rebecca-node`
@@ -136,6 +146,11 @@ Every feature is a `module.Module`:
   command MUST pass `ValidateNodeName`.
 - Discovery snapshots persist in `node_snapshots` (one batch per sweep via
   `ReplaceLatest`); the scheduler's nodes job uses the same providers.
+- **One sweep = one `created_at`**: providers run as separate SSH probes that
+  finish at different instants, and `GetLatestByServer` reloads the latest
+  batch by a single `created_at`. `Collect` stamps every snapshot with the
+  sweep timestamp and `ReplaceLatest` enforces it again — otherwise PasarGuard
+  and Rebecca nodes split across timestamps and only one family is listed.
 
 ## Commands (`internal/module/commands`)
 

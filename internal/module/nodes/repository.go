@@ -86,9 +86,12 @@ func (r SQLRepository) ReplaceLatest(ctx context.Context, serverID int64, snapsh
 	for _, snapshot := range snapshots {
 		snapshot = normalizeSnapshot(snapshot)
 		snapshot.ServerID = serverID
-		if snapshot.CollectedAt.IsZero() {
-			snapshot.CollectedAt = collectedAt
-		}
+		// One sweep = one created_at. GetLatestByServer reloads "the latest
+		// batch" by a single created_at value, so every row written here must
+		// share the timestamp passed in — otherwise nodes discovered by
+		// different providers (PasarGuard vs Rebecca) split across timestamps
+		// and only one family is ever returned.
+		snapshot.CollectedAt = collectedAt
 
 		dependenciesJSON, err := json.Marshal(snapshot.Dependencies)
 		if err != nil {

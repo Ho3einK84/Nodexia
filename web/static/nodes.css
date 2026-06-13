@@ -570,3 +570,60 @@
   word-break: break-all;
   white-space: pre-wrap;
 }
+
+/* ── Install: connection-type choice ─────────────────────────────────────── */
+
+.field-optional {
+  font-weight: 400;
+  color: var(--text-muted, #94a3b8);
+}
+
+.node-proto-choice {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.node-proto-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.node-proto-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  background: rgba(2, 6, 23, 0.4);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.node-proto-option:hover {
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+.node-proto-option:has(input:checked) {
+  border-color: var(--accent, #38bdf8);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.node-proto-option input {
+  accent-color: var(--accent, #38bdf8);
+}
+
+.node-proto-option span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+}
+
+.node-proto-option small {
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.72rem;
+}

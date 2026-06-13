@@ -39,6 +39,7 @@ type installJob struct {
 	id       string
 	serverID int64
 	nodeName string
+	config   InstallConfig
 
 	mu         sync.Mutex
 	createdAt  time.Time
@@ -127,11 +128,12 @@ func newInstallStore() *installStore {
 	return &installStore{jobs: map[string]*installJob{}}
 }
 
-func (s *installStore) create(serverID int64, nodeName string) *installJob {
+func (s *installStore) create(serverID int64, nodeName string, config InstallConfig) *installJob {
 	job := &installJob{
 		id:        randomInstallJobID(),
 		serverID:  serverID,
 		nodeName:  nodeName,
+		config:    config,
 		status:    installStatusRunning,
 		createdAt: time.Now().UTC(),
 	}
@@ -211,7 +213,35 @@ func runInstall(job *installJob, ssh *sshclient.Service, conn sshclient.Connecti
 		return
 	}
 	if exitCode == exitRemoteTimeout {
-		job.appendOutput("\n[log streaming stopped — verifying installation]\n")
+		job.appendOutput("\n[log streaming stopped — applying configuration]\n")
+	}
+
+	// The official installer only writes defaults (port 62050, gRPC,
+	// auto-generated key). Apply the panel's chosen ports/protocol/key by
+	// patching /opt/<name>/.env and restarting through the official CLI.
+	configureCmd, timeout, err := provider.ConfigureCommand(job.nodeName, job.config)
+	if err != nil {
+		job.fail(err.Error())
+		return
+	}
+	job.appendOutput(fmt.Sprintf("\n[configuring node: service port %s, protocol %s]\n", job.config.ServicePort, job.config.Protocol))
+	configCtx, cancelConfig := context.WithTimeout(ctx, timeout)
+	configResult, configErr := ssh.StreamCommand(configCtx, sshclient.CommandRequest{
+		ConnectionRequest: conn,
+		Command:           configureCmd,
+		CommandTimeout:    timeout,
+	}, sshclient.StreamHandlers{
+		OnStdout: job.appendOutput,
+		OnStderr: job.appendOutput,
+	})
+	cancelConfig()
+	if configErr != nil {
+		job.fail("Node installed but applying the configuration failed: " + configErr.Error())
+		return
+	}
+	if configResult.ExitCode != nil && *configResult.ExitCode != 0 {
+		job.fail(fmt.Sprintf("Node installed but configuration exited with code %d. Check the output above.", *configResult.ExitCode))
+		return
 	}
 
 	infoCmd, err := provider.RegistrationInfoCommand(job.nodeName)

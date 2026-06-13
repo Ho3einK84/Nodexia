@@ -190,3 +190,88 @@ MIIBxTCCAWugAwIBAgIUO
 		t.Fatalf("ParseRegistrationInfo must report not-found without an API key")
 	}
 }
+
+func TestInstallConfigNormalize(t *testing.T) {
+	// Defaults fill in when empty.
+	cfg, err := InstallConfig{}.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize empty: %v", err)
+	}
+	if cfg.ServicePort != "62050" || cfg.Protocol != "grpc" {
+		t.Errorf("defaults = %+v, want port 62050 / grpc", cfg)
+	}
+
+	if _, err := (InstallConfig{ServicePort: "70000"}).Normalize(); err == nil {
+		t.Errorf("Normalize must reject out-of-range service port")
+	}
+	if _, err := (InstallConfig{Protocol: "udp"}).Normalize(); err == nil {
+		t.Errorf("Normalize must reject unknown protocol")
+	}
+	if _, err := (InstallConfig{APIKey: "not-a-uuid"}).Normalize(); err == nil {
+		t.Errorf("Normalize must reject malformed API key")
+	}
+	if _, err := (InstallConfig{APIKey: "11111111-2222-3333-4444-555555555555"}).Normalize(); err != nil {
+		t.Errorf("Normalize must accept a valid UUID: %v", err)
+	}
+}
+
+func TestPasarGuardConfigureCommand(t *testing.T) {
+	provider := PasarGuardProvider{}
+	cfg := InstallConfig{ServicePort: "62055", APIPort: "62056", Protocol: "rest", APIKey: "11111111-2222-3333-4444-555555555555"}
+
+	command, timeout, err := provider.ConfigureCommand("node2", cfg)
+	if err != nil {
+		t.Fatalf("ConfigureCommand: %v", err)
+	}
+	if timeout <= 0 {
+		t.Errorf("timeout = %v, want > 0", timeout)
+	}
+	for _, want := range []string{
+		"/opt/node2/.env",
+		"SERVICE_PORT= 62055",
+		`SERVICE_PROTOCOL= \"rest\"`,
+		"API_PORT= 62056",
+		"API_KEY= 11111111-2222-3333-4444-555555555555",
+		"--name node2 restart -n",
+	} {
+		if !strings.Contains(command, want) {
+			t.Errorf("configure command missing %q:\n%s", want, command)
+		}
+	}
+
+	// Optional fields omitted when empty.
+	command, _, err = provider.ConfigureCommand("node", InstallConfig{ServicePort: "62050", Protocol: "grpc"})
+	if err != nil {
+		t.Fatalf("ConfigureCommand minimal: %v", err)
+	}
+	if strings.Contains(command, "API_PORT=") || strings.Contains(command, "API_KEY=") {
+		t.Errorf("empty optional fields must not be written:\n%s", command)
+	}
+
+	if _, _, err := provider.ConfigureCommand("node; rm -rf /", cfg); err == nil {
+		t.Errorf("ConfigureCommand must reject unsafe node names")
+	}
+}
+
+func TestNormalizeInstallInput(t *testing.T) {
+	provider := PasarGuardProvider{}
+
+	cfg, errs := provider.normalizeInstallInput(installFormInput{
+		NodeName: "node2", ServicePort: "62055", Protocol: "rest",
+	})
+	if errs.HasAny() {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if cfg.ServicePort != "62055" || cfg.Protocol != "rest" {
+		t.Errorf("cfg = %+v", cfg)
+	}
+
+	_, errs = provider.normalizeInstallInput(installFormInput{
+		ServicePort: "abc", APIPort: "99999", Protocol: "udp", APIKey: "x",
+	})
+	for _, field := range []string{"service_port", "api_port", "protocol", "api_key"} {
+		if _, ok := errs[field]; !ok {
+			t.Errorf("expected validation error for %q, got %v", field, errs)
+		}
+	}
+}

@@ -521,12 +521,17 @@ type NodeActionView struct {
 	Danger bool
 }
 
-// NodeInstallFormView powers the "Install PasarGuard node" form.
+// NodeInstallFormView powers the "Install PasarGuard node" form, including the
+// pre-install port and connection-type configuration.
 type NodeInstallFormView struct {
-	Action   string
-	NodeName string
-	Enabled  bool
-	Errors   map[string]string
+	Action      string
+	NodeName    string
+	ServicePort string
+	APIPort     string
+	Protocol    string // selected protocol: "rest" or "grpc"
+	APIKey      string
+	Enabled     bool
+	Errors      map[string]string
 }
 
 // NodeInstallView backs the live install job page.  While IsRunning the page

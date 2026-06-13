@@ -36,7 +36,8 @@ func Collect(ctx context.Context, sshService *sshclient.Service, req sshclient.C
 			Command:           command,
 			CommandTimeout:    req.CommandTimeout,
 		})
-		if collectedAt.IsZero() && !result.CompletedAt.IsZero() {
+		// Track the newest probe time so the whole sweep shares one timestamp.
+		if result.CompletedAt.After(collectedAt) {
 			collectedAt = result.CompletedAt
 		}
 		reports = append(reports, ProbeReport{
@@ -54,10 +55,13 @@ func Collect(ctx context.Context, sshService *sshclient.Service, req sshclient.C
 	if collectedAt.IsZero() {
 		collectedAt = time.Now().UTC()
 	}
+	// Every node found in this sweep MUST carry the same collectedAt: providers
+	// run as separate SSH probes that complete at different instants, and the
+	// repository groups "the latest snapshot" by a single created_at. Without
+	// this, PasarGuard and Rebecca nodes would land under different timestamps
+	// and only one family would ever be listed.
 	for i := range snapshots {
-		if snapshots[i].CollectedAt.IsZero() {
-			snapshots[i].CollectedAt = collectedAt
-		}
+		snapshots[i].CollectedAt = collectedAt
 	}
 
 	return dedupeSnapshots(snapshots), reports, nil
