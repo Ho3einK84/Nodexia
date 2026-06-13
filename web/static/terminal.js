@@ -150,6 +150,8 @@
 
   ws.onclose = function (event) {
     setStatus('disconnected', 'disconnected');
+    // The terminal no longer owns the screen — restore background scrolling.
+    setScrollLock(false);
     if (!event.wasClean) {
       showError('Connection closed unexpectedly (code ' + event.code + ').');
     }
@@ -162,6 +164,7 @@
   var backBtn = document.getElementById('terminal-back');
   if (backBtn) {
     backBtn.addEventListener('click', function () {
+      setScrollLock(false);
       try { if (ws) ws.close(1000, 'closed by user'); } catch (e) { /* ignore */ }
       if (window.history.length > 1) {
         window.history.back();
@@ -170,6 +173,9 @@
       }
     });
   }
+
+  // Never leave the page locked if it is bfcached and later restored.
+  window.addEventListener('pagehide', function () { setScrollLock(false); });
 
   /* ── Ctrl-pending modifier ────────────────────────────── */
   // Tapping the toolbar's Ctrl key arms a one-shot modifier: the next character
@@ -344,10 +350,18 @@
     });
   }
 
+  // Lock/unlock the page behind the full-screen terminal. The matching CSS
+  // pins <body> in place (iOS Safari ignores overflow:hidden alone), so the
+  // class must live on both <html> and <body>.
+  function setScrollLock(on) {
+    document.documentElement.classList.toggle('terminal-mobile-active', on);
+    document.body.classList.toggle('terminal-mobile-active', on);
+  }
+
   function enableMobile() {
     buildToolbar();
     card.classList.add('terminal-card--mobile');
-    document.body.classList.add('terminal-mobile-active');
+    setScrollLock(true);
     updateMobileViewport();
 
     if (vv) {
