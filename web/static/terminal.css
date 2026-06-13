@@ -238,8 +238,26 @@
   padding: 6px;
 }
 
+/* Solid, fully opaque header: the default translucent fill lets the page
+   gradient behind the full-screen terminal bleed through on mobile. */
+.terminal-card--mobile .terminal-card__header {
+  background: #0b1120;
+}
+
+/* Lock the page behind the full-screen terminal so the xterm viewport is the
+   only scrollable surface. overflow:hidden on <body> alone is ignored by iOS
+   Safari for touch scrolling, so html is locked and the body is pinned in
+   place too; terminal.js adds/removes the class on both elements. */
+html.terminal-mobile-active,
 body.terminal-mobile-active {
   overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body.terminal-mobile-active {
+  position: fixed;
+  inset: 0;
+  width: 100%;
 }
 
 /* Hide the fixed bottom navigation while the terminal owns the screen. */
