@@ -381,10 +381,12 @@ const pasarguardInstallScriptTimeout = "600"
 //
 // The official install_command / install_node prompt order (AUTO_CONFIRM off):
 //  1. "use your own public certificate?"  -> "" (default: self-signed cert)
-//  2. "enter your API Key"                -> "" (default: auto-generated UUID)
-//  3. "use REST protocol instead?"        -> "" (default: gRPC)
-//  4. "enter the SERVICE_PORT"            -> cfg.ServicePort
-//  5. "install the systemd service?"      -> "n" (Nodexia drives the node via
+//  2. "add additional SAN entries?"       -> "" (default: keep current SANs;
+//     prompted by gen_self_signed_cert on the self-signed path)
+//  3. "enter your API Key"                -> "" (default: auto-generated UUID)
+//  4. "use REST protocol instead?"        -> "" (default: gRPC)
+//  5. "enter the SERVICE_PORT"            -> cfg.ServicePort
+//  6. "install the systemd service?"      -> "n" (Nodexia drives the node via
 //     the pg-node CLI / docker-compose, never systemd; answering "n" also
 //     avoids the service's own API_PORT prompt and the require_systemd exit on
 //     hosts without systemd)
@@ -406,7 +408,7 @@ func (PasarGuardProvider) InstallCommand(nodeName string, cfg InstallConfig) (st
 		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + pasarguardScriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`else echo "curl or wget is required to install" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
 		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + pasarguardInstallScriptTimeout + `"; fi; ` +
-		`printf "\n\n\n` + servicePort + `\nn\n" | $TMO $SUDO bash "$SCRIPT" install --name ` + nodeName + `; ` +
+		`printf "\n\n\n\n` + servicePort + `\nn\n" | $TMO $SUDO bash "$SCRIPT" install --name ` + nodeName + `; ` +
 		`STATUS=$?; rm -f "$SCRIPT"; ` +
 		// The script runs under `set -e` and dies without a message on the
 		// first failed command; emit the exact exit code so the stream never
