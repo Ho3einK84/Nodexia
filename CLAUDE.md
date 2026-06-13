@@ -117,6 +117,12 @@ Every feature is a `module.Module`:
   to avoid log tailing, `--yes` for confirmations); if the `pg-node` command
   is missing, the per-instance CLI `/usr/local/bin/<name>` is used (the
   official script installs it under the custom name).
+- **Discovery uses passwordless sudo for Docker** (`sudo -n`, same as actions):
+  node hosts usually require root for the Docker socket, so an unprivileged
+  `docker ps` returns nothing and every node would look stopped. Health comes
+  from an authoritative per-instance `docker inspect -f {{.State.Status}}`
+  (`=STATE=` marker); the `docker ps` listing is only a fallback, and when
+  neither is readable the node is "unknown", never a false "stopped".
 - **PasarGuard install wizard**: `POST /servers/{id}/nodes/install` runs the
   official script (`install --name <name> --yes`) as a background job
   (`install.go`, in-memory store, 30 min TTL). The script tails container

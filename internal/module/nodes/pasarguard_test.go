@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+// pgDiscoveryFixture covers the realistic mix: "node" is reported running by
+// `docker inspect` (the authoritative =STATE=); "node2" is exited; "pg-node"
+// reproduces the reported bug — it is MISSING from the `docker ps` listing
+// (e.g. the listing came back empty) yet inspect reports it running, so it must
+// still show as running. "orphan" is a PasarGuard container with no /opt dir.
 const pgDiscoveryFixture = `=DOCKER=
 node	pasarguard/node:latest	Up 2 hours	0.0.0.0:443->443/tcp, 0.0.0.0:62050->62050/tcp
 node2	pasarguard/node:v0.5.0	Exited (0) 3 hours ago
@@ -15,6 +20,7 @@ orphan	pasarguard/node:latest	Up 1 hour
 =PGNODE=node=
 =IMAGE=    image: pasarguard/node:latest=
 =DATADIR=/var/lib/node=
+=STATE=running=
 =ENVSTART=
 SERVICE_PORT = 62050
 API_KEY = "11111111-2222-3333-4444-555555555555"
@@ -23,8 +29,17 @@ SERVICE_PROTOCOL = grpc
 =PGNODEEND=
 =PGNODE=node2=
 =IMAGE=image: "pasarguard/node:v0.5.0"=
+=STATE=exited=
 =ENVSTART=
 SERVICE_PORT=5000
+=ENVEND=
+=PGNODEEND=
+=PGNODE=pg-node=
+=IMAGE=    image: pasarguard/node:latest=
+=STATE=running=
+=ENVSTART=
+SERVICE_PORT = 62050
+SERVICE_PROTOCOL = rest
 =ENVEND=
 =PGNODEEND=
 `
@@ -33,8 +48,8 @@ func TestPasarGuardParseDiscovery(t *testing.T) {
 	collectedAt := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	snapshots := PasarGuardProvider{}.ParseDiscovery(pgDiscoveryFixture, collectedAt)
 
-	if len(snapshots) != 3 {
-		t.Fatalf("len(snapshots) = %d, want 3 (node, node2, orphan)", len(snapshots))
+	if len(snapshots) != 4 {
+		t.Fatalf("len(snapshots) = %d, want 4 (node, node2, pg-node, orphan)", len(snapshots))
 	}
 
 	byName := map[string]Snapshot{}
@@ -89,6 +104,13 @@ func TestPasarGuardParseDiscovery(t *testing.T) {
 		t.Errorf("node2 Protocol = %q, want grpc default", node2.Protocol)
 	}
 
+	// The regression case: pg-node is absent from the docker ps listing but
+	// inspect reports it running — it must NOT show as stopped.
+	pgNode := byName["pg-node"]
+	if pgNode.HealthStatus != "running" {
+		t.Errorf("pg-node HealthStatus = %q, want running (authoritative inspect state)", pgNode.HealthStatus)
+	}
+
 	orphan, ok := byName["orphan"]
 	if !ok {
 		t.Fatalf("expected a snapshot for the orphan container without /opt directory")
@@ -102,6 +124,29 @@ func TestPasarGuardParseDiscovery(t *testing.T) {
 
 	if _, found := byName["caddy"]; found {
 		t.Fatalf("non-PasarGuard container must not produce a snapshot")
+	}
+}
+
+func TestPGHealth(t *testing.T) {
+	cases := []struct {
+		name            string
+		state           string
+		hasContainer    bool
+		containerStatus string
+		want            string
+	}{
+		{"inspect running", "running", false, "", "running"},
+		{"inspect restarting", "restarting", false, "", "running"},
+		{"inspect exited", "exited", true, "Up 1h", "stopped"}, // inspect wins over stale ps
+		{"inspect paused", "paused", false, "", "stopped"},
+		{"no inspect, ps up", "", true, "Up 2 hours", "running"},
+		{"no inspect, ps exited", "", true, "Exited (0) ago", "stopped"},
+		{"no signal at all", "", false, "", "unknown"},
+	}
+	for _, tc := range cases {
+		if got := pgHealth(tc.state, tc.hasContainer, tc.containerStatus); got != tc.want {
+			t.Errorf("%s: pgHealth(%q,%v,%q) = %q, want %q", tc.name, tc.state, tc.hasContainer, tc.containerStatus, got, tc.want)
+		}
 	}
 }
 

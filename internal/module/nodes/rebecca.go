@@ -36,14 +36,15 @@ func (RebeccaProvider) SupportsInstall() bool { return false }
 // the docker container state (the official script supports both modes).
 func (RebeccaProvider) DiscoveryCommand() string {
 	return `sh -c '` +
+		`if [ "$(id -u)" -eq 0 ]; then SUDO=""; elif sudo -n true 2>/dev/null; then SUDO="sudo -n"; else SUDO=""; fi; ` +
 		`if [ -d ` + rebeccaAppDir + ` ] || command -v rebecca-node >/dev/null 2>&1; then ` +
 		`printf "=REBECCA=\n"; ` +
-		`printf "=ENVSTART=\n"; cat ` + rebeccaAppDir + `/.env 2>/dev/null || true; printf "\n=ENVEND=\n"; ` +
-		`printf "=RELEASESTART=\n"; cat ` + rebeccaAppDir + `/.binary-release.json 2>/dev/null || true; printf "\n=RELEASEEND=\n"; ` +
-		`printf "=MODE=%s=\n" "$(cat ` + rebeccaAppDir + `/.install-mode 2>/dev/null)"; ` +
+		`printf "=ENVSTART=\n"; $SUDO cat ` + rebeccaAppDir + `/.env 2>/dev/null || true; printf "\n=ENVEND=\n"; ` +
+		`printf "=RELEASESTART=\n"; $SUDO cat ` + rebeccaAppDir + `/.binary-release.json 2>/dev/null || true; printf "\n=RELEASEEND=\n"; ` +
+		`printf "=MODE=%s=\n" "$($SUDO cat ` + rebeccaAppDir + `/.install-mode 2>/dev/null)"; ` +
 		`printf "=SERVICE=%s=\n" "$(systemctl is-active rebecca-node 2>/dev/null)"; ` +
 		`if command -v docker >/dev/null 2>&1; then ` +
-		`printf "=CONTAINER=%s=\n" "$(docker ps -a --filter name=rebecca-node --format "{{.Status}}" 2>/dev/null | head -n 1)"; ` +
+		`printf "=CONTAINER=%s=\n" "$($SUDO docker ps -a --filter name=rebecca-node --format "{{.Status}}" 2>/dev/null | head -n 1)"; ` +
 		`fi; ` +
 		`printf "=REBECCAEND=\n"; ` +
 		`fi; true'`

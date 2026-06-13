@@ -33,12 +33,20 @@ func (PasarGuardProvider) SupportsInstall() bool { return true }
 // DiscoveryCommand enumerates every PasarGuard instance:
 //   - a "=DOCKER=" section lists all containers (name, image, status, ports);
 //   - one "=PGNODE=<name>=" block per /opt/<name> whose compose file
-//     references PasarGuard, including its compose image line and .env.
+//     references PasarGuard, including its compose image line, an authoritative
+//     "=STATE=" from `docker inspect`, and its .env.
+//
+// Docker is queried through passwordless sudo (matching the management
+// actions): node hosts commonly require root for the Docker socket, and
+// without it discovery would see no containers and wrongly report every node
+// as stopped.
 func (PasarGuardProvider) DiscoveryCommand() string {
 	return `sh -c '` +
-		`if command -v docker >/dev/null 2>&1; then ` +
+		`if [ "$(id -u)" -eq 0 ]; then SUDO=""; elif sudo -n true 2>/dev/null; then SUDO="sudo -n"; else SUDO=""; fi; ` +
+		`HAVE_DOCKER=0; command -v docker >/dev/null 2>&1 && HAVE_DOCKER=1; ` +
+		`if [ "$HAVE_DOCKER" -eq 1 ]; then ` +
 		`printf "=DOCKER=\n"; ` +
-		`docker ps -a --format "{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true; ` +
+		`$SUDO docker ps -a --format "{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true; ` +
 		`printf "=DOCKEREND=\n"; ` +
 		`fi; ` +
 		`for dir in /opt/*/; do ` +
@@ -48,6 +56,9 @@ func (PasarGuardProvider) DiscoveryCommand() string {
 		`printf "=PGNODE=%s=\n" "$name"; ` +
 		`printf "=IMAGE=%s=\n" "$(grep -i "image:" "$dir/docker-compose.yml" 2>/dev/null | head -n 1)"; ` +
 		`[ -d "/var/lib/$name" ] && printf "=DATADIR=/var/lib/%s=\n" "$name"; ` +
+		`state=""; ` +
+		`[ "$HAVE_DOCKER" -eq 1 ] && state="$($SUDO docker inspect -f "{{.State.Status}}" "$name" 2>/dev/null)"; ` +
+		`printf "=STATE=%s=\n" "$state"; ` +
 		`printf "=ENVSTART=\n"; cat "$dir/.env" 2>/dev/null || true; printf "\n=ENVEND=\n"; ` +
 		`printf "=PGNODEEND=\n"; ` +
 		`done; true'`
@@ -58,6 +69,7 @@ type pgInstance struct {
 	Name        string
 	ComposeLine string
 	DataDir     string
+	State       string // `docker inspect` .State.Status (running/exited/…), or ""
 	EnvLines    []string
 }
 
@@ -143,6 +155,8 @@ func parsePGInstances(lines []string) []pgInstance {
 			current.ComposeLine = strings.TrimSuffix(strings.TrimPrefix(line, "=IMAGE="), "=")
 		case strings.HasPrefix(line, "=DATADIR=") && strings.HasSuffix(line, "="):
 			current.DataDir = strings.TrimSuffix(strings.TrimPrefix(line, "=DATADIR="), "=")
+		case strings.HasPrefix(line, "=STATE=") && strings.HasSuffix(line, "="):
+			current.State = strings.TrimSuffix(strings.TrimPrefix(line, "=STATE="), "=")
 		case line == "=ENVSTART=":
 			inEnv = true
 		case line == "=ENVEND=":
@@ -181,22 +195,16 @@ func (PasarGuardProvider) buildSnapshot(inst pgInstance, containers map[string]d
 		version = extractImageTag(composeImage(inst.ComposeLine))
 	}
 
-	health := "unknown"
-	switch {
-	case hasContainer && strings.HasPrefix(strings.ToLower(container.Status), "up"):
-		health = "running"
-	case hasContainer:
-		health = "stopped"
-	case dockerSeen:
-		// Docker answered but no container exists for this instance yet.
-		health = "stopped"
-	}
+	health := pgHealth(inst.State, hasContainer, container.Status)
 
 	evidence := []string{
 		fmt.Sprintf("Install directory: /opt/%s (docker-compose.yml)", inst.Name),
 	}
 	if len(env) > 0 {
 		evidence = append(evidence, fmt.Sprintf("Config: /opt/%s/.env (service port %s, protocol %s)", inst.Name, servicePort, protocol))
+	}
+	if strings.TrimSpace(inst.State) != "" {
+		evidence = append(evidence, "Container state: "+strings.TrimSpace(inst.State))
 	}
 	if hasContainer {
 		evidence = append(evidence, fmt.Sprintf("Docker container: %s (image: %s, status: %s)", container.Name, container.Image, container.Status))
@@ -235,6 +243,26 @@ func (PasarGuardProvider) buildSnapshot(inst pgInstance, containers map[string]d
 		Evidence:     evidence,
 		CollectedAt:  collectedAt,
 	})
+}
+
+// pgHealth resolves a node's health. The authoritative source is the
+// `docker inspect` state captured during discovery; the `docker ps` listing is
+// a fallback, and only when neither is available do we report "unknown"
+// (never a false "stopped").
+func pgHealth(inspectState string, hasContainer bool, containerStatus string) string {
+	switch strings.ToLower(strings.TrimSpace(inspectState)) {
+	case "running", "restarting":
+		return "running"
+	case "created", "exited", "dead", "paused", "removing":
+		return "stopped"
+	}
+	if hasContainer {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(containerStatus)), "up") {
+			return "running"
+		}
+		return "stopped"
+	}
+	return "unknown"
 }
 
 // composeImage extracts the image reference from a compose "image:" line.
