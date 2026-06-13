@@ -23,6 +23,11 @@ ram_usage="$(awk "
   /^MemAvailable:/ {available=\$2}
   END {if (total > 0) printf \"%.2f\", ((total-available)/total)*100; else printf \"0.00\"}
 " /proc/meminfo)"
+swap_usage="$(awk "
+  /^SwapTotal:/ {total=\$2}
+  /^SwapFree:/ {free=\$2}
+  END {if (total > 0) printf \"%.2f\", ((total-free)/total)*100; else printf \"0.00\"}
+" /proc/meminfo)"
 disk_usage="$(df -P / | awk "NR==2 {gsub(/%/, \"\", \$5); print \$5}")"
 read load1 load5 load15 _ < /proc/loadavg
 uptime_seconds="$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)"
@@ -41,6 +46,7 @@ network_summary="$(awk -F: "
 " /proc/net/dev)"
 printf "cpu_usage=%s\n" "$cpu_usage"
 printf "ram_usage=%s\n" "$ram_usage"
+printf "swap_usage=%s\n" "$swap_usage"
 printf "disk_usage=%s\n" "$disk_usage"
 printf "load_average_1=%s\n" "$load1"
 printf "load_average_5=%s\n" "$load5"
@@ -66,6 +72,7 @@ func Collect(ctx context.Context, sshService *sshclient.Service, req sshclient.C
 	snapshot := Snapshot{
 		CPUUsage:       parseFloat(values["cpu_usage"]),
 		RAMUsage:       parseFloat(values["ram_usage"]),
+		SwapUsage:      parseFloat(values["swap_usage"]),
 		DiskUsage:      parseFloat(values["disk_usage"]),
 		LoadAverage1:   parseFloat(values["load_average_1"]),
 		LoadAverage5:   parseFloat(values["load_average_5"]),

@@ -13,6 +13,7 @@ import (
 
 	"github.com/Ho3einK84/Nodexia/internal/config"
 	"github.com/Ho3einK84/Nodexia/internal/module/alerts"
+	"github.com/Ho3einK84/Nodexia/internal/module/analytics"
 	"github.com/Ho3einK84/Nodexia/internal/module/monitoring"
 	"github.com/Ho3einK84/Nodexia/internal/module/nodes"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
@@ -67,6 +68,8 @@ type Runtime struct {
 	nodeRepo    nodes.Repository
 	providers   []nodes.Provider
 	evaluator   *alerts.Evaluator
+	rollupSvc   *analytics.RollupService
+	cleanupSvc  *analytics.CleanupService
 
 	mu     sync.RWMutex
 	jobs   map[string]*jobState
@@ -109,6 +112,7 @@ func New(cfg config.Config, conn *sql.DB, ssh *sshclient.Service) *Runtime {
 		return nil
 	}
 
+	analyticsRepo := analytics.NewSQLRepository(conn)
 	runtime := &Runtime{
 		cfg:         cfg.Scheduler,
 		ssh:         ssh,
@@ -118,6 +122,8 @@ func New(cfg config.Config, conn *sql.DB, ssh *sshclient.Service) *Runtime {
 		nodeRepo:    nodes.NewSQLRepository(conn),
 		providers:   nodes.DefaultProviders(),
 		evaluator:   alerts.NewEvaluator(alerts.NewSQLRepository(conn), schedulerNotifier(cfg)),
+		rollupSvc:   analytics.NewRollupService(analyticsRepo),
+		cleanupSvc:  analytics.NewCleanupService(analyticsRepo),
 		jobs:        map[string]*jobState{},
 		paused:      map[string]struct{}{},
 	}
@@ -194,8 +200,45 @@ func (r *Runtime) Start() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	r.cancel = cancel
-	r.wg.Add(1)
+	r.wg.Add(2)
 	go r.loop(ctx)
+	go r.analyticsLoop(ctx)
+}
+
+// analyticsLoop runs hourly metric rollups and daily cleanup on independent
+// tickers so they do not interfere with the per-server monitoring sweep.
+func (r *Runtime) analyticsLoop(ctx context.Context) {
+	defer r.wg.Done()
+	if r.rollupSvc == nil {
+		return
+	}
+
+	hourlyTicker := time.NewTicker(time.Hour)
+	defer hourlyTicker.Stop()
+	dailyTicker := time.NewTicker(24 * time.Hour)
+	defer dailyTicker.Stop()
+
+	// Run an initial rollup shortly after startup so historical data is
+	// available without waiting a full hour.
+	startTimer := time.NewTimer(5 * time.Minute)
+	defer startTimer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-startTimer.C:
+			r.rollupSvc.ComputeHourlyRollups(ctx)
+			r.rollupSvc.ComputeDailyRollups(ctx)
+		case <-hourlyTicker.C:
+			r.rollupSvc.ComputeHourlyRollups(ctx)
+			r.rollupSvc.ComputeDailyRollups(ctx)
+		case <-dailyTicker.C:
+			if r.cleanupSvc != nil {
+				r.cleanupSvc.RunCleanup(ctx)
+			}
+		}
+	}
 }
 
 func (r *Runtime) Close() error {

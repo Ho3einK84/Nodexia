@@ -17,6 +17,7 @@ type Snapshot struct {
 	ServerName     string
 	CPUUsage       float64
 	RAMUsage       float64
+	SwapUsage      float64
 	DiskUsage      float64
 	LoadAverage1   float64
 	LoadAverage5   float64
@@ -53,6 +54,7 @@ func (r SQLRepository) Append(ctx context.Context, snapshot Snapshot) (Snapshot,
 			server_id,
 			cpu_usage,
 			ram_usage,
+			swap_usage,
 			disk_usage,
 			load_average_1,
 			load_average_5,
@@ -60,10 +62,11 @@ func (r SQLRepository) Append(ctx context.Context, snapshot Snapshot) (Snapshot,
 			uptime_seconds,
 			network_summary,
 			created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		snapshot.ServerID,
 		snapshot.CPUUsage,
 		snapshot.RAMUsage,
+		snapshot.SwapUsage,
 		snapshot.DiskUsage,
 		snapshot.LoadAverage1,
 		snapshot.LoadAverage5,
@@ -95,7 +98,7 @@ func (r SQLRepository) HasAny(ctx context.Context, serverID int64) (bool, error)
 func (r SQLRepository) GetLatestByServer(ctx context.Context, serverID int64) (Snapshot, error) {
 	row := r.conn.QueryRowContext(
 		ctx,
-		`SELECT ss.id, ss.server_id, s.name, ss.cpu_usage, ss.ram_usage, ss.disk_usage, ss.load_average_1, ss.load_average_5, ss.load_average_15, ss.uptime_seconds, ss.network_summary, ss.created_at
+		`SELECT ss.id, ss.server_id, s.name, ss.cpu_usage, ss.ram_usage, ss.swap_usage, ss.disk_usage, ss.load_average_1, ss.load_average_5, ss.load_average_15, ss.uptime_seconds, ss.network_summary, ss.created_at
 		 FROM system_snapshots ss
 		 JOIN servers s ON s.id = ss.server_id
 		 WHERE ss.server_id = ?
@@ -122,7 +125,7 @@ func (r SQLRepository) ListLatestByServer(ctx context.Context, limit int) ([]Sna
 
 	rows, err := r.conn.QueryContext(
 		ctx,
-		`SELECT ss.id, ss.server_id, s.name, ss.cpu_usage, ss.ram_usage, ss.disk_usage, ss.load_average_1, ss.load_average_5, ss.load_average_15, ss.uptime_seconds, ss.network_summary, ss.created_at
+		`SELECT ss.id, ss.server_id, s.name, ss.cpu_usage, ss.ram_usage, ss.swap_usage, ss.disk_usage, ss.load_average_1, ss.load_average_5, ss.load_average_15, ss.uptime_seconds, ss.network_summary, ss.created_at
 		 FROM system_snapshots ss
 		 JOIN servers s ON s.id = ss.server_id
 		 JOIN (
@@ -158,7 +161,7 @@ func (r SQLRepository) ListLatestByServer(ctx context.Context, limit int) ([]Sna
 func (r SQLRepository) ListAllLatestByServer(ctx context.Context) ([]Snapshot, error) {
 	rows, err := r.conn.QueryContext(
 		ctx,
-		`SELECT ss.id, ss.server_id, s.name, ss.cpu_usage, ss.ram_usage, ss.disk_usage, ss.load_average_1, ss.load_average_5, ss.load_average_15, ss.uptime_seconds, ss.network_summary, ss.created_at
+		`SELECT ss.id, ss.server_id, s.name, ss.cpu_usage, ss.ram_usage, ss.swap_usage, ss.disk_usage, ss.load_average_1, ss.load_average_5, ss.load_average_15, ss.uptime_seconds, ss.network_summary, ss.created_at
 		 FROM system_snapshots ss
 		 JOIN servers s ON s.id = ss.server_id
 		 JOIN (
@@ -198,6 +201,7 @@ func scanSnapshot(scanner rowScanner) (Snapshot, error) {
 		&snapshot.ServerName,
 		&snapshot.CPUUsage,
 		&snapshot.RAMUsage,
+		&snapshot.SwapUsage,
 		&snapshot.DiskUsage,
 		&snapshot.LoadAverage1,
 		&snapshot.LoadAverage5,

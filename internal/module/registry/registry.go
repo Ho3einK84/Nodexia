@@ -3,6 +3,7 @@ package registry
 import (
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/alerts"
+	"github.com/Ho3einK84/Nodexia/internal/module/analytics"
 	"github.com/Ho3einK84/Nodexia/internal/module/bulk"
 	"github.com/Ho3einK84/Nodexia/internal/module/commands"
 	"github.com/Ho3einK84/Nodexia/internal/module/files"
@@ -22,6 +23,7 @@ func DefaultModules() []module.Module {
 		nodes.New(),
 		system.New(),
 		alerts.New(),
+		analytics.New(),
 		bulk.New(),
 		terminal.New(),
 	}

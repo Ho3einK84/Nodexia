@@ -104,6 +104,10 @@ type PageData struct {
 	TerminalTarget TerminalTargetView
 	TerminalTicket string
 	TerminalForm   TerminalFormView
+
+	// Analytics & forecasting.
+	AnalyticsTarget  AnalyticsTargetView
+	GlobalAnalytics  GlobalAnalyticsView
 }
 
 // PaginationView describes a rendered pagination control. It is reusable across
@@ -772,6 +776,40 @@ type TerminalFormView struct {
 	// POST so it survives the form round-trip.
 	InitCommand string
 	Errors      map[string]string
+}
+
+// ── Analytics ────────────────────────────────────────────────────────────────
+
+type AnalyticsTargetView struct {
+	ID                 int64
+	Name               string
+	Host               string
+	Port               int
+	AuthMode           string
+	Username           string
+	Tags               []string
+	CredentialStrategy string
+}
+
+type TopServerMetricView struct {
+	ServerID   int64
+	ServerName string
+	CPU        string
+	RAM        string
+	Disk       string
+}
+
+type TopServerTrafficView struct {
+	ServerID   int64
+	ServerName string
+	MonthBytes string
+	MonthLabel string
+}
+
+type GlobalAnalyticsView struct {
+	ServerCount int
+	TopMetrics  []TopServerMetricView
+	TopTraffic  []TopServerTrafficView
 }
 
 type Renderer struct {

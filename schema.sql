@@ -228,3 +228,54 @@ CREATE TABLE IF NOT EXISTS alert_rule_streaks (
 -- (e.g. /var/lib/<name>). Appended as a standalone statement so existing
 -- databases pick it up as a new bootstrap migration.
 ALTER TABLE node_snapshots ADD COLUMN data_dir TEXT NOT NULL DEFAULT '';
+
+-- ── Analytics & Historical Metrics ────────────────────────────────────────────
+
+-- system_snapshots.swap_usage tracks swap utilisation alongside RAM. Added as a
+-- standalone migration so existing databases gain the column automatically.
+ALTER TABLE system_snapshots ADD COLUMN swap_usage REAL NOT NULL DEFAULT 0;
+
+-- metric_rollups_hourly holds pre-aggregated system metrics per server per hour.
+-- Retention: 6 months. Raw data in system_snapshots is kept for 30 days, then
+-- these hourly rollups become the authoritative time-series source.
+CREATE TABLE IF NOT EXISTS metric_rollups_hourly (
+  id           INTEGER PRIMARY KEY,
+  server_id    INTEGER NOT NULL,
+  period_start DATETIME NOT NULL,
+  avg_cpu      REAL NOT NULL DEFAULT 0,
+  avg_ram      REAL NOT NULL DEFAULT 0,
+  avg_disk     REAL NOT NULL DEFAULT 0,
+  avg_swap     REAL NOT NULL DEFAULT 0,
+  avg_load1    REAL NOT NULL DEFAULT 0,
+  avg_load5    REAL NOT NULL DEFAULT 0,
+  avg_load15   REAL NOT NULL DEFAULT 0,
+  sample_count INTEGER NOT NULL DEFAULT 0,
+  created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+  UNIQUE (server_id, period_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_metric_rollups_hourly_server_period
+  ON metric_rollups_hourly (server_id, period_start);
+
+-- metric_rollups_daily holds pre-aggregated daily metrics.
+-- Retention: 2 years.
+CREATE TABLE IF NOT EXISTS metric_rollups_daily (
+  id           INTEGER PRIMARY KEY,
+  server_id    INTEGER NOT NULL,
+  period_start DATETIME NOT NULL,
+  avg_cpu      REAL NOT NULL DEFAULT 0,
+  avg_ram      REAL NOT NULL DEFAULT 0,
+  avg_disk     REAL NOT NULL DEFAULT 0,
+  avg_swap     REAL NOT NULL DEFAULT 0,
+  avg_load1    REAL NOT NULL DEFAULT 0,
+  avg_load5    REAL NOT NULL DEFAULT 0,
+  avg_load15   REAL NOT NULL DEFAULT 0,
+  sample_count INTEGER NOT NULL DEFAULT 0,
+  created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+  UNIQUE (server_id, period_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_metric_rollups_daily_server_period
+  ON metric_rollups_daily (server_id, period_start);

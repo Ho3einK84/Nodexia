@@ -1,0 +1,278 @@
+{{ define "content-analytics" }}
+<section class="hero">
+
+  <div class="info-strip">
+    <i data-lucide="bar-chart-2" class="info-strip__icon"></i>
+    <span class="info-strip__name">{{ .AnalyticsTarget.Name }}</span>
+    <span class="info-strip__addr">{{ .AnalyticsTarget.Username }}@{{ .AnalyticsTarget.Host }}:{{ .AnalyticsTarget.Port }}</span>
+    <span class="badge badge--auth-{{ .AnalyticsTarget.AuthMode }}">{{ .AnalyticsTarget.AuthMode }}</span>
+    {{ range .AnalyticsTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
+    <div class="info-strip__actions">
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .AnalyticsTarget.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> Monitoring</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .AnalyticsTarget.ID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> Nodes</a>
+      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> Servers</a>
+    </div>
+  </div>
+
+  <div class="analytics-header">
+    <div>
+      <p class="eyebrow">Historical Metrics</p>
+      <h2 class="analytics-title">Server Analytics</h2>
+      <p class="analytics-subtitle">Track resource usage over time and forecast bandwidth consumption.</p>
+    </div>
+    <div class="analytics-range-tabs" id="globalRangeTabs" role="tablist" aria-label="Time range">
+      <button class="range-tab" data-range="1h" role="tab">1H</button>
+      <button class="range-tab active" data-range="24h" role="tab" aria-selected="true">24H</button>
+      <button class="range-tab" data-range="7d" role="tab">7D</button>
+      <button class="range-tab" data-range="30d" role="tab">30D</button>
+    </div>
+  </div>
+
+  <!-- Resource Charts -->
+  <div class="chart-grid" id="resourceChartGrid">
+
+    <article class="chart-card" id="card-cpu">
+      <div class="chart-card__header">
+        <div class="chart-card__title">
+          <i data-lucide="cpu" class="chart-icon"></i>
+          <span>CPU Usage</span>
+        </div>
+        <span class="chart-card__unit">%</span>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-skeleton" id="skeleton-cpu"><div class="skeleton-shimmer"></div></div>
+        <div class="chart-container" id="chart-cpu" data-metric="cpu" data-server="{{ .AnalyticsTarget.ID }}" style="display:none"></div>
+        <div class="chart-empty" id="empty-cpu" style="display:none">
+          <i data-lucide="bar-chart-2"></i>
+          <p>No data yet for this range</p>
+        </div>
+        <div class="chart-error" id="error-cpu" style="display:none">
+          <i data-lucide="alert-circle"></i>
+          <p>Failed to load chart data</p>
+        </div>
+      </div>
+      <div class="chart-card__footer" id="footer-cpu"></div>
+    </article>
+
+    <article class="chart-card" id="card-ram">
+      <div class="chart-card__header">
+        <div class="chart-card__title">
+          <i data-lucide="memory-stick" class="chart-icon"></i>
+          <span>Memory Usage</span>
+        </div>
+        <span class="chart-card__unit">%</span>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-skeleton" id="skeleton-ram"><div class="skeleton-shimmer"></div></div>
+        <div class="chart-container" id="chart-ram" data-metric="ram" data-server="{{ .AnalyticsTarget.ID }}" style="display:none"></div>
+        <div class="chart-empty" id="empty-ram" style="display:none">
+          <i data-lucide="bar-chart-2"></i>
+          <p>No data yet for this range</p>
+        </div>
+        <div class="chart-error" id="error-ram" style="display:none">
+          <i data-lucide="alert-circle"></i>
+          <p>Failed to load chart data</p>
+        </div>
+      </div>
+      <div class="chart-card__footer" id="footer-ram"></div>
+    </article>
+
+    <article class="chart-card" id="card-disk">
+      <div class="chart-card__header">
+        <div class="chart-card__title">
+          <i data-lucide="hard-drive" class="chart-icon"></i>
+          <span>Disk Usage</span>
+        </div>
+        <span class="chart-card__unit">%</span>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-skeleton" id="skeleton-disk"><div class="skeleton-shimmer"></div></div>
+        <div class="chart-container" id="chart-disk" data-metric="disk" data-server="{{ .AnalyticsTarget.ID }}" style="display:none"></div>
+        <div class="chart-empty" id="empty-disk" style="display:none">
+          <i data-lucide="bar-chart-2"></i>
+          <p>No data yet for this range</p>
+        </div>
+        <div class="chart-error" id="error-disk" style="display:none">
+          <i data-lucide="alert-circle"></i>
+          <p>Failed to load chart data</p>
+        </div>
+      </div>
+      <div class="chart-card__footer" id="footer-disk"></div>
+    </article>
+
+    <article class="chart-card" id="card-load">
+      <div class="chart-card__header">
+        <div class="chart-card__title">
+          <i data-lucide="activity" class="chart-icon"></i>
+          <span>Load Average</span>
+        </div>
+        <span class="chart-card__unit"></span>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-skeleton" id="skeleton-load"><div class="skeleton-shimmer"></div></div>
+        <div class="chart-container" id="chart-load" data-metric="load" data-server="{{ .AnalyticsTarget.ID }}" style="display:none"></div>
+        <div class="chart-empty" id="empty-load" style="display:none">
+          <i data-lucide="bar-chart-2"></i>
+          <p>No data yet for this range</p>
+        </div>
+        <div class="chart-error" id="error-load" style="display:none">
+          <i data-lucide="alert-circle"></i>
+          <p>Failed to load chart data</p>
+        </div>
+      </div>
+      <div class="chart-card__footer" id="footer-load"></div>
+    </article>
+
+  </div>
+
+  <!-- Network Traffic (always 30d from vnstat) -->
+  <article class="chart-card chart-card--wide" id="card-traffic">
+    <div class="chart-card__header">
+      <div class="chart-card__title">
+        <i data-lucide="network" class="chart-icon"></i>
+        <span>Network Traffic</span>
+        <span class="chart-badge">Last 30 days</span>
+      </div>
+      <span class="chart-card__unit">GiB/day</span>
+    </div>
+    <div class="chart-wrap chart-wrap--tall">
+      <div class="chart-skeleton" id="skeleton-traffic"><div class="skeleton-shimmer"></div></div>
+      <div class="chart-container" id="chart-traffic" data-metric="traffic" data-server="{{ .AnalyticsTarget.ID }}" style="display:none"></div>
+      <div class="chart-empty" id="empty-traffic" style="display:none">
+        <i data-lucide="wifi-off"></i>
+        <p>No vnStat traffic data for this server</p>
+        <small>Collect a monitoring snapshot to populate traffic history</small>
+      </div>
+      <div class="chart-error" id="error-traffic" style="display:none">
+        <i data-lucide="alert-circle"></i>
+        <p>Failed to load traffic data</p>
+      </div>
+    </div>
+    <div class="chart-legend" id="legend-traffic"></div>
+  </article>
+
+  <!-- Bandwidth Forecast -->
+  <div class="forecast-header">
+    <p class="eyebrow">Bandwidth Forecasting</p>
+    <h2 class="analytics-title">Usage Forecast</h2>
+    <p class="analytics-subtitle">Projected bandwidth consumption based on historical traffic patterns.</p>
+  </div>
+
+  <div class="forecast-grid" id="forecastGrid">
+    <!-- Populated by analytics.js -->
+    <div class="forecast-skeleton">
+      <div class="skeleton-shimmer"></div>
+    </div>
+  </div>
+
+  <article class="chart-card chart-card--wide" id="card-forecast-chart" style="display:none">
+    <div class="chart-card__header">
+      <div class="chart-card__title">
+        <i data-lucide="trending-up" class="chart-icon"></i>
+        <span>Actual vs Predicted</span>
+        <span class="forecast-algo" id="forecastAlgo"></span>
+      </div>
+    </div>
+    <div class="chart-wrap chart-wrap--tall">
+      <div class="chart-container" id="chart-forecast-actual" data-server="{{ .AnalyticsTarget.ID }}" style="display:none"></div>
+    </div>
+  </article>
+
+</section>
+{{ end }}
+
+{{ define "content-analytics-global" }}
+<section class="hero">
+
+  <div class="shell-header">
+    <div>
+      <p class="eyebrow">Infrastructure Analytics</p>
+      <h1>Analytics Overview</h1>
+      <p class="shell-subtitle">{{ .PageDescription }}</p>
+    </div>
+  </div>
+
+  {{ if eq .GlobalAnalytics.ServerCount 0 }}
+  <article class="card card--empty">
+    <i data-lucide="bar-chart-2" class="empty-icon"></i>
+    <h3>No analytics data yet</h3>
+    <p>Collect at least one monitoring snapshot to populate the analytics overview.</p>
+    <a class="btn btn--primary" href="/servers">Go to Servers</a>
+  </article>
+  {{ else }}
+
+  <!-- Top consumers by CPU / RAM / Disk -->
+  <article class="card">
+    <h3><i data-lucide="cpu"></i> Top Servers by Resource Usage</h3>
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead>
+          <tr>
+            <th>Server</th>
+            <th class="text-right">CPU</th>
+            <th class="text-right">RAM</th>
+            <th class="text-right">Disk</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ range .GlobalAnalytics.TopMetrics }}
+          <tr>
+            <td class="server-name-cell">
+              <i data-lucide="server" class="table-icon"></i>
+              {{ .ServerName }}
+            </td>
+            <td class="text-right"><span class="metric-badge metric-badge--cpu">{{ .CPU }}</span></td>
+            <td class="text-right"><span class="metric-badge metric-badge--ram">{{ .RAM }}</span></td>
+            <td class="text-right"><span class="metric-badge metric-badge--disk">{{ .Disk }}</span></td>
+            <td class="text-right">
+              <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics">
+                <i data-lucide="bar-chart-2" class="icon-in-button"></i> Analytics
+              </a>
+            </td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  {{ if .GlobalAnalytics.TopTraffic }}
+  <!-- Top consumers by bandwidth -->
+  <article class="card">
+    <h3><i data-lucide="network"></i> Top Servers by This Month's Traffic</h3>
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead>
+          <tr>
+            <th>Server</th>
+            <th class="text-right">This Month ({{ (index .GlobalAnalytics.TopTraffic 0).MonthLabel }})</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ range .GlobalAnalytics.TopTraffic }}
+          <tr>
+            <td class="server-name-cell">
+              <i data-lucide="server" class="table-icon"></i>
+              {{ .ServerName }}
+            </td>
+            <td class="text-right">
+              <span class="traffic-badge">{{ .MonthBytes }}</span>
+            </td>
+            <td class="text-right">
+              <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics">
+                <i data-lucide="bar-chart-2" class="icon-in-button"></i> Analytics
+              </a>
+            </td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+  </article>
+  {{ end }}
+
+  {{ end }}
+</section>
+{{ end }}
