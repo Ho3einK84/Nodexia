@@ -77,7 +77,7 @@
     if (label) btn.setAttribute('data-busy-label', label);
     // Keep width stable while we swap content.
     btn.style.minWidth = btn.offsetWidth + 'px';
-    btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span> Working…';
+    btn.innerHTML = '<span class="spinner spinner--sm" aria-hidden="true"></span> Working…';
     // Re-enable as a safety net if navigation never happens (e.g. validation).
     setTimeout(function () { restoreButton(btn); }, 30000);
   }
@@ -485,17 +485,254 @@
     apply();
   }
 
-  /* ── Live command stream auto-refresh ───────────────────── */
-  function initStreamRefresh() {
-    var node = document.querySelector('[data-stream-refresh-url]');
-    if (!node) return;
-    var url = node.getAttribute('data-stream-refresh-url');
-    var ms = parseInt(node.getAttribute('data-stream-refresh-ms'), 10);
-    if (!url || !(ms > 0)) return;
-    setTimeout(function () {
-      startTopBar();
-      window.location.href = url;
-    }, ms);
+  /* ── Live output stream (Server-Sent Events) ────────────────
+   * Replaces the old 2-second full-page poll. A running command / node action /
+   * install renders a result card carrying data-stream-sse-url; we subscribe to
+   * that feed and append output chunks in place. EventSource reconnects on its
+   * own after a network blip — and because the server resends the buffer from
+   * offset 0 on every connect, we reset the output on each (re)open so a
+   * reconnect never duplicates lines.
+   */
+  function initStream() {
+    var card = document.querySelector('[data-stream-sse-url]');
+    if (!card) return;
+    var url = card.getAttribute('data-stream-sse-url');
+    if (!url) return;
+
+    var stdout = card.querySelector('[data-stream-stdout]');
+    var stderr = card.querySelector('[data-stream-stderr]');
+    var reloadOnDone = card.hasAttribute('data-stream-reload');
+
+    if (typeof EventSource === 'undefined') {
+      streamFallback(card);
+      return;
+    }
+
+    // Auto-scroll the output to the bottom unless the user scrolled up to read.
+    var autoScroll = true;
+    if (stdout) {
+      stdout.addEventListener('scroll', function () {
+        autoScroll = stdout.scrollHeight - stdout.scrollTop - stdout.clientHeight < 24;
+      }, { passive: true });
+    }
+    function scrollPinned(el) {
+      if (el && autoScroll) el.scrollTop = el.scrollHeight;
+    }
+
+    var finished = false;
+    card.classList.add('is-connecting');
+    var es = new EventSource(url);
+
+    es.addEventListener('open', function () {
+      card.classList.remove('is-connecting', 'is-reconnecting');
+      // Server resends from offset 0 on each connect → reset before re-streaming.
+      if (stdout) stdout.textContent = '';
+      if (stderr) { stderr.textContent = ''; stderr.hidden = true; }
+    });
+
+    es.addEventListener('output', function (e) {
+      if (!stdout) return;
+      stdout.textContent += e.data;
+      scrollPinned(stdout);
+    });
+
+    es.addEventListener('stderr', function (e) {
+      if (!stderr) return;
+      stderr.hidden = false;
+      stderr.textContent += e.data;
+      scrollPinned(stderr);
+    });
+
+    es.addEventListener('done', function (e) {
+      finished = true;
+      es.close();
+      if (reloadOnDone) { reloadForResult(); return; }
+      finishStreamCard(card, parseJSON(e.data), false);
+    });
+
+    es.addEventListener('error', function (e) {
+      // A server-sent `event: error` carries data; a transport drop does not.
+      if (e && e.data) {
+        finished = true;
+        es.close();
+        if (reloadOnDone) { reloadForResult(); return; }
+        finishStreamCard(card, parseJSON(e.data), true);
+        return;
+      }
+      // Transport error. EventSource retries on its own while readyState is
+      // CONNECTING; if it gave up (CLOSED), fall back to a manual refresh so the
+      // connecting overlay never sticks.
+      card.classList.remove('is-connecting');
+      if (finished) return;
+      if (es.readyState === EventSource.CLOSED) {
+        streamFallback(card);
+      } else {
+        card.classList.add('is-reconnecting');
+      }
+    });
+  }
+
+  function finishStreamCard(card, payload, isError) {
+    payload = payload || {};
+    card.classList.remove('is-connecting', 'is-reconnecting', 'cmd-result-card--live');
+    card.removeAttribute('data-stream-sse-url');
+
+    var status = String(payload.status || (isError ? 'failed' : 'completed'));
+    var failed = isError || status === 'failed' ||
+      (payload.exitCode && payload.exitCode !== '0' && payload.exitCode !== 'n/a');
+    card.classList.add(failed ? 'cmd-result-card--error' : 'cmd-result-card--ok');
+
+    var label = card.querySelector('[data-stream-label]');
+    if (label) {
+      var doneText = failed
+        ? (card.getAttribute('data-stream-label-error') || 'Failed')
+        : (card.getAttribute('data-stream-label-done') || 'Complete');
+      label.innerHTML = '<i data-lucide="' + (failed ? 'x-circle' : 'check-circle') +
+        '" class="icon-in-button"></i> ' + escapeHTML(doneText);
+      label.classList.add('stream-fade-in');
+    }
+
+    var meta = card.querySelector('[data-stream-meta]');
+    if (meta) {
+      var html = '';
+      if (payload.exitCode && payload.exitCode !== 'n/a') {
+        var ok = payload.exitCode === '0';
+        html += '<span class="result-exit ' + (ok ? 'result-exit--ok' : 'result-exit--err') +
+          '">exit ' + escapeHTML(payload.exitCode) + '</span>';
+      }
+      if (payload.duration) {
+        html += '<code class="result-duration">' + escapeHTML(payload.duration) + '</code>';
+      }
+      meta.innerHTML = html;
+      meta.classList.add('stream-fade-in');
+    }
+
+    var statusLine = card.querySelector('[data-stream-status]');
+    if (statusLine) {
+      if (failed && payload.message) {
+        statusLine.className = 'result-message result-message--error';
+        statusLine.textContent = payload.message;
+      } else {
+        statusLine.remove();
+      }
+    }
+
+    // Output that streamed in after page load has no copy button yet.
+    initCopyButtons();
+    renderIcons();
+  }
+
+  function streamFallback(card) {
+    card.classList.remove('is-connecting');
+    var status = card.querySelector('[data-stream-status]');
+    var url = card.getAttribute('data-stream-page-url') || window.location.href;
+    if (status) {
+      status.innerHTML = '<a class="btn btn--ghost btn--sm" href="' + escapeHTML(url) +
+        '"><i data-lucide="refresh-cw" class="icon-in-button"></i> Refresh for the latest output</a>';
+      renderIcons();
+    }
+  }
+
+  /* ── Bulk action progress stream (SSE) ──────────────────────
+   * The bulk result page runs a command across many servers at once. Each
+   * server row is pushed as a `row` event as it transitions
+   * pending → running → ok/failed, swapping an inline spinner for a check / x.
+   */
+  function initBulkStream() {
+    var card = document.querySelector('[data-bulk-sse-url]');
+    if (!card) return;
+    var url = card.getAttribute('data-bulk-sse-url');
+    if (!url || typeof EventSource === 'undefined') return;
+
+    var finished = false;
+    var es = new EventSource(url);
+
+    es.addEventListener('row', function (e) {
+      var row = parseJSON(e.data);
+      if (row.index == null) return;
+      updateBulkRow(card, row);
+    });
+
+    es.addEventListener('done', function (e) {
+      finished = true;
+      es.close();
+      updateBulkSummary(card, parseJSON(e.data));
+    });
+
+    es.addEventListener('error', function (e) {
+      if (e && e.data) { finished = true; es.close(); return; }
+      // Transient transport error → EventSource retries on its own.
+    });
+  }
+
+  function updateBulkRow(card, row) {
+    card.querySelectorAll('[data-bulk-index="' + row.index + '"]').forEach(function (el) {
+      if (el.classList.contains('bulk-result-card')) {
+        el.className = 'bulk-result-card bulk-result-card--' + row.status;
+      }
+      var chip = el.querySelector('[data-bulk-status]');
+      if (chip) chip.outerHTML = bulkChip(row.status);
+      var code = el.querySelector('[data-bulk-exit]');
+      if (code) code.textContent = row.exitCode ? row.exitCode : '—';
+      var reason = el.querySelector('[data-bulk-reason]');
+      if (reason) {
+        var isCell = reason.tagName === 'TD';
+        reason.textContent = row.reason ? row.reason : (isCell ? '—' : '');
+        if (!isCell) reason.hidden = !row.reason;
+      }
+    });
+    renderIcons();
+  }
+
+  function bulkChip(status) {
+    var inner = {
+      ok: '<i data-lucide="check-circle-2" class="icon-in-button"></i> ok',
+      failed: '<i data-lucide="x-circle" class="icon-in-button"></i> failed',
+      skipped: '<i data-lucide="skip-forward" class="icon-in-button"></i> skipped',
+      pending: '<span class="spinner spinner--sm"></span> pending',
+      running: '<span class="spinner spinner--sm"></span> running'
+    }[status] || '<i data-lucide="x-circle" class="icon-in-button"></i> failed';
+    return '<span class="bulk-status bulk-status--' + status + '" data-bulk-status>' + inner + '</span>';
+  }
+
+  function updateBulkSummary(card, done) {
+    card.removeAttribute('data-bulk-sse-url');
+    var note = card.querySelector('[data-bulk-progress-note]');
+    if (note) note.remove();
+    setBulkCount(card, 'inprogress', done.inProgress || 0);
+    setBulkCount(card, 'ok', done.ok || 0);
+    setBulkCount(card, 'failed', done.failed || 0);
+    setBulkCount(card, 'skipped', done.skipped || 0);
+    renderIcons();
+  }
+
+  function setBulkCount(card, key, value) {
+    var el = card.querySelector('[data-bulk-count="' + key + '"]');
+    if (!el) return;
+    el.innerHTML = bulkCountInner(key, value);
+    if (key !== 'ok') el.hidden = value <= 0;
+  }
+
+  function bulkCountInner(key, value) {
+    if (key === 'ok') return '<i data-lucide="check-circle-2" class="icon-in-button"></i> ' + value + ' ok';
+    if (key === 'failed') return '<i data-lucide="x-circle" class="icon-in-button"></i> ' + value + ' failed';
+    if (key === 'skipped') return '<i data-lucide="skip-forward" class="icon-in-button"></i> ' + value + ' skipped';
+    return '<span class="spinner spinner--sm"></span> ' + value + ' in progress';
+  }
+
+  function parseJSON(data) {
+    try { return JSON.parse(data); } catch (err) { return {}; }
+  }
+
+  function reloadForResult() {
+    startTopBar();
+    window.location.reload();
+  }
+
+  function escapeHTML(value) {
+    return String(value).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
   }
 
   /* ── Manual "refresh now" buttons ───────────────────────── */
@@ -846,7 +1083,8 @@
     initProgressBars();
     initReveal();
     initAutoRefresh();
-    initStreamRefresh();
+    initStream();
+    initBulkStream();
     initManualRefresh();
     initActionMenus();
     initModals();

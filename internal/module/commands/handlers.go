@@ -365,6 +365,39 @@ func (h ActionHandler) runStreamSession(sessionID string, serverID int64, comman
 	h.deps.CommandStreams.Complete(sessionID, result.ExitCode, result.CompletedAt, historyID)
 }
 
+// StreamEventsHandler serves GET /servers/{id}/commands/stream/{stream}/events:
+// the Server-Sent Events feed a running command's live page subscribes to. It
+// validates that the stream belongs to the server in the URL, then hands off to
+// the store's SSE streamer.
+type StreamEventsHandler struct {
+	deps module.Dependencies
+}
+
+func NewStreamEventsHandler(deps module.Dependencies) StreamEventsHandler {
+	return StreamEventsHandler{deps: deps}
+}
+
+func (h StreamEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	serverID, ok := pathID(r)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if h.deps.CommandStreams == nil {
+		http.Error(w, "live stream store unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	streamID := strings.TrimSpace(r.PathValue("stream"))
+	snapshot, found := h.deps.CommandStreams.Get(streamID)
+	if !found || snapshot.ServerID != serverID {
+		http.Error(w, "live stream not found", http.StatusNotFound)
+		return
+	}
+
+	h.deps.CommandStreams.ServeSSE(w, r, streamID)
+}
+
 func (h PageHandler) loadServerAndHistory(w http.ResponseWriter, r *http.Request) (servers.Server, []HistoryEntry, bool) {
 	serverID, ok := pathID(r)
 	if !ok {

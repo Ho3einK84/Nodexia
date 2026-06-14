@@ -24,35 +24,36 @@
 
   {{/* ── Live node action output ───────────────────────── */}}
   {{ if .NodeStream.Available }}
-  <article class="card cmd-result-card{{ if .NodeStream.IsRunning }} cmd-result-card--live{{ end }}"
-    {{ if .NodeStream.IsRunning }}data-stream-refresh-url="{{ .NodeStream.RefreshURL }}" data-stream-refresh-ms="{{ .NodeStream.RefreshMillis }}"{{ end }}
+  <article class="card cmd-result-card stream-card{{ if .NodeStream.IsRunning }} cmd-result-card--live{{ end }}"
+    {{ if .NodeStream.IsRunning }}data-stream-sse-url="/servers/{{ .NodeTarget.ID }}/nodes/stream/{{ .NodeStream.ID }}/events" data-stream-page-url="{{ .NodeStream.RefreshURL }}" data-stream-label-done="Node action complete" data-stream-label-error="Node action failed"{{ end }}
   >
     <div class="result-header">
-      <span class="result-header__label">
-        {{ if .NodeStream.IsRunning }}<span class="live-dot"></span> Node action running{{ else }}<i data-lucide="terminal" class="icon-in-button"></i> Node action complete{{ end }}
+      <span class="result-header__label" data-stream-label>
+        {{ if .NodeStream.IsRunning }}<span class="spinner"></span> Node action running{{ else }}<i data-lucide="terminal" class="icon-in-button"></i> Node action complete{{ end }}
       </span>
-      <div class="result-header__meta">
+      <div class="result-header__meta" data-stream-meta>
         {{ if not .NodeStream.IsRunning }}
         <span class="result-exit {{ if eq .NodeStream.ExitCode "0" }}result-exit--ok{{ else }}result-exit--err{{ end }}">exit {{ .NodeStream.ExitCode }}</span>
         {{ end }}
         <code class="result-duration">{{ .NodeStream.Duration }}</code>
-        {{ if .NodeStream.IsRunning }}
-        <a class="btn btn--ghost btn--sm" href="{{ .NodeStream.RefreshURL }}"><i data-lucide="refresh-cw" class="icon-in-button"></i> Refresh</a>
-        {{ end }}
       </div>
     </div>
     <div class="result-cmd"><code>{{ .NodeStream.Command }}</code></div>
     {{ if .NodeStream.Error }}<pre class="output-block output-block--error">{{ .NodeStream.Error }}</pre>{{ end }}
+    {{ if .NodeStream.IsRunning }}
+    <pre class="output-block scrollable" data-stream-stdout>{{ .NodeStream.Stdout }}</pre>
+    <pre class="output-block output-block--error scrollable" data-stream-stderr{{ if not .NodeStream.Stderr }} hidden{{ end }}>{{ .NodeStream.Stderr }}</pre>
+    <p class="result-message" data-stream-status><span class="live-dot"></span> Streaming live output…</p>
+    <div class="stream-connecting" aria-hidden="true"><span class="spinner spinner--lg"></span></div>
+    {{ else }}
     {{ if .NodeStream.Stdout }}
     <pre class="output-block scrollable">{{ .NodeStream.Stdout }}</pre>
     {{ else }}
-    <p class="empty-state">No output captured yet.</p>
+    <p class="empty-state">No output captured.</p>
     {{ end }}
     {{ if .NodeStream.Stderr }}
     <pre class="output-block output-block--error scrollable">{{ .NodeStream.Stderr }}</pre>
     {{ end }}
-    {{ if .NodeStream.IsRunning }}
-    <p class="result-message"><span class="live-dot"></span> Refreshing automatically every {{ .NodeStream.RefreshMillis }}ms.</p>
     {{ end }}
   </article>
   {{ end }}
@@ -488,32 +489,32 @@
     </div>
   </div>
 
-  <article class="card cmd-result-card{{ if .NodeInstall.IsRunning }} cmd-result-card--live{{ else if .NodeInstall.Error }} cmd-result-card--error{{ end }}"
-    {{ if .NodeInstall.IsRunning }}data-stream-refresh-url="{{ .NodeInstall.RefreshURL }}" data-stream-refresh-ms="{{ .NodeInstall.RefreshMillis }}"{{ end }}
+  <article class="card cmd-result-card stream-card{{ if .NodeInstall.IsRunning }} cmd-result-card--live{{ else if .NodeInstall.Error }} cmd-result-card--error{{ end }}"
+    {{ if .NodeInstall.IsRunning }}data-stream-sse-url="/servers/{{ .NodeTarget.ID }}/nodes/install/{{ .NodeInstall.JobID }}/events" data-stream-page-url="{{ .NodeInstall.RefreshURL }}" data-stream-reload{{ end }}
   >
     <div class="result-header">
-      <span class="result-header__label">
-        {{ if .NodeInstall.IsRunning }}<span class="live-dot"></span> Installing node "{{ .NodeInstall.NodeName }}"
+      <span class="result-header__label" data-stream-label>
+        {{ if .NodeInstall.IsRunning }}<span class="spinner"></span> Installing node "{{ .NodeInstall.NodeName }}"
         {{ else if .NodeInstall.Error }}<i data-lucide="x-circle" class="icon-in-button"></i> Install failed
         {{ else }}<i data-lucide="check-circle" class="icon-in-button"></i> Node "{{ .NodeInstall.NodeName }}" installed
         {{ end }}
       </span>
-      <div class="result-header__meta">
+      <div class="result-header__meta" data-stream-meta>
         <code class="result-duration">{{ .NodeInstall.Duration }}</code>
-        {{ if .NodeInstall.IsRunning }}
-        <a class="btn btn--ghost btn--sm" href="{{ .NodeInstall.RefreshURL }}"><i data-lucide="refresh-cw" class="icon-in-button"></i> Refresh</a>
-        {{ end }}
       </div>
     </div>
 
     {{ if .NodeInstall.Error }}<pre class="output-block output-block--error">{{ .NodeInstall.Error }}</pre>{{ end }}
+    {{ if .NodeInstall.IsRunning }}
+    <pre class="output-block scrollable" data-stream-stdout>{{ .NodeInstall.Output }}</pre>
+    <p class="result-message" data-stream-status><span class="live-dot"></span> The official PasarGuard install script is running — output streams live below.</p>
+    <div class="stream-connecting" aria-hidden="true"><span class="spinner spinner--lg"></span></div>
+    {{ else }}
     {{ if .NodeInstall.Output }}
     <pre class="output-block scrollable">{{ .NodeInstall.Output }}</pre>
     {{ else }}
     <p class="empty-state">Waiting for installer output…</p>
     {{ end }}
-    {{ if .NodeInstall.IsRunning }}
-    <p class="result-message"><span class="live-dot"></span> The official PasarGuard install script is running — this page refreshes automatically every 2 seconds.</p>
     {{ end }}
   </article>
 

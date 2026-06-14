@@ -3352,3 +3352,126 @@ body.modal-open {
     grid-template-columns: 1fr;
   }
 }
+
+/* ════════════════════════════════════════════════════════
+   Live streaming (SSE) UI: spinner, live card, reconnecting
+   ════════════════════════════════════════════════════════ */
+
+/* ── Reusable spinner (rotating arc) ─────────────────────── */
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 2px solid rgba(148, 163, 184, 0.25);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  vertical-align: -3px;
+  color: var(--accent-soft);
+  animation: spin 0.6s linear infinite;
+}
+
+.spinner--sm {
+  width: 13px;
+  height: 13px;
+  border-width: 2px;
+  vertical-align: -2px;
+}
+
+.spinner--lg {
+  width: 38px;
+  height: 38px;
+  border-width: 3px;
+  vertical-align: middle;
+}
+
+/* Inside buttons / chips the spinner adopts the surrounding text colour. */
+.btn .spinner,
+.bulk-status .spinner {
+  color: currentColor;
+}
+
+/* ── Streaming result card ───────────────────────────────── */
+
+.stream-card {
+  position: relative;
+}
+
+/* Animated border glow while output streams live. */
+.stream-card.cmd-result-card--live {
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.stream-card.cmd-result-card--live::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: stream-live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes stream-live-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12), 0 0 12px rgba(59, 130, 246, 0.04); }
+  50%      { box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.38), 0 0 20px rgba(59, 130, 246, 0.16); }
+}
+
+/* Brief overlay while the EventSource connection is being established. */
+.stream-connecting {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.stream-card.is-connecting .stream-connecting {
+  display: flex;
+}
+
+/* Network drop: amber border + an inline "reconnecting" note on the status. */
+.stream-card.is-reconnecting.cmd-result-card--live::after {
+  animation: none;
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.45), 0 0 16px rgba(250, 204, 21, 0.12);
+}
+
+.stream-card.is-reconnecting [data-stream-status] .live-dot {
+  background: var(--warn);
+}
+
+.stream-card.is-reconnecting [data-stream-status]::after {
+  content: " — reconnecting…";
+  color: var(--warn);
+  font-weight: 600;
+}
+
+/* Completion state fades in smoothly when the done event lands. */
+.stream-fade-in {
+  animation: stream-fade-in 0.3s ease;
+}
+
+@keyframes stream-fade-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.result-message--error {
+  color: var(--crit);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 1.4s;
+  }
+
+  .stream-card.cmd-result-card--live::after,
+  .stream-fade-in {
+    animation: none;
+  }
+}

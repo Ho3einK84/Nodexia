@@ -38,7 +38,9 @@ func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	mux.HandleFunc("GET /servers/{id}/nodes", handlers.Page)
 	mux.HandleFunc("POST /servers/{id}/nodes", handlers.Refresh)
 	mux.HandleFunc("POST /servers/{id}/nodes/actions", handlers.Action)
+	mux.HandleFunc("GET /servers/{id}/nodes/stream/{stream}/events", handlers.NodeStreamEvents)
 	mux.HandleFunc("GET /servers/{id}/nodes/credentials", handlers.Credentials)
 	mux.HandleFunc("POST /servers/{id}/nodes/install", handlers.InstallStart)
 	mux.HandleFunc("GET /servers/{id}/nodes/install/{job}", handlers.InstallJob)
+	mux.HandleFunc("GET /servers/{id}/nodes/install/{job}/events", handlers.InstallEvents)
 }

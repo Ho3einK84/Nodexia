@@ -143,8 +143,8 @@ func waitForJob(t *testing.T, mux *http.ServeMux, jobPath string) string {
 			t.Fatalf("GET %s status = %d, want 200", jobPath, w.Code)
 		}
 		body := w.Body.String()
-		if !strings.Contains(body, "data-stream-refresh-url") {
-			return body // finished: no auto-refresh attribute rendered
+		if !strings.Contains(body, "data-bulk-sse-url") {
+			return body // finished: no live-stream attribute rendered
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("bulk job did not finish within 5s")

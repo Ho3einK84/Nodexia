@@ -284,6 +284,7 @@ func (h JobPageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		page.MigrationCount = h.deps.Database.MigrationCount()
 	}
 	page.BulkActionResult = result
+	page.PageStyles = []string{"/static/bulk.css"}
 
 	if err := h.deps.Renderer.Render(w, http.StatusOK, page); err != nil {
 		http.Error(w, "render bulk result page", http.StatusInternalServerError)

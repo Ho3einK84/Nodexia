@@ -34,10 +34,12 @@ func (m Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 		})
 		mux.Handle("POST /servers/bulk", placeholder)
 		mux.Handle("GET /servers/bulk/jobs/{job}", placeholder)
+		mux.Handle("GET /servers/bulk/jobs/{job}/events", placeholder)
 		return
 	}
 
 	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
 	mux.Handle("POST /servers/bulk", newActionHandler(deps, serverRepo, deps.SSH, m.jobs))
 	mux.Handle("GET /servers/bulk/jobs/{job}", newJobPageHandler(deps, m.jobs))
+	mux.Handle("GET /servers/bulk/jobs/{job}/events", newJobEventsHandler(deps, m.jobs))
 }

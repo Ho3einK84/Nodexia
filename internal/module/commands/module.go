@@ -35,4 +35,5 @@ func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	historyRepo := NewSQLRepository(deps.Database.SQL)
 	mux.Handle("GET /servers/{id}/commands", NewPageHandler(deps, serverRepo, historyRepo))
 	mux.Handle("POST /servers/{id}/commands", NewActionHandler(deps, serverRepo, historyRepo))
+	mux.Handle("GET /servers/{id}/commands/stream/{stream}/events", NewStreamEventsHandler(deps))
 }

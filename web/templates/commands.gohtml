@@ -121,35 +121,36 @@
       </article>
 
       {{ if .CommandStream.Available }}
-      <article class="card cmd-result-card{{ if .CommandStream.IsRunning }} cmd-result-card--live{{ end }}"
-        {{ if .CommandStream.IsRunning }}data-stream-refresh-url="{{ .CommandStream.RefreshURL }}" data-stream-refresh-ms="{{ .CommandStream.RefreshMillis }}"{{ end }}
+      <article class="card cmd-result-card stream-card{{ if .CommandStream.IsRunning }} cmd-result-card--live{{ end }}"
+        {{ if .CommandStream.IsRunning }}data-stream-sse-url="/servers/{{ .CommandTarget.ID }}/commands/stream/{{ .CommandStream.ID }}/events" data-stream-page-url="{{ .CommandStream.RefreshURL }}" data-stream-label-done="Stream complete" data-stream-label-error="Stream failed"{{ end }}
       >
         <div class="result-header">
-          <span class="result-header__label">
-            {{ if .CommandStream.IsRunning }}<span class="live-dot"></span> Live stream{{ else }}<i data-lucide="terminal" class="icon-in-button"></i> Stream complete{{ end }}
+          <span class="result-header__label" data-stream-label>
+            {{ if .CommandStream.IsRunning }}<span class="spinner"></span> Live stream{{ else }}<i data-lucide="terminal" class="icon-in-button"></i> Stream complete{{ end }}
           </span>
-          <div class="result-header__meta">
+          <div class="result-header__meta" data-stream-meta>
             {{ if not .CommandStream.IsRunning }}
             <span class="result-exit {{ if eq .CommandStream.ExitCode "0" }}result-exit--ok{{ else }}result-exit--err{{ end }}">exit {{ .CommandStream.ExitCode }}</span>
             {{ end }}
             <code class="result-duration">{{ .CommandStream.Duration }}</code>
-            {{ if .CommandStream.IsRunning }}
-            <a class="btn btn--ghost btn--sm" href="{{ .CommandStream.RefreshURL }}"><i data-lucide="refresh-cw" class="icon-in-button"></i> Refresh</a>
-            {{ end }}
           </div>
         </div>
         <div class="result-cmd"><code>{{ .CommandStream.Command }}</code></div>
         {{ if .CommandStream.Error }}<pre class="output-block output-block--error">{{ .CommandStream.Error }}</pre>{{ end }}
+        {{ if .CommandStream.IsRunning }}
+        <pre class="output-block scrollable" data-stream-stdout>{{ .CommandStream.Stdout }}</pre>
+        <pre class="output-block output-block--error scrollable" data-stream-stderr{{ if not .CommandStream.Stderr }} hidden{{ end }}>{{ .CommandStream.Stderr }}</pre>
+        <p class="result-message" data-stream-status><span class="live-dot"></span> Streaming live output…</p>
+        <div class="stream-connecting" aria-hidden="true"><span class="spinner spinner--lg"></span></div>
+        {{ else }}
         {{ if .CommandStream.Stdout }}
         <pre class="output-block scrollable">{{ .CommandStream.Stdout }}</pre>
         {{ else }}
-        <p class="empty-state">No stdout captured yet.</p>
+        <p class="empty-state">No stdout captured.</p>
         {{ end }}
         {{ if .CommandStream.Stderr }}
         <pre class="output-block output-block--error scrollable">{{ .CommandStream.Stderr }}</pre>
         {{ end }}
-        {{ if .CommandStream.IsRunning }}
-        <p class="result-message"><span class="live-dot"></span> Refreshing automatically every {{ .CommandStream.RefreshMillis }}ms.</p>
         {{ end }}
       </article>
 
