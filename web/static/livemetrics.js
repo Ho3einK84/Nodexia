@@ -1,8 +1,8 @@
 /* Real-time monitoring stream client.
  *
- * Drives the unified "Resource health" card: the CPU / RAM / Disk arc gauges,
- * per-core bars, mounted-filesystem bars, and the load / network / uptime strip
- * all update in place as frames arrive over a WebSocket (~every few seconds).
+ * Drives the unified "Resource health" card: the CPU / RAM / Disk arc gauges
+ * and the load / bandwidth / uptime strip update in place as frames arrive over
+ * a WebSocket (~every few seconds).
  *
  * Progressive enhancement: if the live card is absent (no stored credentials)
  * this file no-ops and the server-rendered snapshot gauges stand on their own.
@@ -20,15 +20,15 @@
 
   var statusEl = card.querySelector('[data-live-status]');
   var statusText = card.querySelector('[data-live-status-text]');
-  var coresEl = card.querySelector('[data-live-cores]');
-  var disksEl = card.querySelector('[data-live-disks]');
 
   var socket = null;
   var backoff = 1000;
   var reconnectTimer = null;
   var stopped = false;
-  var coreCount = -1;
-  var diskKey = '';
+  // Previous network counters, for deriving current bandwidth (rate) from the
+  // delta between consecutive frames. Reset on every (re)connect so a gap never
+  // shows up as a misleading averaged-over-the-gap spike.
+  var prevNet = null;
 
   function q(sel) { return card.querySelector(sel); }
   function setText(sel, text) {
@@ -44,11 +44,6 @@
   function clampPct(value) { return Math.max(0, Math.min(100, value || 0)); }
 
   // Bucketed color matching the gauge palette: green / amber / red.
-  function levelOf(value) {
-    if (value <= 60) return 'ok';
-    if (value <= 80) return 'warn';
-    return 'crit';
-  }
   function gaugeColor(value) {
     if (value <= 60) return { stroke: '#4ade80', glow: 'rgba(74, 222, 128, 0.45)' };
     if (value <= 80) return { stroke: '#facc15', glow: 'rgba(250, 204, 21, 0.45)' };
@@ -73,13 +68,6 @@
     var valEl = gauge.querySelector('[data-gauge-value]');
     if (valEl) valEl.textContent = v.toFixed(0) + '%';
     gauge.setAttribute('data-gauge', v.toFixed(2));
-  }
-
-  function setBar(fill, value) {
-    if (!fill) return;
-    var v = clampPct(value);
-    fill.style.width = v.toFixed(1) + '%';
-    fill.className = 'live-bar__fill live-bar__fill--' + levelOf(v);
   }
 
   function humanBytes(bytes) {
@@ -118,71 +106,6 @@
     return max;
   }
 
-  function renderCores(perCore) {
-    if (!coresEl) return;
-    perCore = perCore || [];
-    if (perCore.length !== coreCount) {
-      coresEl.innerHTML = '';
-      perCore.forEach(function () {
-        var core = document.createElement('div');
-        core.className = 'live-core';
-        var fill = document.createElement('div');
-        fill.className = 'live-core__fill';
-        core.appendChild(fill);
-        coresEl.appendChild(core);
-      });
-      coreCount = perCore.length;
-    }
-    var fills = coresEl.querySelectorAll('.live-core__fill');
-    perCore.forEach(function (value, i) {
-      var fill = fills[i];
-      if (!fill) return;
-      var v = clampPct(value);
-      fill.style.height = v.toFixed(0) + '%';
-      fill.className = 'live-core__fill live-core__fill--' + levelOf(v);
-      fill.parentNode.title = 'core ' + i + ': ' + v.toFixed(0) + '%';
-    });
-  }
-
-  function renderDisks(disks) {
-    if (!disksEl) return;
-    disks = disks || [];
-    var key = disks.map(function (d) { return d.mount; }).join('|');
-    if (key !== diskKey) {
-      disksEl.innerHTML = '';
-      if (disks.length === 0) {
-        var none = document.createElement('p');
-        none.className = 'empty-state';
-        none.textContent = 'No mounted filesystems reported.';
-        disksEl.appendChild(none);
-      }
-      disks.forEach(function (d) {
-        var row = document.createElement('div');
-        row.className = 'live-disk';
-        row.setAttribute('data-disk-mount', d.mount);
-        row.innerHTML =
-          '<span class="live-disk__mount"></span>' +
-          '<div class="live-bar live-bar--sm"><div class="live-bar__fill" data-disk-fill style="width:0%"></div></div>' +
-          '<span class="live-disk__detail" data-disk-detail></span>';
-        row.querySelector('.live-disk__mount').textContent = d.mount;
-        disksEl.appendChild(row);
-      });
-      diskKey = key;
-    }
-    disks.forEach(function (d) {
-      var row = disksEl.querySelector('[data-disk-mount="' + cssEscape(d.mount) + '"]');
-      if (!row) return;
-      setBar(row.querySelector('[data-disk-fill]'), d.percent);
-      row.querySelector('[data-disk-detail]').textContent =
-        d.percent.toFixed(0) + '% · ' + humanBytes(d.usedKB * 1024) + ' / ' + humanBytes(d.totalKB * 1024);
-    });
-  }
-
-  // Minimal attribute-selector escaping for mount paths (which contain "/").
-  function cssEscape(value) {
-    return String(value).replace(/["\\]/g, '\\$&');
-  }
-
   function render(m) {
     setGauge('cpu', m.cpuPercent);
     setText('[data-live-cpu-detail]', (m.perCore ? m.perCore.length : 0) + ' cores');
@@ -199,13 +122,27 @@
         root.mount + '  ·  ' + humanBytes(root.usedKB * 1024) + ' / ' + humanBytes(root.totalKB * 1024));
     }
 
-    renderCores(m.perCore);
-    renderDisks(m.disks);
-
     setText('[data-live-load1]', fmt2(m.load1));
     setText('[data-live-load5]', fmt2(m.load5));
     setText('[data-live-load15]', fmt2(m.load15));
-    setText('[data-live-net]', '↓ ' + humanBytes(m.netRxBytes) + '   ↑ ' + humanBytes(m.netTxBytes));
+
+    // Current bandwidth = byte-counter delta over the elapsed time between
+    // frames. The counters are cumulative since boot, so a negative delta means
+    // the host rebooted and the counter reset — skip that sample.
+    var nowMs = new Date(m.collectedAt || Date.now()).getTime();
+    if (prevNet && nowMs > prevNet.t) {
+      var dtSec = (nowMs - prevNet.t) / 1000;
+      var drx = m.netRxBytes - prevNet.rx;
+      var dtx = m.netTxBytes - prevNet.tx;
+      if (dtSec > 0 && drx >= 0 && dtx >= 0) {
+        var rxMbps = (drx * 8) / 1e6 / dtSec;
+        var txMbps = (dtx * 8) / 1e6 / dtSec;
+        var digits = Math.max(rxMbps, txMbps) >= 100 ? 0 : (Math.max(rxMbps, txMbps) >= 10 ? 1 : 2);
+        setText('[data-live-bandwidth]', '↓ ' + rxMbps.toFixed(digits) + '  ↑ ' + txMbps.toFixed(digits) + ' Mbps');
+      }
+    }
+    prevNet = { rx: m.netRxBytes, tx: m.netTxBytes, t: nowMs };
+
     setText('[data-live-uptime]', humanUptime(m.uptimeSeconds));
     setText('[data-live-updated]', new Date(m.collectedAt || Date.now()).toLocaleTimeString());
   }
@@ -234,6 +171,7 @@
 
     ws.onopen = function () {
       backoff = 1000;
+      prevNet = null; // re-seed the bandwidth baseline after any (re)connect
       setStatus('live', 'Live');
     };
     ws.onmessage = function (event) {

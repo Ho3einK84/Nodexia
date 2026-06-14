@@ -94,23 +94,6 @@
       </div>
     </div>
 
-    {{ if .MonitoringLive.Enabled }}
-    <div class="live-extra">
-      <div class="live-block">
-        <span class="live-section__label"><i data-lucide="cpu"></i> Per-core usage</span>
-        <div class="live-cores" data-live-cores aria-label="Per-core CPU usage">
-          <span class="live-cores__waiting">Waiting for the first sample…</span>
-        </div>
-      </div>
-      <div class="live-block">
-        <span class="live-section__label"><i data-lucide="hard-drive"></i> Mounted filesystems</span>
-        <div class="live-disks" data-live-disks>
-          <p class="empty-state">Waiting for the first sample…</p>
-        </div>
-      </div>
-    </div>
-    {{ end }}
-
     <div class="metric-strip">
       <div class="metric-strip__item">
         <span class="metric-strip__label"><i data-lucide="activity"></i> Load average</span>
@@ -125,8 +108,8 @@
         <span class="metric-strip__value">{{ .MonitoringTraffic.CurrentMonthRX }}</span>
       </div>
       <div class="metric-strip__item">
-        <span class="metric-strip__label"><i data-lucide="arrow-down-up"></i> Network</span>
-        <span class="metric-strip__value" data-live-net>{{ if .MonitoringLive.Enabled }}–{{ else }}n/a{{ end }}</span>
+        <span class="metric-strip__label"><i data-lucide="gauge"></i> Bandwidth</span>
+        <span class="metric-strip__value" data-live-bandwidth>{{ if .MonitoringLive.Enabled }}–{{ else }}n/a{{ end }}</span>
       </div>
       <div class="metric-strip__item">
         <span class="metric-strip__label"><i data-lucide="clock"></i> Uptime</span>
