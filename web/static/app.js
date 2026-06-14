@@ -521,7 +521,7 @@
       menu.classList.toggle('is-open', open);
       var toggle = menu.querySelector('.action-menu__toggle');
       if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-      var card = menu.closest('.server-card');
+      var card = menu.closest('.server-card, .node-card');
       if (card) card.style.zIndex = open ? '30' : '';
     }
     function closeAll(except) {
@@ -550,6 +550,80 @@
       if (e.key === 'Escape') closeAll(null);
     });
     window.addEventListener('resize', function () { closeAll(null); });
+  }
+
+  /* ── Modal dialogs (frosted backdrop) ───────────────────── */
+  function initModals() {
+    var openers = document.querySelectorAll('[data-modal-open]');
+    var modals = document.querySelectorAll('[data-modal]');
+    if (!modals.length) return;
+    var lastFocus = null;
+
+    function openModal(modal) {
+      if (!modal) return;
+      lastFocus = document.activeElement;
+      modal.hidden = false;
+      // Force reflow so the entrance transition runs from the hidden state.
+      void modal.offsetWidth;
+      modal.classList.add('is-open');
+      document.body.classList.add('modal-open');
+      var focusTarget = modal.querySelector('[data-modal-autofocus]') ||
+        modal.querySelector('input:not([type="hidden"]), select, textarea, button');
+      if (focusTarget && focusTarget.focus) {
+        try { focusTarget.focus({ preventScroll: true }); } catch (err) { focusTarget.focus(); }
+      }
+    }
+    function closeModal(modal) {
+      if (!modal || !modal.classList.contains('is-open')) return;
+      modal.classList.remove('is-open');
+      document.body.classList.remove('modal-open');
+      setTimeout(function () {
+        if (!modal.classList.contains('is-open')) modal.hidden = true;
+      }, prefersReducedMotion ? 0 : 240);
+      if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (err) {} }
+    }
+
+    openers.forEach(function (opener) {
+      opener.addEventListener('click', function (e) {
+        e.preventDefault();
+        var id = opener.getAttribute('data-modal-open');
+        openModal(id ? document.getElementById(id) : null);
+      });
+    });
+
+    modals.forEach(function (modal) {
+      modal.querySelectorAll('[data-modal-close]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          closeModal(modal);
+        });
+      });
+      // Basic focus trap: keep Tab within the dialog while it is open.
+      modal.addEventListener('keydown', function (e) {
+        if (e.key !== 'Tab' || !modal.classList.contains('is-open')) return;
+        var focusables = modal.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (!focusables.length) return;
+        var first = focusables[0];
+        var last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      });
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      document.querySelectorAll('[data-modal].is-open').forEach(closeModal);
+    });
+
+    // Re-open a modal the server asked to surface (e.g. install form had errors).
+    var initial = document.querySelector('[data-modal][data-modal-open-initial]');
+    if (initial) openModal(initial);
   }
 
   /* ── Mobile drawer (hamburger menu) ─────────────────────── */
@@ -775,6 +849,7 @@
     initStreamRefresh();
     initManualRefresh();
     initActionMenus();
+    initModals();
     initDrawer();
     initBackToTop();
     initShortcuts();

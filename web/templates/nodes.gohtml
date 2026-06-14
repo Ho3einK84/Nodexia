@@ -74,13 +74,49 @@
           <span class="node-card__name">{{ .Name }}</span>
           <code class="node-card__type">{{ .TypeLabel }}</code>
         </div>
-        <div class="node-confidence node-confidence--{{ .Confidence }}" title="Detection confidence: {{ .Confidence }}">
-          <span class="node-confidence__meter">
-            <span class="node-confidence__seg"></span>
-            <span class="node-confidence__seg"></span>
-            <span class="node-confidence__seg"></span>
-          </span>
-          <span class="node-confidence__label">{{ .Confidence }}</span>
+        <div class="node-card__head-end">
+          <div class="node-confidence node-confidence--{{ .Confidence }}" title="Detection confidence: {{ .Confidence }}">
+            <span class="node-confidence__meter">
+              <span class="node-confidence__seg"></span>
+              <span class="node-confidence__seg"></span>
+              <span class="node-confidence__seg"></span>
+            </span>
+            <span class="node-confidence__label">{{ .Confidence }}</span>
+          </div>
+
+          {{ if .Actions }}
+          <div class="action-menu action-menu--below node-card__menu" data-action-menu>
+            <button type="button" class="btn btn--ghost btn--sm action-menu__toggle node-card__menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="Actions for {{ .Name }}">
+              <i data-lucide="ellipsis-vertical"></i>
+            </button>
+            <div class="action-menu__panel" role="menu">
+              <span class="action-menu__caption"><i data-lucide="wrench"></i> Node actions</span>
+              <div class="action-menu__divider" role="separator"></div>
+              {{ if .ActionsEnabled }}
+              <form method="post" action="/servers/{{ $.NodeTarget.ID }}/nodes/actions" class="action-menu__form">
+                <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+                <input type="hidden" name="node_type" value="{{ .NodeType }}">
+                <input type="hidden" name="node_name" value="{{ .Name }}">
+                {{ $node := . }}
+                {{ range .Actions }}
+                <button
+                  type="submit"
+                  name="action"
+                  value="{{ .Key }}"
+                  role="menuitem"
+                  class="action-menu__item{{ if .Danger }} action-menu__item--danger{{ end }}"
+                  {{ if .Danger }}data-confirm="Really {{ .Label }} {{ $node.Name }}? This runs the official CLI with auto-confirm and cannot be undone."{{ end }}
+                >
+                  <i data-lucide="{{ .Icon }}" class="icon-in-button"></i> {{ .Label }}
+                </button>
+                {{ end }}
+              </form>
+              {{ else }}
+              <span class="action-menu__note"><i data-lucide="key-round"></i> Store SSH credentials for this server to manage this node.</span>
+              {{ end }}
+            </div>
+          </div>
+          {{ end }}
         </div>
       </header>
 
@@ -124,33 +160,6 @@
           <span class="node-fact__value"><code class="node-path">{{ .DataDir }}</code></span>
         </div>
       </div>
-
-      {{ if .Actions }}
-      <div class="node-section">
-        <span class="node-section__label"><i data-lucide="wrench"></i> Actions</span>
-        {{ if .ActionsEnabled }}
-        <form method="post" action="/servers/{{ $.NodeTarget.ID }}/nodes/actions" class="node-actions">
-          <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-          <input type="hidden" name="node_type" value="{{ .NodeType }}">
-          <input type="hidden" name="node_name" value="{{ .Name }}">
-          {{ $node := . }}
-          {{ range .Actions }}
-          <button
-            type="submit"
-            name="action"
-            value="{{ .Key }}"
-            class="btn btn--ghost btn--sm node-action-btn{{ if .Danger }} btn--danger{{ end }}"
-            {{ if .Danger }}data-confirm="Really {{ .Label }} {{ $node.Name }}? This runs the official CLI with auto-confirm and cannot be undone."{{ end }}
-          >
-            <i data-lucide="{{ .Icon }}" class="icon-in-button"></i> {{ .Label }}
-          </button>
-          {{ end }}
-        </form>
-        {{ else }}
-        <p class="node-actions-note"><i data-lucide="key-round" class="icon-in-button"></i> Store SSH credentials for this server to manage nodes from the panel.</p>
-        {{ end }}
-      </div>
-      {{ end }}
 
       {{ if eq .NodeType "pasarguard-node" }}
       <div class="node-section node-credentials">
@@ -225,7 +234,10 @@
   <div class="empty-state-card">
     <span class="empty-state-icon"><i data-lucide="search-x"></i></span>
     <p class="empty-state-title">No node installation detected</p>
-    <p class="empty-state-desc">Discovery ran but no PasarGuard or Rebecca installation was found. Install a PasarGuard node below, or inspect the raw probe output for clues.</p>
+    <p class="empty-state-desc">Discovery ran but no PasarGuard or Rebecca installation was found. Install a PasarGuard node, or inspect the raw probe output below for clues.</p>
+    <button type="button" class="btn btn--primary" data-modal-open="install-node-modal">
+      <i data-lucide="container" class="icon-in-button"></i> Install PasarGuard node
+    </button>
   </div>
   {{ else }}
   <div class="empty-state-card">
@@ -305,66 +317,22 @@
       </form>
     </article>
 
-    <article class="card node-install-card">
+    <article class="card node-install-launch">
       <div class="card__header">
-        <h3><i data-lucide="plus-circle"></i> Install PasarGuard node</h3>
+        <h3><i data-lucide="plus-circle"></i> Install a node</h3>
       </div>
 
-      {{ if .NodeInstallForm.Enabled }}
-      <form method="post" action="{{ .NodeInstallForm.Action }}">
-        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-        <label class="form-field">
-          <span>Node name</span>
-          <input type="text" name="node_name" value="{{ .NodeInstallForm.NodeName }}" placeholder="node" maxlength="64" required>
-          {{ with index .NodeInstallForm.Errors "node_name" }}<small class="field-error">{{ . }}</small>{{ end }}
-          <small class="field-hint">Each instance gets its own <code>/opt/&lt;name&gt;</code> and <code>/var/lib/&lt;name&gt;</code>, so several nodes can run side by side (node, node2, …).</small>
-        </label>
+      <p class="node-install-launch__lead">Provision a new node on <strong>{{ .NodeTarget.Name }}</strong>. PasarGuard installs through the official script; Rebecca nodes are detect-and-manage only.</p>
 
-        <div class="form-grid">
-          <label class="form-field">
-            <span>Service port</span>
-            <input type="number" name="service_port" value="{{ .NodeInstallForm.ServicePort }}" placeholder="62050" min="1" max="65535">
-            {{ with index .NodeInstallForm.Errors "service_port" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-          <label class="form-field">
-            <span>API port <small class="field-optional">(optional)</small></span>
-            <input type="number" name="api_port" value="{{ .NodeInstallForm.APIPort }}" placeholder="62051" min="1" max="65535">
-            {{ with index .NodeInstallForm.Errors "api_port" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-        </div>
-
-        <fieldset class="form-field node-proto-choice">
-          <span>Connection type</span>
-          <div class="node-proto-options">
-            <label class="node-proto-option">
-              <input type="radio" name="protocol" value="grpc" {{ if ne .NodeInstallForm.Protocol "rest" }}checked{{ end }}>
-              <span><i data-lucide="layers" class="icon-in-button"></i> gRPC <small>recommended</small></span>
-            </label>
-            <label class="node-proto-option">
-              <input type="radio" name="protocol" value="rest" {{ if eq .NodeInstallForm.Protocol "rest" }}checked{{ end }}>
-              <span><i data-lucide="globe" class="icon-in-button"></i> REST</span>
-            </label>
-          </div>
-          {{ with index .NodeInstallForm.Errors "protocol" }}<small class="field-error">{{ . }}</small>{{ end }}
-        </fieldset>
-
-        <label class="form-field">
-          <span>API key <small class="field-optional">(optional)</small></span>
-          <input type="text" name="api_key" value="{{ .NodeInstallForm.APIKey }}" placeholder="Leave blank to auto-generate a UUID" autocomplete="off" spellcheck="false">
-          {{ with index .NodeInstallForm.Errors "api_key" }}<small class="field-error">{{ . }}</small>{{ end }}
-          <small class="field-hint">Must be a valid UUID. Leave blank and the installer generates one for you.</small>
-        </label>
-
-        <div class="sys-form__actions">
-          <button type="submit" class="btn btn--primary" data-confirm="Run the official PasarGuard install script on this server? This installs Docker-based services and may take several minutes.">
-            <i data-lucide="download" class="icon-in-button"></i> Install node
-          </button>
-        </div>
-        <p class="node-install-note">Runs the official installer, applies your ports and connection type to <code>/opt/&lt;name&gt;/.env</code>, restarts the node through its CLI, and then shows the API key and SSL certificate needed to register it in the PasarGuard panel. Rebecca nodes are detect-and-manage only.</p>
-      </form>
-      {{ else }}
-      <p class="empty-state">Installing a node needs stored SSH credentials. Edit the server and store credentials first.</p>
-      {{ end }}
+      <div class="node-install-launch__actions">
+        <button type="button" class="btn btn--primary node-install-launch__btn" data-modal-open="install-node-modal">
+          <i data-lucide="container" class="icon-in-button"></i> Install PasarGuard node
+        </button>
+        <button type="button" class="btn node-install-launch__btn node-install-soon" data-tooltip="Rebecca install is coming soon" aria-disabled="true" aria-label="Install Rebecca node — coming soon">
+          <i data-lucide="package" class="icon-in-button"></i> Install Rebecca node
+          <span class="coming-soon-badge">Soon</span>
+        </button>
+      </div>
     </article>
 
     {{ if .NodeCollection.Available }}
@@ -413,6 +381,76 @@
     </article>
     {{ end }}
 
+  </div>
+
+  {{/* ── Install PasarGuard node modal ─────────────────── */}}
+  <div class="modal" id="install-node-modal" data-modal hidden {{ if .NodeInstallForm.Errors }}data-modal-open-initial{{ end }}>
+    <div class="modal__backdrop" data-modal-close></div>
+    <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="install-node-modal-title">
+      <header class="modal__header">
+        <h3 class="modal__title" id="install-node-modal-title"><i data-lucide="container"></i> Install PasarGuard node</h3>
+        <button type="button" class="modal__close" data-modal-close aria-label="Close install dialog">
+          <i data-lucide="x"></i>
+        </button>
+      </header>
+      <div class="modal__body">
+        {{ if .NodeInstallForm.Enabled }}
+        <form method="post" action="{{ .NodeInstallForm.Action }}">
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+          <label class="form-field">
+            <span>Node name</span>
+            <input type="text" name="node_name" value="{{ .NodeInstallForm.NodeName }}" placeholder="node" maxlength="64" required data-modal-autofocus>
+            {{ with index .NodeInstallForm.Errors "node_name" }}<small class="field-error">{{ . }}</small>{{ end }}
+            <small class="field-hint">Each instance gets its own <code>/opt/&lt;name&gt;</code> and <code>/var/lib/&lt;name&gt;</code>, so several nodes can run side by side (node, node2, …).</small>
+          </label>
+
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Service port</span>
+              <input type="number" name="service_port" value="{{ .NodeInstallForm.ServicePort }}" placeholder="62050" min="1" max="65535">
+              {{ with index .NodeInstallForm.Errors "service_port" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>API port <small class="field-optional">(optional)</small></span>
+              <input type="number" name="api_port" value="{{ .NodeInstallForm.APIPort }}" placeholder="62051" min="1" max="65535">
+              {{ with index .NodeInstallForm.Errors "api_port" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+          </div>
+
+          <fieldset class="form-field node-proto-choice">
+            <span>Connection type</span>
+            <div class="node-proto-options">
+              <label class="node-proto-option">
+                <input type="radio" name="protocol" value="grpc" {{ if ne .NodeInstallForm.Protocol "rest" }}checked{{ end }}>
+                <span><i data-lucide="layers" class="icon-in-button"></i> gRPC <small>recommended</small></span>
+              </label>
+              <label class="node-proto-option">
+                <input type="radio" name="protocol" value="rest" {{ if eq .NodeInstallForm.Protocol "rest" }}checked{{ end }}>
+                <span><i data-lucide="globe" class="icon-in-button"></i> REST</span>
+              </label>
+            </div>
+            {{ with index .NodeInstallForm.Errors "protocol" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </fieldset>
+
+          <label class="form-field">
+            <span>API key <small class="field-optional">(optional)</small></span>
+            <input type="text" name="api_key" value="{{ .NodeInstallForm.APIKey }}" placeholder="Leave blank to auto-generate a UUID" autocomplete="off" spellcheck="false">
+            {{ with index .NodeInstallForm.Errors "api_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+            <small class="field-hint">Must be a valid UUID. Leave blank and the installer generates one for you.</small>
+          </label>
+
+          <div class="sys-form__actions">
+            <button type="submit" class="btn btn--primary" data-confirm="Run the official PasarGuard install script on this server? This installs Docker-based services and may take several minutes.">
+              <i data-lucide="download" class="icon-in-button"></i> Install node
+            </button>
+          </div>
+          <p class="node-install-note">Runs the official installer, applies your ports and connection type to <code>/opt/&lt;name&gt;/.env</code>, restarts the node through its CLI, and then shows the API key and SSL certificate needed to register it in the PasarGuard panel. Rebecca nodes are detect-and-manage only.</p>
+        </form>
+        {{ else }}
+        <p class="empty-state">Installing a node needs stored SSH credentials. Edit the server and store credentials first.</p>
+        {{ end }}
+      </div>
+    </div>
   </div>
 
   {{/* ── How node management works ─────────────────────── */}}
