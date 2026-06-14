@@ -44,6 +44,7 @@ func TestHealthEndpointsSmoke(t *testing.T) {
 		sshService,
 		streams,
 		nil, // terminalTickets
+		nil, // liveMetrics
 		renderer,
 		staticFiles,
 		nil, // backgroundScheduler

@@ -24,8 +24,8 @@ func (Module) RouteGroup() string {
 func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	if deps.Database == nil || deps.Database.SQL == nil || deps.SSH == nil {
 		mux.Handle("GET /servers/{id}/monitoring", module.NewPlaceholderHandler(deps, module.PlaceholderPage{
-			Title:      "Monitoring",
-			RouteGroup: "/servers/{id}/monitoring",
+			Title:       "Monitoring",
+			RouteGroup:  "/servers/{id}/monitoring",
 			Description: "The monitoring page needs both the database and SSH runtime to collect and store resource snapshots.",
 		}))
 		return
@@ -36,4 +36,11 @@ func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	trafficRepo := NewSQLRepository(deps.Database.SQL)
 	mux.Handle("GET /servers/{id}/monitoring", NewPageHandler(deps, serverRepo, snapshotRepo, trafficRepo))
 	mux.Handle("POST /servers/{id}/monitoring", NewRefreshHandler(deps, serverRepo, snapshotRepo, trafficRepo))
+
+	// Real-time metrics stream (opt-in, independent of the scheduled snapshot
+	// pipeline). Needs the live-metrics hub; without it the page still renders
+	// scheduled snapshots and simply omits the live panel.
+	if deps.LiveMetrics != nil {
+		mux.Handle("GET /servers/{id}/monitoring/live", NewLiveHandler(deps, serverRepo, deps.LiveMetrics))
+	}
 }

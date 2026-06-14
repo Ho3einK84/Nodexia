@@ -10,6 +10,7 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/db"
 	"github.com/Ho3einK84/Nodexia/internal/http/handlers"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
+	"github.com/Ho3einK84/Nodexia/internal/livemetrics"
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/registry"
 	"github.com/Ho3einK84/Nodexia/internal/ratelimit"
@@ -19,7 +20,7 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
 
-func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Service, commandStreams *commandstream.Store, terminalTickets *terminalticket.Store, renderer *view.Renderer, staticFiles fs.FS, backgroundScheduler *scheduler.Runtime, modules []module.Module) http.Handler {
+func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Service, commandStreams *commandstream.Store, terminalTickets *terminalticket.Store, liveMetrics *livemetrics.Hub, renderer *view.Renderer, staticFiles fs.FS, backgroundScheduler *scheduler.Runtime, modules []module.Module) http.Handler {
 	mux := http.NewServeMux()
 	notFoundHandler := handlers.NewErrorHandler(
 		cfg,
@@ -40,8 +41,9 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 		Config:          cfg,
 		Database:        database,
 		SSH:             sshService,
-		CommandStreams:   commandStreams,
+		CommandStreams:  commandStreams,
 		TerminalTickets: terminalTickets,
+		LiveMetrics:     liveMetrics,
 		Renderer:        renderer,
 	}
 

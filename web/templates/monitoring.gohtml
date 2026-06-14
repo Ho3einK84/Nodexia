@@ -101,6 +101,66 @@
     {{ end }}
   </article>
 
+  {{ if .MonitoringLive.Enabled }}
+  <article class="card live-card"
+    data-live-url="{{ .MonitoringLive.WSURL }}"
+    data-live-interval="{{ .MonitoringLive.IntervalSeconds }}">
+    <div class="live-head">
+      <h3><i data-lucide="radio"></i> Live metrics</h3>
+      <span class="live-status live-status--connecting" data-live-status>
+        <span class="live-status__dot"></span><span data-live-status-text>Connecting…</span>
+      </span>
+    </div>
+    <p class="live-sub">Streamed over a shared SSH session every {{ .MonitoringLive.IntervalSeconds }}s. This is separate from the stored snapshots above.</p>
+
+    <div class="live-top">
+      <div class="live-metric live-metric--cpu">
+        <div class="live-metric__head">
+          <span class="live-metric__label"><i data-lucide="cpu"></i> CPU</span>
+          <span class="live-metric__value" data-live-cpu>–</span>
+        </div>
+        <div class="live-bar"><div class="live-bar__fill" data-live-cpu-bar style="width:0%"></div></div>
+        <div class="live-cores" data-live-cores aria-label="Per-core usage"></div>
+      </div>
+
+      <div class="live-metric live-metric--mem">
+        <div class="live-metric__head">
+          <span class="live-metric__label"><i data-lucide="memory-stick"></i> Memory</span>
+          <span class="live-metric__value" data-live-mem>–</span>
+        </div>
+        <div class="live-bar"><div class="live-bar__fill" data-live-mem-bar style="width:0%"></div></div>
+        <span class="live-metric__sub" data-live-mem-detail></span>
+      </div>
+    </div>
+
+    <div class="live-section">
+      <span class="live-section__label"><i data-lucide="hard-drive"></i> Disks</span>
+      <div class="live-disks" data-live-disks>
+        <p class="empty-state">Waiting for the first sample…</p>
+      </div>
+    </div>
+
+    <div class="metric-strip live-strip">
+      <div class="metric-strip__item">
+        <span class="metric-strip__label"><i data-lucide="activity"></i> Load average</span>
+        <span class="metric-strip__value" data-live-load>–</span>
+      </div>
+      <div class="metric-strip__item">
+        <span class="metric-strip__label"><i data-lucide="arrow-down-up"></i> Network total</span>
+        <span class="metric-strip__value" data-live-net>–</span>
+      </div>
+      <div class="metric-strip__item">
+        <span class="metric-strip__label"><i data-lucide="clock"></i> Uptime</span>
+        <span class="metric-strip__value" data-live-uptime>–</span>
+      </div>
+      <div class="metric-strip__item">
+        <span class="metric-strip__label"><i data-lucide="refresh-cw"></i> Updated</span>
+        <span class="metric-strip__value" data-live-updated>–</span>
+      </div>
+    </div>
+  </article>
+  {{ end }}
+
   {{ if .MonitoringTraffic.Known }}
   {{ if .MonitoringTraffic.Available }}
   <article class="card traffic-card">

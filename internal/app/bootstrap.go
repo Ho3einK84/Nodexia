@@ -9,6 +9,7 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/commandstream"
 	"github.com/Ho3einK84/Nodexia/internal/config"
 	"github.com/Ho3einK84/Nodexia/internal/db"
+	"github.com/Ho3einK84/Nodexia/internal/livemetrics"
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/registry"
 	"github.com/Ho3einK84/Nodexia/internal/scheduler"
@@ -21,8 +22,9 @@ type Bootstrap struct {
 	Config          config.Config
 	Database        *db.Runtime
 	SSH             *sshclient.Service
-	CommandStreams   *commandstream.Store
+	CommandStreams  *commandstream.Store
 	TerminalTickets *terminalticket.Store
+	LiveMetrics     *livemetrics.Hub
 	Renderer        *view.Renderer
 	StaticFiles     fs.FS
 	Scheduler       *scheduler.Runtime
@@ -50,6 +52,7 @@ func NewBootstrap(cfg config.Config) (Bootstrap, error) {
 	sshService := sshclient.New(cfg.SSH, cfg.Security)
 	commandStreams := commandstream.New(45 * time.Minute)
 	terminalTickets := terminalticket.New(terminalticket.DefaultTTL)
+	liveMetrics := livemetrics.New(sshService)
 	backgroundScheduler := scheduler.New(cfg, dbRuntime.SQL, sshService)
 	if backgroundScheduler != nil {
 		backgroundScheduler.Start()
@@ -59,8 +62,9 @@ func NewBootstrap(cfg config.Config) (Bootstrap, error) {
 		Config:          cfg,
 		Database:        dbRuntime,
 		SSH:             sshService,
-		CommandStreams:   commandStreams,
+		CommandStreams:  commandStreams,
 		TerminalTickets: terminalTickets,
+		LiveMetrics:     liveMetrics,
 		Renderer:        renderer,
 		StaticFiles:     staticFiles,
 		Scheduler:       backgroundScheduler,

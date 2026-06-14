@@ -81,6 +81,7 @@ type PageData struct {
 	MonitoringCollection        MonitoringCollectionResultView
 	MonitoringTraffic           MonitoringTrafficSnapshotView
 	MonitoringTrafficCollection MonitoringTrafficCollectionResultView
+	MonitoringLive              MonitoringLiveView
 	DashboardSnapshots          []DashboardMonitoringView
 	DashboardSnapshotTotal      int
 	DashboardSnapshotPagination PaginationView
@@ -430,6 +431,16 @@ type MonitoringCollectionResultView struct {
 	Stdout      string
 	Stderr      string
 	Error       string
+}
+
+// MonitoringLiveView powers the real-time metrics panel. Enabled is false when
+// the server has no stored credentials or the live-metrics hub is unavailable,
+// in which case the panel renders a short explanatory note instead of opening a
+// WebSocket. IntervalSeconds is the live sampling cadence shown in the UI.
+type MonitoringLiveView struct {
+	Enabled         bool
+	WSURL           string
+	IntervalSeconds int
 }
 
 type MonitoringTrafficSnapshotView struct {

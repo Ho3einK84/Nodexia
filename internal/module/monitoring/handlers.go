@@ -11,6 +11,7 @@ import (
 
 	"github.com/Ho3einK84/Nodexia/internal/http/httperrors"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
+	"github.com/Ho3einK84/Nodexia/internal/livemetrics"
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 	"github.com/Ho3einK84/Nodexia/internal/sshclient"
@@ -349,7 +350,6 @@ func boundedCollectionContext(ctx context.Context, deps module.Dependencies) (co
 	return context.WithTimeout(ctx, budget)
 }
 
-
 func monitoringURL(serverID int64) string {
 	return "/servers/" + formatID(serverID) + "/monitoring"
 }
@@ -410,25 +410,41 @@ func renderPage(
 	page.MonitoringCollection = collection
 	page.MonitoringTraffic = traffic
 	page.MonitoringTrafficCollection = trafficCollection
+	page.MonitoringLive = liveView(deps, server)
 	page.FlashKind = flashKind
 	page.FlashMessage = flashMessage
 	page.PageStyles = []string{"/static/monitoring.css"}
-	page.PageScripts = []string{"/static/monitoring.js"}
+	page.PageScripts = []string{"/static/monitoring.js", "/static/livemetrics.js"}
 
 	if err := deps.Renderer.Render(w, statusCode, page); err != nil {
 		http.Error(w, "render monitoring page", http.StatusInternalServerError)
 	}
 }
 
+// liveView assembles the real-time panel's view data. Live streaming needs both
+// the hub and stored SSH credentials (resolved server-side); when either is
+// missing the panel renders a note instead of opening a socket.
+func liveView(deps module.Dependencies, server servers.Server) view.MonitoringLiveView {
+	intervalSeconds := int(livemetrics.DefaultInterval.Seconds())
+	if deps.LiveMetrics != nil {
+		intervalSeconds = int(deps.LiveMetrics.Interval().Seconds())
+	}
+	return view.MonitoringLiveView{
+		Enabled:         deps.LiveMetrics != nil && servers.HasStoredCredentials(server),
+		WSURL:           liveURL(server.ID),
+		IntervalSeconds: intervalSeconds,
+	}
+}
+
 func defaultFormView(deps module.Dependencies, server servers.Server, hasStoredCreds bool) view.MonitoringFormView {
 	return view.MonitoringFormView{
-		Action:                    "/servers/" + formatID(server.ID) + "/monitoring",
-		ConnectTimeout:            deps.Config.SSH.ConnectTimeout.String(),
-		CommandTimeout:            deps.Config.SSH.CommandTimeout.String(),
-		TrafficInterface:          "",
+		Action:                     "/servers/" + formatID(server.ID) + "/monitoring",
+		ConnectTimeout:             deps.Config.SSH.ConnectTimeout.String(),
+		CommandTimeout:             deps.Config.SSH.CommandTimeout.String(),
+		TrafficInterface:           "",
 		StoredCredentialsAvailable: hasStoredCreds,
-		RefreshURL:                monitoringURL(server.ID),
-		Errors:                    map[string]string{},
+		RefreshURL:                 monitoringURL(server.ID),
+		Errors:                     map[string]string{},
 	}
 }
 
@@ -503,16 +519,16 @@ func validateForm(input FormInput, server servers.Server, deps module.Dependenci
 
 func snapshotViewFromModel(snapshot Snapshot) view.MonitoringSnapshotView {
 	return view.MonitoringSnapshotView{
-		Available:       true,
-		CPUUsage:        formatPercent(snapshot.CPUUsage),
-		RAMUsage:        formatPercent(snapshot.RAMUsage),
-		DiskUsage:       formatPercent(snapshot.DiskUsage),
-		LoadAverage1:    formatLoad(snapshot.LoadAverage1),
-		LoadAverage5:    formatLoad(snapshot.LoadAverage5),
-		LoadAverage15:   formatLoad(snapshot.LoadAverage15),
-		UptimeHuman:     formatUptime(snapshot.UptimeSeconds),
-		NetworkSummary:  fallbackDisplay(snapshot.NetworkSummary),
-		CollectedAt:     formatTimestamp(snapshot.CreatedAt),
+		Available:      true,
+		CPUUsage:       formatPercent(snapshot.CPUUsage),
+		RAMUsage:       formatPercent(snapshot.RAMUsage),
+		DiskUsage:      formatPercent(snapshot.DiskUsage),
+		LoadAverage1:   formatLoad(snapshot.LoadAverage1),
+		LoadAverage5:   formatLoad(snapshot.LoadAverage5),
+		LoadAverage15:  formatLoad(snapshot.LoadAverage15),
+		UptimeHuman:    formatUptime(snapshot.UptimeSeconds),
+		NetworkSummary: fallbackDisplay(snapshot.NetworkSummary),
+		CollectedAt:    formatTimestamp(snapshot.CreatedAt),
 	}
 }
 
@@ -604,7 +620,6 @@ func reverseTrafficRowViews(rows []view.MonitoringTrafficRowView) {
 		rows[i], rows[j] = rows[j], rows[i]
 	}
 }
-
 
 func pathID(r *http.Request) (int64, bool) {
 	rawID := r.PathValue("id")

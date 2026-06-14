@@ -208,6 +208,85 @@ func (s *Service) StreamCommand(ctx context.Context, req CommandRequest, handler
 	}
 }
 
+// maxStreamLineBytes bounds a single line read by StreamScan so a hostile or
+// broken remote cannot drive unbounded memory growth on one token.
+const maxStreamLineBytes = 256 * 1024
+
+// StreamScan opens a connection, runs command, and invokes onLine for every
+// newline-delimited stdout line until the command exits or ctx is cancelled.
+//
+// Unlike RunCommand/StreamCommand it applies NO command timeout — the caller
+// bounds the session lifetime via ctx — and it does not accumulate output in
+// memory. It is built for long-lived streaming probes (the live-metrics
+// collector loop). Stderr is drained and discarded so the remote pipe never
+// blocks. When ctx is cancelled the session and client are closed, which tears
+// down the remote loop and unblocks the scanner.
+func (s *Service) StreamScan(ctx context.Context, req CommandRequest, onLine func(string)) error {
+	command := strings.TrimSpace(req.Command)
+	if command == "" {
+		return errors.New("sshclient: command cannot be empty")
+	}
+
+	client, _, err := s.connect(ctx, req.ConnectionRequest)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("sshclient: create session: %w", err)
+	}
+	defer session.Close()
+
+	stdoutReader, err := session.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("sshclient: stdout pipe: %w", err)
+	}
+	stderrReader, err := session.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("sshclient: stderr pipe: %w", err)
+	}
+
+	if err := session.Start(command); err != nil {
+		return fmt.Errorf("sshclient: start command: %w", err)
+	}
+
+	// Closing the session/client on ctx cancellation tears down the remote loop
+	// and unblocks the scanner below.
+	stop := context.AfterFunc(ctx, func() {
+		_ = session.Close()
+		_ = client.Close()
+	})
+	defer stop()
+
+	go func() { _, _ = io.Copy(io.Discard, stderrReader) }()
+
+	scanner := bufio.NewScanner(stdoutReader)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxStreamLineBytes)
+	for scanner.Scan() {
+		if onLine != nil {
+			onLine(scanner.Text())
+		}
+	}
+
+	waitErr := session.Wait()
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if scanErr := scanner.Err(); scanErr != nil {
+		return fmt.Errorf("sshclient: scan stream: %w", scanErr)
+	}
+	if waitErr != nil {
+		var exitErr *xssh.ExitError
+		if errors.As(waitErr, &exitErr) {
+			return fmt.Errorf("sshclient: remote stream exited with status %d", exitErr.ExitStatus())
+		}
+		return fmt.Errorf("sshclient: stream wait: %w", waitErr)
+	}
+	return nil
+}
+
 // ResizeRequest carries a PTY window-change request.
 type ResizeRequest struct {
 	Rows uint32
