@@ -41,11 +41,16 @@ func TestMonitoringPageRendersLivePanel(t *testing.T) {
 			t.Fatalf("render: %v", err)
 		}
 		body := rec.Body.String()
-		if !strings.Contains(body, "Live metrics") {
-			t.Error("expected the live metrics panel heading")
-		}
+		// The unified card carries the live WebSocket hook, the live status pill,
+		// and live-driven gauges (even with no stored snapshot).
 		if !strings.Contains(body, `data-live-url="/servers/5/monitoring/live"`) {
 			t.Error("expected the live WebSocket URL data attribute")
+		}
+		if !strings.Contains(body, "data-live-status") {
+			t.Error("expected the live status pill")
+		}
+		if !strings.Contains(body, `data-gauge-metric="cpu"`) {
+			t.Error("expected the live-driven CPU gauge")
 		}
 	})
 

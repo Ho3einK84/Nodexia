@@ -520,10 +520,15 @@
   margin: 0;
 }
 
-.live-sub {
-  margin: 6px 0 16px;
-  font-size: 0.8rem;
+/* Per-gauge detail line (used / total, mount, core count) under each gauge. */
+.gauge__detail {
+  display: block;
+  margin-top: 6px;
+  min-height: 1em;
+  font-size: 0.74rem;
   color: var(--text-muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .live-status {
@@ -568,6 +573,13 @@
   border-color: rgba(248, 113, 113, 0.28);
 }
 
+/* Static fallback (no live stream): the card shows the latest stored snapshot. */
+.live-status--idle {
+  color: var(--text-dim);
+  background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
 @keyframes live-pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.45; }
@@ -577,57 +589,31 @@
   .live-status--live .live-status__dot { animation: none; }
 }
 
-.live-top {
+/* Detail row under the gauges: per-core bars + mounted filesystems. */
+.live-extra {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  margin: 18px 0 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
 
-.live-metric {
+.live-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 14px 16px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  gap: 10px;
+  min-width: 0;
 }
 
-.live-metric__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.live-metric__label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.live-cores__waiting {
+  font-size: 0.8rem;
   color: var(--text-dim);
+  font-style: italic;
 }
 
-.live-metric__label svg {
-  width: 14px;
-  height: 14px;
-  color: var(--accent-soft);
-}
-
-.live-metric__value {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-.live-metric__sub {
-  font-size: 0.76rem;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
+.metric-strip__value--load .badge--load {
+  margin-right: 2px;
 }
 
 .live-bar {
@@ -739,10 +725,6 @@
   color: var(--text-muted);
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-
-.live-strip {
-  margin-top: 18px;
 }
 
 @media (max-width: 540px) {
