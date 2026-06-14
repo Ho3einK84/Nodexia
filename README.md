@@ -137,6 +137,13 @@ make test     # full test suite
 go vet ./...  # static analysis
 ```
 
+> **Go version:** the project targets the **latest Go 1.25.x** patch, not a
+> frozen one. The Docker base image (`golang:1.25`) and CI (`go-version: 1.25.x`)
+> both float to the newest 1.25 patch automatically. The `go 1.25.0` line in
+> `go.mod` is the **minimum** language version required — Go has no directive
+> that auto-selects the latest patch, so building with any 1.25.x toolchain
+> (1.25.0 or newer) is supported and no `toolchain` pin is added.
+
 ---
 
 ## 📄 License

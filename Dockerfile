@@ -1,4 +1,8 @@
 # syntax=docker/dockerfile:1
+# The bare `golang:1.25` tag is the minor-tracking tag: it floats to the latest
+# 1.25.x patch published on Docker Hub. Deliberately not pinned to an exact
+# patch (e.g. golang:1.25.11) so builds pick up Go security/patch releases
+# automatically. go.mod's `go 1.25.0` line is the minimum the code requires.
 FROM golang:1.25 AS build
 
 ARG VERSION=dev
