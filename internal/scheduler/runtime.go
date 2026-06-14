@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/config"
+	"github.com/Ho3einK84/Nodexia/internal/db"
 	"github.com/Ho3einK84/Nodexia/internal/module/alerts"
 	"github.com/Ho3einK84/Nodexia/internal/module/analytics"
 	"github.com/Ho3einK84/Nodexia/internal/module/monitoring"
@@ -544,7 +545,10 @@ func (r *Runtime) executeMonitoringJob(ctx context.Context, server servers.Serve
 		return "", err
 	}
 	snapshot.ServerID = server.ID
-	if _, err := r.monitorRepo.Append(ctx, snapshot); err != nil {
+	if err := db.RetryOnBusy(ctx, func() error {
+		_, appendErr := r.monitorRepo.Append(ctx, snapshot)
+		return appendErr
+	}); err != nil {
 		return "", err
 	}
 
@@ -559,7 +563,10 @@ func (r *Runtime) executeMonitoringJob(ctx context.Context, server servers.Serve
 	trafficStored := false
 	if trafficErr == nil {
 		trafficSnapshot.ServerID = server.ID
-		if _, err := r.trafficRepo.AppendTraffic(ctx, trafficSnapshot); err == nil {
+		if err := db.RetryOnBusy(ctx, func() error {
+			_, appendErr := r.trafficRepo.AppendTraffic(ctx, trafficSnapshot)
+			return appendErr
+		}); err == nil {
 			trafficStored = true
 		}
 	}
@@ -627,7 +634,9 @@ func (r *Runtime) executeNodesJob(ctx context.Context, server servers.Server, re
 	}
 
 	collectedAt := latestNodesCollectedAt(snapshots, probes)
-	if err := r.nodeRepo.ReplaceLatest(ctx, server.ID, snapshots, collectedAt); err != nil {
+	if err := db.RetryOnBusy(ctx, func() error {
+		return r.nodeRepo.ReplaceLatest(ctx, server.ID, snapshots, collectedAt)
+	}); err != nil {
 		return "", err
 	}
 	if len(snapshots) == 0 {
