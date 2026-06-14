@@ -19,7 +19,7 @@
           <option value="load5">Load (5m)</option>
           <option value="load15">Load (15m)</option>
           <option value="traffic_total">Traffic total</option>
-          <option value="bandwidth_mbps">Bandwidth</option>
+          <option value="bandwidth_mbps">Download bandwidth</option>
         </select>
         <button type="submit" class="btn btn--ghost btn--sm"><i data-lucide="bell-off" class="icon-in-button"></i> Silence</button>
       </form>
@@ -149,14 +149,14 @@
     {{ if or (ne .MonitoringTraffic.PeakMbps "-") (ne .MonitoringTraffic.AvgMbps "-") }}
     <div class="traffic-bw">
       <div class="traffic-bw__item">
-        <span class="traffic-bw__label"><i data-lucide="zap"></i> Peak bandwidth</span>
-        <span class="traffic-bw__value">{{ .MonitoringTraffic.PeakMbps }}</span>
-        <span class="traffic-bw__sub">max per hour</span>
+        <span class="traffic-bw__label"><i data-lucide="zap"></i> Peak download</span>
+        <span class="traffic-bw__value" title="Peak download (RX) bandwidth. Upload is excluded so this lines up with the download-only port speed VPS providers advertise.">{{ .MonitoringTraffic.PeakMbps }}</span>
+        <span class="traffic-bw__sub">max download (RX) per hour</span>
       </div>
       <div class="traffic-bw__item">
-        <span class="traffic-bw__label"><i data-lucide="trending-up"></i> Avg bandwidth</span>
-        <span class="traffic-bw__value">{{ .MonitoringTraffic.AvgMbps }}</span>
-        <span class="traffic-bw__sub">mean over available hours</span>
+        <span class="traffic-bw__label"><i data-lucide="trending-up"></i> Avg download</span>
+        <span class="traffic-bw__value" title="Average download (RX) bandwidth. Upload is excluded so this lines up with the download-only port speed VPS providers advertise.">{{ .MonitoringTraffic.AvgMbps }}</span>
+        <span class="traffic-bw__sub">mean download (RX) over available hours</span>
       </div>
     </div>
     {{ end }}

@@ -61,7 +61,7 @@ var metricLabels = map[string]string{
 	MetricLoad5:        "Load average (5m)",
 	MetricLoad15:       "Load average (15m)",
 	MetricTrafficTotal: "Monthly traffic total",
-	MetricBandwidth:    "Bandwidth",
+	MetricBandwidth:    "Download bandwidth",
 	MetricAll:          "All metrics",
 }
 

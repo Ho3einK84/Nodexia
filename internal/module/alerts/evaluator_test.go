@@ -193,7 +193,9 @@ func TestEvaluatorTrafficMetrics(t *testing.T) {
 		t.Fatalf("calls = %d, want 0 when traffic is unavailable", spy.calls)
 	}
 
-	// Traffic available and breaching: both rules fire.
+	// Traffic available and breaching: both rules fire. PeakMbps is the
+	// download-only (RX) peak the collector produces, so bandwidth_mbps alerts
+	// on download bandwidth alone.
 	mustEvaluate(t, ev, f, alerts.Metrics{TrafficAvailable: true, TrafficTotalGiB: 150, PeakMbps: 600})
 	if spy.calls != 2 {
 		t.Fatalf("calls = %d, want 2 (traffic_total + bandwidth_mbps)", spy.calls)

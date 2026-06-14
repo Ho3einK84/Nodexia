@@ -229,13 +229,16 @@ func tailTrafficRows(rows []TrafficRow, limit int) []TrafficRow {
 
 // ── Bandwidth rate computation ────────────────────────────────────────────
 
-// computePeakMbps returns the maximum observed throughput across all available
-// hourly entries. vnstat stores rx+tx per hour; dividing by 3600 seconds and
-// multiplying by 8 gives the average rate over that hour in Mbps.
+// computePeakMbps returns the maximum observed download (RX) throughput across
+// all available hourly entries. vnstat stores rx per hour; dividing by 3600
+// seconds and multiplying by 8 gives the average download rate over that hour in
+// Mbps. Only RX is counted because VPS providers advertise port speed as
+// download-only, so a download-only figure is what users compare against their
+// plan's cap. Upload (TX) is deliberately excluded.
 func computePeakMbps(hours []vnstatHour) float64 {
 	var peak float64
 	for _, h := range hours {
-		mbps := float64(h.RX+h.TX) * 8.0 / 3600.0 / 1_000_000.0
+		mbps := float64(h.RX) * 8.0 / 3600.0 / 1_000_000.0
 		if mbps > peak {
 			peak = mbps
 		}
@@ -243,16 +246,18 @@ func computePeakMbps(hours []vnstatHour) float64 {
 	return peak
 }
 
-// computeAvgMbps returns the mean hourly throughput rate across all available
-// hourly entries. Empty hours (zero traffic) are included so the result
-// represents a true time-averaged rate, not just active-period average.
+// computeAvgMbps returns the mean hourly download (RX) throughput rate across
+// all available hourly entries. Empty hours (zero traffic) are included so the
+// result represents a true time-averaged rate, not just active-period average.
+// As with computePeakMbps, only RX is counted (download-only); upload (TX) is
+// deliberately excluded.
 func computeAvgMbps(hours []vnstatHour) float64 {
 	if len(hours) == 0 {
 		return 0
 	}
 	var total float64
 	for _, h := range hours {
-		total += float64(h.RX+h.TX) * 8.0 / 3600.0 / 1_000_000.0
+		total += float64(h.RX) * 8.0 / 3600.0 / 1_000_000.0
 	}
 	return total / float64(len(hours))
 }
