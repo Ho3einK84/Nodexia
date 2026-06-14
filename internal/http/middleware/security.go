@@ -145,11 +145,20 @@ func shouldSkipSecurityMiddleware(r *http.Request) bool {
 	switch {
 	case strings.HasPrefix(r.URL.Path, "/static/"):
 		return true
+	case isPublicPWAAsset(r.URL.Path):
+		return true
 	case r.URL.Path == "/healthz", strings.HasPrefix(r.URL.Path, "/healthz/"):
 		return true
 	default:
 		return false
 	}
+}
+
+// isPublicPWAAsset reports whether the path is a Progressive Web App entry point
+// (manifest or service worker) that must be reachable without authentication and
+// served with its own caching headers, like the /static assets.
+func isPublicPWAAsset(path string) bool {
+	return path == "/manifest.webmanifest" || path == "/sw.js"
 }
 
 func isSafeMethod(method string) bool {
