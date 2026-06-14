@@ -196,6 +196,77 @@ SERVICE_PORT = 62051
 	}
 }
 
+func TestIsPasarguardNodeImage(t *testing.T) {
+	cases := map[string]bool{
+		"pasarguard/node:latest":       true,
+		"ghcr.io/pasarguard/node:v1":   true,
+		"PasarGuard/Node:latest":       true, // case-insensitive
+		"some-registry/pg-node:edge":   true,
+		"pasarguard/pasarguard:latest": false, // the panel, not a node
+		"node:18":                      false, // unrelated Node.js image
+		"caddy:2":                      false,
+		"":                             false,
+	}
+	for image, want := range cases {
+		if got := isPasarguardNodeImage(image); got != want {
+			t.Errorf("isPasarguardNodeImage(%q) = %v, want %v", image, got, want)
+		}
+	}
+}
+
+// TestPasarGuardDiscoveryIgnoresPanel reproduces the reported environment: the
+// PasarGuard PANEL is installed alongside a node. docker ps lists the panel
+// container "pasarguard-pasarguard-1" (image pasarguard/pasarguard); discovery
+// must surface only the node and never mistake the panel for one.
+func TestPasarGuardDiscoveryIgnoresPanel(t *testing.T) {
+	const fixture = `=DOCKER=
+pasarguard-pasarguard-1	pasarguard/pasarguard:latest	Up 3 hours	0.0.0.0:8000->8000/tcp
+node	pasarguard/node:latest	Up 2 hours	0.0.0.0:62050->62050/tcp
+=DOCKEREND=
+=PGNODE=pg-node=
+=CONTAINER=node=
+=IMAGE=    image: pasarguard/node:latest=
+=STATE=running=
+=ENVSTART=
+SERVICE_PORT = 62050
+=ENVEND=
+=PGNODEEND=
+`
+	snapshots := PasarGuardProvider{}.ParseDiscovery(fixture, time.Now())
+
+	names := make([]string, 0, len(snapshots))
+	byName := map[string]Snapshot{}
+	for _, s := range snapshots {
+		byName[s.ServiceName] = s
+		names = append(names, s.ServiceName)
+	}
+	if _, ok := byName["pasarguard-pasarguard-1"]; ok {
+		t.Error("the PasarGuard panel container must not be reported as a node")
+	}
+	if _, ok := byName["pasarguard"]; ok {
+		t.Error("the PasarGuard panel must not be reported as a node")
+	}
+	if _, ok := byName["pg-node"]; !ok {
+		t.Errorf("expected the real node to be discovered; got %v", names)
+	}
+	if len(snapshots) != 1 {
+		t.Fatalf("len(snapshots) = %d %v, want 1 (only the node, not the panel)", len(snapshots), names)
+	}
+}
+
+// TestPasarGuardDiscoveryCommandTargetsNodeImage guards the shell-side dir scan
+// against the regression: it must match the node image specifically, not a bare
+// "pasarguard" (which also matches the panel at /opt/pasarguard).
+func TestPasarGuardDiscoveryCommandTargetsNodeImage(t *testing.T) {
+	cmd := PasarGuardProvider{}.DiscoveryCommand()
+	if !strings.Contains(cmd, "pasarguard/node|pg-node") {
+		t.Errorf("discovery dir scan must match the node image specifically:\n%s", cmd)
+	}
+	if strings.Contains(cmd, `"pasarguard|pg-node"`) {
+		t.Errorf("discovery must not use the broad pasarguard match (it catches the panel):\n%s", cmd)
+	}
+}
+
 func TestPGHealth(t *testing.T) {
 	cases := []struct {
 		name            string

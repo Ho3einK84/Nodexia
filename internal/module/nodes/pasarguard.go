@@ -60,7 +60,11 @@ func (PasarGuardProvider) DiscoveryCommand() string {
 		`fi; ` +
 		`for dir in /opt/*/; do ` +
 		`[ -f "$dir/docker-compose.yml" ] || continue; ` +
-		`grep -Eqi "pasarguard|pg-node" "$dir/docker-compose.yml" 2>/dev/null || continue; ` +
+		// Match the PasarGuard NODE specifically (image pasarguard/node, or the
+		// pg-node marker) — NOT a bare "pasarguard", which also matches the
+		// PasarGuard PANEL (image pasarguard/pasarguard at /opt/pasarguard). The
+		// panel is a separate product and must never be reported as a node.
+		`grep -Eqi "pasarguard/node|pg-node" "$dir/docker-compose.yml" 2>/dev/null || continue; ` +
 		`name="${dir%/}"; name="${name##*/}"; ` +
 		// Resolve the actual container name: prefer an explicit container_name:,
 		// else the first service key under services:, else the directory name.
@@ -118,10 +122,13 @@ func (p PasarGuardProvider) ParseDiscovery(output string, collectedAt time.Time)
 		snapshots = append(snapshots, p.buildSnapshot(inst, containers, dockerSeen, collectedAt))
 	}
 
-	// Containers running a PasarGuard image without a matching /opt directory
-	// (manual installs) are still surfaced, with config defaults.
+	// Containers running a PasarGuard NODE image without a matching /opt
+	// directory (manual installs) are still surfaced, with config defaults.
+	// The image match is node-specific so the PasarGuard PANEL container
+	// (pasarguard/pasarguard, e.g. "pasarguard-pasarguard-1") is never mistaken
+	// for a node, and a plain "node:NN" (Node.js) container is ignored too.
 	for _, c := range containers {
-		if !strings.Contains(strings.ToLower(c.Image), "pasarguard") {
+		if !isPasarguardNodeImage(c.Image) {
 			continue
 		}
 		if _, ok := seen[strings.ToLower(c.Name)]; ok {
@@ -132,6 +139,16 @@ func (p PasarGuardProvider) ParseDiscovery(output string, collectedAt time.Time)
 	}
 
 	return snapshots
+}
+
+// isPasarguardNodeImage reports whether a Docker image reference belongs to a
+// PasarGuard node. It matches the official image (pasarguard/node, including
+// registry-prefixed mirrors like ghcr.io/pasarguard/node) and the pg-node
+// marker, while deliberately rejecting the PasarGuard panel image
+// (pasarguard/pasarguard) and unrelated images such as a bare node:NN runtime.
+func isPasarguardNodeImage(image string) bool {
+	lower := strings.ToLower(image)
+	return strings.Contains(lower, "pasarguard/node") || strings.Contains(lower, "pg-node")
 }
 
 func parseDockerSection(lines []string) (map[string]dockerEntry, bool) {
