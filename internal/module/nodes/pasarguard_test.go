@@ -6,20 +6,22 @@ import (
 	"time"
 )
 
-// pgDiscoveryFixture covers the realistic mix: "node" is reported running by
-// `docker inspect` (the authoritative =STATE=); "node2" is exited; "pg-node"
-// reproduces the reported bug — it is MISSING from the `docker ps` listing
-// (e.g. the listing came back empty) yet inspect reports it running, so it must
-// still show as running. "orphan" is a PasarGuard container with no /opt dir.
+// pgDiscoveryFixture mirrors what a real server produces. The install dirs and
+// their containers have DIFFERENT names: /opt/pg-node (the default, no --name)
+// runs container "node" (its compose service name), and /opt/node2 runs "node2".
+// The probe resolves each container name via =CONTAINER= so the install links to
+// its container instead of producing a ghost duplicate. "orphan" is a PasarGuard
+// container with no /opt directory (a manual install) and is surfaced on its own.
 const pgDiscoveryFixture = `=DOCKER=
 node	pasarguard/node:latest	Up 2 hours	0.0.0.0:443->443/tcp, 0.0.0.0:62050->62050/tcp
 node2	pasarguard/node:v0.5.0	Exited (0) 3 hours ago
 caddy	caddy:2	Up 5 hours
 orphan	pasarguard/node:latest	Up 1 hour
 =DOCKEREND=
-=PGNODE=node=
+=PGNODE=pg-node=
+=CONTAINER=node=
 =IMAGE=    image: pasarguard/node:latest=
-=DATADIR=/var/lib/node=
+=DATADIR=/var/lib/pg-node=
 =STATE=running=
 =ENVSTART=
 SERVICE_PORT = 62050
@@ -28,18 +30,11 @@ SERVICE_PROTOCOL = grpc
 =ENVEND=
 =PGNODEEND=
 =PGNODE=node2=
+=CONTAINER=node2=
 =IMAGE=image: "pasarguard/node:v0.5.0"=
 =STATE=exited=
 =ENVSTART=
 SERVICE_PORT=5000
-=ENVEND=
-=PGNODEEND=
-=PGNODE=pg-node=
-=IMAGE=    image: pasarguard/node:latest=
-=STATE=running=
-=ENVSTART=
-SERVICE_PORT = 62050
-SERVICE_PROTOCOL = rest
 =ENVEND=
 =PGNODEEND=
 `
@@ -48,8 +43,8 @@ func TestPasarGuardParseDiscovery(t *testing.T) {
 	collectedAt := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	snapshots := PasarGuardProvider{}.ParseDiscovery(pgDiscoveryFixture, collectedAt)
 
-	if len(snapshots) != 4 {
-		t.Fatalf("len(snapshots) = %d, want 4 (node, node2, pg-node, orphan)", len(snapshots))
+	if len(snapshots) != 3 {
+		t.Fatalf("len(snapshots) = %d, want 3 (pg-node, node2, orphan)", len(snapshots))
 	}
 
 	byName := map[string]Snapshot{}
@@ -60,30 +55,42 @@ func TestPasarGuardParseDiscovery(t *testing.T) {
 		}
 	}
 
-	node := byName["node"]
-	if node.HealthStatus != "running" {
-		t.Errorf("node HealthStatus = %q, want running", node.HealthStatus)
+	// The default install: directory /opt/pg-node, container "node". It must be a
+	// single entry named for its directory and linked to the "node" container
+	// (health/version/ports come from that container) — never two entries.
+	pgNode := byName["pg-node"]
+	if pgNode.HealthStatus != "running" {
+		t.Errorf("pg-node HealthStatus = %q, want running", pgNode.HealthStatus)
 	}
-	if node.ServicePort != "62050" {
-		t.Errorf("node ServicePort = %q, want 62050", node.ServicePort)
+	if pgNode.ServicePort != "62050" {
+		t.Errorf("pg-node ServicePort = %q, want 62050", pgNode.ServicePort)
 	}
-	if node.Protocol != "grpc" {
-		t.Errorf("node Protocol = %q, want grpc", node.Protocol)
+	if pgNode.Protocol != "grpc" {
+		t.Errorf("pg-node Protocol = %q, want grpc", pgNode.Protocol)
 	}
-	if node.Version != "latest" {
-		t.Errorf("node Version = %q, want latest", node.Version)
+	if pgNode.Version != "latest" {
+		t.Errorf("pg-node Version = %q, want latest (from linked container)", pgNode.Version)
 	}
-	if node.DataDir != "/var/lib/node" {
-		t.Errorf("node DataDir = %q, want /var/lib/node", node.DataDir)
+	if pgNode.DataDir != "/var/lib/pg-node" {
+		t.Errorf("pg-node DataDir = %q, want /var/lib/pg-node", pgNode.DataDir)
 	}
-	if node.Confidence != "high" {
-		t.Errorf("node Confidence = %q, want high", node.Confidence)
+	if pgNode.Confidence != "high" {
+		t.Errorf("pg-node Confidence = %q, want high", pgNode.Confidence)
 	}
-	if !containsString(node.XrayPorts, "443") {
-		t.Errorf("node XrayPorts = %v, want to contain 443", node.XrayPorts)
+	if !containsString(pgNode.XrayPorts, "443") {
+		t.Errorf("pg-node XrayPorts = %v, want to contain 443", pgNode.XrayPorts)
 	}
-	if containsString(node.XrayPorts, "62050") {
-		t.Errorf("node XrayPorts = %v, must not contain the service port", node.XrayPorts)
+	if containsString(pgNode.XrayPorts, "62050") {
+		t.Errorf("pg-node XrayPorts = %v, must not contain the service port", pgNode.XrayPorts)
+	}
+	if !containsSubstring(pgNode.Evidence, "Docker container: node") {
+		t.Errorf("pg-node Evidence = %v, want it linked to container \"node\"", pgNode.Evidence)
+	}
+
+	// The bug: container "node" must NOT also appear as its own snapshot — it is
+	// claimed by the /opt/pg-node install above.
+	if _, dup := byName["node"]; dup {
+		t.Fatalf("container \"node\" must not produce a separate snapshot; it belongs to /opt/pg-node")
 	}
 
 	node2 := byName["node2"]
@@ -96,19 +103,14 @@ func TestPasarGuardParseDiscovery(t *testing.T) {
 	if node2.Version != "v0.5.0" {
 		t.Errorf("node2 Version = %q, want v0.5.0", node2.Version)
 	}
-	if node2.DataDir != "/var/lib/node2" {
-		t.Errorf("node2 DataDir = %q, want /var/lib/node2 fallback", node2.DataDir)
+	// No =DATADIR= was emitted (/var/lib/node2 does not exist), so DataDir must be
+	// empty rather than a guessed path that is not on the host.
+	if node2.DataDir != "" {
+		t.Errorf("node2 DataDir = %q, want empty (no =DATADIR= probe marker)", node2.DataDir)
 	}
 	// Protocol falls back to the PasarGuard default when .env omits it.
 	if node2.Protocol != "grpc" {
 		t.Errorf("node2 Protocol = %q, want grpc default", node2.Protocol)
-	}
-
-	// The regression case: pg-node is absent from the docker ps listing but
-	// inspect reports it running — it must NOT show as stopped.
-	pgNode := byName["pg-node"]
-	if pgNode.HealthStatus != "running" {
-		t.Errorf("pg-node HealthStatus = %q, want running (authoritative inspect state)", pgNode.HealthStatus)
 	}
 
 	orphan, ok := byName["orphan"]
@@ -124,6 +126,73 @@ func TestPasarGuardParseDiscovery(t *testing.T) {
 
 	if _, found := byName["caddy"]; found {
 		t.Fatalf("non-PasarGuard container must not produce a snapshot")
+	}
+}
+
+// containsSubstring reports whether any element of values contains sub.
+func containsSubstring(values []string, sub string) bool {
+	for _, v := range values {
+		if strings.Contains(v, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestPasarGuardDiscoveryNoGhostDuplicate reproduces the exact reported server
+// state: `docker ps` shows containers "node2" and "node", the default install is
+// /opt/pg-node (whose container is "node") and a named install is /opt/node2.
+// Before the fix the default install appeared twice — as "pg-node" (dir scan,
+// inspect by "pg-node" found nothing) and as "node" (orphan fallback). It must
+// now collapse to exactly one "pg-node" entry linked to the "node" container.
+func TestPasarGuardDiscoveryNoGhostDuplicate(t *testing.T) {
+	const fixture = `=DOCKER=
+node2	pasarguard/node:latest	Up 1 hour	0.0.0.0:62051->62051/tcp
+node	pasarguard/node:latest	Up 2 hours	0.0.0.0:62050->62050/tcp
+=DOCKEREND=
+=PGNODE=pg-node=
+=CONTAINER=node=
+=IMAGE=    image: pasarguard/node:latest=
+=DATADIR=/var/lib/pg-node=
+=STATE=running=
+=ENVSTART=
+SERVICE_PORT = 62050
+=ENVEND=
+=PGNODEEND=
+=PGNODE=node2=
+=CONTAINER=node2=
+=IMAGE=    image: pasarguard/node:latest=
+=STATE=running=
+=ENVSTART=
+SERVICE_PORT = 62051
+=ENVEND=
+=PGNODEEND=
+`
+	snapshots := PasarGuardProvider{}.ParseDiscovery(fixture, time.Now())
+	if len(snapshots) != 2 {
+		names := make([]string, len(snapshots))
+		for i, s := range snapshots {
+			names[i] = s.ServiceName
+		}
+		t.Fatalf("len(snapshots) = %d %v, want 2 (pg-node, node2) with no ghost duplicate", len(snapshots), names)
+	}
+
+	byName := map[string]Snapshot{}
+	for _, s := range snapshots {
+		byName[s.ServiceName] = s
+	}
+	if _, dup := byName["node"]; dup {
+		t.Errorf("container \"node\" produced a separate snapshot; it belongs to the /opt/pg-node install")
+	}
+	pgNode, ok := byName["pg-node"]
+	if !ok {
+		t.Fatalf("missing pg-node snapshot; got %v", byName)
+	}
+	if pgNode.HealthStatus != "running" {
+		t.Errorf("pg-node HealthStatus = %q, want running (from linked \"node\" container)", pgNode.HealthStatus)
+	}
+	if !containsString(pgNode.ActivePorts, "62050") {
+		t.Errorf("pg-node ActivePorts = %v, want service port 62050", pgNode.ActivePorts)
 	}
 }
 

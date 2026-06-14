@@ -33,8 +33,17 @@ func (PasarGuardProvider) SupportsInstall() bool { return true }
 // DiscoveryCommand enumerates every PasarGuard instance:
 //   - a "=DOCKER=" section lists all containers (name, image, status, ports);
 //   - one "=PGNODE=<name>=" block per /opt/<name> whose compose file
-//     references PasarGuard, including its compose image line, an authoritative
-//     "=STATE=" from `docker inspect`, and its .env.
+//     references PasarGuard, including its compose image line, the actual
+//     container name ("=CONTAINER="), an authoritative "=STATE=" from
+//     `docker inspect`, and its .env.
+//
+// The install directory name and the running container name differ: the default
+// install lives in /opt/pg-node but its container is "node" (the compose service
+// name), so inspecting by the directory name finds nothing and the node would be
+// reported twice — once as the dead "pg-node" dir and once as the live "node"
+// container surfaced by the orphan fallback. We therefore read the real name
+// from the compose file (container_name:, else the first service under
+// services:) and inspect by that, linking the install to its container.
 //
 // Docker is queried through passwordless sudo (matching the management
 // actions): node hosts commonly require root for the Docker socket, and
@@ -53,11 +62,17 @@ func (PasarGuardProvider) DiscoveryCommand() string {
 		`[ -f "$dir/docker-compose.yml" ] || continue; ` +
 		`grep -Eqi "pasarguard|pg-node" "$dir/docker-compose.yml" 2>/dev/null || continue; ` +
 		`name="${dir%/}"; name="${name##*/}"; ` +
+		// Resolve the actual container name: prefer an explicit container_name:,
+		// else the first service key under services:, else the directory name.
+		`cname="$(grep -iE "^[[:space:]]*container_name:" "$dir/docker-compose.yml" 2>/dev/null | head -n 1 | sed -e "s/.*container_name:[[:space:]]*//" -e "s/[\"]//g" | tr -d "[:space:]")"; ` +
+		`if [ -z "$cname" ]; then cname="$(sed -n "/^[[:space:]]*services:/,/^[^[:space:]#]/p" "$dir/docker-compose.yml" 2>/dev/null | sed -n -e "s/^[[:space:]]\{1,\}\([A-Za-z0-9._-]\{1,\}\):[[:space:]]*$/\1/p" | head -n 1)"; fi; ` +
+		`[ -n "$cname" ] || cname="$name"; ` +
 		`printf "=PGNODE=%s=\n" "$name"; ` +
+		`printf "=CONTAINER=%s=\n" "$cname"; ` +
 		`printf "=IMAGE=%s=\n" "$(grep -i "image:" "$dir/docker-compose.yml" 2>/dev/null | head -n 1)"; ` +
 		`[ -d "/var/lib/$name" ] && printf "=DATADIR=/var/lib/%s=\n" "$name"; ` +
 		`state=""; ` +
-		`[ "$HAVE_DOCKER" -eq 1 ] && state="$($SUDO docker inspect -f "{{.State.Status}}" "$name" 2>/dev/null)"; ` +
+		`[ "$HAVE_DOCKER" -eq 1 ] && state="$($SUDO docker inspect -f "{{.State.Status}}" "$cname" 2>/dev/null)"; ` +
 		`printf "=STATE=%s=\n" "$state"; ` +
 		`printf "=ENVSTART=\n"; cat "$dir/.env" 2>/dev/null || true; printf "\n=ENVEND=\n"; ` +
 		`printf "=PGNODEEND=\n"; ` +
@@ -66,11 +81,16 @@ func (PasarGuardProvider) DiscoveryCommand() string {
 
 // pgInstance is the parsed evidence for one PasarGuard install directory.
 type pgInstance struct {
-	Name        string
-	ComposeLine string
-	DataDir     string
-	State       string // `docker inspect` .State.Status (running/exited/…), or ""
-	EnvLines    []string
+	Name string
+	// ContainerName is the real Docker container name from the compose file
+	// (container_name: or the service key), which differs from the install
+	// directory name — e.g. /opt/pg-node runs container "node". Empty falls back
+	// to Name. It is what `docker inspect` and the orphan fallback key on.
+	ContainerName string
+	ComposeLine   string
+	DataDir       string
+	State         string // `docker inspect` .State.Status (running/exited/…), or ""
+	EnvLines      []string
 }
 
 // dockerEntry is one row of the `docker ps -a` section.
@@ -90,6 +110,11 @@ func (p PasarGuardProvider) ParseDiscovery(output string, collectedAt time.Time)
 	seen := map[string]struct{}{}
 	for _, inst := range instances {
 		seen[strings.ToLower(inst.Name)] = struct{}{}
+		// Claim the linked container too, so it is not surfaced again below as a
+		// phantom orphan (the bug: /opt/pg-node's container "node" reappearing).
+		if cn := strings.ToLower(strings.TrimSpace(inst.ContainerName)); cn != "" {
+			seen[cn] = struct{}{}
+		}
 		snapshots = append(snapshots, p.buildSnapshot(inst, containers, dockerSeen, collectedAt))
 	}
 
@@ -151,6 +176,8 @@ func parsePGInstances(lines []string) []pgInstance {
 			current = nil
 			inEnv = false
 		case current == nil:
+		case strings.HasPrefix(line, "=CONTAINER=") && strings.HasSuffix(line, "="):
+			current.ContainerName = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "=CONTAINER="), "="))
 		case strings.HasPrefix(line, "=IMAGE=") && strings.HasSuffix(line, "="):
 			current.ComposeLine = strings.TrimSuffix(strings.TrimPrefix(line, "=IMAGE="), "=")
 		case strings.HasPrefix(line, "=DATADIR=") && strings.HasSuffix(line, "="):
@@ -170,7 +197,12 @@ func parsePGInstances(lines []string) []pgInstance {
 
 func (PasarGuardProvider) buildSnapshot(inst pgInstance, containers map[string]dockerEntry, dockerSeen bool, collectedAt time.Time) Snapshot {
 	env := parseEnvFile(inst.EnvLines)
-	container, hasContainer := containers[strings.ToLower(inst.Name)]
+	// Look the container up by its real name, not the install directory name.
+	lookup := strings.ToLower(strings.TrimSpace(inst.ContainerName))
+	if lookup == "" {
+		lookup = strings.ToLower(inst.Name)
+	}
+	container, hasContainer := containers[lookup]
 
 	servicePort := parsePortFromEnv(env, "SERVICE_PORT")
 	if servicePort == "" {
@@ -182,10 +214,10 @@ func (PasarGuardProvider) buildSnapshot(inst pgInstance, containers map[string]d
 		protocol = pasarguardDefaultProtocol
 	}
 
+	// DataDir is only trusted when the probe actually found /var/lib/<name>
+	// (=DATADIR=). We never guess the path: a missing directory must read as
+	// empty ("-" in the UI), not as a path that does not exist on the host.
 	dataDir := inst.DataDir
-	if dataDir == "" {
-		dataDir = "/var/lib/" + inst.Name
-	}
 
 	version := ""
 	if hasContainer {
