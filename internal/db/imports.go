@@ -1,17 +1,10 @@
 package db
 
 import (
-	"context"
-
+	// Register the database/sql drivers. SQLite connection setup (WAL,
+	// busy_timeout, foreign_keys, …) is applied per-connection via the DSN built
+	// in the sqlite dialect's DataSourceName, so no global connection hook is
+	// needed here.
 	_ "github.com/go-sql-driver/mysql"
-	sqlite "modernc.org/sqlite"
+	_ "modernc.org/sqlite"
 )
-
-func init() {
-	// Enable foreign-key enforcement on every SQLite connection.
-	// Without this, SQLite silently ignores all FK constraints.
-	sqlite.RegisterConnectionHook(func(conn sqlite.ExecQuerierContext, _ string) error {
-		_, err := conn.ExecContext(context.Background(), "PRAGMA foreign_keys = ON", nil)
-		return err
-	})
-}

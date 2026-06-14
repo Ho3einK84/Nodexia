@@ -35,9 +35,7 @@ func Open(ctx context.Context, cfg config.DatabaseConfig) (*Runtime, error) {
 		return nil, fmt.Errorf("db: open connection: %w", err)
 	}
 
-	conn.SetMaxOpenConns(cfg.MaxOpenConns)
-	conn.SetMaxIdleConns(cfg.MaxIdleConns)
-	conn.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	dialect.ConfigurePool(conn, cfg)
 
 	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
