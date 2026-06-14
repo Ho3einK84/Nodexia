@@ -8,12 +8,14 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/bulk"
+	"github.com/Ho3einK84/Nodexia/internal/module/nodes"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 	"github.com/Ho3einK84/Nodexia/internal/sshclient"
 	"github.com/Ho3einK84/Nodexia/internal/testutil"
@@ -51,6 +53,54 @@ func (f *fakeRunner) RunCommand(ctx context.Context, req sshclient.CommandReques
 	return sshclient.CommandResult{ExitCode: &code}, nil
 }
 
+// testRunner is the (unexported-in-bulk) command-runner contract, restated here
+// so test helpers can accept either fake.
+type testRunner interface {
+	RunCommand(ctx context.Context, req sshclient.CommandRequest) (sshclient.CommandResult, error)
+}
+
+// nodeScriptRunner is a discovery-aware fake: it answers each provider's
+// DiscoveryCommand with canned probe output and records every command it runs,
+// so node-action tests can assert which CLI invocations bulk produced (e.g. the
+// exact --name) without a real SSH server.
+type nodeScriptRunner struct {
+	mu       sync.Mutex
+	commands []string
+	pgOut    string // stdout for the PasarGuard discovery probe
+	rbOut    string // stdout for the Rebecca discovery probe
+	exitCode int    // exit code for action commands
+}
+
+func (r *nodeScriptRunner) RunCommand(ctx context.Context, req sshclient.CommandRequest) (sshclient.CommandResult, error) {
+	r.mu.Lock()
+	r.commands = append(r.commands, req.Command)
+	r.mu.Unlock()
+
+	switch req.Command {
+	case (nodes.PasarGuardProvider{}).DiscoveryCommand():
+		zero := 0
+		return sshclient.CommandResult{Stdout: r.pgOut, ExitCode: &zero}, nil
+	case (nodes.RebeccaProvider{}).DiscoveryCommand():
+		zero := 0
+		return sshclient.CommandResult{Stdout: r.rbOut, ExitCode: &zero}, nil
+	default:
+		code := r.exitCode
+		return sshclient.CommandResult{ExitCode: &code}, nil
+	}
+}
+
+// ranContaining reports whether any recorded command contains substr.
+func (r *nodeScriptRunner) ranContaining(substr string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, c := range r.commands {
+		if strings.Contains(c, substr) {
+			return true
+		}
+	}
+	return false
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func newDeps(t *testing.T) module.Dependencies {
@@ -70,7 +120,7 @@ func newDeps(t *testing.T) module.Dependencies {
 
 // newBulkMux registers POST + job-page handlers (with a fake runner) on a mux
 // so PathValue routing works exactly as in production.
-func newBulkMux(t *testing.T, deps module.Dependencies, serverRepo servers.Repository, runner *fakeRunner) *http.ServeMux {
+func newBulkMux(t *testing.T, deps module.Dependencies, serverRepo servers.Repository, runner testRunner) *http.ServeMux {
 	t.Helper()
 	action, page := bulk.NewTestHandlers(deps, serverRepo, runner)
 	mux := http.NewServeMux()
@@ -280,6 +330,21 @@ func TestBulkWorkerPoolCapsConcurrency(t *testing.T) {
 	}
 }
 
+// pgDiscovery is canned PasarGuard discovery output for one instance whose
+// install directory (dirName) differs from its Docker container (containerName)
+// — the default install's /opt/pg-node running container "node".
+func pgDiscovery(dirName, containerName string) string {
+	return "=DOCKER=\n" +
+		containerName + "\tpasarguard/node:latest\tUp 3 hours\t0.0.0.0:62050->62050/tcp\n" +
+		"=DOCKEREND=\n" +
+		"=PGNODE=" + dirName + "=\n" +
+		"=CONTAINER=" + containerName + "=\n" +
+		"=IMAGE=    image: pasarguard/node:latest\n" +
+		"=STATE=running=\n" +
+		"=ENVSTART=\nSERVICE_PORT = 62050\n=ENVEND=\n" +
+		"=PGNODEEND=\n"
+}
+
 func TestBulkNodeActionsRun(t *testing.T) {
 	for _, action := range []struct {
 		key   string
@@ -294,7 +359,10 @@ func TestBulkNodeActionsRun(t *testing.T) {
 			withCreds := seedServer(t, serverRepo, true)
 			noCreds := seedServer(t, serverRepo, false)
 
-			mux := newBulkMux(t, deps, serverRepo, &fakeRunner{})
+			// One PasarGuard node is discovered, so the credentialed server runs
+			// the action and reports ok.
+			runner := &nodeScriptRunner{pgOut: pgDiscovery("pg-node", "node")}
+			mux := newBulkMux(t, deps, serverRepo, runner)
 			jobPath := startJob(t, mux, action.key, []int64{withCreds.ID, noCreds.ID})
 			body := waitForJob(t, mux, jobPath)
 
@@ -313,6 +381,63 @@ func TestBulkNodeActionsRun(t *testing.T) {
 				t.Errorf("expected the no-credentials server to be skipped")
 			}
 		})
+	}
+}
+
+// TestBulkNodeActionUsesDiscoveredName is the regression guard for the original
+// bug: bulk must invoke the node CLI with the *discovered* node name (the install
+// directory / instance name resolved by the canonical pipeline), never something
+// derived locally. For the default install the directory is /opt/pg-node while
+// the Docker container is "node" — bulk must target `--name pg-node`, not the
+// container name.
+func TestBulkNodeActionUsesDiscoveredName(t *testing.T) {
+	deps := newDeps(t)
+	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
+	server := seedServer(t, serverRepo, true)
+
+	runner := &nodeScriptRunner{pgOut: pgDiscovery("pg-node", "node")}
+	mux := newBulkMux(t, deps, serverRepo, runner)
+	jobPath := startJob(t, mux, "node-restart", []int64{server.ID})
+	body := waitForJob(t, mux, jobPath)
+
+	if !runner.ranContaining(`--name pg-node restart -n`) {
+		t.Errorf("bulk did not restart the node by its discovered name (--name pg-node)\ncommands: %v", runner.commands)
+	}
+	if runner.ranContaining(`--name node `) {
+		t.Errorf("bulk targeted the container name instead of the instance name\ncommands: %v", runner.commands)
+	}
+	if !strings.Contains(body, "1 ok") {
+		t.Errorf("expected the node restart to report ok")
+	}
+}
+
+// TestBulkNodeActionIgnoresPanel is the second regression guard: a /opt/pasarguard
+// *panel* directory (image pasarguard/pasarguard) must NOT be treated as a node.
+// The original bulk script greped a bare "pasarguard" and would have run
+// `pg-node --name pasarguard ...` against the panel; reusing the canonical
+// discovery filter (pasarguard/node|pg-node) excludes it, so the server has no
+// nodes to act on.
+func TestBulkNodeActionIgnoresPanel(t *testing.T) {
+	deps := newDeps(t)
+	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
+	server := seedServer(t, serverRepo, true)
+
+	// Discovery output for a host that runs only the PasarGuard panel: the panel
+	// container is present but no =PGNODE= block is emitted (its compose does not
+	// match the node filter) and the panel image is not a node image.
+	panelOut := "=DOCKER=\n" +
+		"pasarguard-pasarguard-1\tpasarguard/pasarguard:latest\tUp 2 days\t0.0.0.0:8000->8000/tcp\n" +
+		"=DOCKEREND=\n"
+	runner := &nodeScriptRunner{pgOut: panelOut}
+	mux := newBulkMux(t, deps, serverRepo, runner)
+	jobPath := startJob(t, mux, "node-restart", []int64{server.ID})
+	body := waitForJob(t, mux, jobPath)
+
+	if runner.ranContaining(`--name pasarguard`) || runner.ranContaining(`pg-node --name`) {
+		t.Errorf("bulk treated the PasarGuard panel as a node\ncommands: %v", runner.commands)
+	}
+	if !strings.Contains(body, "no nodes found") {
+		t.Errorf("expected the panel-only server to be skipped with 'no nodes found'\nbody: %s", body)
 	}
 }
 

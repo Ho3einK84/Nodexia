@@ -12,6 +12,7 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/http/httperrors"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
 	"github.com/Ho3einK84/Nodexia/internal/module"
+	"github.com/Ho3einK84/Nodexia/internal/module/nodes"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 	"github.com/Ho3einK84/Nodexia/internal/sshclient"
 	"github.com/Ho3einK84/Nodexia/internal/view"
@@ -25,11 +26,12 @@ const bulkWorkers = 5
 const (
 	bulkRebootTimeout = 2 * time.Minute
 	bulkUpdateTimeout = 20 * time.Minute
-	// Node actions fan out across every PasarGuard + Rebecca instance on a server
-	// in one session, so they get their own generous budgets (an update pulls and
-	// recreates Docker images for each instance).
-	bulkNodeRestartTimeout = 10 * time.Minute
-	bulkNodeUpdateTimeout  = 25 * time.Minute
+	// bulkNodeDiscoveryTimeout bounds each per-server node discovery probe when the
+	// configured SSH command timeout is unavailable. Node actions reuse the nodes
+	// module's discovery (one read-only SSH round trip per provider) before fanning
+	// out; the actions themselves run under the canonical per-action timeouts
+	// returned by nodes.Provider.ActionCommand.
+	bulkNodeDiscoveryTimeout = 2 * time.Minute
 )
 
 // Non-interactive SSH exit codes returned by the sudo preamble and pkg-manager
@@ -55,57 +57,12 @@ const updateCommand = `if [ "$(id -u)" -eq 0 ]; then SUDO=""; elif sudo -n true 
 	`elif command -v apk >/dev/null 2>&1; then $SUDO apk update && $SUDO apk upgrade; ` +
 	`else echo "unsupported package manager" >&2; exit 87; fi`
 
-// nodeActionPreamble mirrors the nodes module's sudo preamble (exit 88 when sudo
-// would need a password) so bulk node actions behave exactly like a per-node
-// action: already root, or passwordless sudo, or a clean 88.
-const nodeActionPreamble = `if [ "$(id -u)" -eq 0 ]; then SUDO=""; elif sudo -n true 2>/dev/null; then SUDO="sudo -n"; else echo "sudo requires password" >&2; exit 88; fi; `
-
-// nodeBulkCommand builds one SSH script that runs a node operation across every
-// node instance on a server in a single session:
-//
-//   - PasarGuard: scans /opt/*/ for compose files referencing pasarguard/pg-node
-//     (exactly like PasarGuardProvider.DiscoveryCommand), and runs the op via the
-//     official `pg-node --name <name>` CLI (falling back to the per-instance CLI
-//     name, mirroring ActionCommand) for each instance found.
-//   - Rebecca: the single /opt/rebecca-node instance, run via `rebecca-node`.
-//
-// A provider with no instances is skipped silently (no output, no error). The
-// script never aborts on a single instance's failure; it records one and exits
-// non-zero at the end so the bulk result marks the server failed only when an
-// action actually failed. pgOp is the pg-node operation (e.g. "restart -n");
-// rebeccaInvoke is the full Rebecca invocation (it may use `$SUDO` and pipes).
-func nodeBulkCommand(opLabel, pgOp, rebeccaInvoke string) string {
-	return nodeActionPreamble +
-		`fail=0; ` +
-		`for dir in /opt/*/; do ` +
-		`[ -f "$dir/docker-compose.yml" ] || continue; ` +
-		`grep -Eqi "pasarguard|pg-node" "$dir/docker-compose.yml" 2>/dev/null || continue; ` +
-		`name="${dir%/}"; name="${name##*/}"; ` +
-		`if command -v pg-node >/dev/null 2>&1; then CLI="pg-node"; ` +
-		`elif command -v "$name" >/dev/null 2>&1; then CLI="$name"; ` +
-		`else echo "pg-node CLI not found for $name" >&2; fail=1; continue; fi; ` +
-		`echo "== PasarGuard $name: ` + opLabel + ` =="; ` +
-		`$SUDO "$CLI" --name "$name" ` + pgOp + ` </dev/null || fail=1; ` +
-		`done; ` +
-		`if [ -d /opt/rebecca-node ] || command -v rebecca-node >/dev/null 2>&1; then ` +
-		`if command -v rebecca-node >/dev/null 2>&1; then ` +
-		`echo "== Rebecca rebecca-node: ` + opLabel + ` =="; ` +
-		rebeccaInvoke + ` || fail=1; ` +
-		`else echo "rebecca-node CLI not found" >&2; fail=1; fi; ` +
-		`fi; ` +
-		`exit $fail`
-}
-
-// nodeRestartCommand restarts every node instance: pg-node restart -n, and
-// rebecca-node restart.
-func nodeRestartCommand() string {
-	return nodeBulkCommand("restart", "restart -n", `$SUDO rebecca-node restart </dev/null`)
-}
-
-// nodeUpdateCommand updates every node instance: pg-node update --yes, and
-// `yes | rebecca-node update` (Rebecca's update prompts for confirmation).
-func nodeUpdateCommand() string {
-	return nodeBulkCommand("update", "update --yes", `yes | $SUDO rebecca-node update`)
+// nodeActionKeys maps a bulk node action to the per-provider action key that the
+// nodes module understands (nodes.Provider.ActionCommand). Bulk node actions are
+// thin fan-outs of the canonical per-node actions, so they share its vocabulary.
+var nodeActionKeys = map[string]string{
+	"node-restart": "restart",
+	"node-update":  "update",
 }
 
 // commandRunner is a thin interface over the SSH service's RunCommand so that
@@ -214,14 +171,18 @@ func (h ActionHandler) runJob(job *job, action string, targets []bulkTarget) {
 		return
 	}
 
-	cmd, timeout := rebootCommand, bulkRebootTimeout
+	// run executes the action against a single (already credential-checked)
+	// server. Plain OS actions run one combined script; node actions fan out over
+	// the canonical nodes pipeline (discovery + per-instance CLI action).
+	var run func(servers.Server) view.BulkServerResultView
 	switch action {
 	case "update":
-		cmd, timeout = updateCommand, bulkUpdateTimeout
-	case "node-restart":
-		cmd, timeout = nodeRestartCommand(), bulkNodeRestartTimeout
-	case "node-update":
-		cmd, timeout = nodeUpdateCommand(), bulkNodeUpdateTimeout
+		run = func(s servers.Server) view.BulkServerResultView { return h.execOne(ctx, s, updateCommand, bulkUpdateTimeout) }
+	case "node-restart", "node-update":
+		actionKey := nodeActionKeys[action]
+		run = func(s servers.Server) view.BulkServerResultView { return h.execNodeAction(ctx, s, actionKey) }
+	default: // reboot
+		run = func(s servers.Server) view.BulkServerResultView { return h.execOne(ctx, s, rebootCommand, bulkRebootTimeout) }
 	}
 
 	queue := make(chan bulkTarget, len(targets))
@@ -237,11 +198,89 @@ func (h ActionHandler) runJob(job *job, action string, targets []bulkTarget) {
 			defer wg.Done()
 			for target := range queue {
 				job.setStatus(target.index, statusRunning)
-				job.setRow(target.index, h.execOne(ctx, target.server, cmd, timeout))
+				job.setRow(target.index, run(target.server))
 			}
 		}()
 	}
 	wg.Wait()
+}
+
+// execNodeAction runs a node operation (restart/update) across every PasarGuard
+// and Rebecca instance on one server, behaving exactly like the per-node action
+// on the nodes page. Rather than maintain a second, drift-prone copy of the node
+// discovery/invocation shell (the original source of this bug — bulk's inline
+// script greped a looser "pasarguard" pattern that also matched the PasarGuard
+// *panel* and keyed --name off the install directory instead of the discovered
+// node name), it reuses the canonical pipeline from internal/module/nodes:
+// Provider.DiscoveryCommand + ParseDiscovery for the exact same filtering and
+// name resolution, then Provider.ActionCommand for the exact same CLI invocation
+// and timeout. So the two modules can never diverge again.
+//
+// Each instance is acted on independently: one instance failing does not abort
+// the rest, and the server is marked failed only when an action truly failed. A
+// server with no nodes is skipped, and an SSH/connection failure (the action
+// could never run) fails the whole server, mirroring execOne.
+func (h ActionHandler) execNodeAction(ctx context.Context, server servers.Server, actionKey string) view.BulkServerResultView {
+	password, privateKey, keyPassphrase := servers.ResolveCredentials(server)
+	conn := sshclient.ConnectionRequest{
+		Host:           server.Host,
+		Port:           server.Port,
+		Username:       server.Username,
+		AuthMode:       server.AuthMode,
+		Password:       password,
+		PrivateKeyPEM:  privateKey,
+		KeyPassphrase:  keyPassphrase,
+		ConnectTimeout: h.deps.Config.SSH.ConnectTimeout,
+	}
+
+	discoveryTimeout := h.deps.Config.SSH.CommandTimeout
+	if discoveryTimeout <= 0 {
+		discoveryTimeout = bulkNodeDiscoveryTimeout
+	}
+
+	var found int
+	var failures []string
+	for _, provider := range nodes.DefaultProviders() {
+		// Discover this provider's instances exactly as the nodes page does.
+		discovery, err := h.runner.RunCommand(ctx, sshclient.CommandRequest{
+			ConnectionRequest: conn,
+			Command:           provider.DiscoveryCommand(),
+			CommandTimeout:    discoveryTimeout,
+		})
+		if err != nil {
+			return view.BulkServerResultView{ID: server.ID, Name: server.Name, Status: statusFailed, Reason: err.Error()}
+		}
+
+		for _, snapshot := range provider.ParseDiscovery(discovery.Stdout, discovery.CompletedAt) {
+			found++
+			command, timeout, err := provider.ActionCommand(snapshot.ServiceName, actionKey)
+			if err != nil {
+				failures = append(failures, fmt.Sprintf("%s %s: %v", provider.DisplayName(), snapshot.ServiceName, err))
+				continue
+			}
+			result, runErr := h.runner.RunCommand(ctx, sshclient.CommandRequest{
+				ConnectionRequest: conn,
+				Command:           command,
+				CommandTimeout:    timeout,
+			})
+			if runErr != nil {
+				failures = append(failures, fmt.Sprintf("%s %s: %v", provider.DisplayName(), snapshot.ServiceName, runErr))
+				continue
+			}
+			if result.ExitCode != nil && *result.ExitCode != 0 {
+				failures = append(failures, fmt.Sprintf("%s %s: %s", provider.DisplayName(), snapshot.ServiceName, mapExitCode(*result.ExitCode, result.Stderr)))
+			}
+		}
+	}
+
+	switch {
+	case len(failures) > 0:
+		return view.BulkServerResultView{ID: server.ID, Name: server.Name, Status: statusFailed, Reason: strings.Join(failures, "; ")}
+	case found == 0:
+		return view.BulkServerResultView{ID: server.ID, Name: server.Name, Status: statusSkipped, Reason: "no nodes found"}
+	default:
+		return view.BulkServerResultView{ID: server.ID, Name: server.Name, Status: statusOK}
+	}
 }
 
 // deleteOne removes a single server from the registry.
