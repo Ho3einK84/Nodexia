@@ -81,8 +81,8 @@
             {{ end }}
             {{ if .PeakBandwidth }}
             <div class="mini-bw-stat mini-bw-stat--peak">
-              <span class="mini-bw-stat__label"><i data-lucide="zap"></i> Peak bandwidth</span>
-              <span class="mini-bw-stat__value">{{ .PeakBandwidth }}</span>
+              <span class="mini-bw-stat__label"><i data-lucide="zap"></i> Peak download</span>
+              <span class="mini-bw-stat__value" title="Peak download (RX) bandwidth. Upload is excluded so this lines up with the download-only port speed VPS providers advertise.">{{ .PeakBandwidth }}</span>
             </div>
             {{ end }}
           </div>

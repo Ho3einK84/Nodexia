@@ -55,7 +55,9 @@ func (m Metrics) valueFor(metric string) (float64, bool) {
 	case MetricTrafficTotal:
 		return m.TrafficTotalGiB, m.TrafficAvailable
 	case MetricBandwidth:
-		// bandwidth_mbps alerts on the peak sample for the period.
+		// bandwidth_mbps alerts on the peak download (RX) sample for the
+		// period. Upload (TX) is excluded so the threshold lines up with the
+		// download-only port speed VPS providers advertise.
 		return m.PeakMbps, m.TrafficAvailable
 	default:
 		return 0, false
