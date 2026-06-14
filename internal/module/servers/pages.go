@@ -73,6 +73,7 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 	pd.PageTitle = "Server registry"
 	pd.PageDescription = "Your managed Rebecca and PasarGuard servers. Register a target to start collecting monitoring and node data."
 	pd.ServerCount = totalRegistered
+	pd.TotalNodeCount = totalNodeCount(r.Context(), deps)
 	pd.Servers = items
 	pd.ServerSearch = query
 	pd.ServerMatchCount = len(matched)
@@ -260,6 +261,34 @@ func serverLastSeenMap(ctx context.Context, deps module.Dependencies) map[int64]
 		}
 	}
 	return result
+}
+
+// totalNodeCount sums the discovered node instances across every server's latest
+// discovery sweep. A sweep that found nothing persists a single "none" sentinel
+// row (see nodes.ReplaceLatest), so those are excluded. The per-server "latest
+// sweep" is the rows sharing the created_at of that server's highest-id row —
+// the exact definition nodes.GetLatestByServer uses — so this count always
+// matches what the nodes pages show. Returns 0 on any error or when no discovery
+// has run yet (portable SQL: correlated subquery, no driver-specific syntax).
+func totalNodeCount(ctx context.Context, deps module.Dependencies) int {
+	if deps.Database == nil || deps.Database.SQL == nil {
+		return 0
+	}
+	var count int
+	err := deps.Database.SQL.QueryRowContext(ctx,
+		`SELECT COUNT(*)
+		 FROM node_snapshots ns
+		 WHERE ns.node_type <> 'none'
+		   AND ns.created_at = (
+		     SELECT created_at FROM node_snapshots
+		     WHERE server_id = ns.server_id
+		     ORDER BY id DESC
+		     LIMIT 1
+		   )`).Scan(&count)
+	if err != nil {
+		return 0
+	}
+	return count
 }
 
 // parseSnapshotTime decodes the flexible datetime values returned by the SQLite

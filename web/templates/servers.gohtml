@@ -25,6 +25,7 @@
     </form>
     <div class="server-toolbar__aside">
       <span class="server-toolbar__count"><i data-lucide="server"></i> {{ .ServerCount }} registered</span>
+      <span class="server-toolbar__count" title="Node instances discovered across all servers"><i data-lucide="boxes"></i> {{ .TotalNodeCount }} {{ if eq .TotalNodeCount 1 }}node{{ else }}nodes{{ end }}</span>
       <a href="/servers/new" class="btn btn--primary"><i data-lucide="plus" class="icon-in-button"></i> Add server</a>
     </div>
   </div>
@@ -53,6 +54,8 @@
         <option value="">Choose action…</option>
         <option value="reboot">Reboot</option>
         <option value="update">Update packages</option>
+        <option value="node-restart">Restart all nodes</option>
+        <option value="node-update">Update all nodes</option>
         <option value="delete">Delete</option>
       </select>
       <button type="submit" id="bulk-submit" class="btn btn--primary"

@@ -36,6 +36,10 @@
         return 'Reboot ' + noun + ' now? Active connections will drop.';
       case 'update':
         return 'Update packages on ' + noun + '? This can take several minutes.';
+      case 'node-restart':
+        return 'Restart every PasarGuard and Rebecca node on ' + noun + '? Active connections will drop briefly.';
+      case 'node-update':
+        return 'Update every PasarGuard and Rebecca node on ' + noun + '? This can take many minutes per server.';
       default:
         return 'Run this bulk action on ' + noun + '?';
     }

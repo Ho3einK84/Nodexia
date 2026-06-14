@@ -49,6 +49,7 @@ type PageData struct {
 	FlashKind                   string
 	FlashMessage                string
 	ServerCount                 int
+	TotalNodeCount              int
 	Servers                     []ServerSummary
 	ServerSearch                string
 	ServerMatchCount            int
@@ -734,8 +735,11 @@ type AlertChannelFormView struct {
 // run as background jobs; while InProgressCount > 0 the page auto-refreshes
 // via RefreshURL until Finished.
 type BulkActionResultView struct {
-	Available       bool
-	Action          string
+	Available bool
+	Action    string
+	// ActionLabel is the human-facing action name shown in the result header and
+	// page copy (e.g. "node restart" instead of the raw "node-restart" key).
+	ActionLabel     string
 	Results         []BulkServerResultView
 	OKCount         int
 	FailedCount     int

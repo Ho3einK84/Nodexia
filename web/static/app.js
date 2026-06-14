@@ -617,6 +617,14 @@
       }
     }
 
+    // A node-action card self-dismisses on success / exposes a manual close on
+    // failure, and stderr that arrived on a clean exit is no longer styled red.
+    if (card.hasAttribute('data-node-result')) {
+      var doneStderr = card.querySelector('[data-stream-stderr]');
+      if (doneStderr && !failed) doneStderr.classList.remove('output-block--error');
+      scheduleNodeResultDismiss(card, failed);
+    }
+
     // Output that streamed in after page load has no copy button yet.
     initCopyButtons();
     renderIcons();
@@ -631,6 +639,92 @@
         '"><i data-lucide="refresh-cw" class="icon-in-button"></i> Refresh for the latest output</a>';
       renderIcons();
     }
+  }
+
+  /* ── Node action result card: auto-dismiss / manual close ───
+   * Once a node action completes, a successful result counts down ("Closing in
+   * 5…") and then slides out, navigating to the clean nodes URL (no ?stream=) so
+   * the node list is shown without a stale result card. A failed result stays
+   * put — the error output must remain readable — and gets a manual close (X)
+   * that navigates to the clean URL. Two entry points feed this: a card already
+   * completed at page load (server-rendered) and a live card that finished over
+   * SSE (finishStreamCard calls scheduleNodeResultDismiss directly).
+   */
+  var NODE_RESULT_COUNTDOWN_SECS = 5;
+
+  function initNodeResult() {
+    var card = document.querySelector('[data-node-result]');
+    if (!card) return;
+    // A still-running card finishes through the SSE path, which schedules its own
+    // dismiss; skip it here so we don't act before the action completes.
+    if (card.hasAttribute('data-stream-sse-url')) return;
+    scheduleNodeResultDismiss(card, card.getAttribute('data-node-failed') === 'true');
+  }
+
+  function scheduleNodeResultDismiss(card, failed) {
+    if (card.dataset.nodeDismissReady === '1') return;
+    card.dataset.nodeDismissReady = '1';
+    var cleanURL = card.getAttribute('data-node-clean-url') || '/servers';
+    if (failed) {
+      addNodeResultClose(card, cleanURL);
+      return;
+    }
+    startNodeResultCountdown(card, cleanURL);
+  }
+
+  // addNodeResultClose pins a dismiss (X) button to the card corner.
+  function addNodeResultClose(card, cleanURL) {
+    if (card.querySelector('.node-result-close')) return;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'node-result-close';
+    btn.setAttribute('aria-label', 'Dismiss result');
+    btn.innerHTML = '<i data-lucide="x"></i>';
+    btn.addEventListener('click', function () { dismissNodeCard(card, cleanURL); });
+    card.appendChild(btn);
+    renderIcons();
+  }
+
+  // startNodeResultCountdown shows a live "Closing in N…" pill, then dismisses.
+  // Hovering the card pauses it so a user reading the output is never yanked away.
+  function startNodeResultCountdown(card, cleanURL) {
+    var meta = card.querySelector('[data-stream-meta]') || card.querySelector('.result-header');
+    var pill = document.createElement('span');
+    pill.className = 'node-result-countdown';
+    if (meta) meta.appendChild(pill);
+
+    var remaining = NODE_RESULT_COUNTDOWN_SECS;
+    var paused = false;
+    function paint() {
+      pill.innerHTML = '<span class="node-result-countdown__dot"></span> Closing in ' + remaining + '…';
+    }
+    paint();
+
+    card.addEventListener('mouseenter', function () { paused = true; pill.classList.add('is-paused'); });
+    card.addEventListener('mouseleave', function () { paused = false; pill.classList.remove('is-paused'); });
+
+    var timer = setInterval(function () {
+      if (paused) return;
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(timer);
+        dismissNodeCard(card, cleanURL);
+        return;
+      }
+      paint();
+    }, 1000);
+  }
+
+  // dismissNodeCard slides the card out (honoring reduced-motion) then navigates
+  // to the clean nodes URL.
+  function dismissNodeCard(card, cleanURL) {
+    startTopBar();
+    if (prefersReducedMotion) { window.location.href = cleanURL; return; }
+    var navigated = false;
+    function go() { if (navigated) return; navigated = true; window.location.href = cleanURL; }
+    card.classList.add('is-dismissing');
+    card.addEventListener('transitionend', go, { once: true });
+    setTimeout(go, 600); // fallback when transitionend does not fire
   }
 
   /* ── Bulk action progress stream (SSE) ──────────────────────
@@ -1084,6 +1178,7 @@
     initReveal();
     initAutoRefresh();
     initStream();
+    initNodeResult();
     initBulkStream();
     initManualRefresh();
     initActionMenus();

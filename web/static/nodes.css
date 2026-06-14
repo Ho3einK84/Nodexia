@@ -569,6 +569,94 @@
   border-color: rgba(148, 163, 184, 0.2);
 }
 
+/* ── Node action result: countdown + auto-dismiss ────────────────────────── */
+
+/* The completed node-action card anchors the manual close (X) in its corner. */
+.cmd-result-card[data-node-result] {
+  position: relative;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+/* Slide + fade the card out before navigating to the clean nodes URL. */
+.cmd-result-card[data-node-result].is-dismissing {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.99);
+  pointer-events: none;
+}
+
+/* "Closing in N…" pill, sat with the exit/duration meta. */
+.node-result-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  white-space: nowrap;
+}
+
+.node-result-countdown.is-paused {
+  color: var(--text-muted, #94a3b8);
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+.node-result-countdown__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: node-result-blink 1s ease-in-out infinite;
+}
+
+.node-result-countdown.is-paused .node-result-countdown__dot {
+  animation: none;
+}
+
+@keyframes node-result-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-result-countdown__dot { animation: none; }
+}
+
+/* Manual dismiss (X), top-right of a failed (or kept-open) result card. */
+.node-result-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(2, 6, 23, 0.5);
+  color: var(--text-muted, #94a3b8);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.node-result-close:hover,
+.node-result-close:focus-visible {
+  color: #f1f5f9;
+  border-color: var(--border-strong, rgba(148, 163, 184, 0.4));
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.node-result-close svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* ── Install node ────────────────────────────────────────────────────────── */
 
 .node-install-note {

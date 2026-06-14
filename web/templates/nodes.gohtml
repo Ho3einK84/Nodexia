@@ -25,7 +25,9 @@
   {{/* ── Live node action output ───────────────────────── */}}
   {{ if .NodeStream.Available }}
   <article class="card cmd-result-card stream-card{{ if .NodeStream.IsRunning }} cmd-result-card--live{{ end }}"
-    {{ if .NodeStream.IsRunning }}data-stream-sse-url="/servers/{{ .NodeTarget.ID }}/nodes/stream/{{ .NodeStream.ID }}/events" data-stream-page-url="{{ .NodeStream.RefreshURL }}" data-stream-label-done="Node action complete" data-stream-label-error="Node action failed"{{ end }}
+    data-node-result
+    data-node-clean-url="/servers/{{ .NodeTarget.ID }}/nodes"
+    {{ if .NodeStream.IsRunning }}data-stream-sse-url="/servers/{{ .NodeTarget.ID }}/nodes/stream/{{ .NodeStream.ID }}/events" data-stream-page-url="{{ .NodeStream.RefreshURL }}" data-stream-label-done="Node action complete" data-stream-label-error="Node action failed"{{ else }}data-node-failed="{{ if and (eq .NodeStream.ExitCode "0") (not .NodeStream.Error) }}false{{ else }}true{{ end }}"{{ end }}
   >
     <div class="result-header">
       <span class="result-header__label" data-stream-label>
@@ -51,8 +53,10 @@
     {{ else }}
     <p class="empty-state">No output captured.</p>
     {{ end }}
+    {{/* stderr is only an error when the action actually failed (exit != 0). On a
+         clean exit, tools that log progress to stderr must not look like errors. */}}
     {{ if .NodeStream.Stderr }}
-    <pre class="output-block output-block--error scrollable">{{ .NodeStream.Stderr }}</pre>
+    <pre class="output-block scrollable{{ if ne .NodeStream.ExitCode "0" }} output-block--error{{ end }}">{{ .NodeStream.Stderr }}</pre>
     {{ end }}
     {{ end }}
   </article>

@@ -280,6 +280,42 @@ func TestBulkWorkerPoolCapsConcurrency(t *testing.T) {
 	}
 }
 
+func TestBulkNodeActionsRun(t *testing.T) {
+	for _, action := range []struct {
+		key   string
+		label string
+	}{
+		{"node-restart", "node restart"},
+		{"node-update", "node update"},
+	} {
+		t.Run(action.key, func(t *testing.T) {
+			deps := newDeps(t)
+			serverRepo := servers.NewSQLRepository(deps.Database.SQL)
+			withCreds := seedServer(t, serverRepo, true)
+			noCreds := seedServer(t, serverRepo, false)
+
+			mux := newBulkMux(t, deps, serverRepo, &fakeRunner{})
+			jobPath := startJob(t, mux, action.key, []int64{withCreds.ID, noCreds.ID})
+			body := waitForJob(t, mux, jobPath)
+
+			// Humanized label in the result header, not the raw key.
+			if !strings.Contains(body, action.label) {
+				t.Errorf("result page missing humanized label %q", action.label)
+			}
+			if strings.Contains(body, "Results — "+action.key) {
+				t.Errorf("result page shows raw action key %q instead of label", action.key)
+			}
+			// The credentialed server ran (ok); the credential-less one is skipped.
+			if !strings.Contains(body, "1 ok") {
+				t.Errorf("expected '1 ok' for the credentialed server")
+			}
+			if !strings.Contains(body, "no stored credentials") {
+				t.Errorf("expected the no-credentials server to be skipped")
+			}
+		})
+	}
+}
+
 func TestBulkExitCodeMapping(t *testing.T) {
 	cases := []struct {
 		name     string

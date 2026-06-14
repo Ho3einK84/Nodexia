@@ -6,7 +6,7 @@
   <div class="card"
     {{ if not .BulkActionResult.Finished }}data-bulk-sse-url="{{ .BulkActionResult.RefreshURL }}/events"{{ end }}>
     <div class="card__header">
-      <h3 class="card__title">Results — {{ .BulkActionResult.Action }}</h3>
+      <h3 class="card__title">Results — {{ .BulkActionResult.ActionLabel }}</h3>
       <div class="bulk-summary" data-bulk-summary>
         <span class="bulk-status bulk-status--running" data-bulk-count="inprogress" {{ if not .BulkActionResult.InProgressCount }}hidden{{ end }}>
           <span class="spinner spinner--sm"></span> {{ .BulkActionResult.InProgressCount }} in progress
