@@ -14,7 +14,11 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
+          # "1.25.x" floats to the newest 1.25 patch; check-latest forces a
+          # lookup against the upstream Go release list instead of settling for
+          # the highest patch already cached on the runner image.
           go-version: "1.25.x"
+          check-latest: true
 
       - name: Run tests
         run: go test ./...
