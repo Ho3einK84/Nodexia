@@ -86,7 +86,24 @@ self.addEventListener('fetch', function (event) {
   // cached — they may carry per-session, no-store content.
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req).catch(function () {
+      fetch(req).then(function (resp) {
+        // A response that followed a redirect cannot be handed back to a
+        // navigation request (whose redirect mode is "manual"): the browser
+        // rejects it as a network error and renders a BLANK page. This is the
+        // cold shortcut-launch failure — opening e.g. /servers while logged out
+        // bounces through a 303 to /login. Rebuild a fresh, non-redirected
+        // response from the final body so the target page always renders.
+        if (resp.redirected) {
+          return resp.blob().then(function (body) {
+            return new Response(body, {
+              status: resp.status,
+              statusText: resp.statusText,
+              headers: resp.headers
+            });
+          });
+        }
+        return resp;
+      }).catch(function () {
         return caches.match(OFFLINE_URL, { ignoreSearch: true }).then(function (cached) {
           return cached || new Response(
             'You are offline.',

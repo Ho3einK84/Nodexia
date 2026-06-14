@@ -27,6 +27,7 @@ Every decision below is justified against these, in order.
 | Service worker | `/sw.js` | `handlers.ServiceWorkerHandler` (root scope) |
 | Offline fallback | `/static/offline.html` | static FS + SW precache |
 | App icons | `/static/icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png`, `favicon.svg` | static FS |
+| Shortcut icons | `/static/shortcut-servers.png`, `shortcut-diagnostics.png`, `shortcut-alerts.png` (96×96) | static FS |
 
 The service worker source lives in `web/static/sw.js` (a normal, lintable JS
 file embedded via the existing `//go:embed web/static/*`). It is *served* from
@@ -98,7 +99,8 @@ PNGs are committed. `favicon.svg` is hand-authored for crisp scalable rendering.
 Run `go run scripts/genicons/main.go` to regenerate after a brand change.
 A maskable 512px icon (full-bleed background, motif inside the 80% safe zone)
 covers Android adaptive icons; rounded 192/512 cover everyone else; a 180px
-opaque `apple-touch-icon.png` covers iOS.
+opaque `apple-touch-icon.png` covers iOS. The same generator also renders the
+per-shortcut icons (decision 10).
 
 ### 8. Push notifications: foundation only, server side deferred
 
@@ -114,7 +116,35 @@ real maintenance cost for a capability the alerting system already covers. So:
 
 Revisit when there's a concrete need for browser-native (vs Telegram) alerts.
 
-### 9. CSP unchanged
+### 9. Manifest shortcuts ship per-shortcut icons
+
+Each `shortcuts` entry (Servers, Diagnostics, Alerts) declares its **own `icons`
+array** with a 96×96 PNG — the Android baseline for shortcut icons — plus a
+`short_name` and `description`. This is a spec requirement, not a nicety: a
+shortcut with no `icons` renders a **blank white placeholder** in the launcher
+(only the app's own glyph shows in a corner), and a malformed shortcut pinned to
+the home screen launches poorly. The three icons are distinct, recognizable
+glyphs on the shared branded background (a stacked list, a heartbeat, an
+exclamation mark), rendered by the same stdlib generator as the app icons
+(`scripts/genicons/main.go`) so there is no parallel toolchain and the PNGs are
+committed and reproducible. Distinct icons were cheap to produce from the
+generator's existing primitives, so they were preferred over a single shared
+shortcut icon for clearer launcher presentation.
+
+### 10. Cold shortcut launch must never render blank
+
+Opening a shortcut while logged out navigates to a protected page (e.g.
+`/servers`), which the auth middleware answers with a `303 → /login`. The service
+worker's navigate handler is network-first, and a navigation request carries
+redirect mode `manual`; handing a **followed/redirected** response back to such a
+request makes the browser reject it as a network error and paint a **blank
+page**. The handler now detects `response.redirected` and rebuilds a fresh,
+non-redirected `Response` from the final body, so the auth bounce always renders
+the login page (and any future redirect-based navigation is equally safe). A
+test asserts each shortcut target cleanly returns `303 → /login` rather than a
+404 or an empty body.
+
+### 11. CSP unchanged
 
 The existing policy (`default-src 'self'`, `script-src 'self'`) already permits
 a same-origin worker (`worker-src` falls back to `default-src`), the manifest
@@ -129,4 +159,5 @@ confirming the PWA fits the security model rather than bending it.
   devices.
 - `theme-color`, `apple-mobile-web-app-*`, and `application-name` meta tags for a
   native status bar and launch title.
-- Manifest `shortcuts` (Servers, Diagnostics, Alerts) for long-press app menus.
+- Manifest `shortcuts` (Servers, Diagnostics, Alerts) for long-press app menus,
+  each with its own 96×96 icon, `short_name`, and `description` (decision 9).
