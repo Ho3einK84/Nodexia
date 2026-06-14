@@ -33,9 +33,16 @@ type manifestIcon struct {
 	Purpose string `json:"purpose,omitempty"`
 }
 
+// manifestShortcut mirrors a Web App Manifest "shortcuts" entry. Each shortcut
+// declares its own icons array: without one the launcher renders a blank
+// placeholder (Android prefers a 96x96 shortcut icon), so per-shortcut icons are
+// required, not optional. ShortName/Description improve the long-press menu.
 type manifestShortcut struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
+	Name        string         `json:"name"`
+	ShortName   string         `json:"short_name"`
+	Description string         `json:"description"`
+	URL         string         `json:"url"`
+	Icons       []manifestIcon `json:"icons"`
 }
 
 type webManifest struct {
@@ -84,9 +91,33 @@ func NewManifestHandler(cfg config.Config) ManifestHandler {
 			{Src: "/static/icon-maskable-512.png", Sizes: "512x512", Type: "image/png", Purpose: "maskable"},
 		},
 		Shortcuts: []manifestShortcut{
-			{Name: "Servers", URL: "/servers"},
-			{Name: "Diagnostics", URL: "/ops/diagnostics"},
-			{Name: "Alerts", URL: "/alerts"},
+			{
+				Name:        "Servers",
+				ShortName:   "Servers",
+				Description: "Browse the managed server registry.",
+				URL:         "/servers",
+				Icons: []manifestIcon{
+					{Src: "/static/shortcut-servers.png", Sizes: "96x96", Type: "image/png", Purpose: "any"},
+				},
+			},
+			{
+				Name:        "Diagnostics",
+				ShortName:   "Diagnostics",
+				Description: "Check system health and background jobs.",
+				URL:         "/ops/diagnostics",
+				Icons: []manifestIcon{
+					{Src: "/static/shortcut-diagnostics.png", Sizes: "96x96", Type: "image/png", Purpose: "any"},
+				},
+			},
+			{
+				Name:        "Alerts",
+				ShortName:   "Alerts",
+				Description: "Review alert rules, channels, and events.",
+				URL:         "/alerts",
+				Icons: []manifestIcon{
+					{Src: "/static/shortcut-alerts.png", Sizes: "96x96", Type: "image/png", Purpose: "any"},
+				},
+			},
 		},
 	}
 

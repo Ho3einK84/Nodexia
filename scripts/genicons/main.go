@@ -41,6 +41,15 @@ func main() {
 	write(filepath.Join(outDir, "icon-512.png"), render(512, 0.66, true, false))
 	write(filepath.Join(outDir, "icon-maskable-512.png"), render(512, 0.62, false, false))
 	write(filepath.Join(outDir, "apple-touch-icon.png"), render(180, 0.62, false, true))
+
+	// Per-shortcut icons for the manifest "shortcuts" entries. Android renders a
+	// blank placeholder when a shortcut declares no icon, so each long-press menu
+	// entry gets its own recognizable 96x96 glyph (the Android baseline size) on
+	// the shared branded background: a stacked list for Servers, a heartbeat for
+	// Diagnostics, and an exclamation mark for Alerts.
+	write(filepath.Join(outDir, "shortcut-servers.png"), renderShortcut(96, glyphServers))
+	write(filepath.Join(outDir, "shortcut-diagnostics.png"), renderShortcut(96, glyphPulse))
+	write(filepath.Join(outDir, "shortcut-alerts.png"), renderShortcut(96, glyphAlert))
 }
 
 // render draws an icon of the given size. contentFraction is the motif diameter
@@ -126,6 +135,88 @@ func render(size int, contentFraction float64, rounded, opaque bool) *image.NRGB
 	}
 
 	return downsample(hi, size)
+}
+
+// glyphFunc returns anti-aliased coverage of a shortcut glyph at point p, given
+// the icon center c and the glyph half-extent R (both in supersampled pixels).
+type glyphFunc func(p, c vec, R float64) float64
+
+// renderShortcut draws a 96x96-class shortcut icon: the shared branded rounded
+// background (matching the rounded app icons) with a single bright glyph on top.
+func renderShortcut(size int, draw glyphFunc) *image.NRGBA {
+	ss := size * supersample
+	hi := image.NewNRGBA(image.Rect(0, 0, ss, ss))
+
+	fss := float64(ss)
+	center := vec{fss / 2, fss / 2}
+	cornerR := 0.22 * fss
+	glyphR := 0.30 * fss
+	glyphCol := rgb{241.0 / 255, 245.0 / 255, 249.0 / 255} // #f1f5f9 slate-100
+
+	for y := 0; y < ss; y++ {
+		t := float64(y) / fss
+		bg := mix(bgTop, bgBottom, t)
+		for x := 0; x < ss; x++ {
+			p := vec{float64(x) + 0.5, float64(y) + 0.5}
+
+			alpha := roundedRectCoverage(p, fss, cornerR)
+			if alpha <= 0 {
+				hi.Set(x, y, color.NRGBA{})
+				continue
+			}
+
+			col := bg
+			if cov := draw(p, center, glyphR); cov > 0 {
+				col = over(glyphCol, col, cov)
+			}
+			hi.Set(x, y, toNRGBA(col, alpha))
+		}
+	}
+
+	return downsample(hi, size)
+}
+
+// glyphServers draws three stacked rounded bars — a server/host list.
+func glyphServers(p, c vec, R float64) float64 {
+	halfW := R * 0.82
+	halfH := R * 0.15
+	gap := R * 0.6
+	cov := 0.0
+	for i := -1; i <= 1; i++ {
+		y := c.y + float64(i)*gap
+		a := vec{c.x - halfW + halfH, y}
+		b := vec{c.x + halfW - halfH, y}
+		cov = math.Max(cov, capsuleCoverage(p, a, b, halfH))
+	}
+	return cov
+}
+
+// glyphPulse draws an ECG-style heartbeat line — diagnostics/health.
+func glyphPulse(p, c vec, R float64) float64 {
+	half := R * 0.13
+	pts := []vec{
+		{c.x - R, c.y},
+		{c.x - R*0.45, c.y},
+		{c.x - R*0.2, c.y - R*0.72},
+		{c.x + R*0.05, c.y + R*0.72},
+		{c.x + R*0.35, c.y},
+		{c.x + R, c.y},
+	}
+	cov := 0.0
+	for i := 0; i+1 < len(pts); i++ {
+		cov = math.Max(cov, capsuleCoverage(p, pts[i], pts[i+1], half))
+	}
+	return cov
+}
+
+// glyphAlert draws an exclamation mark — alerts/warnings.
+func glyphAlert(p, c vec, R float64) float64 {
+	half := R * 0.16
+	top := vec{c.x, c.y - R*0.82}
+	bot := vec{c.x, c.y + R*0.22}
+	stem := capsuleCoverage(p, top, bot, half)
+	dot := diskCoverage(p, vec{c.x, c.y + R*0.72}, half*1.1)
+	return math.Max(stem, dot)
 }
 
 // diskCoverage returns 1-pixel anti-aliased coverage of a filled disk.
