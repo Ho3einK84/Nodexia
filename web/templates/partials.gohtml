@@ -1,9 +1,23 @@
 {{ define "head" }}
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{{ .Title }}</title>
   <meta name="description" content="{{ .Description }}">
+
+  {{/* Progressive Web App: installability, theming and home-screen icons. */}}
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="color-scheme" content="dark">
+  <meta name="application-name" content="{{ .AppName }}">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="{{ .AppName }}">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/static/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+
   <link rel="stylesheet" href="/static/style.css">
   {{ range .PageStyles }}<link rel="stylesheet" href="{{ . }}">
   {{ end }}<script src="/static/lucide.min.js" defer></script>

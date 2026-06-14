@@ -1164,6 +1164,20 @@
     });
   }
 
+  /* ── Service worker registration (PWA) ──────────────────────
+   * Registers the root-scoped worker that powers installability and the
+   * offline fallback. Progressive enhancement: unsupported browsers simply
+   * skip it. See docs/pwa.md.
+   */
+  function initServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {
+        /* registration failure must never break the page */
+      });
+    });
+  }
+
   /* ── Boot ───────────────────────────────────────────────── */
   function boot() {
     renderIcons();
@@ -1188,6 +1202,7 @@
     initShortcuts();
     initCollapsibles();
     initAdvancedToggle();
+    initServiceWorker();
     renderIcons(); // pick up icons injected by the steps above
   }
 

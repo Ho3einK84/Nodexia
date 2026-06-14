@@ -16,6 +16,7 @@
 - 🔔 **Alerting** — threshold rules with Telegram delivery, silences, and history.
 - ⏱️ **Scheduler** — recurring background monitoring and discovery jobs.
 - 🧰 **Supporting tools** — bulk reboot/update/delete, in-browser SSH terminal (xterm.js over WebSocket), command runner, SFTP browser.
+- 📱 **Installable PWA** — add Nodexia to a phone or desktop home screen for an app-like, standalone experience, with a graceful offline screen. See [`docs/pwa.md`](docs/pwa.md).
 - 🔒 **Security** — single admin account, HMAC-signed cookie sessions, trust-on-first-use SSH host-key pinning, runtime-only credentials.
 
 ---
@@ -122,6 +123,7 @@ Open <http://localhost:8080> and sign in. Dev cookies aren't marked `Secure`, so
 | `/alerts` | Alert rules, channels, silences, history |
 | `/servers/bulk` | Bulk reboot / update / delete |
 | `/healthz` | Health check |
+| `/manifest.webmanifest`, `/sw.js` | PWA manifest + service worker |
 
 Also available: `/servers/{id}/system`, `/servers/{id}/commands`, `/servers/{id}/files`, `/ops/diagnostics`.
 

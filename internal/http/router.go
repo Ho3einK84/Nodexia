@@ -67,6 +67,12 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
 
+	// Progressive Web App entry points. The manifest and service worker are
+	// served from dedicated routes (see handlers/pwa.go) so they carry the right
+	// scope and headers; both are public, like /static.
+	mux.Handle("GET /manifest.webmanifest", handlers.NewManifestHandler(cfg))
+	mux.Handle("GET /sw.js", handlers.NewServiceWorkerHandler(staticFiles))
+
 	for _, mod := range modules {
 		mod.RegisterRoutes(mux, deps)
 	}

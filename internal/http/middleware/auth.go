@@ -68,6 +68,8 @@ func shouldSkipAuth(r *http.Request) bool {
 	switch {
 	case strings.HasPrefix(r.URL.Path, "/static/"):
 		return true
+	case isPublicPWAAsset(r.URL.Path):
+		return true
 	case r.URL.Path == "/healthz", strings.HasPrefix(r.URL.Path, "/healthz/"):
 		return true
 	case r.URL.Path == "/login":
