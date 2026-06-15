@@ -100,6 +100,7 @@
 
 .terminal-container {
   /* xterm.js fills this; min-width: 0 lets the card shrink on narrow screens. */
+  position: relative; /* anchor for the select-mode overlay */
   min-width: 0;
   padding: 8px;
   background: #000;
@@ -209,7 +210,8 @@
   border-color: rgba(148, 163, 184, 0.3);
 }
 
-.terminal-key--ctrl.is-active {
+.terminal-key--ctrl.is-active,
+.terminal-key--select.is-active {
   background: var(--accent-soft);
   border-color: var(--accent-soft);
   color: #03070f;
@@ -251,14 +253,33 @@
   background: #0b1120;
 }
 
-/* Enable native text selection on mobile. xterm renders text as real DOM (its
-   v5 default renderer) but ships `user-select: none` on `.xterm` for desktop
-   mouse-drag selection, which blocks the touch long-press → Copy gesture.
-   Re-enable it (and the iOS callout) on the full-screen terminal only, so the
-   user can long-press to select and copy natively; desktop is untouched. */
-.terminal-card--mobile .xterm,
-.terminal-card--mobile .xterm .xterm-screen,
-.terminal-card--mobile .xterm .xterm-rows {
+/* ── Select-mode overlay ─────────────────────────────── */
+/* Long-pressing xterm's live rows rarely starts a usable selection on a phone,
+   so "Select" overlays the scrollback as a plain <pre> of real, selectable text
+   on top of the terminal. The user long-presses + drags handles here, then taps
+   Copy (or uses the OS copy menu — which works even without the clipboard API).
+   Built and toggled by terminal.js; absent until first use. */
+.terminal-select-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  margin: 0;
+  overflow: auto;
+  background: #000;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.terminal-select-text {
+  margin: 0;
+  padding: 6px 8px;
+  font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* The whole point of this overlay: native selection + the iOS callout menu. */
   -webkit-user-select: text;
   user-select: text;
   -webkit-touch-callout: default;
