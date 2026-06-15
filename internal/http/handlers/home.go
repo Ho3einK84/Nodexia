@@ -49,13 +49,13 @@ const homeDashboardPerPage = 5
 func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	snapPage, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("snap_page")))
 
-	page := view.NewPageData(h.config)
+	page := view.NewPageData(h.config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = "Nodexia"
 	page.ContentTemplate = "content-home"
 	page.ActiveNav = "/"
-	page.PageTitle = "Operations overview"
-	page.PageDescription = "Resource health, scheduled collection, and runtime status across your managed Rebecca and PasarGuard servers."
+	page.PageTitle = page.T("home.page_title")
+	page.PageDescription = page.T("home.page_description")
 	page.MigrationCount = db.BootstrapMigrationCount()
 	page.RouteGroups = h.routeGroups
 

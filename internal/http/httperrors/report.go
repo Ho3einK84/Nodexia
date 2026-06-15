@@ -26,7 +26,7 @@ func RenderPage(w http.ResponseWriter, r *http.Request, deps module.Dependencies
 	requestID := middleware.GetRequestID(r.Context())
 	logFailure(r, requestID, statusCode, title, err)
 
-	page := view.NewErrorPageData(deps.Config, statusCode, title, message)
+	page := view.NewErrorPageData(deps.Config, r, statusCode, title, message)
 	page.ActiveNav = activeNav
 	page.RequestID = requestID
 	page.ErrorDetail = operatorDetail(deps.Config.Environment, requestID, err)

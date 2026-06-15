@@ -27,9 +27,53 @@
     U+A720-A7FF;
 }
 
+/* ── Persian typography: Vazirmatn (self-hosted) ─────────────────────
+   Loaded only for the fa locale (html[lang="fa"] swaps --font-ui below).
+   Five static weights mirror the Exo 2 weight scale (400–800). They are
+   self-hosted under /static/fonts to stay offline-friendly and CDN-free,
+   matching the project's dependency-light ethos. */
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/Vazirmatn-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/static/fonts/Vazirmatn-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/static/fonts/Vazirmatn-SemiBold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/static/fonts/Vazirmatn-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/static/fonts/Vazirmatn-ExtraBold.woff2') format('woff2');
+}
+
 :root {
   color-scheme: dark;
-  font-family: 'Exo 2', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* --font-ui is the UI typeface; html[lang="fa"] overrides it with Vazirmatn
+     so only Persian pulls the Persian font. English keeps Exo 2 unchanged. */
+  --font-ui: 'Exo 2', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-ui);
   line-height: 1.6;
   background: #0f172a;
   color: #e2e8f0;
@@ -486,7 +530,7 @@ body {
 }
 
 .server-card__actions-right {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: flex;
   gap: 8px;
 }
@@ -495,7 +539,7 @@ body {
 
 .action-menu {
   position: relative;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .action-menu__toggle[aria-expanded="true"] {
@@ -506,7 +550,7 @@ body {
 .action-menu__panel {
   position: absolute;
   bottom: calc(100% + 6px);
-  right: 0;
+  inset-inline-end: 0;
   z-index: 40;
   min-width: 188px;
   padding: 6px;
@@ -546,7 +590,7 @@ body {
   font-size: 0.85rem;
   font-weight: var(--fw-medium);
   font-family: inherit;
-  text-align: left;
+  text-align: start;
   text-decoration: none;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
@@ -595,8 +639,8 @@ body {
 .action-menu--below .action-menu__panel {
   top: calc(100% + 6px);
   bottom: auto;
-  right: 0;
-  left: auto;
+  inset-inline-end: 0;
+  inset-inline-start: auto;
 }
 
 /* Non-actionable note rendered in place of items (e.g. missing credentials). */
@@ -637,7 +681,7 @@ body {
 
 .server-search__icon {
   position: absolute;
-  left: 13px;
+  inset-inline-start: 13px;
   width: 17px;
   height: 17px;
   color: var(--text-dim);
@@ -674,7 +718,7 @@ body {
 
 .server-search__clear {
   position: absolute;
-  right: 8px;
+  inset-inline-end: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1025,7 +1069,7 @@ body {
   gap: 6px;
   font-size: 0.85rem;
   color: #94a3b8;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .auto-refresh-toggle select {
@@ -1054,8 +1098,8 @@ body {
 }
 
 .credential-info li {
-  padding-left: 14px;
-  border-left: 2px solid rgba(96, 165, 250, 0.2);
+  padding-inline-start: 14px;
+  border-inline-start: 2px solid rgba(96, 165, 250, 0.2);
   font-size: 0.88rem;
   color: #94a3b8;
   line-height: 1.5;
@@ -1230,7 +1274,7 @@ body {
 .dashboard-list--scrollable {
   max-height: 720px;
   overflow-y: auto;
-  padding-right: 4px;
+  padding-inline-end: 4px;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.18) transparent;
 }
@@ -1268,7 +1312,7 @@ body {
 
 ul {
   margin: 0;
-  padding-left: 18px;
+  padding-inline-start: 18px;
 }
 
 code {
@@ -1403,7 +1447,7 @@ code {
   .server-card__actions > .btn .icon-in-button {
     width: 18px;
     height: 18px;
-    margin-right: 5px;
+    margin-inline-end: 5px;
   }
 
   /* When the three equal-width buttons get tight, truncate the label with an
@@ -1418,7 +1462,7 @@ code {
   /* Kebab wrapper: fixed size, does not grow */
   .server-card__actions > .action-menu {
     flex: 0 0 auto;
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 
   /* Keep kebab icon-only on mobile, but show labels on primary buttons */
@@ -1436,7 +1480,7 @@ code {
   .action-menu__toggle .icon-in-button {
     width: 18px;
     height: 18px;
-    margin-right: 0;
+    margin-inline-end: 0;
   }
 
   /* Toolbar stacks: search on top, count + add button below */
@@ -1447,13 +1491,13 @@ code {
 
   /* Dropdown anchored to right edge of toggle */
   .action-menu__panel {
-    left: auto;
-    right: 0;
+    inset-inline-start: auto;
+    inset-inline-end: 0;
     min-width: 188px;
   }
 
   .server-card__actions-right {
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 
   .server-item__actions,
@@ -1497,7 +1541,7 @@ code {
   width: 16px;
   height: 16px;
   vertical-align: middle;
-  margin-right: 4px;
+  margin-inline-end: 4px;
 }
 
 /* ── Icon in buttons / headings ──────────────────────── */
@@ -1518,7 +1562,7 @@ h4 svg {
 .page-header h2 svg {
   width: 22px;
   height: 22px;
-  margin-right: 6px;
+  margin-inline-end: 6px;
   vertical-align: middle;
   color: #60a5fa;
 }
@@ -1526,7 +1570,7 @@ h4 svg {
 .card h3 svg {
   width: 18px;
   height: 18px;
-  margin-right: 6px;
+  margin-inline-end: 6px;
   color: #60a5fa;
   vertical-align: middle;
 }
@@ -1553,7 +1597,7 @@ h4 svg {
   border-radius: 8px;
   font-family: inherit;
   transition: color 0.15s ease, background 0.15s ease;
-  text-align: left;
+  text-align: start;
 }
 
 .collapsible__toggle:hover {
@@ -1686,7 +1730,7 @@ h4 svg {
 .server-card__name svg {
   width: 16px;
   height: 16px;
-  margin-right: 4px;
+  margin-inline-end: 4px;
   color: #60a5fa;
   vertical-align: middle;
 }
@@ -1697,7 +1741,7 @@ h4 svg {
   width: 16px;
   height: 16px;
   vertical-align: middle;
-  margin-right: 4px;
+  margin-inline-end: 4px;
   /* Icons are flex items inside .btn (inline-flex): never let them shrink
      when a long label squeezes the button — truncate the label instead. */
   flex-shrink: 0;
@@ -1724,7 +1768,7 @@ h4 svg {
 .top-progress {
   position: fixed;
   top: 0;
-  left: 0;
+  inset-inline-start: 0;
   height: 3px;
   width: 0;
   z-index: 10000;
@@ -1815,7 +1859,7 @@ h4 svg {
 .copy-btn {
   position: absolute;
   top: 8px;
-  right: 8px;
+  inset-inline-end: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1879,7 +1923,7 @@ h4 svg {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: 8px;
+  margin-inline-start: 8px;
   padding: 3px 9px;
   border-radius: 999px;
   font-size: 0.76rem;
@@ -1901,7 +1945,7 @@ h4 svg {
 
 .back-to-top {
   position: fixed;
-  right: 20px;
+  inset-inline-end: 20px;
   bottom: 20px;
   z-index: 9000;
   display: inline-flex;
@@ -1978,7 +2022,7 @@ h4 svg {
   display: inline-block;
   width: 8px;
   height: 8px;
-  margin-right: 4px;
+  margin-inline-end: 4px;
   border-radius: 50%;
   background: #4ade80;
   box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.6);
@@ -2001,7 +2045,7 @@ h4 svg {
   }
 
   .back-to-top {
-    right: 14px;
+    inset-inline-end: 14px;
     bottom: calc(76px + env(safe-area-inset-bottom));
     width: 40px;
     height: 40px;
@@ -2368,7 +2412,7 @@ h4 svg {
   justify-content: center;
   width: 24px;
   height: 24px;
-  margin-left: 6px;
+  margin-inline-start: 6px;
   padding: 0;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
@@ -2450,7 +2494,7 @@ code.secret-value {
 .drawer {
   position: fixed;
   top: 0;
-  right: 0;
+  inset-inline-end: 0;
   bottom: 0;
   z-index: 1300;
   width: min(84vw, 330px);
@@ -2459,7 +2503,7 @@ code.secret-value {
   gap: 16px;
   padding: 18px 18px calc(20px + env(safe-area-inset-bottom));
   background: linear-gradient(185deg, #111c33 0%, #0b1120 100%);
-  border-left: 1px solid var(--border-strong);
+  border-inline-start: 1px solid var(--border-strong);
   box-shadow: -18px 0 48px rgba(0, 0, 0, 0.45);
   transform: translateX(105%);
   transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
@@ -2591,7 +2635,7 @@ code.secret-value {
 }
 
 .drawer__meta li code {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .drawer__meta svg {
@@ -2611,8 +2655,8 @@ code.secret-value {
 .bottom-nav {
   display: none;
   position: fixed;
-  left: 0;
-  right: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
   bottom: 0;
   z-index: 1100;
   padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
@@ -2843,8 +2887,8 @@ body.modal-open {
     width: 100%;
     max-height: 100vh;
     border-radius: 0;
-    border-left: 0;
-    border-right: 0;
+    border-inline-start: 0;
+    border-inline-end: 0;
   }
 
   .modal__body {
@@ -2953,7 +2997,7 @@ body.modal-open {
 }
 
 .info-strip__actions {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
@@ -3044,7 +3088,7 @@ body.modal-open {
   }
   .info-strip__actions {
     width: 100%;
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 }
 
@@ -3103,7 +3147,7 @@ body.modal-open {
 /* ── Collection result card ─────────────────────────── */
 
 .sys-result-card {
-  border-left: 3px solid rgba(148, 163, 184, 0.2);
+  border-inline-start: 3px solid rgba(148, 163, 184, 0.2);
 }
 
 .sys-result-card--ok {
@@ -3134,8 +3178,8 @@ body.modal-open {
   text-transform: uppercase;
   letter-spacing: 0.09em;
   color: var(--text-dim);
-  padding-left: 10px;
-  border-left: 3px solid var(--accent-soft);
+  padding-inline-start: 10px;
+  border-inline-start: 3px solid var(--accent-soft);
   margin: 0;
 }
 
@@ -3306,7 +3350,7 @@ body.modal-open {
 }
 
 .data-table thead th {
-  text-align: left;
+  text-align: start;
   font-weight: var(--fw-semibold);
   font-size: 0.74rem;
   letter-spacing: 0.04em;
@@ -3565,4 +3609,75 @@ body.modal-open {
   .stream-fade-in {
     animation: none;
   }
+}
+
+/* ── Internationalization: locale font + RTL adjustments ──────────────
+   Layout mirroring is handled by logical properties throughout this
+   stylesheet (margin/padding/border-inline-*, inset-inline-*, text-align
+   start/end), so [dir="rtl"] flips automatically. The rules below cover the
+   few cases that cannot be expressed logically — transforms and directional
+   box-shadows — plus the Persian font swap. */
+
+/* Persian uses Vazirmatn; English (and every other locale) keeps Exo 2. */
+html[lang="fa"] {
+  --font-ui: 'Vazirmatn', 'Exo 2', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* The mobile drawer parks off-screen with translateX. translateX is physical,
+   so in RTL (drawer anchored to the inline-end = left edge) it must park to the
+   left and its inward shadow must face the opposite way. */
+[dir="rtl"] .drawer {
+  transform: translateX(-105%);
+  box-shadow: 18px 0 48px rgba(0, 0, 0, 0.45);
+}
+[dir="rtl"] .drawer.is-open {
+  transform: translateX(0);
+}
+
+/* Language switcher in the header meta strip. */
+.lang-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  padding: 3px 6px;
+}
+
+.lang-switcher__icon {
+  width: 15px;
+  height: 15px;
+  color: var(--text-dim);
+  margin-inline-end: 2px;
+}
+
+.lang-switcher__option {
+  font-size: 0.78rem;
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 2px 7px;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+
+.lang-switcher__option:hover {
+  color: var(--text);
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.lang-switcher__option.is-active {
+  color: #fff;
+  background: var(--accent);
+}
+
+/* Numeric / code / identifier surfaces stay LTR regardless of UI direction so
+   IPs, ports, durations and shell snippets read left-to-right. text-align uses
+   logical start, which resolves to left inside these LTR contexts. */
+[dir="rtl"] code,
+[dir="rtl"] .token-list code,
+[dir="rtl"] .fact-list code {
+  direction: ltr;
+  unicode-bidi: isolate;
 }

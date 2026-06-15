@@ -87,7 +87,7 @@ func (h LoginHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h LoginHandler) renderLogin(w http.ResponseWriter, r *http.Request, status int, flashKind, flashMessage string) {
-	page := view.NewPageData(h.config)
+	page := view.NewPageData(h.config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = "Login - " + h.config.App.Name
 	page.ContentTemplate = "content-login"

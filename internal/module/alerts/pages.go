@@ -11,8 +11,8 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
 
-func newAlertsPage(deps module.Dependencies) view.PageData {
-	page := view.NewPageData(deps.Config)
+func newAlertsPage(deps module.Dependencies, r *http.Request) view.PageData {
+	page := view.NewPageData(deps.Config, r)
 	page.Title = "Alerts"
 	page.ActiveNav = "/alerts"
 	if deps.Database != nil {
@@ -29,7 +29,7 @@ func renderOverview(
 	overview view.AlertsOverviewView,
 	flashKind, flashMessage string,
 ) {
-	page := newAlertsPage(deps)
+	page := newAlertsPage(deps, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.ContentTemplate = "content-alerts-overview"
 	page.PageTitle = "Alerting"
@@ -52,7 +52,7 @@ func renderRuleForm(
 	form view.AlertRuleFormView,
 	flashKind, flashMessage string,
 ) {
-	page := newAlertsPage(deps)
+	page := newAlertsPage(deps, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.ContentTemplate = "content-alert-rule-form"
 	page.PageTitle = pageTitle
@@ -76,7 +76,7 @@ func renderChannelForm(
 	form view.AlertChannelFormView,
 	flashKind, flashMessage string,
 ) {
-	page := newAlertsPage(deps)
+	page := newAlertsPage(deps, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.ContentTemplate = "content-alert-channel-form"
 	page.PageTitle = pageTitle
@@ -160,7 +160,7 @@ func eventsPageWindow(current, total int) []int {
 }
 
 // renderError renders an SSR error page, mapping ErrNotFound to a 404.
-func renderError(w http.ResponseWriter, deps module.Dependencies, err error, fallbackTitle, fallbackMessage string) {
+func renderError(w http.ResponseWriter, r *http.Request, deps module.Dependencies, err error, fallbackTitle, fallbackMessage string) {
 	statusCode := http.StatusInternalServerError
 	title := fallbackTitle
 	message := fallbackMessage
@@ -176,7 +176,7 @@ func renderError(w http.ResponseWriter, deps module.Dependencies, err error, fal
 		slog.String("error", err.Error()),
 	)
 
-	page := view.NewErrorPageData(deps.Config, statusCode, title, message)
+	page := view.NewErrorPageData(deps.Config, r, statusCode, title, message)
 	page.ActiveNav = "/alerts"
 	if renderErr := deps.Renderer.Render(w, statusCode, page); renderErr != nil {
 		http.Error(w, fallbackMessage, statusCode)

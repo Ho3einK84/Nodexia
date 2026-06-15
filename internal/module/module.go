@@ -49,7 +49,7 @@ type PlaceholderPage struct {
 
 func NewPlaceholderHandler(deps Dependencies, page PlaceholderPage) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		viewModel := view.NewPageData(deps.Config)
+		viewModel := view.NewPageData(deps.Config, r)
 		viewModel.CSRFToken = middleware.GetCSRFToken(r.Context())
 		viewModel.Title = page.Title
 		viewModel.ContentTemplate = "content-module-placeholder"

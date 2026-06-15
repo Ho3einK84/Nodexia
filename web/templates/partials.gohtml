@@ -23,7 +23,9 @@
        parsed. latin-ext is intentionally not preloaded — it is fetched only
        when a non-Basic-Latin glyph is rendered. */}}
   <link rel="preload" href="/static/fonts/exo2-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/style.css">
+  {{ if eq .Lang "fa" }}{{/* Persian locale: preload Vazirmatn alongside the stylesheet. */}}
+  <link rel="preload" href="/static/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  {{ end }}<link rel="stylesheet" href="/static/style.css">
   {{ range .PageStyles }}<link rel="stylesheet" href="{{ . }}">
   {{ end }}<script src="/static/lucide.min.js" defer></script>
 </head>
@@ -32,76 +34,89 @@
 {{ define "shell-header" }}
 <header class="shell-header">
   <div class="shell-header__brand">
-    <p class="eyebrow">Node monitoring &amp; management</p>
+    <p class="eyebrow">{{ t "shell.eyebrow" }}</p>
     <h1>{{ .AppName }}</h1>
     <p class="shell-subtitle">{{ .FooterNote }}</p>
   </div>
   <div class="meta">
-    <span>Env: {{ .Environment }}</span>
-    <span>Version: {{ .Version }}</span>
-    <span>DB: {{ .DatabaseDriver }}</span>
-    <a href="/logout" class="logout-link">Logout</a>
+    <span>{{ t "shell.meta.env" "value" .Environment }}</span>
+    <span>{{ t "shell.meta.version" "value" .Version }}</span>
+    <span>{{ t "shell.meta.db" "value" .DatabaseDriver }}</span>
+    {{ template "lang-switcher" . }}
+    <a href="/logout" class="logout-link">{{ t "nav.logout" }}</a>
   </div>
   {{ if ne .ContentTemplate "content-login" }}
-  <button type="button" class="nav-toggle" data-drawer-open aria-label="Open menu" aria-expanded="false" aria-controls="mobile-drawer">
+  <button type="button" class="nav-toggle" data-drawer-open aria-label="{{ t "shell.menu.open" }}" aria-expanded="false" aria-controls="mobile-drawer">
     <i data-lucide="menu"></i>
   </button>
   {{ end }}
 </header>
 {{ end }}
 
+{{/* Language switcher: a row of root-relative links, one per supported locale,
+     that persist the choice via GET /lang/{code} and redirect back. Adding a
+     locale needs no template change — it is driven by .LanguageOptions. */}}
+{{ define "lang-switcher" }}
+<div class="lang-switcher" role="group" aria-label="{{ t "lang.switcher.label" }}">
+  <i data-lucide="languages" class="lang-switcher__icon" aria-hidden="true"></i>
+  {{ range .LanguageOptions }}
+  <a href="{{ .SwitchURL }}" hreflang="{{ .Code }}" class="lang-switcher__option{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="true"{{ end }}>{{ .Label }}</a>
+  {{ end }}
+</div>
+{{ end }}
+
 {{ define "mobile-drawer" }}
 <div class="drawer-backdrop" data-drawer-backdrop></div>
-<aside id="mobile-drawer" class="drawer" aria-label="Menu" aria-hidden="true">
+<aside id="mobile-drawer" class="drawer" aria-label="{{ t "shell.menu.title" }}" aria-hidden="true">
   <div class="drawer__header">
     <div>
-      <p class="eyebrow">Node monitoring &amp; management</p>
+      <p class="eyebrow">{{ t "shell.eyebrow" }}</p>
       <span class="drawer__title">{{ .AppName }}</span>
     </div>
-    <button type="button" class="drawer__close" data-drawer-close aria-label="Close menu"><i data-lucide="x"></i></button>
+    <button type="button" class="drawer__close" data-drawer-close aria-label="{{ t "shell.menu.close" }}"><i data-lucide="x"></i></button>
   </div>
 
-  <nav class="drawer__nav" aria-label="Sections">
+  <nav class="drawer__nav" aria-label="{{ t "shell.nav.sections" }}">
     {{ range .NavigationItems }}
     <a href="{{ .Href }}" class="drawer__link{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="page"{{ end }}>
       <i data-lucide="{{ if eq .Label "Overview" }}layout-dashboard{{ else if eq .Label "Home" }}house{{ else if eq .Label "Servers" }}server{{ else if eq .Label "Alerts" }}bell-ring{{ else if eq .Label "Diagnostics" }}stethoscope{{ else if eq .Label "Login" }}log-in{{ else if eq .Label "Logout" }}log-out{{ else }}circle{{ end }}"></i>
-      <span>{{ .Label }}</span>
+      <span>{{ t .Key }}</span>
     </a>
     {{ end }}
   </nav>
 
-  <a href="/servers/new" class="btn btn--primary drawer__action"><i data-lucide="plus" class="icon-in-button"></i> Add server</a>
+  <a href="/servers/new" class="btn btn--primary drawer__action"><i data-lucide="plus" class="icon-in-button"></i> {{ t "drawer.add_server" }}</a>
 
   <div class="drawer__section">
-    <p class="drawer__section-title">Session</p>
+    <p class="drawer__section-title">{{ t "drawer.session" }}</p>
     <ul class="drawer__meta">
-      <li><i data-lucide="settings"></i> Environment <code>{{ .Environment }}</code></li>
-      <li><i data-lucide="tag"></i> Version <code>{{ .Version }}</code></li>
-      <li><i data-lucide="database"></i> Database <code>{{ .DatabaseDriver }}</code></li>
+      <li><i data-lucide="settings"></i> {{ t "drawer.environment" }} <code>{{ .Environment }}</code></li>
+      <li><i data-lucide="tag"></i> {{ t "drawer.version" }} <code>{{ .Version }}</code></li>
+      <li><i data-lucide="database"></i> {{ t "drawer.database" }} <code>{{ .DatabaseDriver }}</code></li>
     </ul>
   </div>
 
-  <a href="/logout" class="btn btn--secondary drawer__logout"><i data-lucide="log-out" class="icon-in-button"></i> Logout</a>
+  <a href="/logout" class="btn btn--secondary drawer__logout"><i data-lucide="log-out" class="icon-in-button"></i> {{ t "nav.logout" }}</a>
 </aside>
 {{ end }}
 
 {{ define "bottom-nav" }}
-<nav class="bottom-nav" aria-label="Primary mobile navigation">
+<nav class="bottom-nav" aria-label="{{ t "shell.nav.primary" }}">
   {{ range .NavigationItems }}
   <a href="{{ .Href }}" class="bottom-nav__item{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="page"{{ end }}>
     <i data-lucide="{{ if eq .Label "Overview" }}layout-dashboard{{ else if eq .Label "Home" }}house{{ else if eq .Label "Servers" }}server{{ else if eq .Label "Alerts" }}bell-ring{{ else if eq .Label "Diagnostics" }}stethoscope{{ else if eq .Label "Login" }}log-in{{ else if eq .Label "Logout" }}log-out{{ else }}circle{{ end }}"></i>
-    <span>{{ .Label }}</span>
+    <span>{{ t .Key }}</span>
   </a>
   {{ end }}
 </nav>
 {{ end }}
 
 {{ define "shell-nav" }}
-<nav class="shell-nav" aria-label="Primary">
+<nav class="shell-nav" aria-label="{{ t "shell.nav.primary" }}">
   {{ range .NavigationItems }}
   <a href="{{ .Href }}" class="{{ if .Active }}is-active{{ end }}"{{ if .Active }} aria-current="page"{{ end }}>
     <i data-lucide="{{ if eq .Label "Overview" }}layout-dashboard{{ else if eq .Label "Home" }}house{{ else if eq .Label "Servers" }}server{{ else if eq .Label "Alerts" }}bell-ring{{ else if eq .Label "Diagnostics" }}stethoscope{{ else if eq .Label "Login" }}log-in{{ else if eq .Label "Logout" }}log-out{{ else }}circle{{ end }}" class="nav-icon"></i>
-    {{ .Label }}
+    {{ t .Key }}
   </a>
   {{ end }}
 </nav>

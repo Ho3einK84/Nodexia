@@ -421,7 +421,7 @@ func renderTerminalPage(
 	ticketID string,
 	initCommand string,
 ) {
-	page := view.NewPageData(deps.Config)
+	page := view.NewPageData(deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = "Terminal"
 	page.ActiveNav = "/servers"

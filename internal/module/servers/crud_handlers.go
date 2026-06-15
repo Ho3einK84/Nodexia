@@ -40,7 +40,7 @@ func NewCreateHandler(deps module.Dependencies, repo Repository) CreateHandler {
 
 func (h CreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		renderRepositoryError(w, h.deps, err, "Invalid form request", "The submitted server form could not be parsed.")
+		renderRepositoryError(w, r, h.deps, err, "Invalid form request", "The submitted server form could not be parsed.")
 		return
 	}
 
@@ -61,7 +61,7 @@ func (h CreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.repo.Create(r.Context(), validated.Server)
 	if err != nil {
-		renderRepositoryError(w, h.deps, err, "Could not create server", "The server record could not be created.")
+		renderRepositoryError(w, r, h.deps, err, "Could not create server", "The server record could not be created.")
 		return
 	}
 
@@ -87,13 +87,13 @@ func NewEditHandler(deps module.Dependencies, repo Repository) EditHandler {
 func (h EditHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	serverID, ok := pathID(r)
 	if !ok {
-		renderRepositoryError(w, h.deps, ErrNotFound, "Server not found", "The requested server record does not exist.")
+		renderRepositoryError(w, r, h.deps, ErrNotFound, "Server not found", "The requested server record does not exist.")
 		return
 	}
 
 	server, err := h.repo.GetByID(r.Context(), serverID)
 	if err != nil {
-		renderRepositoryError(w, h.deps, err, "Could not load server", "The requested server record could not be loaded.")
+		renderRepositoryError(w, r, h.deps, err, "Could not load server", "The requested server record could not be loaded.")
 		return
 	}
 
@@ -121,12 +121,12 @@ func NewUpdateHandler(deps module.Dependencies, repo Repository) UpdateHandler {
 func (h UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	serverID, ok := pathID(r)
 	if !ok {
-		renderRepositoryError(w, h.deps, ErrNotFound, "Server not found", "The requested server record does not exist.")
+		renderRepositoryError(w, r, h.deps, ErrNotFound, "Server not found", "The requested server record does not exist.")
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		renderRepositoryError(w, h.deps, err, "Invalid form request", "The submitted server form could not be parsed.")
+		renderRepositoryError(w, r, h.deps, err, "Invalid form request", "The submitted server form could not be parsed.")
 		return
 	}
 
@@ -158,7 +158,7 @@ func (h UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	updated, err := h.repo.Update(r.Context(), validated.Server)
 	if err != nil {
-		renderRepositoryError(w, h.deps, err, "Could not update server", "The server record could not be updated.")
+		renderRepositoryError(w, r, h.deps, err, "Could not update server", "The server record could not be updated.")
 		return
 	}
 
@@ -183,12 +183,12 @@ func NewDeleteHandler(deps module.Dependencies, repo Repository) DeleteHandler {
 func (h DeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	serverID, ok := pathID(r)
 	if !ok {
-		renderRepositoryError(w, h.deps, ErrNotFound, "Server not found", "The requested server record does not exist.")
+		renderRepositoryError(w, r, h.deps, ErrNotFound, "Server not found", "The requested server record does not exist.")
 		return
 	}
 
 	if err := h.repo.Delete(r.Context(), serverID); err != nil {
-		renderRepositoryError(w, h.deps, err, "Could not delete server", "The server record could not be deleted.")
+		renderRepositoryError(w, r, h.deps, err, "Could not delete server", "The server record could not be deleted.")
 		return
 	}
 
@@ -207,13 +207,13 @@ func NewForgetHostKeyHandler(deps module.Dependencies, repo Repository) ForgetHo
 func (h ForgetHostKeyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	serverID, ok := pathID(r)
 	if !ok {
-		renderRepositoryError(w, h.deps, ErrNotFound, "Server not found", "The requested server record does not exist.")
+		renderRepositoryError(w, r, h.deps, ErrNotFound, "Server not found", "The requested server record does not exist.")
 		return
 	}
 
 	server, err := h.repo.GetByID(r.Context(), serverID)
 	if err != nil {
-		renderRepositoryError(w, h.deps, err, "Could not load server", "The server record could not be loaded.")
+		renderRepositoryError(w, r, h.deps, err, "Could not load server", "The server record could not be loaded.")
 		return
 	}
 
@@ -225,7 +225,7 @@ func (h ForgetHostKeyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	if h.deps.SSH != nil {
 		if err := h.deps.SSH.ForgetHostKey(address); err != nil {
-			renderRepositoryError(w, h.deps, err, "Could not forget host key", "The stored host key for this server could not be removed.")
+			renderRepositoryError(w, r, h.deps, err, "Could not forget host key", "The stored host key for this server could not be removed.")
 			return
 		}
 	}

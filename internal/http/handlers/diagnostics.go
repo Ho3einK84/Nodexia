@@ -36,7 +36,7 @@ func NewDiagnosticsHandler(cfg config.Config, database *db.Runtime, renderer *vi
 }
 
 func (h DiagnosticsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	page := view.NewPageData(h.config)
+	page := view.NewPageData(h.config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = "Diagnostics"
 	page.ContentTemplate = "content-diagnostics"

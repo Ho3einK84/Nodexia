@@ -79,7 +79,7 @@
 
 /* Right cluster in the card header: confidence meter + action (⋯) menu. */
 .node-card__head-end {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -87,7 +87,7 @@
 }
 
 .node-card__head-end .node-confidence {
-  margin-left: 0;
+  margin-inline-start: 0;
 }
 
 .node-card__menu-toggle {
@@ -113,7 +113,7 @@
 /* ── Confidence meter ────────────────────────────────────────────────────── */
 
 .node-confidence {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -379,12 +379,12 @@
 }
 
 .node-evidence .collapsible__toggle {
-  padding-left: 2px;
+  padding-inline-start: 2px;
 }
 
 .node-evidence__count {
   font-variant-numeric: var(--num);
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 0.7rem;
   font-weight: var(--fw-bold);
   padding: 1px 8px;
@@ -495,7 +495,7 @@
 }
 
 .node-probe .collapsible__toggle .result-duration {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 /* ── Discovery scope ─────────────────────────────────────────────────────── */
@@ -506,7 +506,7 @@
 
 .node-scope__list {
   margin: 8px 0 6px;
-  padding-left: 20px;
+  padding-inline-start: 20px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -632,7 +632,7 @@
 .node-result-close {
   position: absolute;
   top: 12px;
-  right: 12px;
+  inset-inline-end: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -833,7 +833,7 @@
 .coming-soon-badge {
   display: inline-flex;
   align-items: center;
-  margin-left: 2px;
+  margin-inline-start: 2px;
   padding: 1px 7px;
   border-radius: 999px;
   font-size: 0.62rem;

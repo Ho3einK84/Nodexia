@@ -25,6 +25,7 @@ func (h ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.deps.Database == nil || h.deps.Database.SQL == nil {
 		page := view.NewErrorPageData(
 			h.deps.Config,
+			r,
 			http.StatusInternalServerError,
 			"Database runtime unavailable",
 			"The servers page cannot load because the database runtime is not available.",
@@ -38,7 +39,7 @@ func (h ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	servers, err := h.repo.List(r.Context())
 	if err != nil {
-		renderRepositoryError(w, h.deps, err, "Could not load servers", "The server registry could not be loaded from the persistence layer.")
+		renderRepositoryError(w, r, h.deps, err, "Could not load servers", "The server registry could not be loaded from the persistence layer.")
 		return
 	}
 

@@ -23,6 +23,7 @@ func Recover(cfg config.Config, renderer *view.Renderer) Middleware {
 
 					page := view.NewErrorPageData(
 						cfg,
+						r,
 						http.StatusInternalServerError,
 						"Internal server error",
 						"The request failed unexpectedly while the server was processing it.",
