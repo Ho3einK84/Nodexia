@@ -41,26 +41,35 @@ type Module interface {
 	RegisterRoutes(mux *http.ServeMux, deps Dependencies)
 }
 
+// PlaceholderPage describes the fallback page a module renders when its
+// runtime dependencies are unavailable. TitleKey and DescriptionKey are i18n
+// catalog keys (not literals): a module's definition is static and registered
+// once at startup, but the page is rendered per request, so the keys are
+// resolved against the request's active localizer in NewPlaceholderHandler —
+// that handler closure is the per-request seam where a language is known.
+// RouteGroup is a machine value (the URL prefix) and stays untranslated.
 type PlaceholderPage struct {
-	Title       string
-	RouteGroup  string
-	Description string
+	TitleKey       string
+	RouteGroup     string
+	DescriptionKey string
 }
 
 func NewPlaceholderHandler(deps Dependencies, page PlaceholderPage) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		viewModel := view.NewPageData(deps.Config, r)
 		viewModel.CSRFToken = middleware.GetCSRFToken(r.Context())
-		viewModel.Title = page.Title
+		title := viewModel.T(page.TitleKey)
+		description := viewModel.T(page.DescriptionKey)
+		viewModel.Title = title
 		viewModel.ContentTemplate = "content-module-placeholder"
-		viewModel.PageTitle = page.Title
-		viewModel.PageDescription = page.Description
+		viewModel.PageTitle = title
+		viewModel.PageDescription = description
 		if strings.HasPrefix(page.RouteGroup, "/servers") {
 			viewModel.ActiveNav = "/servers"
 		}
-		viewModel.ModuleName = page.Title
+		viewModel.ModuleName = title
 		viewModel.ModuleRouteGroup = page.RouteGroup
-		viewModel.ModuleDescription = page.Description
+		viewModel.ModuleDescription = description
 
 		if err := deps.Renderer.Render(w, http.StatusOK, viewModel); err != nil {
 			http.Error(w, "render page", http.StatusInternalServerError)

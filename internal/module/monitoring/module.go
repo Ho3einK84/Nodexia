@@ -24,9 +24,9 @@ func (Module) RouteGroup() string {
 func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	if deps.Database == nil || deps.Database.SQL == nil || deps.SSH == nil {
 		mux.Handle("GET /servers/{id}/monitoring", module.NewPlaceholderHandler(deps, module.PlaceholderPage{
-			Title:       "Monitoring",
-			RouteGroup:  "/servers/{id}/monitoring",
-			Description: "The monitoring page needs both the database and SSH runtime to collect and store resource snapshots.",
+			TitleKey:       "monitoring.title",
+			RouteGroup:     "/servers/{id}/monitoring",
+			DescriptionKey: "module.placeholder.monitoring",
 		}))
 		return
 	}

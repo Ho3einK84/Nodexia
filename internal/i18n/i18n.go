@@ -312,6 +312,35 @@ func (l *Localizer) Tsafe(key string, args ...any) string {
 	return substituteEscaped(text, args)
 }
 
+// ClientMessages resolves the given keys for the browser-side JS layer. Each key
+// is looked up through the normal fallback chain (active language → default
+// language); a singular key maps to its plain string and a pluralized key maps
+// to an object of its CLDR forms (so the JS can pick the form for a count).
+// Keys absent from every catalog are skipped. Only the handful of keys the JS
+// actually needs are passed in — the full catalog is never shipped to the
+// client.
+func (l *Localizer) ClientMessages(keys []string) map[string]any {
+	out := make(map[string]any, len(keys))
+	for _, key := range keys {
+		msg, ok := l.lookup(key)
+		if !ok {
+			continue
+		}
+		if len(msg.forms) == 1 {
+			if v, ok := msg.forms["other"]; ok {
+				out[key] = v
+				continue
+			}
+		}
+		forms := make(map[string]string, len(msg.forms))
+		for cat, v := range msg.forms {
+			forms[cat] = v
+		}
+		out[key] = forms
+	}
+	return out
+}
+
 // lookup finds a key in the active language, then the default language.
 func (l *Localizer) lookup(key string) (message, bool) {
 	if catalog, ok := l.bundle.catalogs[l.language.Code]; ok {

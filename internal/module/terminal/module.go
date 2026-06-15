@@ -25,9 +25,9 @@ func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	if deps.Database == nil || deps.Database.SQL == nil ||
 		deps.SSH == nil || deps.TerminalTickets == nil {
 		mux.Handle("GET /servers/{id}/terminal", module.NewPlaceholderHandler(deps, module.PlaceholderPage{
-			Title:       "Terminal",
-			RouteGroup:  "/servers/{id}/terminal",
-			Description: "The interactive terminal requires the database, SSH runtime, and ticket store.",
+			TitleKey:       "terminal.title",
+			RouteGroup:     "/servers/{id}/terminal",
+			DescriptionKey: "module.placeholder.terminal",
 		}))
 		return
 	}

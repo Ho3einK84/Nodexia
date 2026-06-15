@@ -23,9 +23,9 @@ func (Module) RouteGroup() string {
 func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	if deps.Database == nil || deps.Database.SQL == nil {
 		mux.Handle("GET /servers", module.NewPlaceholderHandler(deps, module.PlaceholderPage{
-			Title:       "Servers",
-			RouteGroup:  "/servers",
-			Description: "The database runtime is not available yet, so the server registry cannot load persisted records.",
+			TitleKey:       "servers.title",
+			RouteGroup:     "/servers",
+			DescriptionKey: "module.placeholder.servers",
 		}))
 		return
 	}

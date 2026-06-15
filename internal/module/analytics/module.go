@@ -24,9 +24,9 @@ func (Module) RouteGroup() string {
 func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	if deps.Database == nil || deps.Database.SQL == nil {
 		mux.Handle("GET /analytics", module.NewPlaceholderHandler(deps, module.PlaceholderPage{
-			Title:       "Analytics",
-			RouteGroup:  "/analytics",
-			Description: "The analytics module requires the database runtime.",
+			TitleKey:       "nav.analytics",
+			RouteGroup:     "/analytics",
+			DescriptionKey: "module.placeholder.analytics",
 		}))
 		return
 	}

@@ -26,6 +26,9 @@
 (function () {
   'use strict';
 
+  // Localization helper (see app.js for window.nxT). Falls back to the key.
+  function T(key, params) { return window.nxT ? window.nxT(key, params) : key; }
+
   var card = document.getElementById('terminal-card');
   if (!card) return;
 
@@ -138,7 +141,7 @@
   }
 
   ws.onopen = function () {
-    setStatus('connected', 'connected');
+    setStatus('connected', T('js.terminal.connected'));
     fitAndResize();
     term.focus();
     if (initCmd) setTimeout(maybeSendInitCmd, 1200);
@@ -152,22 +155,22 @@
         maybeSendInitCmd();
       } else if (msg.type === 'error') {
         showError(msg.message);
-        setStatus('error', 'error');
+        setStatus('error', T('js.terminal.status_error'));
       }
     } catch (e) { /* ignore unparseable frames */ }
   };
 
   ws.onerror = function () {
-    setStatus('error', 'connection error');
-    showError('WebSocket connection failed.');
+    setStatus('error', T('js.terminal.connection_error'));
+    showError(T('js.terminal.ws_failed'));
   };
 
   ws.onclose = function (event) {
-    setStatus('disconnected', 'disconnected');
+    setStatus('disconnected', T('js.terminal.disconnected'));
     // The terminal no longer owns the screen — restore background scrolling.
     setScrollLock(false);
     if (!event.wasClean) {
-      showError('Connection closed unexpectedly (code ' + event.code + ').');
+      showError(T('js.terminal.closed_unexpectedly', { code: event.code }));
     }
   };
 
@@ -307,7 +310,7 @@
   // silently, so ask the user — they can paste into the prompt on any browser.
   function promptPaste() {
     try {
-      var text = window.prompt('Paste text to send to the terminal:');
+      var text = window.prompt(T('js.terminal.paste_prompt'));
       if (text) sendInput(text);
     } catch (e) { /* prompt unavailable */ }
   }
@@ -346,7 +349,7 @@
   function flashCopied(btn) {
     if (!btn) return;
     var orig = btn.getAttribute('data-label') || btn.textContent;
-    btn.textContent = 'Copied!';
+    btn.textContent = T('js.copy.copied');
     btn.classList.add('is-copied');
     setTimeout(function () {
       btn.textContent = orig;
@@ -403,7 +406,7 @@
     if (selectBtn) {
       selectBtn.classList.toggle('is-active', on);
       selectBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-      selectBtn.textContent = on ? 'Done' : 'Select';
+      selectBtn.textContent = on ? T('js.terminal.done') : T('js.terminal.select');
     }
   }
 
@@ -420,23 +423,26 @@
     del:   '\x1b[3~',
   };
 
+  // Physical keycap labels (Ctrl/Esc/Tab/Home/End/Del/A−/A+ and the arrow glyphs)
+  // are conventionally kept in Latin even in RTL/Persian technical UIs, so only
+  // their aria-labels and the action buttons (Select/Copy/Paste) are localized.
   var BUTTONS = [
     { label: 'Ctrl',  kind: 'ctrl' },
     { label: 'Esc',   kind: 'seq', key: 'esc' },
     { label: 'Tab',   kind: 'seq', key: 'tab' },
-    { label: '←',     kind: 'seq', key: 'left',  aria: 'Left' },
-    { label: '↑',     kind: 'seq', key: 'up',    aria: 'Up' },
-    { label: '↓',     kind: 'seq', key: 'down',  aria: 'Down' },
-    { label: '→',     kind: 'seq', key: 'right', aria: 'Right' },
+    { label: '←',     kind: 'seq', key: 'left',  aria: T('js.terminal.aria_left') },
+    { label: '↑',     kind: 'seq', key: 'up',    aria: T('js.terminal.aria_up') },
+    { label: '↓',     kind: 'seq', key: 'down',  aria: T('js.terminal.aria_down') },
+    { label: '→',     kind: 'seq', key: 'right', aria: T('js.terminal.aria_right') },
     { label: 'Home',  kind: 'seq', key: 'home' },
     { label: 'End',   kind: 'seq', key: 'end' },
     { label: 'Del',   kind: 'seq', key: 'del' },
-    { label: 'Select',   kind: 'select', aria: 'Select text' },
-    { label: 'Copy',     kind: 'copy', aria: 'Copy selection' },
-    { label: 'Copy all', kind: 'copyall', aria: 'Copy all output' },
-    { label: 'Paste',    kind: 'paste' },
-    { label: 'A−',    kind: 'font', key: 'dec', aria: 'Smaller font' },
-    { label: 'A+',    kind: 'font', key: 'inc', aria: 'Larger font' },
+    { label: T('js.terminal.select'),   kind: 'select', aria: T('js.terminal.aria_select') },
+    { label: T('js.copy.label'),        kind: 'copy', aria: T('js.terminal.aria_copy') },
+    { label: T('js.terminal.copy_all'), kind: 'copyall', aria: T('js.terminal.aria_copy_all') },
+    { label: T('js.terminal.paste'),    kind: 'paste' },
+    { label: 'A−',    kind: 'font', key: 'dec', aria: T('js.terminal.aria_font_smaller') },
+    { label: 'A+',    kind: 'font', key: 'inc', aria: T('js.terminal.aria_font_larger') },
   ];
 
   // Actions that touch (or depend on) a text selection must not pull focus back
@@ -459,7 +465,7 @@
     var bar = document.createElement('div');
     bar.className = 'terminal-toolbar';
     bar.setAttribute('role', 'toolbar');
-    bar.setAttribute('aria-label', 'Terminal keys');
+    bar.setAttribute('aria-label', T('js.terminal.keys_label'));
 
     BUTTONS.forEach(function (def) {
       // Copy/Paste are always offered now: even without the async clipboard API

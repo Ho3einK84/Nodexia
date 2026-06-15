@@ -7,6 +7,52 @@
 (function () {
   'use strict';
 
+  /* ── Client-side i18n ───────────────────────────────────
+   * The server injects only the strings the JS needs as a non-executable JSON
+   * island (<script type="application/json" id="nodexia-i18n">), which is exempt
+   * from the strict script-src CSP. We parse it once and expose window.nxT /
+   * window.nxTn so every page script (loaded after this file) can localize.
+   * nxT mirrors the server's {{ t }}; nxTn mirrors {{ tn }} (plural by count).
+   * A missing key returns the key itself, matching the Go fallback. */
+  var I18N = (function () {
+    var map = {};
+    try {
+      var island = document.getElementById('nodexia-i18n');
+      if (island) map = JSON.parse(island.textContent) || {};
+    } catch (err) { /* fall back to raw keys */ }
+    var lang = document.documentElement.getAttribute('lang') || 'en';
+    function category(n) {
+      if (lang === 'fa') return (n === 0 || n === 1) ? 'one' : 'other';
+      return n === 1 ? 'one' : 'other';
+    }
+    function substitute(text, params) {
+      if (!params) return text;
+      return text.replace(/\{(\w+)\}/g, function (whole, name) {
+        return params[name] != null ? params[name] : whole;
+      });
+    }
+    return {
+      t: function (key, params) {
+        var value = map[key];
+        if (value == null) return key;
+        if (typeof value === 'object') value = value.other || key;
+        return substitute(value, params);
+      },
+      tn: function (key, count, params) {
+        var value = map[key];
+        if (value == null) return key;
+        var text = typeof value === 'object'
+          ? (value[category(count)] || value.other || key)
+          : value;
+        params = params || {};
+        if (params.count == null) params.count = count;
+        return substitute(text, params);
+      }
+    };
+  })();
+  window.nxT = I18N.t;
+  window.nxTn = I18N.tn;
+
   var prefersReducedMotion = window.matchMedia &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -77,7 +123,7 @@
     if (label) btn.setAttribute('data-busy-label', label);
     // Keep width stable while we swap content.
     btn.style.minWidth = btn.offsetWidth + 'px';
-    btn.innerHTML = '<span class="spinner spinner--sm" aria-hidden="true"></span> Working…';
+    btn.innerHTML = '<span class="spinner spinner--sm" aria-hidden="true"></span> ' + I18N.t('js.working');
     // Re-enable as a safety net if navigation never happens (e.g. validation).
     setTimeout(function () { restoreButton(btn); }, 30000);
   }
@@ -105,7 +151,7 @@
       var confirmMsg = (submitter && submitter.getAttribute('data-confirm')) ||
         form.getAttribute('data-confirm');
       if (!confirmMsg && submitter && submitter.classList.contains('btn--danger')) {
-        confirmMsg = 'This action cannot be undone. Continue?';
+        confirmMsg = I18N.t('js.confirm_irreversible');
       }
       if (confirmMsg && !window.confirm(confirmMsg)) {
         e.preventDefault();
@@ -145,7 +191,7 @@
       var close = document.createElement('button');
       close.type = 'button';
       close.className = 'flash-banner__close';
-      close.setAttribute('aria-label', 'Dismiss message');
+      close.setAttribute('aria-label', I18N.t('js.flash.dismiss'));
       close.innerHTML = '<i data-lucide="x"></i>';
       close.addEventListener('click', function () { dismissFlash(banner); });
       banner.appendChild(close);
@@ -175,14 +221,14 @@
       var toggle = document.createElement('button');
       toggle.type = 'button';
       toggle.className = 'secret-toggle';
-      toggle.setAttribute('aria-label', 'Reveal value');
+      toggle.setAttribute('aria-label', I18N.t('js.secret.reveal'));
       toggle.innerHTML = '<i data-lucide="eye"></i>';
       var shown = false;
       toggle.addEventListener('click', function () {
         shown = !shown;
         el.textContent = shown ? el.dataset.secretValue : '••••••••';
         toggle.innerHTML = shown ? '<i data-lucide="eye-off"></i>' : '<i data-lucide="eye"></i>';
-        toggle.setAttribute('aria-label', shown ? 'Hide value' : 'Reveal value');
+        toggle.setAttribute('aria-label', shown ? I18N.t('js.secret.hide') : I18N.t('js.secret.reveal'));
         renderIcons();
       });
       if (el.nextSibling) {
@@ -209,7 +255,7 @@
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'copy-btn';
-      btn.setAttribute('aria-label', 'Copy to clipboard');
+      btn.setAttribute('aria-label', I18N.t('js.copy.aria'));
       btn.innerHTML = '<i data-lucide="copy"></i>';
       btn.addEventListener('click', function () {
         copyText(pre.textContent).then(function (ok) {
@@ -246,8 +292,8 @@
         copyText(value.replace(/\n$/, '')).then(function (ok) {
           btn.classList.add(ok ? 'is-copied' : 'is-failed');
           btn.innerHTML = ok
-            ? '<i data-lucide="check"></i> Copied!'
-            : '<i data-lucide="x"></i> Failed';
+            ? '<i data-lucide="check"></i> ' + I18N.t('js.copy.copied')
+            : '<i data-lucide="x"></i> ' + I18N.t('js.failed');
           renderIcons();
           setTimeout(function () {
             btn.classList.remove('is-copied', 'is-failed');
@@ -266,7 +312,7 @@
       if (btn.dataset.credReady === '1') return;
       btn.dataset.credReady = '1';
       var out = btn.parentNode.querySelector('.node-credentials__out');
-      var showLabel = '<i data-lucide="key-round" class="icon-in-button"></i> Show API key &amp; certificate';
+      var showLabel = '<i data-lucide="key-round" class="icon-in-button"></i> ' + I18N.t('js.cred.show');
       btn.addEventListener('click', function () {
         if (out && !out.hidden) {
           out.hidden = true;
@@ -276,7 +322,7 @@
           return;
         }
         btn.disabled = true;
-        btn.innerHTML = '<i data-lucide="loader"></i> Loading…';
+        btn.innerHTML = '<i data-lucide="loader"></i> ' + I18N.t('js.loading');
         renderIcons();
         fetch(btn.getAttribute('data-url'), { headers: { Accept: 'application/json' } })
           .then(function (resp) {
@@ -285,14 +331,14 @@
           .then(function (res) {
             btn.disabled = false;
             if (!res.ok) {
-              showCredError(out, btn, showLabel, (res.data && res.data.error) || 'Failed to load credentials.');
+              showCredError(out, btn, showLabel, (res.data && res.data.error) || I18N.t('js.cred.load_error'));
               return;
             }
             renderNodeCredentials(out, btn, res.data);
           })
           .catch(function () {
             btn.disabled = false;
-            showCredError(out, btn, showLabel, 'Failed to load credentials.');
+            showCredError(out, btn, showLabel, I18N.t('js.cred.load_error'));
           });
       });
     });
@@ -318,21 +364,21 @@
     var name = String(data.node_name || 'node').replace(/[^a-zA-Z0-9._-]/g, '') || 'node';
 
     if (data.has_api_key) {
-      out.appendChild(credentialBlock('key-round', 'API key', 'cred-key-' + name, data.api_key, true));
+      out.appendChild(credentialBlock('key-round', I18N.t('js.cred.api_key'), 'cred-key-' + name, data.api_key, true));
     } else {
       var miss = document.createElement('p');
       miss.className = 'node-actions-note';
-      miss.textContent = 'API key not found in /opt/' + name + '/.env.';
+      miss.textContent = I18N.t('js.cred.api_key_missing', { name: name });
       out.appendChild(miss);
     }
     if (data.has_cert) {
-      out.appendChild(credentialBlock('shield-check', 'SSL certificate', 'cred-cert-' + name, data.certificate, false));
+      out.appendChild(credentialBlock('shield-check', I18N.t('js.cred.ssl_cert'), 'cred-cert-' + name, data.certificate, false));
     }
 
     // Wire masking + copy on the freshly inserted blocks.
     initSecrets();
     initCopyTargets();
-    btn.innerHTML = '<i data-lucide="eye-off" class="icon-in-button"></i> Hide';
+    btn.innerHTML = '<i data-lucide="eye-off" class="icon-in-button"></i> ' + I18N.t('js.cred.hide');
     renderIcons();
   }
 
@@ -349,8 +395,8 @@
     copyBtn.type = 'button';
     copyBtn.className = 'btn btn--ghost btn--sm copy-inline';
     copyBtn.setAttribute('data-copy-target', '#' + id);
-    copyBtn.setAttribute('aria-label', 'Copy ' + label);
-    copyBtn.innerHTML = '<i data-lucide="copy"></i> Copy';
+    copyBtn.setAttribute('aria-label', I18N.t('js.copy.aria_label', { label: label }));
+    copyBtn.innerHTML = '<i data-lucide="copy"></i> ' + I18N.t('js.copy.label');
     head.appendChild(lab);
     head.appendChild(copyBtn);
 
@@ -464,7 +510,8 @@
     }
     function updatePill() {
       var remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-      pill.innerHTML = '<i data-lucide="refresh-cw"></i> next in ' + remaining + 's';
+      pill.innerHTML = '<i data-lucide="refresh-cw"></i> ' +
+        escapeHTML(I18N.t('js.refresh.next_in', { seconds: remaining }));
       renderIcons();
     }
     function apply() {
@@ -585,8 +632,8 @@
     var label = card.querySelector('[data-stream-label]');
     if (label) {
       var doneText = failed
-        ? (card.getAttribute('data-stream-label-error') || 'Failed')
-        : (card.getAttribute('data-stream-label-done') || 'Complete');
+        ? (card.getAttribute('data-stream-label-error') || I18N.t('js.failed'))
+        : (card.getAttribute('data-stream-label-done') || I18N.t('js.stream.complete'));
       label.innerHTML = '<i data-lucide="' + (failed ? 'x-circle' : 'check-circle') +
         '" class="icon-in-button"></i> ' + escapeHTML(doneText);
       label.classList.add('stream-fade-in');
@@ -598,7 +645,7 @@
       if (payload.exitCode && payload.exitCode !== 'n/a') {
         var ok = payload.exitCode === '0';
         html += '<span class="result-exit ' + (ok ? 'result-exit--ok' : 'result-exit--err') +
-          '">exit ' + escapeHTML(payload.exitCode) + '</span>';
+          '">' + escapeHTML(I18N.t('commands.exit', { code: payload.exitCode })) + '</span>';
       }
       if (payload.duration) {
         html += '<code class="result-duration">' + escapeHTML(payload.duration) + '</code>';
@@ -636,7 +683,7 @@
     var url = card.getAttribute('data-stream-page-url') || window.location.href;
     if (status) {
       status.innerHTML = '<a class="btn btn--ghost btn--sm" href="' + escapeHTML(url) +
-        '"><i data-lucide="refresh-cw" class="icon-in-button"></i> Refresh for the latest output</a>';
+        '"><i data-lucide="refresh-cw" class="icon-in-button"></i> ' + escapeHTML(I18N.t('js.stream.refresh')) + '</a>';
       renderIcons();
     }
   }
@@ -678,7 +725,7 @@
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'node-result-close';
-    btn.setAttribute('aria-label', 'Dismiss result');
+    btn.setAttribute('aria-label', I18N.t('js.node_result.dismiss'));
     btn.innerHTML = '<i data-lucide="x"></i>';
     btn.addEventListener('click', function () { dismissNodeCard(card, cleanURL); });
     card.appendChild(btn);
@@ -696,7 +743,8 @@
     var remaining = NODE_RESULT_COUNTDOWN_SECS;
     var paused = false;
     function paint() {
-      pill.innerHTML = '<span class="node-result-countdown__dot"></span> Closing in ' + remaining + '…';
+      pill.innerHTML = '<span class="node-result-countdown__dot"></span> ' +
+        escapeHTML(I18N.t('js.node_result.closing', { seconds: remaining }));
     }
     paint();
 
@@ -780,12 +828,12 @@
 
   function bulkChip(status) {
     var inner = {
-      ok: '<i data-lucide="check-circle-2" class="icon-in-button"></i> ok',
-      failed: '<i data-lucide="x-circle" class="icon-in-button"></i> failed',
-      skipped: '<i data-lucide="skip-forward" class="icon-in-button"></i> skipped',
-      pending: '<span class="spinner spinner--sm"></span> pending',
-      running: '<span class="spinner spinner--sm"></span> running'
-    }[status] || '<i data-lucide="x-circle" class="icon-in-button"></i> failed';
+      ok: '<i data-lucide="check-circle-2" class="icon-in-button"></i> ' + I18N.t('bulk.status_ok'),
+      failed: '<i data-lucide="x-circle" class="icon-in-button"></i> ' + I18N.t('bulk.status_failed'),
+      skipped: '<i data-lucide="skip-forward" class="icon-in-button"></i> ' + I18N.t('bulk.status_skipped'),
+      pending: '<span class="spinner spinner--sm"></span> ' + I18N.t('bulk.status_pending'),
+      running: '<span class="spinner spinner--sm"></span> ' + I18N.t('bulk.status_running')
+    }[status] || ('<i data-lucide="x-circle" class="icon-in-button"></i> ' + I18N.t('bulk.status_failed'));
     return '<span class="bulk-status bulk-status--' + status + '" data-bulk-status>' + inner + '</span>';
   }
 
@@ -808,10 +856,10 @@
   }
 
   function bulkCountInner(key, value) {
-    if (key === 'ok') return '<i data-lucide="check-circle-2" class="icon-in-button"></i> ' + value + ' ok';
-    if (key === 'failed') return '<i data-lucide="x-circle" class="icon-in-button"></i> ' + value + ' failed';
-    if (key === 'skipped') return '<i data-lucide="skip-forward" class="icon-in-button"></i> ' + value + ' skipped';
-    return '<span class="spinner spinner--sm"></span> ' + value + ' in progress';
+    if (key === 'ok') return '<i data-lucide="check-circle-2" class="icon-in-button"></i> ' + I18N.t('bulk.count_ok', { count: value });
+    if (key === 'failed') return '<i data-lucide="x-circle" class="icon-in-button"></i> ' + I18N.t('bulk.count_failed', { count: value });
+    if (key === 'skipped') return '<i data-lucide="skip-forward" class="icon-in-button"></i> ' + I18N.t('bulk.count_skipped', { count: value });
+    return '<span class="spinner spinner--sm"></span> ' + I18N.t('bulk.count_in_progress', { count: value });
   }
 
   function parseJSON(data) {
@@ -1013,7 +1061,7 @@
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'back-to-top';
-    btn.setAttribute('aria-label', 'Back to top');
+    btn.setAttribute('aria-label', I18N.t('js.back_to_top'));
     btn.innerHTML = '<i data-lucide="arrow-up"></i>';
     btn.addEventListener('click', function () {
       window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });

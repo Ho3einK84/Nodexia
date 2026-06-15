@@ -24,9 +24,9 @@ func (Module) RouteGroup() string {
 func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	if deps.Database == nil || deps.Database.SQL == nil || deps.SSH == nil {
 		mux.Handle("GET /servers/{id}/files", module.NewPlaceholderHandler(deps, module.PlaceholderPage{
-			Title:      "Files",
-			RouteGroup: "/servers/{id}/files",
-			Description: "The file browser needs both the database and SSH runtime to be available before SFTP-backed browsing can start.",
+			TitleKey:       "files.title",
+			RouteGroup:     "/servers/{id}/files",
+			DescriptionKey: "module.placeholder.files",
 		}))
 		return
 	}

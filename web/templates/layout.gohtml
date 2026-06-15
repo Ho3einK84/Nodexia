@@ -23,6 +23,10 @@
   {{ template "bottom-nav" . }}
   {{ end }}
 
+  {{/* Client i18n island: only the strings the JS needs, in the active locale.
+       type="application/json" is data, not script, so it is exempt from the
+       strict script-src CSP; app.js parses it and exposes window.nxT/nxTn. */}}
+  <script type="application/json" id="nodexia-i18n">{{ clientI18nJSON }}</script>
   <script src="/static/app.js"></script>
   {{ range .PageScripts }}<script src="{{ . }}"></script>
   {{ end }}
