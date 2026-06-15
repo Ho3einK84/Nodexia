@@ -19,6 +19,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io/fs"
 	"sort"
 	"strings"
@@ -293,6 +294,24 @@ func (l *Localizer) Tn(key string, count int, args ...any) string {
 	return substitute(text, pairs)
 }
 
+// Tsafe is like T but intended for catalog strings that contain trusted inline
+// HTML markup (e.g. <code>, <strong>). The looked-up template string is trusted
+// (it ships in our embedded catalogs, never from user input); only the
+// substituted placeholder VALUES are HTML-escaped, so interpolating user data
+// stays safe. The render layer wraps the result as template.HTML. Use plain T
+// for everything that has no markup.
+func (l *Localizer) Tsafe(key string, args ...any) string {
+	msg, ok := l.lookup(key)
+	if !ok {
+		return key
+	}
+	text, ok := msg.form("other")
+	if !ok {
+		return key
+	}
+	return substituteEscaped(text, args)
+}
+
 // lookup finds a key in the active language, then the default language.
 func (l *Localizer) lookup(key string) (message, bool) {
 	if catalog, ok := l.bundle.catalogs[l.language.Code]; ok {
@@ -323,6 +342,26 @@ func substitute(text string, pairs []any) string {
 			continue
 		}
 		replacements = append(replacements, "{"+name+"}", fmt.Sprint(pairs[i+1]))
+	}
+	if len(replacements) == 0 {
+		return text
+	}
+	return strings.NewReplacer(replacements...).Replace(text)
+}
+
+// substituteEscaped is substitute but HTML-escapes each value so trusted
+// catalog markup can be combined with untrusted interpolated values safely.
+func substituteEscaped(text string, pairs []any) string {
+	if len(pairs) < 2 {
+		return text
+	}
+	replacements := make([]string, 0, len(pairs))
+	for i := 0; i+1 < len(pairs); i += 2 {
+		name, ok := pairs[i].(string)
+		if !ok {
+			continue
+		}
+		replacements = append(replacements, "{"+name+"}", html.EscapeString(fmt.Sprint(pairs[i+1])))
 	}
 	if len(replacements) == 0 {
 		return text

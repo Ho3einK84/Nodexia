@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/Ho3einK84/Nodexia/internal/i18n"
 )
 
 func formatTimestamp(value time.Time) string {
@@ -27,24 +29,35 @@ func flashKind(r *http.Request) string {
 }
 
 func flashMessage(r *http.Request) string {
+	key := ""
 	switch r.URL.Query().Get("flash") {
 	case "created":
-		return "Server record created successfully."
+		key = "servers.flash.created"
 	case "updated":
-		return "Server record updated successfully."
+		key = "servers.flash.updated"
 	case "deleted":
-		return "Server record deleted successfully."
+		key = "servers.flash.deleted"
 	case "host-key-forgotten":
-		return "Stored host key removed. The next connection will trust and pin the new key."
+		key = "servers.flash.host_key_forgotten"
 	case "bulk-no-selection":
-		return "Select at least one server before running a bulk action."
+		key = "servers.flash.bulk_no_selection"
 	case "bulk-invalid-action":
-		return "Choose a valid bulk action (reboot, update, or delete)."
+		key = "servers.flash.bulk_invalid_action"
 	case "bulk-job-expired":
-		return "That bulk action result is no longer available (it expired or the server restarted)."
+		key = "servers.flash.bulk_job_expired"
 	default:
 		return ""
 	}
+	return localizerFromRequest(r).T(key)
+}
+
+// localizerFromRequest returns the request's active localizer, falling back to
+// the default-language localizer so flash/error helpers never panic.
+func localizerFromRequest(r *http.Request) *i18n.Localizer {
+	if loc := i18n.FromContext(r.Context()); loc != nil {
+		return loc
+	}
+	return i18n.MustDefault().Localizer(i18n.DefaultLanguage)
 }
 
 func HasStoredCredentials(server Server) bool {

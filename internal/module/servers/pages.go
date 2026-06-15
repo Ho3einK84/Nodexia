@@ -19,7 +19,7 @@ import (
 
 func newServersPage(deps module.Dependencies, r *http.Request) view.PageData {
 	page := view.NewPageData(deps.Config, r)
-	page.Title = "Servers"
+	page.Title = page.T("servers.title")
 	page.ActiveNav = "/servers"
 	page.MigrationCount = deps.Database.MigrationCount()
 	return page
@@ -74,8 +74,8 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 	pd := newServersPage(deps, r)
 	pd.CSRFToken = middleware.GetCSRFToken(r.Context())
 	pd.ContentTemplate = "content-servers-list"
-	pd.PageTitle = "Server registry"
-	pd.PageDescription = "Your managed Rebecca and PasarGuard servers. Register a target to start collecting monitoring and node data."
+	pd.PageTitle = pd.T("servers.list_title")
+	pd.PageDescription = pd.T("servers.list_description")
 	pd.ServerCount = totalRegistered
 	pd.TotalNodeCount = totalNodeCount(r.Context(), deps)
 	pd.Servers = items
@@ -364,8 +364,10 @@ func renderFormPage(
 	page := newServersPage(deps, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.ContentTemplate = "content-server-form"
-	page.PageTitle = pageTitle
-	page.PageDescription = pageDescription
+	// pageTitle/pageDescription/flashMessage are translation keys resolved here
+	// in the request's active language.
+	page.PageTitle = page.T(pageTitle)
+	page.PageDescription = page.T(pageDescription)
 	page.IsEditingServer = form.ID > 0
 	page.ServerFormAction = form.Action
 	page.ServerDeleteAction = form.DeleteAction
@@ -383,22 +385,28 @@ func renderFormPage(
 		Errors:             form.Errors,
 	}
 	page.FlashKind = flashKind
-	page.FlashMessage = flashMessage
+	page.FlashMessage = page.T(flashMessage)
 
 	if err := deps.Renderer.Render(w, statusCode, page); err != nil {
 		http.Error(w, "render server form page", http.StatusInternalServerError)
 	}
 }
 
+// renderRepositoryError renders an SSR error page. fallbackTitle/fallbackMessage
+// are translation keys resolved in the request's active language.
 func renderRepositoryError(w http.ResponseWriter, r *http.Request, deps module.Dependencies, err error, fallbackTitle string, fallbackMessage string) {
 	statusCode := http.StatusInternalServerError
-	title := fallbackTitle
-	message := fallbackMessage
+	titleKey := fallbackTitle
+	messageKey := fallbackMessage
 	if errors.Is(err, ErrNotFound) {
 		statusCode = http.StatusNotFound
-		title = "Server not found"
-		message = "The requested server record does not exist anymore."
+		titleKey = "servers.error.not_found_title"
+		messageKey = "servers.error.not_found_message"
 	}
+
+	loc := localizerFromRequest(r)
+	title := loc.T(titleKey)
+	message := loc.T(messageKey)
 
 	slog.Warn("server lookup failed",
 		slog.Int("status", statusCode),
