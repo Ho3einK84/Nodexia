@@ -393,6 +393,17 @@ body {
   word-break: break-all;
 }
 
+/* Country flag badge next to the server name. The glyph is a regional-indicator
+   emoji; on platforms without flag-emoji support (e.g. most Windows builds) the
+   browser renders the two letters of the ISO code instead, which is an
+   acceptable text fallback. */
+.server-card__flag {
+  font-size: 1.05rem;
+  line-height: 1;
+  vertical-align: middle;
+  cursor: default;
+}
+
 .server-card__badges {
   display: flex;
   gap: 6px;

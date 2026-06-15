@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Ho3einK84/Nodexia/internal/geoip"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/view"
@@ -49,6 +50,9 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 			CredentialRef:      server.CredentialRef,
 			CreatedAt:          formatTimestamp(server.CreatedAt),
 			UpdatedAt:          formatTimestamp(server.UpdatedAt),
+			FlagEmoji:          geoip.FlagEmoji(server.CountryCode),
+			CountryCode:        server.CountryCode,
+			CountryName:        server.CountryName,
 		}
 		if ts, ok := lastSeen[server.ID]; ok {
 			age := time.Since(ts)
@@ -114,6 +118,8 @@ func serverMatchesQuery(server Server, query string) bool {
 		server.Note,
 		server.AuthMode,
 		server.CredentialStrategy,
+		server.CountryCode,
+		server.CountryName,
 		strconv.Itoa(server.Port),
 	}
 	for _, field := range haystacks {

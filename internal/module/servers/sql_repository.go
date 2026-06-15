@@ -69,7 +69,7 @@ func (r SQLRepository) Create(ctx context.Context, server Server) (Server, error
 func (r SQLRepository) GetByID(ctx context.Context, id int64) (Server, error) {
 	row := r.conn.QueryRowContext(
 		ctx,
-		`SELECT id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, created_at, updated_at
+		`SELECT id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, country_code, country_name, country_checked_at, created_at, updated_at
 		 FROM servers
 		 WHERE id = ?
 		 LIMIT 1`,
@@ -97,7 +97,7 @@ func (r SQLRepository) GetByID(ctx context.Context, id int64) (Server, error) {
 func (r SQLRepository) List(ctx context.Context) ([]Server, error) {
 	rows, err := r.conn.QueryContext(
 		ctx,
-		`SELECT id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, created_at, updated_at
+		`SELECT id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, country_code, country_name, country_checked_at, created_at, updated_at
 		 FROM servers
 		 ORDER BY id DESC`,
 	)
@@ -184,6 +184,33 @@ func (r SQLRepository) Update(ctx context.Context, server Server) (Server, error
 	return r.GetByID(ctx, server.ID)
 }
 
+// UpdateCountry writes the detected country (or an empty result) for one server
+// and stamps country_checked_at. It deliberately updates only the country
+// columns — not updated_at or any credential/identity field — so detection never
+// interferes with the audit trail of user edits. A missing server is a no-op
+// (returns nil): the row may have been deleted between detection and write, and
+// that is not an error worth surfacing to a background job.
+func (r SQLRepository) UpdateCountry(ctx context.Context, id int64, code, name string) error {
+	code = strings.TrimSpace(code)
+	name = strings.TrimSpace(name)
+	now := time.Now().UTC()
+
+	if _, err := r.conn.ExecContext(
+		ctx,
+		`UPDATE servers
+		 SET country_code = ?, country_name = ?, country_checked_at = ?
+		 WHERE id = ?`,
+		code,
+		name,
+		now,
+		id,
+	); err != nil {
+		return fmt.Errorf("servers: update country %d: %w", id, err)
+	}
+
+	return nil
+}
+
 func (r SQLRepository) Delete(ctx context.Context, id int64) error {
 	tx, err := r.conn.BeginTx(ctx, nil)
 	if err != nil {
@@ -239,6 +266,7 @@ func scanServer(scanner rowScanner) (Server, error) {
 	var server Server
 	var createdAtRaw any
 	var updatedAtRaw any
+	var countryCheckedAtRaw any
 
 	if err := scanner.Scan(
 		&server.ID,
@@ -250,6 +278,9 @@ func scanServer(scanner rowScanner) (Server, error) {
 		&server.Note,
 		&server.CredentialStrategy,
 		&server.CredentialRef,
+		&server.CountryCode,
+		&server.CountryName,
+		&countryCheckedAtRaw,
 		&createdAtRaw,
 		&updatedAtRaw,
 	); err != nil {
@@ -266,6 +297,13 @@ func scanServer(scanner rowScanner) (Server, error) {
 		return Server{}, fmt.Errorf("parse updated_at: %w", err)
 	}
 
+	// country_checked_at is nullable; a NULL maps to a zero time (never checked).
+	countryCheckedAt, err := parseDatabaseTime(countryCheckedAtRaw)
+	if err != nil {
+		return Server{}, fmt.Errorf("parse country_checked_at: %w", err)
+	}
+
+	server.CountryCheckedAt = countryCheckedAt
 	server.CreatedAt = createdAt
 	server.UpdatedAt = updatedAt
 	return server, nil

@@ -65,6 +65,13 @@ func (h CreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Detect the new server's country in the background. This must not block or
+	// fail the create — the flag is filled in asynchronously (and by later
+	// scheduler sweeps) over the server's own SSH connection.
+	if h.deps.CountryResolver != nil {
+		h.deps.CountryResolver.ResolveCountryAsync(created.ID)
+	}
+
 	http.Redirect(w, r, "/servers?flash=created&id="+formatID(created.ID), http.StatusSeeOther)
 }
 
@@ -153,6 +160,12 @@ func (h UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		renderRepositoryError(w, h.deps, err, "Could not update server", "The server record could not be updated.")
 		return
+	}
+
+	// Host or credentials may have changed, so re-detect the country in the
+	// background. Non-blocking and best-effort, exactly like the create path.
+	if h.deps.CountryResolver != nil {
+		h.deps.CountryResolver.ResolveCountryAsync(updated.ID)
 	}
 
 	http.Redirect(w, r, "/servers?flash=updated&id="+formatID(updated.ID), http.StatusSeeOther)

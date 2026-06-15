@@ -22,6 +22,17 @@ type Dependencies struct {
 	TerminalTickets *terminalticket.Store
 	LiveMetrics     *livemetrics.Hub
 	Renderer        *view.Renderer
+	// CountryResolver triggers background country detection for a server (e.g.
+	// after create/update). It is satisfied by the scheduler runtime and may be
+	// nil when the scheduler is unavailable, so callers must nil-check it.
+	CountryResolver CountryResolver
+}
+
+// CountryResolver kicks off best-effort, non-blocking country detection for a
+// single server over its SSH connection. Implementations must never block the
+// caller and must tolerate a missing/unreachable server.
+type CountryResolver interface {
+	ResolveCountryAsync(serverID int64)
 }
 
 type Module interface {
