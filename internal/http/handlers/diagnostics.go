@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	nodexiaruntime "github.com/Ho3einK84/Nodexia/internal/runtime"
 	"github.com/Ho3einK84/Nodexia/internal/commandstream"
 	"github.com/Ho3einK84/Nodexia/internal/config"
 	"github.com/Ho3einK84/Nodexia/internal/db"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
+	nodexiaruntime "github.com/Ho3einK84/Nodexia/internal/runtime"
 	"github.com/Ho3einK84/Nodexia/internal/scheduler"
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
@@ -38,11 +38,11 @@ func NewDiagnosticsHandler(cfg config.Config, database *db.Runtime, renderer *vi
 func (h DiagnosticsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	page := view.NewPageData(h.config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
-	page.Title = "Diagnostics"
+	page.Title = page.T("diagnostics.title")
 	page.ContentTemplate = "content-diagnostics"
 	page.ActiveNav = "/ops/diagnostics"
-	page.PageTitle = "Operational diagnostics"
-	page.PageDescription = "Runtime health, background jobs, and support signals without reading application logs manually."
+	page.PageTitle = page.T("diagnostics.page_title")
+	page.PageDescription = page.T("diagnostics.page_description")
 	schPage, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("sch_page")))
 	page.Diagnostics = h.buildDiagnostics(r)
 	page.SchedulerOverview = schedulerOverviewView(h.scheduler, schPage, 10, serverCountryBadges(h.database), func(p int) string {

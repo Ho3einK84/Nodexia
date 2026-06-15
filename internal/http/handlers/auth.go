@@ -11,6 +11,7 @@ import (
 
 	"github.com/Ho3einK84/Nodexia/internal/config"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
+	"github.com/Ho3einK84/Nodexia/internal/i18n"
 	"github.com/Ho3einK84/Nodexia/internal/ratelimit"
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
@@ -46,11 +47,12 @@ func (h LoginHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	loc := loginLocalizer(r)
 	clientKey := h.clientKey(r)
 	if allowed, retryAfter := h.throttle.Allowed(clientKey); !allowed {
 		w.Header().Set("Retry-After", retryAfterSeconds(retryAfter))
-		h.renderLogin(w, r, http.StatusTooManyRequests, "error", fmt.Sprintf(
-			"Too many failed attempts. Try again in %s.", humanizeRetryAfter(retryAfter)))
+		h.renderLogin(w, r, http.StatusTooManyRequests, "error",
+			loc.T("login.too_many", "duration", humanizeRetryAfter(retryAfter)))
 		return
 	}
 
@@ -66,11 +68,11 @@ func (h LoginHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !userMatch || !passMatch {
 		if retryAfter := h.throttle.RecordFailure(clientKey); retryAfter > 0 {
 			w.Header().Set("Retry-After", retryAfterSeconds(retryAfter))
-			h.renderLogin(w, r, http.StatusTooManyRequests, "error", fmt.Sprintf(
-				"Too many failed attempts. Try again in %s.", humanizeRetryAfter(retryAfter)))
+			h.renderLogin(w, r, http.StatusTooManyRequests, "error",
+				loc.T("login.too_many", "duration", humanizeRetryAfter(retryAfter)))
 			return
 		}
-		h.renderLogin(w, r, http.StatusUnauthorized, "error", "Invalid username or password.")
+		h.renderLogin(w, r, http.StatusUnauthorized, "error", loc.T("login.invalid"))
 		return
 	}
 
@@ -89,16 +91,25 @@ func (h LoginHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 func (h LoginHandler) renderLogin(w http.ResponseWriter, r *http.Request, status int, flashKind, flashMessage string) {
 	page := view.NewPageData(h.config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
-	page.Title = "Login - " + h.config.App.Name
+	page.Title = page.T("login.title", "app", h.config.App.Name)
 	page.ContentTemplate = "content-login"
-	page.PageTitle = "Administrator login"
-	page.PageDescription = "Enter your credentials to access the control panel."
+	page.PageTitle = page.T("login.heading")
+	page.PageDescription = page.T("login.subtitle")
 	page.FlashKind = flashKind
 	page.FlashMessage = flashMessage
 
 	if err := h.renderer.Render(w, status, page); err != nil {
 		http.Error(w, "render login page", http.StatusInternalServerError)
 	}
+}
+
+// loginLocalizer returns the request's localizer, falling back to the default
+// language so login messages render even before authentication.
+func loginLocalizer(r *http.Request) *i18n.Localizer {
+	if loc := i18n.FromContext(r.Context()); loc != nil {
+		return loc
+	}
+	return i18n.MustDefault().Localizer(i18n.DefaultLanguage)
 }
 
 // clientKey identifies the caller for throttling. Behind a trusted reverse

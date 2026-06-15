@@ -4,21 +4,21 @@
 
   <div class="grid">
     <article class="card">
-      <h3>Route group</h3>
+      <h3>{{ t "module.route_group" }}</h3>
       <p><code>{{ .ModuleRouteGroup }}</code></p>
     </article>
 
     <article class="card">
-      <h3>Current state</h3>
-      <p>This route group is registered through the new modular application core and is ready for focused implementation in the next phases.</p>
+      <h3>{{ t "module.current_state" }}</h3>
+      <p>{{ t "module.current_state_desc" }}</p>
     </article>
 
     <article class="card">
-      <h3>Runtime</h3>
+      <h3>{{ t "common.runtime" }}</h3>
       <ul>
-        <li>Environment: <code>{{ .Environment }}</code></li>
-        <li>Version: <code>{{ .Version }}</code></li>
-        <li>Database driver: <code>{{ .DatabaseDriver }}</code></li>
+        <li>{{ t "common.environment" }}: <code>{{ .Environment }}</code></li>
+        <li>{{ t "common.version" }}: <code>{{ .Version }}</code></li>
+        <li>{{ t "module.database_driver" }}: <code>{{ .DatabaseDriver }}</code></li>
       </ul>
     </article>
   </div>

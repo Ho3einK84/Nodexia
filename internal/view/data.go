@@ -30,11 +30,13 @@ func NewPageData(cfg config.Config, r *http.Request) PageData {
 		DatabaseDriver:  cfg.Database.Driver,
 		DatabaseTarget:  DatabaseTarget(cfg),
 		EnvFile:         cfg.Install.EnvFile,
-		Description:     "Self-hosted control panel for monitoring and managing Rebecca and PasarGuard panel nodes.",
-		FooterNote:      "Open-source, self-hosted monitoring and node management for Rebecca and PasarGuard.",
 		NavigationItems: defaultNavigation(""),
 	}
 	data.SetLocalizer(localizerFor(r))
+	// Localized after SetLocalizer so the footer and meta description follow the
+	// active language. Both are overridable per page.
+	data.Description = data.T("shell.meta_description")
+	data.FooterNote = data.T("shell.footer_note")
 	return data
 }
 
