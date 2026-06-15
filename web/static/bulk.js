@@ -28,20 +28,23 @@
   }
 
   function confirmMessage(action, n) {
-    var noun = n === 1 ? '1 server' : n + ' servers';
+    // The localized noun ("N server(s)") is interpolated into each message so
+    // every language can place the count naturally; nxTn handles pluralization.
+    var noun = window.nxTn ? window.nxTn('js.bulk.server_count', n) : n + ' servers';
+    var t = window.nxT || function (key) { return key; };
     switch (action) {
       case 'delete':
-        return 'Delete ' + noun + ' from the registry? This cannot be undone.';
+        return t('js.bulk.confirm_delete', { noun: noun });
       case 'reboot':
-        return 'Reboot ' + noun + ' now? Active connections will drop.';
+        return t('js.bulk.confirm_reboot', { noun: noun });
       case 'update':
-        return 'Update packages on ' + noun + '? This can take several minutes.';
+        return t('js.bulk.confirm_update', { noun: noun });
       case 'node-restart':
-        return 'Restart every PasarGuard and Rebecca node on ' + noun + '? Active connections will drop briefly.';
+        return t('js.bulk.confirm_node_restart', { noun: noun });
       case 'node-update':
-        return 'Update every PasarGuard and Rebecca node on ' + noun + '? This can take many minutes per server.';
+        return t('js.bulk.confirm_node_update', { noun: noun });
       default:
-        return 'Run this bulk action on ' + noun + '?';
+        return t('js.bulk.confirm_generic', { noun: noun });
     }
   }
 
@@ -51,7 +54,7 @@
     var n       = checked.length;
 
     if (countEl) {
-      countEl.textContent = n + ' selected';
+      countEl.textContent = window.nxT ? window.nxT('js.bulk.selected', { count: n }) : n + ' selected';
     }
 
     if (selectAll) {

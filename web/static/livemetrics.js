@@ -12,6 +12,10 @@
 (function () {
   'use strict';
 
+  // Localization helpers (see app.js for window.nxT / window.nxTn).
+  function T(key, params) { return window.nxT ? window.nxT(key, params) : key; }
+  function Tn(key, count, params) { return window.nxTn ? window.nxTn(key, count, params) : key; }
+
   var card = document.querySelector('[data-live-url]');
   if (!card || typeof WebSocket === 'undefined') return;
 
@@ -108,12 +112,12 @@
 
   function render(m) {
     setGauge('cpu', m.cpuPercent);
-    setText('[data-live-cpu-detail]', (m.perCore ? m.perCore.length : 0) + ' cores');
+    setText('[data-live-cpu-detail]', Tn('js.live.cores', m.perCore ? m.perCore.length : 0));
 
     setGauge('ram', m.memPercent);
     setText('[data-live-mem-detail]',
       humanBytes(m.memUsedKB * 1024) + ' / ' + humanBytes(m.memTotalKB * 1024) +
-      (m.swapPercent > 0 ? '  ·  swap ' + m.swapPercent.toFixed(0) + '%' : ''));
+      (m.swapPercent > 0 ? '  ·  ' + T('js.live.swap') + ' ' + m.swapPercent.toFixed(0) + '%' : ''));
 
     var root = pickRootDisk(m.disks);
     if (root) {
@@ -149,7 +153,7 @@
 
   function scheduleReconnect() {
     if (stopped || reconnectTimer) return;
-    setStatus('error', 'Reconnecting…');
+    setStatus('error', T('js.live.reconnecting'));
     reconnectTimer = setTimeout(function () {
       reconnectTimer = null;
       connect();
@@ -159,7 +163,7 @@
 
   function connect() {
     if (stopped) return;
-    setStatus('connecting', 'Connecting…');
+    setStatus('connecting', T('monitoring.connecting'));
     var ws;
     try {
       ws = new WebSocket(wsURL);
@@ -172,16 +176,16 @@
     ws.onopen = function () {
       backoff = 1000;
       prevNet = null; // re-seed the bandwidth baseline after any (re)connect
-      setStatus('live', 'Live');
+      setStatus('live', T('js.live.live'));
     };
     ws.onmessage = function (event) {
       var frame;
       try { frame = JSON.parse(event.data); } catch (err) { return; }
       if (frame.type === 'metrics' && frame.data) {
-        setStatus('live', 'Live');
+        setStatus('live', T('js.live.live'));
         render(frame.data);
       } else if (frame.type === 'error') {
-        setStatus('error', 'Reconnecting…');
+        setStatus('error', T('js.live.reconnecting'));
       }
     };
     ws.onclose = function () {

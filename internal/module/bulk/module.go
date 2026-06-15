@@ -28,9 +28,9 @@ func (Module) RouteGroup() string {
 func (m Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	if deps.Database == nil || deps.Database.SQL == nil || deps.SSH == nil {
 		placeholder := module.NewPlaceholderHandler(deps, module.PlaceholderPage{
-			Title:       "Bulk actions",
-			RouteGroup:  "/servers/bulk",
-			Description: "Bulk server actions need the database and SSH runtime before they can run.",
+			TitleKey:       "bulk.title",
+			RouteGroup:     "/servers/bulk",
+			DescriptionKey: "module.placeholder.bulk",
 		})
 		mux.Handle("POST /servers/bulk", placeholder)
 		mux.Handle("GET /servers/bulk/jobs/{job}", placeholder)

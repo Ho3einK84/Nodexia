@@ -960,6 +960,9 @@ func NewRenderer() (*Renderer, error) {
 		"t":     func(key string, _ ...any) string { return key },
 		"tn":    func(key string, _ int, _ ...any) string { return key },
 		"tsafe": func(key string, _ ...any) template.HTML { return template.HTML(key) },
+		// clientI18nJSON ships the client-needed strings to the browser; rebound
+		// per render to the active language (placeholder emits an empty object).
+		"clientI18nJSON": func() template.JS { return template.JS("{}") },
 	}
 	templates, err := template.New("").Funcs(funcMap).ParseFS(assets.Templates(), "web/templates/*.gohtml")
 	if err != nil {
@@ -992,9 +995,10 @@ func (r *Renderer) Render(w http.ResponseWriter, statusCode int, data PageData) 
 	}
 	loc := data.localizer
 	tmpl.Funcs(template.FuncMap{
-		"t":     loc.T,
-		"tn":    loc.Tn,
-		"tsafe": func(key string, args ...any) template.HTML { return template.HTML(loc.Tsafe(key, args...)) },
+		"t":              loc.T,
+		"tn":             loc.Tn,
+		"tsafe":          func(key string, args ...any) template.HTML { return template.HTML(loc.Tsafe(key, args...)) },
+		"clientI18nJSON": func() template.JS { return clientI18nJSON(loc) },
 	})
 
 	var content bytes.Buffer
@@ -1027,7 +1031,9 @@ func normalizePageData(data PageData) PageData {
 	}
 
 	if data.Description == "" {
-		data.Description = "Lightweight SSR control plane for servers and infrastructure nodes."
+		// Localized fallback for request paths that build PageData without
+		// NewPageData (which normally sets this); never an English literal.
+		data.Description = data.T("shell.meta_description")
 	}
 
 	if data.PageTitle == "" {
@@ -1043,7 +1049,7 @@ func normalizePageData(data PageData) PageData {
 	}
 
 	if data.FooterNote == "" {
-		data.FooterNote = "Open-source, self-hosted, and optimized for an SSH-first workflow."
+		data.FooterNote = data.T("shell.footer_note")
 	}
 
 	if len(data.NavigationItems) == 0 {

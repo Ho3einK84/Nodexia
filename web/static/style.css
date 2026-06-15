@@ -2645,6 +2645,19 @@ code.secret-value {
   flex-shrink: 0;
 }
 
+/* Language switcher lives in the bottom cluster with the session meta; the
+   session section already claimed the flexible space (margin-top:auto), so this
+   one hugs it rather than adding a second gap. The switcher stretches to fill
+   the drawer width and centres its options for a comfortable tap target. */
+.drawer__section--lang {
+  margin-top: 0;
+}
+
+.drawer__section--lang .lang-switcher {
+  display: flex;
+  justify-content: center;
+}
+
 .drawer__logout {
   width: 100%;
   min-height: 46px;

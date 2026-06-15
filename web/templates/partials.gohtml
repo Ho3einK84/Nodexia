@@ -96,6 +96,11 @@
     </ul>
   </div>
 
+  <div class="drawer__section drawer__section--lang">
+    <p class="drawer__section-title">{{ t "drawer.language" }}</p>
+    {{ template "lang-switcher" . }}
+  </div>
+
   <a href="/logout" class="btn btn--secondary drawer__logout"><i data-lucide="log-out" class="icon-in-button"></i> {{ t "nav.logout" }}</a>
 </aside>
 {{ end }}

@@ -27,9 +27,9 @@ func (Module) RouteGroup() string {
 func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	if deps.Database == nil || deps.Database.SQL == nil {
 		mux.Handle("GET /alerts", module.NewPlaceholderHandler(deps, module.PlaceholderPage{
-			Title:       "Alerts",
-			RouteGroup:  "/alerts",
-			Description: "The database runtime is not available yet, so alert rules, channels, and silences cannot load.",
+			TitleKey:       "nav.alerts",
+			RouteGroup:     "/alerts",
+			DescriptionKey: "module.placeholder.alerts",
 		}))
 		return
 	}

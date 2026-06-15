@@ -2,6 +2,9 @@
 (function () {
   'use strict';
 
+  // Localization helper (see app.js for window.nxT). Falls back to the key.
+  function T(key, params) { return window.nxT ? window.nxT(key, params) : key; }
+
   // ── SVG chart renderer ────────────────────────────────────────────────────
 
   const CHART_PAD = { top: 12, right: 16, bottom: 28, left: 42 };
@@ -281,7 +284,9 @@
     const max = Math.max(...values);
     const unit = data.unit || '';
     const fmt = (v) => unit === '%' ? v.toFixed(1) + '%' : v.toFixed(2) + (unit ? ' ' + unit : '');
-    footer.textContent = `Avg: ${fmt(avg)} · Peak: ${fmt(max)} · ${values.length} points`;
+    footer.textContent = window.nxT
+      ? window.nxT('js.analytics.chart_footer', { avg: fmt(avg), peak: fmt(max), count: values.length })
+      : `Avg: ${fmt(avg)} · Peak: ${fmt(max)} · ${values.length} points`;
   }
 
   async function loadChart(serverID, metric, range) {
@@ -338,7 +343,7 @@
       if (grid) {
         grid.innerHTML = `<div class="chart-error" style="position:relative;height:80px">
           <i data-lucide="alert-circle"></i>
-          <p>Forecast unavailable — no traffic data collected yet</p>
+          <p>${window.nxT ? window.nxT('js.analytics.forecast_unavailable') : 'Forecast unavailable — no traffic data collected yet'}</p>
         </div>`;
         if (window.lucide) lucide.createIcons();
       }
@@ -354,9 +359,9 @@
     const risksHTML = renderRisks(f.risks);
 
     grid.innerHTML = `
-      ${renderPeriodCard('Today', f.today, f.today.pct_elapsed)}
-      ${renderPeriodCard('This Week', f.this_week, f.this_week.pct_elapsed)}
-      ${renderPeriodCard('This Month', f.this_month, f.this_month.pct_elapsed)}
+      ${renderPeriodCard(T('js.analytics.today'), f.today, f.today.pct_elapsed)}
+      ${renderPeriodCard(T('js.analytics.this_week'), f.this_week, f.this_week.pct_elapsed)}
+      ${renderPeriodCard(T('js.analytics.this_month'), f.this_month, f.this_month.pct_elapsed)}
     `;
 
     // Show metadata below grid
@@ -389,34 +394,35 @@
       : '';
     return `
       <div class="forecast-card">
-        <div class="forecast-card__label">${label} <span class="forecast-card__scope">↓ download</span></div>
+        <div class="forecast-card__label">${label} <span class="forecast-card__scope">${T('js.analytics.download_scope')}</span></div>
         <div class="forecast-card__current">${period.current_human}</div>
         <div class="forecast-card__predicted">
-          Predicted end: <strong>${period.predicted_human}</strong>
+          ${T('js.analytics.predicted_end')} <strong>${period.predicted_human}</strong>
         </div>
         <div class="forecast-progress">
           <div class="forecast-progress__bar ${progressClass}" style="width:${Math.min(100, pct)}%"></div>
         </div>
-        <div class="forecast-progress__label">${pct}% of period elapsed</div>
+        <div class="forecast-progress__label">${T('js.analytics.period_elapsed', { pct: pct })}</div>
       </div>
     `;
   }
 
   function renderTrend(trend) {
     const map = {
-      increasing: { cls: 'trend-indicator--increasing', icon: '↑', label: 'Increasing' },
-      decreasing: { cls: 'trend-indicator--decreasing', icon: '↓', label: 'Decreasing' },
-      stable:     { cls: 'trend-indicator--stable',     icon: '→', label: 'Stable' },
+      increasing: { cls: 'trend-indicator--increasing', icon: '↑', label: T('js.analytics.trend_increasing') },
+      decreasing: { cls: 'trend-indicator--decreasing', icon: '↓', label: T('js.analytics.trend_decreasing') },
+      stable:     { cls: 'trend-indicator--stable',     icon: '→', label: T('js.analytics.trend_stable') },
     };
     const t = map[trend] || map.stable;
     return `<span class="trend-indicator ${t.cls}">${t.icon} ${t.label}</span>`;
   }
 
   function renderConfidence(confidence) {
+    const level = T('js.analytics.confidence_' + confidence);
     return `
       <span class="forecast-confidence">
         <span class="confidence-dot confidence-dot--${confidence}"></span>
-        ${confidence.charAt(0).toUpperCase() + confidence.slice(1)} confidence
+        ${T('js.analytics.confidence', { level: level })}
       </span>
     `;
   }
@@ -424,13 +430,13 @@
   function renderRisks(risks) {
     const items = [];
     if (risks.traffic_spike) {
-      items.push(`<span class="risk-badge"><i data-lucide="zap"></i> Traffic spike</span>`);
+      items.push(`<span class="risk-badge"><i data-lucide="zap"></i> ${T('js.analytics.risk_spike')}</span>`);
     }
     if (risks.unusual_growth) {
-      items.push(`<span class="risk-badge"><i data-lucide="trending-up"></i> Unusual growth</span>`);
+      items.push(`<span class="risk-badge"><i data-lucide="trending-up"></i> ${T('js.analytics.risk_growth')}</span>`);
     }
     if (risks.exhaustion) {
-      items.push(`<span class="risk-badge"><i data-lucide="alert-triangle"></i> Bandwidth exhaustion risk</span>`);
+      items.push(`<span class="risk-badge"><i data-lucide="alert-triangle"></i> ${T('js.analytics.risk_exhaustion')}</span>`);
     }
     return items.length > 0 ? `<div class="risk-badges">${items.join('')}</div>` : '';
   }

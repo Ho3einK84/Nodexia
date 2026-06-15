@@ -24,9 +24,9 @@ func (Module) RouteGroup() string {
 func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	if deps.Database == nil || deps.Database.SQL == nil || deps.SSH == nil || deps.CommandStreams == nil {
 		mux.Handle("GET /servers/{id}/nodes", module.NewPlaceholderHandler(deps, module.PlaceholderPage{
-			Title:       "Nodes",
-			RouteGroup:  "/servers/{id}/nodes",
-			Description: "This module requires a database runtime, SSH service, and the live stream store to discover and manage nodes.",
+			TitleKey:       "common.nodes",
+			RouteGroup:     "/servers/{id}/nodes",
+			DescriptionKey: "module.placeholder.nodes",
 		}))
 		return
 	}

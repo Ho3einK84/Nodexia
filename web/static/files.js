@@ -10,6 +10,9 @@
 (function () {
   'use strict';
 
+  // Localization helper (see app.js for window.nxT). Falls back to the key.
+  function T(key, params) { return window.nxT ? window.nxT(key, params) : key; }
+
   function renderIcons() {
     if (typeof lucide === 'undefined' || !lucide.createIcons) return;
     try { lucide.createIcons(); } catch (e) { /* never let icons break the page */ }
@@ -114,7 +117,7 @@
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
         if (!res.ok || !data.ok) {
-          throw new Error((data && data.error) || ('Request failed (' + res.status + ').'));
+          throw new Error((data && data.error) || T('js.files.request_failed', { status: res.status }));
         }
         return data;
       });
@@ -145,10 +148,10 @@
         if (xhr.status >= 200 && xhr.status < 300 && data.ok) {
           resolve(data);
         } else {
-          reject(new Error((data && data.error) || ('Upload failed (' + xhr.status + ').')));
+          reject(new Error((data && data.error) || T('js.files.upload_failed', { status: xhr.status })));
         }
       };
-      xhr.onerror = function () { reject(new Error('Network error during upload.')); };
+      xhr.onerror = function () { reject(new Error(T('js.files.upload_network_error'))); };
       xhr.send(body);
     });
   }
@@ -190,7 +193,7 @@
         if (anyOk && !anyFailed) {
           setTimeout(function () { reloadCurrent(); }, 700);
         } else if (anyFailed) {
-          toast('Some uploads failed — see details above.', 'error');
+          toast(T('js.files.uploads_failed'), 'error');
         }
         return;
       }
@@ -204,11 +207,11 @@
         anyOk = true;
         ui.row.classList.add('file-upload--ok');
         ui.fill.style.width = '100%';
-        ui.pct.textContent = 'Done';
+        ui.pct.textContent = T('js.files.upload_done');
       }).catch(function (err) {
         anyFailed = true;
         ui.row.classList.add('file-upload--error');
-        ui.pct.textContent = 'Failed';
+        ui.pct.textContent = T('js.failed');
         ui.row.title = err.message;
       }).then(function () {
         index += 1;
@@ -264,10 +267,10 @@
   function copyPath(p) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(p).then(function () {
-        toast('Path copied to clipboard.', 'info');
-      }).catch(function () { toast('Could not copy path.', 'error'); });
+        toast(T('js.files.path_copied'), 'info');
+      }).catch(function () { toast(T('js.files.path_copy_failed'), 'error'); });
     } else {
-      toast('Clipboard unavailable.', 'error');
+      toast(T('js.files.clipboard_unavailable'), 'error');
     }
   }
 
@@ -283,21 +286,21 @@
     m.innerHTML = '';
 
     if (kind === 'directory') {
-      m.appendChild(menuItem('Open', 'folder-open', false, function () {
+      m.appendChild(menuItem(T('common.open'), 'folder-open', false, function () {
         navigateTo(entryPath);
       }));
     } else {
-      m.appendChild(menuItem('Download', 'download', false, function () {
+      m.appendChild(menuItem(T('js.files.menu_download'), 'download', false, function () {
         triggerDownload(entryPath);
       }));
     }
-    m.appendChild(menuItem('Rename', 'pencil', false, function () {
+    m.appendChild(menuItem(T('js.files.menu_rename'), 'pencil', false, function () {
       promptRename(entryName, entryPath);
     }));
-    m.appendChild(menuItem('Copy path', 'clipboard', false, function () {
+    m.appendChild(menuItem(T('js.files.menu_copy_path'), 'clipboard', false, function () {
       copyPath(entryPath);
     }));
-    m.appendChild(menuItem('Delete', 'trash-2', true, function () {
+    m.appendChild(menuItem(T('common.delete'), 'trash-2', true, function () {
       confirmDelete(entryName, entryPath, kind === 'directory');
     }));
 
@@ -367,32 +370,32 @@
   }
 
   function promptRename(name, oldPath) {
-    var next = window.prompt('Rename "' + name + '" to:', name);
+    var next = window.prompt(T('js.files.rename_prompt', { name: name }), name);
     if (next === null) return;
     next = next.trim();
     if (!next || next === name) return;
     postOp('rename', { path: oldPath, name: next })
-      .then(function () { toast('Renamed to "' + next + '".', 'success'); reloadCurrent(); })
+      .then(function () { toast(T('js.files.renamed', { name: next }), 'success'); reloadCurrent(); })
       .catch(function (err) { toast(err.message, 'error'); });
   }
 
   function confirmDelete(name, target, isDir) {
     var msg = isDir
-      ? 'Delete folder "' + name + '" and everything inside it? This cannot be undone.'
-      : 'Delete "' + name + '"? This cannot be undone.';
+      ? T('js.files.confirm_delete_dir', { name: name })
+      : T('js.files.confirm_delete_file', { name: name });
     if (!window.confirm(msg)) return;
     postOp('delete', { path: target, recursive: isDir ? 'true' : 'false' })
-      .then(function () { toast('Deleted "' + name + '".', 'success'); reloadCurrent(); })
+      .then(function () { toast(T('js.files.deleted', { name: name }), 'success'); reloadCurrent(); })
       .catch(function (err) { toast(err.message, 'error'); });
   }
 
   function promptMkdir() {
-    var name = window.prompt('New folder name:', '');
+    var name = window.prompt(T('js.files.mkdir_prompt'), '');
     if (name === null) return;
     name = name.trim();
     if (!name) return;
     postOp('mkdir', { path: context().currentDir, name: name })
-      .then(function () { toast('Created folder "' + name + '".', 'success'); reloadCurrent(); })
+      .then(function () { toast(T('js.files.created', { name: name }), 'success'); reloadCurrent(); })
       .catch(function (err) { toast(err.message, 'error'); });
   }
 
@@ -458,7 +461,7 @@
     var dirBtn = document.getElementById('file-sort-dir');
     if (dirBtn) {
       dirBtn.setAttribute('data-dir', sortState.dir);
-      dirBtn.title = sortState.dir === 'desc' ? 'Descending' : 'Ascending';
+      dirBtn.title = sortState.dir === 'desc' ? T('js.files.sort_desc') : T('js.files.sort_asc');
       dirBtn.innerHTML = sortState.dir === 'desc'
         ? '<i data-lucide="arrow-down-wide-narrow"></i>'
         : '<i data-lucide="arrow-up-narrow-wide"></i>';
