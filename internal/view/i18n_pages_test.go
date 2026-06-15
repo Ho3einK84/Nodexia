@@ -13,7 +13,7 @@ import (
 // dotted segment) so the smoke test fails if any {{ t }} call references a key
 // missing from the catalog — the fallback renders the raw key, which this
 // catches in both languages.
-var rawKeyPattern = regexp.MustCompile(`\b(servers|common|nav|home|diagnostics|login|bulk|terminal|files|system|error|module|pagination|shell|lang|drawer|commands|monitoring|analytics|alerts)\.[a-z_]+(\.[a-z_]+)*\b`)
+var rawKeyPattern = regexp.MustCompile(`\b(servers|common|nav|home|diagnostics|login|bulk|terminal|files|system|error|module|pagination|shell|lang|drawer|commands|monitoring|analytics|alerts|nodes)\.[a-z_]+(\.[a-z_]+)*\b`)
 
 // translatedPages enumerates the content templates that phase 2 has localized.
 // Each renders end-to-end in every supported locale; any raw-key leak or
@@ -46,6 +46,11 @@ func translatedPages() map[string]func(p *PageData) {
 		"content-alerts-overview":    func(p *PageData) { p.AlertsOverview = AlertsOverviewView{} },
 		"content-alert-rule-form":    func(p *PageData) { p.AlertRuleForm = AlertRuleFormView{Errors: map[string]string{}} },
 		"content-alert-channel-form": func(p *PageData) { p.AlertChannelForm = AlertChannelFormView{Errors: map[string]string{}} },
+		"content-nodes": func(p *PageData) {
+			p.NodeForm = NodeFormView{Errors: map[string]string{}}
+			p.NodeInstallForm = NodeInstallFormView{Errors: map[string]string{}}
+		},
+		"content-node-install": func(p *PageData) { p.NodeInstall = NodeInstallView{Available: true} },
 	}
 }
 
