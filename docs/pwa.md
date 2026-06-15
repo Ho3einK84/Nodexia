@@ -144,24 +144,42 @@ the login page (and any future redirect-based navigation is equally safe). A
 test asserts each shortcut target cleanly returns `303 → /login` rather than a
 404 or an empty body.
 
-### 11. Orientation: omitted so the OS rotation lock wins
+### 11. Orientation: locked to portrait, never rotates
 
-The manifest declares **no `orientation` member**. An explicit value — including
-the spec default `"any"` — makes an installed PWA request an orientation lock
-from the OS, which *overrides* the user's system rotation lock: a phone locked to
-portrait still force-rotates to landscape when turned sideways (the bug this
-fixes). Omitting the member requests no lock, so the platform's auto-rotate /
-rotation-lock setting governs the app — locked portrait stays portrait, and an
-unlocked device is free to rotate.
+The manifest declares **`"orientation": "portrait"`**. The app must stay upright:
+on a phone turned sideways it should not rotate to landscape at all, even when the
+device's system rotation lock is off. `"portrait"` is chosen over
+`"portrait-primary"` because it is the more broadly honoured value across Android
+Chromium installs while still keeping the app upright; `portrait-primary` would
+additionally forbid the (rarely auto-triggered) upside-down portrait but is no
+more reliable in practice. The earlier "omit the member so the OS rotation lock
+wins" approach was abandoned — it left rotation entirely to the device, which
+still let the installed app swing to landscape and did not satisfy the
+"never rotate" requirement.
 
-We deliberately did **not** use `"portrait"` or `"natural"`: both *force* a fixed
-orientation rather than respecting the user's choice, and would prevent using the
-in-browser SSH terminal in landscape. There is **no per-page terminal exception**
-— a page-level `screen.orientation.lock()` would need fullscreen, add client JS
-against the minimal-`web/static` constraint, and would fight a hard rotation lock,
-reintroducing the original complaint. With orientation omitted the terminal
-already rotates to landscape whenever the user has rotation unlocked, which covers
-the long-line use case without overriding anyone's lock.
+**Defence-in-depth runtime lock.** Because some browsers/installs do not fully
+honour the manifest field, `app.js` (`initOrientationLock`) also calls
+`screen.orientation.lock('portrait')` at boot. It is strictly best-effort and
+fully feature-detected: the API is absent on iOS Safari (so the call is skipped),
+and Chromium only permits the lock for an installed/fullscreen app (so the
+returned Promise can reject). Every path is wrapped so a failure is swallowed and
+**never throws or breaks the page**. This adds a small, self-contained snippet to
+`web/static`, justified by the reliability win on platforms that ignore the
+manifest member.
+
+**The terminal.** There is no longer a landscape exception for the in-browser SSH
+terminal — it runs in portrait like everything else. The terminal's
+`orientationchange` listener (`terminal.js`) is now effectively a no-op on locked
+clients (orientation no longer changes) but is kept as a harmless safety net: if
+any browser still allows a flip, the xterm grid reflows correctly rather than
+being left mis-sized. The bfcache scroll-lock release on `pagehide` is unaffected.
+
+**iOS caveat.** iOS Safari has historically ignored the manifest `orientation`
+field for home-screen PWAs and exposes no `screen.orientation.lock()`, so neither
+mechanism can *force* portrait there — on iOS the app follows the device's own
+rotation behaviour. The runtime lock therefore buys us nothing on iOS; it is the
+Android/Chromium path that benefits. The manifest value remains correct and
+harmless on iOS.
 
 Note: installed PWAs cache the manifest, so an already-installed app must be
 **reinstalled** (or its manifest cache cleared) before this change takes effect.

@@ -1178,6 +1178,30 @@
     });
   }
 
+  /* ── Lock screen orientation to portrait (PWA) ──────────────
+   * Defence-in-depth for the manifest `orientation: "portrait"` member: where
+   * the platform supports the Screen Orientation API we also lock at runtime, so
+   * installs/browsers that don't fully honour the manifest field still stay
+   * upright. This is strictly best-effort — screen.orientation.lock() rejects (a
+   * Promise) or throws on platforms where it is unavailable or not permitted
+   * (iOS Safari has no lock(); Chromium only allows it for an installed/
+   * fullscreen app), so every path is feature-detected and swallowed. A failure
+   * here must never surface an error or break the page.
+   */
+  function initOrientationLock() {
+    try {
+      var so = window.screen && window.screen.orientation;
+      if (!so || typeof so.lock !== 'function') return; // e.g. iOS Safari
+      var p = so.lock('portrait');
+      // Spec returns a Promise; older shims may return undefined or throw.
+      if (p && typeof p.catch === 'function') {
+        p.catch(function () { /* not allowed (not installed/fullscreen) — ignore */ });
+      }
+    } catch (err) {
+      /* unsupported / not permitted — fail silently */
+    }
+  }
+
   /* ── Boot ───────────────────────────────────────────────── */
   function boot() {
     renderIcons();
@@ -1203,6 +1227,7 @@
     initCollapsibles();
     initAdvancedToggle();
     initServiceWorker();
+    initOrientationLock();
     renderIcons(); // pick up icons injected by the steps above
   }
 
