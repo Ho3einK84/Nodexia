@@ -95,6 +95,7 @@
 }
 
 .bulk-summary__total {
+  font-variant-numeric: var(--num);
   font-size: 0.82rem;
   color: var(--text-muted);
   white-space: nowrap;
@@ -107,7 +108,7 @@
   align-items: center;
   gap: 5px;
   font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   border-radius: 6px;
   padding: 3px 8px;
   white-space: nowrap;
@@ -176,7 +177,7 @@
 }
 
 .bulk-result__name {
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   max-width: 180px;
   word-break: break-word;
 }
@@ -237,7 +238,7 @@
   }
 
   .bulk-result-card__name {
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
     font-size: 0.92rem;
     min-width: 0;
     word-break: break-word;

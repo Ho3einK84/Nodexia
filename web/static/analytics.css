@@ -12,7 +12,7 @@
 .analytics-title {
   margin: 4px 0 0;
   font-size: 1.6rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: -0.02em;
   background: linear-gradient(135deg, #f0f9ff 0%, #93c5fd 100%);
   -webkit-background-clip: text;
@@ -46,7 +46,7 @@
   background: transparent;
   color: var(--text-muted);
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: 0.04em;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -110,7 +110,7 @@
   align-items: center;
   gap: 8px;
   font-size: 0.9375rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text);
 }
 
@@ -127,13 +127,13 @@
   background: rgba(59, 130, 246, 0.12);
   color: var(--accent-soft);
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .chart-card__unit {
   font-size: 0.75rem;
   color: var(--text-dim);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .chart-card__footer {
@@ -333,7 +333,8 @@
 }
 
 .chart-tooltip__value {
-  font-weight: 600;
+  font-variant-numeric: var(--num);
+  font-weight: var(--fw-semibold);
 }
 
 /* ── Forecast section ────────────────────────────────────────────────────── */
@@ -347,7 +348,7 @@
   align-items: center;
   gap: 4px;
   font-size: 0.8rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--accent-bright);
   vertical-align: middle;
   /* The title clips a gradient to transparent text; opt this badge back in. */
@@ -361,7 +362,7 @@
 
 .forecast-card__scope {
   font-size: 0.65rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--accent-bright);
   text-transform: none;
   letter-spacing: 0;
@@ -396,7 +397,7 @@
 
 .forecast-card__label {
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
@@ -404,8 +405,9 @@
 }
 
 .forecast-card__current {
+  font-variant-numeric: var(--num);
   font-size: 1.5rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--text);
   line-height: 1.2;
 }
@@ -417,7 +419,7 @@
 }
 
 .forecast-card__predicted strong {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .forecast-progress {
@@ -455,7 +457,7 @@
   background: rgba(139, 92, 246, 0.12);
   color: #a78bfa;
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .forecast-confidence {
@@ -484,7 +486,7 @@
   padding: 2px 8px;
   border-radius: 100px;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   margin-left: 8px;
 }
 
@@ -517,7 +519,7 @@
   padding: 4px 10px;
   border-radius: 100px;
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   background: rgba(248, 113, 113, 0.1);
   color: var(--crit);
   border: 1px solid rgba(248, 113, 113, 0.2);
@@ -545,7 +547,7 @@
   padding: 10px 12px;
   text-align: left;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-dim);
@@ -574,7 +576,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .table-icon {
@@ -588,7 +590,7 @@
   padding: 3px 8px;
   border-radius: 100px;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .metric-badge--cpu {
@@ -612,7 +614,7 @@
   background: rgba(74, 222, 128, 0.12);
   color: var(--ok);
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   white-space: nowrap;
 }
 
@@ -669,7 +671,7 @@
   align-items: center;
   gap: 6px;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -681,9 +683,10 @@
 }
 
 .traffic-summary__value {
+  font-variant-numeric: var(--num);
   margin-top: 8px;
   font-size: 1.35rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--text);
   line-height: 1.2;
 }

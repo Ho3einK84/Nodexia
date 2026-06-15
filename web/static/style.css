@@ -1,9 +1,49 @@
+/* ── Typography: Exo 2 (self-hosted variable font) ────────────────────
+   One variable WOFF2 covers the whole 400–800 weight axis, so a single
+   request serves every weight in the type scale. latin-ext is a separate
+   face gated by unicode-range and only fetched when a non-Basic-Latin glyph
+   appears. font-display: swap paints fallback text first, then swaps in.
+   See docs/typography.md for the weight hierarchy and rationale. */
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/static/fonts/exo2-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/static/fonts/exo2-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
 :root {
   color-scheme: dark;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: 'Exo 2', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.6;
   background: #0f172a;
   color: #e2e8f0;
+
+  /* Typography scale — Exo 2 is variable, so these map to axis positions.
+     Reach for a token instead of hardcoding font-weight. See the weight
+     table in docs/typography.md. */
+  --fw-regular: 400;   /* body copy, table data, descriptions, logs        */
+  --fw-medium: 500;    /* buttons, inputs, secondary labels, nav default   */
+  --fw-semibold: 600;  /* table headers, badges, card titles, form labels  */
+  --fw-bold: 700;      /* section headings, KPI / metric / gauge values    */
+  --fw-extrabold: 800; /* brand wordmark + the largest hero metrics        */
+  /* Tabular figures keep monitoring columns from jittering as values tick. */
+  --num: tabular-nums;
 
   /* Design tokens — shared by newer components (gauges, KPIs, dashboard). */
   --accent: #3b82f6;
@@ -39,6 +79,12 @@ body {
   margin: 0;
   min-height: 100vh;
   overflow-x: hidden;
+  font-weight: var(--fw-regular);
+  /* Exo 2 Regular is a touch lighter than Inter; antialiased smoothing keeps
+     light-on-dark text crisp instead of muddy on WebKit/Blink. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   background:
     radial-gradient(ellipse at 50% 0%, rgba(59, 130, 246, 0.15), transparent 50%),
     radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.08), transparent 40%),
@@ -64,7 +110,8 @@ body {
 .shell-header h1 {
   margin: 4px 0 0;
   font-size: 2.2rem;
-  font-weight: 700;
+  /* Brand wordmark sits at the very top of the hierarchy — ExtraBold. */
+  font-weight: var(--fw-extrabold);
   letter-spacing: -0.02em;
   background: linear-gradient(135deg, #f0f9ff 0%, #93c5fd 100%);
   -webkit-background-clip: text;
@@ -85,7 +132,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .meta {
@@ -121,7 +168,7 @@ body {
   text-decoration: none;
   padding: 8px 14px;
   font-size: 0.88rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   border-radius: 8px 8px 0 0;
   transition: color 0.15s ease, background 0.15s ease;
   position: relative;
@@ -182,7 +229,7 @@ body {
 .page-header h2 {
   margin: 4px 0 8px;
   font-size: 1.6rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: -0.01em;
 }
 
@@ -210,7 +257,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .page-meta {
@@ -247,8 +294,9 @@ body {
 }
 
 .stat-card__value {
+  font-variant-numeric: var(--num);
   font-size: 1.3rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: #e2e8f0;
   letter-spacing: -0.01em;
 }
@@ -258,7 +306,7 @@ body {
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .stat-card--action {
@@ -277,7 +325,7 @@ body {
 .stat-card__link {
   text-decoration: none;
   color: #60a5fa;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   font-size: 0.95rem;
 }
 
@@ -317,7 +365,7 @@ body {
 .card h2,
 .card h3 {
   margin: 0;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   font-size: 1.05rem;
   color: #f1f5f9;
 }
@@ -391,7 +439,7 @@ body {
 .server-card__name {
   margin: 0;
   font-size: 1.05rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: #f1f5f9;
   word-break: break-word;
 }
@@ -496,7 +544,7 @@ body {
   background: transparent;
   color: #cbd5e1;
   font-size: 0.85rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   font-family: inherit;
   text-align: left;
   text-decoration: none;
@@ -656,11 +704,12 @@ body {
 }
 
 .server-toolbar__count {
+  font-variant-numeric: var(--num);
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -705,7 +754,7 @@ body {
   background: rgba(15, 23, 42, 0.6);
   color: var(--text-muted);
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-decoration: none;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
@@ -743,7 +792,7 @@ body {
   justify-content: center;
   min-width: 24px;
   color: var(--text-dim);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: 0.08em;
 }
 
@@ -755,7 +804,7 @@ body {
   padding: 3px 9px;
   border-radius: 6px;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -827,7 +876,7 @@ body {
   border-radius: 8px;
   border: 1px solid transparent;
   font-size: 0.85rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   font-family: inherit;
   text-decoration: none;
   cursor: pointer;
@@ -908,7 +957,7 @@ body {
 .form-field > span {
   display: block;
   color: #e2e8f0;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   font-size: 0.88rem;
 }
 
@@ -957,7 +1006,7 @@ body {
   display: block;
   color: #f87171;
   font-size: 0.8rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   margin-top: 0;
 }
 
@@ -1088,7 +1137,7 @@ body {
 .empty-state-title {
   margin: 0 0 8px;
   font-size: 1.2rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: #94a3b8;
 }
 
@@ -1138,7 +1187,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 /* ── List items (shared) ────────────────────────────── */
@@ -1497,7 +1546,7 @@ h4 svg {
   user-select: none;
   color: #94a3b8;
   font-size: 0.82rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   padding: 8px 12px;
   border: none;
   background: transparent;
@@ -1834,8 +1883,8 @@ h4 svg {
   padding: 3px 9px;
   border-radius: 999px;
   font-size: 0.76rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: var(--num);
   color: #93c5fd;
   background: rgba(59, 130, 246, 0.12);
   border: 1px solid rgba(59, 130, 246, 0.25);
@@ -1919,7 +1968,7 @@ h4 svg {
 .loading-overlay__label {
   color: #cbd5e1;
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: 0.02em;
 }
 
@@ -2066,8 +2115,9 @@ h4 svg {
 }
 
 .kpi-card__value {
+  font-variant-numeric: var(--num);
   font-size: clamp(1.1rem, 5vw, 1.5rem);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: -0.02em;
   color: var(--text);
   line-height: 1.15;
@@ -2078,7 +2128,7 @@ h4 svg {
 
 .kpi-card__label {
   font-size: 0.76rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-dim);
@@ -2106,7 +2156,7 @@ h4 svg {
   gap: 8px;
   margin: 4px 2px -6px;
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-dim);
@@ -2145,7 +2195,7 @@ h4 svg {
   align-items: center;
   gap: 4px;
   font-size: 0.7rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-dim);
@@ -2157,10 +2207,10 @@ h4 svg {
 }
 
 .mini-metric__value {
+  font-variant-numeric: var(--num);
   font-size: 0.82rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--text);
-  font-variant-numeric: tabular-nums;
 }
 
 .mini-metric__bar {
@@ -2207,7 +2257,7 @@ h4 svg {
   align-items: center;
   gap: 4px;
   font-size: 0.67rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-dim);
@@ -2219,9 +2269,9 @@ h4 svg {
 }
 
 .mini-bw-stat__value {
+  font-variant-numeric: var(--num);
   font-size: 1.05rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-extrabold);
   letter-spacing: -0.01em;
 }
 
@@ -2265,7 +2315,7 @@ h4 svg {
   padding: 2px 9px;
   border-radius: 999px;
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: 0.02em;
   text-transform: capitalize;
   border: 1px solid transparent;
@@ -2434,7 +2484,8 @@ code.secret-value {
   display: block;
   margin-top: 2px;
   font-size: 1.35rem;
-  font-weight: 700;
+  /* Brand wordmark (mobile drawer) — matches the header at ExtraBold. */
+  font-weight: var(--fw-extrabold);
   letter-spacing: -0.02em;
   background: linear-gradient(135deg, #f0f9ff 0%, #93c5fd 100%);
   -webkit-background-clip: text;
@@ -2484,7 +2535,7 @@ code.secret-value {
   color: var(--text-muted);
   text-decoration: none;
   font-size: 0.98rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -2516,7 +2567,7 @@ code.secret-value {
 .drawer__section-title {
   margin: 0 0 8px;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-dim);
@@ -2583,7 +2634,7 @@ code.secret-value {
   color: var(--text-dim);
   text-decoration: none;
   font-size: 0.68rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: 0.01em;
   transition: color 0.15s ease, background 0.15s ease;
   position: relative;
@@ -2730,7 +2781,7 @@ body.drawer-open {
   gap: 8px;
   margin: 0;
   font-size: 1.05rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: #f1f5f9;
 }
 
@@ -2826,7 +2877,7 @@ body.modal-open {
   border: 1px solid var(--border-strong);
   color: var(--text);
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   line-height: 1.2;
   white-space: nowrap;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
@@ -2873,7 +2924,7 @@ body.modal-open {
 }
 
 .info-strip__name {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   font-size: 0.92rem;
   color: #f1f5f9;
 }
@@ -2931,7 +2982,7 @@ body.modal-open {
   align-items: center;
   gap: 6px;
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: #cbd5e1;
 }
 
@@ -2943,7 +2994,7 @@ body.modal-open {
 
 .result-exit {
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   padding: 2px 8px;
   border-radius: 5px;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
@@ -3079,7 +3130,7 @@ body.modal-open {
   align-items: center;
   gap: 8px;
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.09em;
   color: var(--text-dim);
@@ -3120,7 +3171,7 @@ body.modal-open {
   min-width: 140px;
   color: var(--text-dim);
   font-size: 0.82rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .fact-list__key svg {
@@ -3151,7 +3202,7 @@ body.modal-open {
   align-items: center;
   gap: 5px;
   font-size: 0.72rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   margin-top: 2px;
 }
 
@@ -3201,7 +3252,7 @@ body.modal-open {
 .health-ep__label {
   color: var(--text-dim);
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -3217,7 +3268,7 @@ body.modal-open {
   text-decoration: none;
   color: var(--accent-soft);
   font-size: 0.78rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -3256,7 +3307,7 @@ body.modal-open {
 
 .data-table thead th {
   text-align: left;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   font-size: 0.74rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3270,6 +3321,8 @@ body.modal-open {
   padding: 10px;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
+  /* Fixed-width digits keep numeric columns aligned as rows update. */
+  font-variant-numeric: var(--num);
 }
 
 .data-table tbody tr:hover td {
@@ -3306,7 +3359,7 @@ body.modal-open {
   padding: 2px 9px;
   border-radius: 999px;
   font-size: 0.74rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-transform: capitalize;
   border: 1px solid transparent;
 }
@@ -3486,7 +3539,7 @@ body.modal-open {
 .stream-card.is-reconnecting [data-stream-status]::after {
   content: " — reconnecting…";
   color: var(--warn);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 /* Completion state fades in smoothly when the done event lands. */

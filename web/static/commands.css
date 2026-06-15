@@ -12,7 +12,7 @@
   align-items: center;
   gap: 4px;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: #334155;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -34,7 +34,7 @@
   background: rgba(30, 41, 59, 0.5);
   color: #94a3b8;
   font-size: 0.8rem;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   cursor: pointer;
   transition: all 0.15s ease;
   font-family: inherit;
@@ -91,7 +91,7 @@
 .cmd-hint {
   font-size: 0.73rem;
   color: #334155;
-  font-weight: 400;
+  font-weight: var(--fw-regular);
 }
 
 .cmd-actions {
@@ -189,7 +189,7 @@
 
 .history-row__exit {
   font-size: 0.68rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   padding: 1px 6px;
   border-radius: 4px;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;

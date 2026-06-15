@@ -3,6 +3,7 @@ package webhttp
 import (
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/commandstream"
@@ -71,7 +72,7 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 	mux.HandleFunc("GET /healthz/live", health.Live)
 	mux.HandleFunc("GET /healthz/ready", health.Ready)
 
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
+	mux.Handle("GET /static/", staticAssetHandler(staticFiles))
 
 	// Progressive Web App entry points. The manifest and service worker are
 	// served from dedicated routes (see handlers/pwa.go) so they carry the right
@@ -93,4 +94,19 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 		middleware.Logging(),
 		middleware.Recover(cfg, renderer),
 	)
+}
+
+// staticAssetHandler serves the embedded /static tree. Font files are
+// immutable — their content never changes under a given name — so they are
+// served with a one-year immutable cache directive to avoid revalidation on
+// every navigation. Other assets (CSS/JS) are left to the service worker's
+// stale-while-revalidate strategy and normal validators.
+func staticAssetHandler(staticFiles fs.FS) http.Handler {
+	fileServer := http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles)))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/static/fonts/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
+		fileServer.ServeHTTP(w, r)
+	})
 }
