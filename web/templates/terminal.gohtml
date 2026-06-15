@@ -6,21 +6,20 @@
   {{ if eq .TerminalTicket "" }}
   <div class="card">
     <div class="card__header">
-      <h3 class="card__title"><i data-lucide="terminal-square" class="icon-in-button"></i> Open terminal</h3>
+      <h3 class="card__title"><i data-lucide="terminal-square" class="icon-in-button"></i> {{ t "terminal.open" }}</h3>
     </div>
     <p class="page-description" style="margin-bottom:16px">
-      Connecting to <code>{{ .TerminalTarget.Username }}@{{ .TerminalTarget.Host }}:{{ .TerminalTarget.Port }}</code>
       {{ if .TerminalForm.StoredCredentialsAvailable }}
-      — stored credentials will be used automatically.
+      {{ tsafe "terminal.connecting_stored" "addr" (printf "%s@%s:%d" .TerminalTarget.Username .TerminalTarget.Host .TerminalTarget.Port) }}
       {{ else }}
-      — enter your SSH credentials below.
+      {{ tsafe "terminal.connecting_enter" "addr" (printf "%s@%s:%d" .TerminalTarget.Username .TerminalTarget.Host .TerminalTarget.Port) }}
       {{ end }}
     </p>
 
     {{ if .TerminalForm.InitCommand }}
     <p class="terminal-init-hint">
       <i data-lucide="play" class="icon-in-button"></i>
-      This terminal will run <code>{{ .TerminalForm.InitCommand }}</code> once connected.
+      {{ tsafe "terminal.init_hint" "cmd" .TerminalForm.InitCommand }}
     </p>
     {{ end }}
 
@@ -31,9 +30,9 @@
       {{ if not .TerminalForm.StoredCredentialsAvailable }}
       {{ if or (eq .TerminalTarget.AuthMode "password") (eq .TerminalTarget.AuthMode "hybrid") (eq .TerminalTarget.AuthMode "") }}
       <div class="form-field{{ if index .TerminalForm.Errors "password" }} form-field--error{{ end }}">
-        <label class="form-label" for="term-password">Password</label>
+        <label class="form-label" for="term-password">{{ t "common.password" }}</label>
         <input type="password" id="term-password" name="password" class="form-input"
-          autocomplete="current-password" placeholder="SSH password">
+          autocomplete="current-password" placeholder="{{ t "terminal.password_placeholder" }}">
         {{ if index .TerminalForm.Errors "password" }}
         <span class="form-error">{{ index .TerminalForm.Errors "password" }}</span>
         {{ end }}
@@ -42,7 +41,7 @@
 
       {{ if or (eq .TerminalTarget.AuthMode "key") (eq .TerminalTarget.AuthMode "hybrid") }}
       <div class="form-field{{ if index .TerminalForm.Errors "private_key" }} form-field--error{{ end }}">
-        <label class="form-label" for="term-key">Private key (PEM)</label>
+        <label class="form-label" for="term-key">{{ t "terminal.private_key" }}</label>
         <textarea id="term-key" name="private_key" class="form-input form-input--mono" rows="5"
           placeholder="-----BEGIN ... PRIVATE KEY-----"></textarea>
         {{ if index .TerminalForm.Errors "private_key" }}
@@ -50,24 +49,24 @@
         {{ end }}
       </div>
       <div class="form-field">
-        <label class="form-label" for="term-passphrase">Key passphrase (optional)</label>
+        <label class="form-label" for="term-passphrase">{{ t "terminal.passphrase" }}</label>
         <input type="password" id="term-passphrase" name="key_passphrase" class="form-input"
-          autocomplete="off" placeholder="Leave blank if not encrypted">
+          autocomplete="off" placeholder="{{ t "terminal.passphrase_placeholder" }}">
       </div>
       {{ end }}
       {{ end }}
 
       <div class="form-field">
-        <label class="form-label" for="term-timeout">Connect timeout</label>
+        <label class="form-label" for="term-timeout">{{ t "common.connect_timeout" }}</label>
         <input type="text" id="term-timeout" name="connect_timeout" class="form-input form-input--narrow"
-          value="{{ .TerminalForm.ConnectTimeout }}" placeholder="e.g. 10s">
+          value="{{ .TerminalForm.ConnectTimeout }}" placeholder="{{ t "terminal.timeout_placeholder" }}">
       </div>
 
       <div class="terminal-form__actions">
         <button type="submit" class="btn btn--primary">
-          <i data-lucide="terminal-square" class="icon-in-button"></i> Open terminal
+          <i data-lucide="terminal-square" class="icon-in-button"></i> {{ t "terminal.open" }}
         </button>
-        <a href="/servers" class="btn btn--ghost">Cancel</a>
+        <a href="/servers" class="btn btn--ghost">{{ t "common.cancel" }}</a>
       </div>
     </form>
   </div>
@@ -87,9 +86,9 @@
         <span class="terminal-card__addr">{{ .TerminalTarget.Username }}@{{ .TerminalTarget.Host }}:{{ .TerminalTarget.Port }}</span>
       </span>
       <div class="terminal-card__actions">
-        <span id="terminal-status" class="terminal-status terminal-status--connecting">connecting…</span>
-        <button type="button" id="terminal-back" class="terminal-back" aria-label="Close terminal and go back">
-          <i data-lucide="chevron-left"></i><span>Back</span>
+        <span id="terminal-status" class="terminal-status terminal-status--connecting">{{ t "terminal.status_connecting" }}</span>
+        <button type="button" id="terminal-back" class="terminal-back" aria-label="{{ t "terminal.back_aria" }}">
+          <i data-lucide="chevron-left"></i><span>{{ t "common.back" }}</span>
         </button>
       </div>
     </div>

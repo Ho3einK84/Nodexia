@@ -264,12 +264,12 @@ func renderPage(
 ) {
 	page := view.NewPageData(deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
-	page.Title = "System"
+	page.Title = page.T("system.title")
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-system"
-	page.PageTitle = "System facts for " + server.Name
+	page.PageTitle = page.T("system.page_title", "server", server.Name)
 	page.SetServerCountry(server.CountryCode, server.CountryName)
-	page.PageDescription = "Collect and review core host metadata such as OS version, kernel, architecture, uptime, and recent package update signals."
+	page.PageDescription = page.T("system.page_description")
 	if deps.Database != nil {
 		page.MigrationCount = deps.Database.MigrationCount()
 	}
@@ -299,12 +299,12 @@ func renderPage(
 
 func defaultFormView(deps module.Dependencies, server servers.Server, hasStoredCreds bool) view.SystemFormView {
 	return view.SystemFormView{
-		Action:                    "/servers/" + formatID(server.ID) + "/system",
-		ConnectTimeout:            deps.Config.SSH.ConnectTimeout.String(),
-		CommandTimeout:            deps.Config.SSH.CommandTimeout.String(),
+		Action:                     "/servers/" + formatID(server.ID) + "/system",
+		ConnectTimeout:             deps.Config.SSH.ConnectTimeout.String(),
+		CommandTimeout:             deps.Config.SSH.CommandTimeout.String(),
 		StoredCredentialsAvailable: hasStoredCreds,
-		RefreshURL:                systemURL(server.ID),
-		Errors:                    map[string]string{},
+		RefreshURL:                 systemURL(server.ID),
+		Errors:                     map[string]string{},
 	}
 }
 
@@ -324,11 +324,11 @@ func formInputFromRequest(r *http.Request, deps module.Dependencies) FormInput {
 
 func formViewFromInput(input FormInput, validationErrors ValidationErrors, serverID int64, hasStoredCreds bool) view.SystemFormView {
 	return view.SystemFormView{
-		Action:                    "/servers/" + formatID(serverID) + "/system",
-		ConnectTimeout:            input.ConnectTimeout,
-		CommandTimeout:            input.CommandTimeout,
+		Action:                     "/servers/" + formatID(serverID) + "/system",
+		ConnectTimeout:             input.ConnectTimeout,
+		CommandTimeout:             input.CommandTimeout,
 		StoredCredentialsAvailable: hasStoredCreds,
-		Errors:                    validationErrors,
+		Errors:                     validationErrors,
 	}
 }
 

@@ -423,12 +423,12 @@ func renderTerminalPage(
 ) {
 	page := view.NewPageData(deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
-	page.Title = "Terminal"
+	page.Title = page.T("terminal.title")
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-terminal"
-	page.PageTitle = "Terminal — " + server.Name
+	page.PageTitle = page.T("terminal.page_title", "server", server.Name)
 	page.SetServerCountry(server.CountryCode, server.CountryName)
-	page.PageDescription = "Interactive SSH shell for " + server.Name + "."
+	page.PageDescription = page.T("terminal.page_description", "server", server.Name)
 	if deps.Database != nil {
 		page.MigrationCount = deps.Database.MigrationCount()
 	}
