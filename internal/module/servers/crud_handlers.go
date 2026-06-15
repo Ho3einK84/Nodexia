@@ -21,8 +21,8 @@ func (h NewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w, r,
 		h.deps,
 		http.StatusOK,
-		"Register server",
-		"Add a new SSH target with labels and a non-secret credential handling plan.",
+		"servers.form.title_new",
+		"servers.form.new_description",
 		NewFormViewData(DefaultFormInput(), ValidationErrors{}),
 		"",
 		"",
@@ -40,7 +40,7 @@ func NewCreateHandler(deps module.Dependencies, repo Repository) CreateHandler {
 
 func (h CreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		renderRepositoryError(w, r, h.deps, err, "Invalid form request", "The submitted server form could not be parsed.")
+		renderRepositoryError(w, r, h.deps, err, "servers.error.invalid_form_title", "servers.error.invalid_form_message")
 		return
 	}
 
@@ -50,18 +50,18 @@ func (h CreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w, r,
 			h.deps,
 			http.StatusUnprocessableEntity,
-			"Register server",
-			"Fix the validation issues below and submit the server again.",
+			"servers.form.title_new",
+			"servers.form.new_invalid_description",
 			NewFormViewData(validated.Input, validationErrors),
 			"error",
-			"Please fix the highlighted fields before saving.",
+			"servers.form.fix_fields",
 		)
 		return
 	}
 
 	created, err := h.repo.Create(r.Context(), validated.Server)
 	if err != nil {
-		renderRepositoryError(w, r, h.deps, err, "Could not create server", "The server record could not be created.")
+		renderRepositoryError(w, r, h.deps, err, "servers.error.create_title", "servers.error.create_message")
 		return
 	}
 
@@ -87,13 +87,13 @@ func NewEditHandler(deps module.Dependencies, repo Repository) EditHandler {
 func (h EditHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	serverID, ok := pathID(r)
 	if !ok {
-		renderRepositoryError(w, r, h.deps, ErrNotFound, "Server not found", "The requested server record does not exist.")
+		renderRepositoryError(w, r, h.deps, ErrNotFound, "servers.error.not_found_title", "servers.error.not_found_message")
 		return
 	}
 
 	server, err := h.repo.GetByID(r.Context(), serverID)
 	if err != nil {
-		renderRepositoryError(w, r, h.deps, err, "Could not load server", "The requested server record could not be loaded.")
+		renderRepositoryError(w, r, h.deps, err, "servers.error.load_title", "servers.error.load_message_requested")
 		return
 	}
 
@@ -101,8 +101,8 @@ func (h EditHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w, r,
 		h.deps,
 		http.StatusOK,
-		"Edit server",
-		"Update the SSH target metadata, labels, and credential handling plan.",
+		"servers.form.title_edit",
+		"servers.form.edit_description",
 		EditFormViewData(server, ValidationErrors{}),
 		"",
 		"",
@@ -121,12 +121,12 @@ func NewUpdateHandler(deps module.Dependencies, repo Repository) UpdateHandler {
 func (h UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	serverID, ok := pathID(r)
 	if !ok {
-		renderRepositoryError(w, r, h.deps, ErrNotFound, "Server not found", "The requested server record does not exist.")
+		renderRepositoryError(w, r, h.deps, ErrNotFound, "servers.error.not_found_title", "servers.error.not_found_message")
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		renderRepositoryError(w, r, h.deps, err, "Invalid form request", "The submitted server form could not be parsed.")
+		renderRepositoryError(w, r, h.deps, err, "servers.error.invalid_form_title", "servers.error.invalid_form_message")
 		return
 	}
 
@@ -147,18 +147,18 @@ func (h UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w, r,
 			h.deps,
 			http.StatusUnprocessableEntity,
-			"Edit server",
-			"Fix the validation issues below and save the server again.",
+			"servers.form.title_edit",
+			"servers.form.edit_invalid_description",
 			form,
 			"error",
-			"Please fix the highlighted fields before saving.",
+			"servers.form.fix_fields",
 		)
 		return
 	}
 
 	updated, err := h.repo.Update(r.Context(), validated.Server)
 	if err != nil {
-		renderRepositoryError(w, r, h.deps, err, "Could not update server", "The server record could not be updated.")
+		renderRepositoryError(w, r, h.deps, err, "servers.error.update_title", "servers.error.update_message")
 		return
 	}
 
@@ -183,12 +183,12 @@ func NewDeleteHandler(deps module.Dependencies, repo Repository) DeleteHandler {
 func (h DeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	serverID, ok := pathID(r)
 	if !ok {
-		renderRepositoryError(w, r, h.deps, ErrNotFound, "Server not found", "The requested server record does not exist.")
+		renderRepositoryError(w, r, h.deps, ErrNotFound, "servers.error.not_found_title", "servers.error.not_found_message")
 		return
 	}
 
 	if err := h.repo.Delete(r.Context(), serverID); err != nil {
-		renderRepositoryError(w, r, h.deps, err, "Could not delete server", "The server record could not be deleted.")
+		renderRepositoryError(w, r, h.deps, err, "servers.error.delete_title", "servers.error.delete_message")
 		return
 	}
 
@@ -207,13 +207,13 @@ func NewForgetHostKeyHandler(deps module.Dependencies, repo Repository) ForgetHo
 func (h ForgetHostKeyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	serverID, ok := pathID(r)
 	if !ok {
-		renderRepositoryError(w, r, h.deps, ErrNotFound, "Server not found", "The requested server record does not exist.")
+		renderRepositoryError(w, r, h.deps, ErrNotFound, "servers.error.not_found_title", "servers.error.not_found_message")
 		return
 	}
 
 	server, err := h.repo.GetByID(r.Context(), serverID)
 	if err != nil {
-		renderRepositoryError(w, r, h.deps, err, "Could not load server", "The server record could not be loaded.")
+		renderRepositoryError(w, r, h.deps, err, "servers.error.load_title", "servers.error.load_message")
 		return
 	}
 
@@ -225,7 +225,7 @@ func (h ForgetHostKeyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	if h.deps.SSH != nil {
 		if err := h.deps.SSH.ForgetHostKey(address); err != nil {
-			renderRepositoryError(w, r, h.deps, err, "Could not forget host key", "The stored host key for this server could not be removed.")
+			renderRepositoryError(w, r, h.deps, err, "servers.error.forget_title", "servers.error.forget_message")
 			return
 		}
 	}

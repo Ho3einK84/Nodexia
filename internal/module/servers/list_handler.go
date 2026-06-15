@@ -27,9 +27,13 @@ func (h ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.deps.Config,
 			r,
 			http.StatusInternalServerError,
-			"Database runtime unavailable",
-			"The servers page cannot load because the database runtime is not available.",
+			"",
+			"",
 		)
+		page.ErrorTitle = page.T("servers.error.db_unavailable_title")
+		page.ErrorMessage = page.T("servers.error.db_unavailable_message")
+		page.Title = page.ErrorTitle
+		page.Description = page.ErrorMessage
 		page.ActiveNav = "/servers"
 		if err := h.deps.Renderer.Render(w, http.StatusInternalServerError, page); err != nil {
 			http.Error(w, "database runtime is not available", http.StatusInternalServerError)
@@ -39,7 +43,7 @@ func (h ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	servers, err := h.repo.List(r.Context())
 	if err != nil {
-		renderRepositoryError(w, r, h.deps, err, "Could not load servers", "The server registry could not be loaded from the persistence layer.")
+		renderRepositoryError(w, r, h.deps, err, "servers.error.load_servers_title", "servers.error.load_servers_message")
 		return
 	}
 

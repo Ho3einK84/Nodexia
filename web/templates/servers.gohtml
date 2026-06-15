@@ -15,25 +15,25 @@
         type="search"
         name="q"
         value="{{ .ServerSearch }}"
-        placeholder="Search name, host, tag…"
+        placeholder="{{ t "servers.search_placeholder" }}"
         autocomplete="off"
-        aria-label="Search servers"
+        aria-label="{{ t "servers.search_aria" }}"
       >
       {{ if .ServerSearch }}
-      <a class="server-search__clear" href="/servers" aria-label="Clear search"><i data-lucide="x"></i></a>
+      <a class="server-search__clear" href="/servers" aria-label="{{ t "servers.search_clear" }}"><i data-lucide="x"></i></a>
       {{ end }}
     </form>
     <div class="server-toolbar__aside">
-      <span class="server-toolbar__count"><i data-lucide="server"></i> {{ .ServerCount }} registered</span>
-      <span class="server-toolbar__count" title="Node instances discovered across all servers"><i data-lucide="boxes"></i> {{ .TotalNodeCount }} {{ if eq .TotalNodeCount 1 }}node{{ else }}nodes{{ end }}</span>
-      <a href="/servers/new" class="btn btn--primary"><i data-lucide="plus" class="icon-in-button"></i> Add server</a>
+      <span class="server-toolbar__count"><i data-lucide="server"></i> {{ t "servers.toolbar_registered" "count" .ServerCount }}</span>
+      <span class="server-toolbar__count" title="{{ t "servers.toolbar_nodes_title" }}"><i data-lucide="boxes"></i> {{ tn "servers.toolbar_nodes" .TotalNodeCount }}</span>
+      <a href="/servers/new" class="btn btn--primary"><i data-lucide="plus" class="icon-in-button"></i> {{ t "servers.add" }}</a>
     </div>
   </div>
 
   {{ if .Servers }}
   {{ if .ServerSearch }}
   <p class="server-result-note">
-    Showing <strong>{{ .ServerShowingFrom }}–{{ .ServerShowingTo }}</strong> of {{ .ServerMatchCount }} match{{ if ne .ServerMatchCount 1 }}es{{ end }} for "{{ .ServerSearch }}"
+    {{ tn "servers.result_note" .ServerMatchCount "from" .ServerShowingFrom "to" .ServerShowingTo "query" .ServerSearch }}
   </p>
   {{ end }}
 
@@ -46,21 +46,21 @@
 
     <div class="bulk-toolbar" id="bulk-toolbar">
       <label class="bulk-select-all" for="bulk-select-all">
-        <input type="checkbox" id="bulk-select-all" aria-label="Select all servers">
-        <span>Select all</span>
+        <input type="checkbox" id="bulk-select-all" aria-label="{{ t "servers.bulk.select_all_aria" }}">
+        <span>{{ t "servers.bulk.select_all" }}</span>
       </label>
-      <span class="bulk-count" id="bulk-count" aria-live="polite">0 selected</span>
-      <select name="action" id="bulk-action" class="bulk-action-select" required aria-label="Bulk action">
-        <option value="">Choose action…</option>
-        <option value="reboot">Reboot</option>
-        <option value="update">Update packages</option>
-        <option value="node-restart">Restart all nodes</option>
-        <option value="node-update">Update all nodes</option>
-        <option value="delete">Delete</option>
+      <span class="bulk-count" id="bulk-count" aria-live="polite">{{ t "servers.bulk.selected_count" "count" 0 }}</span>
+      <select name="action" id="bulk-action" class="bulk-action-select" required aria-label="{{ t "servers.bulk.action_aria" }}">
+        <option value="">{{ t "servers.bulk.choose_action" }}</option>
+        <option value="reboot">{{ t "servers.bulk.reboot" }}</option>
+        <option value="update">{{ t "servers.bulk.update_packages" }}</option>
+        <option value="node-restart">{{ t "servers.bulk.restart_nodes" }}</option>
+        <option value="node-update">{{ t "servers.bulk.update_nodes" }}</option>
+        <option value="delete">{{ t "common.delete" }}</option>
       </select>
       <button type="submit" id="bulk-submit" class="btn btn--primary"
-        data-confirm="Run this bulk action on the selected servers?">
-        <i data-lucide="play" class="icon-in-button"></i> Run on selected
+        data-confirm="{{ t "servers.bulk.confirm" }}">
+        <i data-lucide="play" class="icon-in-button"></i> {{ t "servers.bulk.run" }}
       </button>
     </div>
   </form>
@@ -74,17 +74,17 @@
             <input type="checkbox" name="server_ids" value="{{ .ID }}"
               form="bulk-form"
               class="bulk-server-checkbox"
-              aria-label="Select {{ .Name }}">
+              aria-label="{{ t "servers.card.select_aria" "name" .Name }}">
           </div>
           <div class="server-card__identity">
             <h4 class="server-card__name"><i data-lucide="server" class="icon-in-button"></i> {{ .Name }}{{ if .FlagEmoji }} <span class="server-card__flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</h4>
             <span class="server-card__host">{{ .Username }}@{{ .Host }}:{{ .Port }}</span>
             {{ if .IsOnline }}
-            <span class="server-card__status server-status--online"><span class="status-pulse"></span>Online</span>
+            <span class="server-card__status server-status--online"><span class="status-pulse"></span>{{ t "servers.status.online" }}</span>
             {{ else if .LastSeenAt }}
-            <span class="server-card__status server-status--stale"><span class="status-pulse"></span>Last checked {{ .LastSeenAt }}</span>
+            <span class="server-card__status server-status--stale"><span class="status-pulse"></span>{{ t "servers.status.last_checked" "value" .LastSeenAt }}</span>
             {{ else }}
-            <span class="server-card__status server-status--unknown"><span class="status-pulse"></span>No data</span>
+            <span class="server-card__status server-status--unknown"><span class="status-pulse"></span>{{ t "servers.status.no_data" }}</span>
             {{ end }}
           </div>
         </div>
@@ -99,23 +99,23 @@
       <p class="server-card__note">{{ .Note }}</p>
       {{ end }}
       <div class="server-card__actions">
-        <a class="btn btn--primary" href="/servers/{{ .ID }}/monitoring" aria-label="Monitoring"><i data-lucide="gauge" class="icon-in-button"></i><span class="btn-label"> Monitoring</span></a>
-        <a class="btn btn--secondary" href="/servers/{{ .ID }}/nodes" aria-label="Nodes"><i data-lucide="boxes" class="icon-in-button"></i><span class="btn-label"> Nodes</span></a>
-        <a class="btn btn--secondary" href="/servers/{{ .ID }}/terminal" aria-label="Terminal"><i data-lucide="terminal-square" class="icon-in-button"></i><span class="btn-label"> Terminal</span></a>
+        <a class="btn btn--primary" href="/servers/{{ .ID }}/monitoring" aria-label="{{ t "common.monitoring" }}"><i data-lucide="gauge" class="icon-in-button"></i><span class="btn-label"> {{ t "common.monitoring" }}</span></a>
+        <a class="btn btn--secondary" href="/servers/{{ .ID }}/nodes" aria-label="{{ t "common.nodes" }}"><i data-lucide="boxes" class="icon-in-button"></i><span class="btn-label"> {{ t "common.nodes" }}</span></a>
+        <a class="btn btn--secondary" href="/servers/{{ .ID }}/terminal" aria-label="{{ t "common.terminal" }}"><i data-lucide="terminal-square" class="icon-in-button"></i><span class="btn-label"> {{ t "common.terminal" }}</span></a>
         <div class="action-menu" data-action-menu>
-          <button type="button" class="btn btn--ghost action-menu__toggle" aria-haspopup="true" aria-expanded="false" aria-label="More actions for {{ .Name }}"><i data-lucide="ellipsis-vertical" class="icon-in-button"></i><span class="action-menu__label"> More</span></button>
+          <button type="button" class="btn btn--ghost action-menu__toggle" aria-haspopup="true" aria-expanded="false" aria-label="{{ t "servers.card.more_aria" "name" .Name }}"><i data-lucide="ellipsis-vertical" class="icon-in-button"></i><span class="action-menu__label"> {{ t "common.more" }}</span></button>
           <div class="action-menu__panel" role="menu">
-            <span class="action-menu__caption"><i data-lucide="calendar"></i> Created {{ .CreatedAt }}</span>
+            <span class="action-menu__caption"><i data-lucide="calendar"></i> {{ t "servers.card.created" "value" .CreatedAt }}</span>
             <div class="action-menu__divider" role="separator"></div>
-            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/system"><i data-lucide="info" class="icon-in-button"></i> System</a>
-            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
-            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
-            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> Analytics</a>
-            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> Edit</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> {{ t "common.edit" }}</a>
             <div class="action-menu__divider" role="separator"></div>
             <form method="post" action="/servers/{{ .ID }}/delete" class="action-menu__form">
               <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-              <button type="submit" class="action-menu__item action-menu__item--danger" role="menuitem" data-confirm="Delete server &quot;{{ .Name }}&quot;? This cannot be undone."><i data-lucide="trash-2" class="icon-in-button"></i> Delete</button>
+              <button type="submit" class="action-menu__item action-menu__item--danger" role="menuitem" data-confirm="{{ t "servers.card.delete_confirm" "name" .Name }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "common.delete" }}</button>
             </form>
           </div>
         </div>
@@ -129,16 +129,16 @@
   {{ else if .ServerSearch }}
   <div class="empty-state-card">
     <span class="empty-state-icon"><i data-lucide="search-x"></i></span>
-    <p class="empty-state-title">No matching servers</p>
-    <p class="empty-state-desc">Nothing matched "{{ .ServerSearch }}". Try another name, host, or tag.</p>
-    <a class="btn btn--secondary" href="/servers"><i data-lucide="x" class="icon-in-button"></i> Clear search</a>
+    <p class="empty-state-title">{{ t "servers.empty.no_match_title" }}</p>
+    <p class="empty-state-desc">{{ t "servers.empty.no_match_desc" "query" .ServerSearch }}</p>
+    <a class="btn btn--secondary" href="/servers"><i data-lucide="x" class="icon-in-button"></i> {{ t "servers.search_clear" }}</a>
   </div>
   {{ else }}
   <div class="empty-state-card">
     <span class="empty-state-icon"><i data-lucide="server"></i></span>
-    <p class="empty-state-title">No servers yet</p>
-    <p class="empty-state-desc">Register your first SSH target to start managing servers.</p>
-    <a class="btn btn--primary" href="/servers/new"><i data-lucide="plus" class="icon-in-button"></i> Register a server</a>
+    <p class="empty-state-title">{{ t "servers.empty.none_title" }}</p>
+    <p class="empty-state-desc">{{ t "servers.empty.none_desc" }}</p>
+    <a class="btn btn--primary" href="/servers/new"><i data-lucide="plus" class="icon-in-button"></i> {{ t "servers.empty.register" }}</a>
   </div>
   {{ end }}
 </section>
@@ -147,9 +147,9 @@
 {{/* ── Reusable pagination control ─────────────────────── */}}
 {{ define "pagination" }}
 {{ if gt .TotalPages 1 }}
-<nav class="pagination" aria-label="Pagination">
+<nav class="pagination" aria-label="{{ t "pagination.label" }}">
   {{ if .HasPrev }}
-  <a class="pagination__nav" href="{{ .PrevURL }}" aria-label="Previous page"><i data-lucide="chevron-left"></i></a>
+  <a class="pagination__nav" href="{{ .PrevURL }}" aria-label="{{ t "pagination.previous" }}"><i data-lucide="chevron-left"></i></a>
   {{ else }}
   <span class="pagination__nav pagination__nav--disabled" aria-disabled="true"><i data-lucide="chevron-left"></i></span>
   {{ end }}
@@ -165,7 +165,7 @@
   {{ end }}
 
   {{ if .HasNext }}
-  <a class="pagination__nav" href="{{ .NextURL }}" aria-label="Next page"><i data-lucide="chevron-right"></i></a>
+  <a class="pagination__nav" href="{{ .NextURL }}" aria-label="{{ t "pagination.next" }}"><i data-lucide="chevron-right"></i></a>
   {{ else }}
   <span class="pagination__nav pagination__nav--disabled" aria-disabled="true"><i data-lucide="chevron-right"></i></span>
   {{ end }}

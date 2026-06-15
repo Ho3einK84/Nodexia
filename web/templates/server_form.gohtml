@@ -10,25 +10,25 @@
 
   <div class="grid">
     <article class="card">
-      <h3><i data-lucide="{{ if .IsEditingServer }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingServer }}Edit server{{ else }}Register server{{ end }}</h3>
+      <h3><i data-lucide="{{ if .IsEditingServer }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingServer }}{{ t "servers.form.title_edit" }}{{ else }}{{ t "servers.form.title_new" }}{{ end }}</h3>
       <form method="post" action="{{ .ServerFormAction }}" class="server-form" id="server-form">
         <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
 
         <label class="form-field">
-          <span><i data-lucide="tag" class="icon-in-button"></i> Name</span>
-          <input type="text" name="name" value="{{ .ServerForm.Name }}" placeholder="Production VPS">
+          <span><i data-lucide="tag" class="icon-in-button"></i> {{ t "common.name" }}</span>
+          <input type="text" name="name" value="{{ .ServerForm.Name }}" placeholder="{{ t "servers.form.name_placeholder" }}">
           {{ with index .ServerForm.Errors "name" }}<small class="field-error">{{ . }}</small>{{ end }}
         </label>
 
         <div class="form-grid">
           <label class="form-field">
-            <span><i data-lucide="globe" class="icon-in-button"></i> Host</span>
+            <span><i data-lucide="globe" class="icon-in-button"></i> {{ t "common.host" }}</span>
             <input type="text" name="host" value="{{ .ServerForm.Host }}" placeholder="203.0.113.10">
             {{ with index .ServerForm.Errors "host" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
 
           <label class="form-field">
-            <span><i data-lucide="hash" class="icon-in-button"></i> Port</span>
+            <span><i data-lucide="hash" class="icon-in-button"></i> {{ t "common.port" }}</span>
             <input type="number" name="port" min="1" max="65535" value="{{ .ServerForm.Port }}">
             {{ with index .ServerForm.Errors "port" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
@@ -36,17 +36,17 @@
 
         <div class="form-grid">
           <label class="form-field">
-            <span><i data-lucide="lock" class="icon-in-button"></i> Auth mode</span>
+            <span><i data-lucide="lock" class="icon-in-button"></i> {{ t "servers.form.auth_mode" }}</span>
             <select name="auth_mode">
-              <option value="password" {{ if eq .ServerForm.AuthMode "password" }}selected{{ end }}>Password</option>
-              <option value="key" {{ if eq .ServerForm.AuthMode "key" }}selected{{ end }}>SSH Key</option>
-              <option value="hybrid" {{ if eq .ServerForm.AuthMode "hybrid" }}selected{{ end }}>Hybrid (key + password)</option>
+              <option value="password" {{ if eq .ServerForm.AuthMode "password" }}selected{{ end }}>{{ t "servers.form.auth_password" }}</option>
+              <option value="key" {{ if eq .ServerForm.AuthMode "key" }}selected{{ end }}>{{ t "servers.form.auth_key" }}</option>
+              <option value="hybrid" {{ if eq .ServerForm.AuthMode "hybrid" }}selected{{ end }}>{{ t "servers.form.auth_hybrid" }}</option>
             </select>
             {{ with index .ServerForm.Errors "auth_mode" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
 
           <label class="form-field">
-            <span><i data-lucide="user" class="icon-in-button"></i> Username</span>
+            <span><i data-lucide="user" class="icon-in-button"></i> {{ t "common.username" }}</span>
             <input type="text" name="username" value="{{ .ServerForm.Username }}" placeholder="root">
             {{ with index .ServerForm.Errors "username" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
@@ -54,12 +54,12 @@
 
         {{/* ── Credential strategy ─────────────────────────────── */}}
         <label class="form-field">
-          <span><i data-lucide="shield" class="icon-in-button"></i> Credential strategy</span>
+          <span><i data-lucide="shield" class="icon-in-button"></i> {{ t "servers.form.cred_strategy" }}</span>
           <select name="credential_strategy" id="cred-strategy">
-            <option value="stored"      {{ if or (eq .ServerForm.CredentialStrategy "stored") (eq .ServerForm.CredentialStrategy "") }}selected{{ end }}>Stored — save password in Nodexia (enables scheduler)</option>
-            <option value="runtime"     {{ if eq .ServerForm.CredentialStrategy "runtime" }}selected{{ end }}>Runtime — enter password per request</option>
-            <option value="external_ref"{{ if eq .ServerForm.CredentialStrategy "external_ref" }}selected{{ end }}>External reference — env var or file path</option>
-            <option value="agent_ready" {{ if eq .ServerForm.CredentialStrategy "agent_ready" }}selected{{ end }}>Agent — SSH agent socket (SSH_AUTH_SOCK)</option>
+            <option value="stored"      {{ if or (eq .ServerForm.CredentialStrategy "stored") (eq .ServerForm.CredentialStrategy "") }}selected{{ end }}>{{ t "servers.form.cred_stored" }}</option>
+            <option value="runtime"     {{ if eq .ServerForm.CredentialStrategy "runtime" }}selected{{ end }}>{{ t "servers.form.cred_runtime" }}</option>
+            <option value="external_ref"{{ if eq .ServerForm.CredentialStrategy "external_ref" }}selected{{ end }}>{{ t "servers.form.cred_external" }}</option>
+            <option value="agent_ready" {{ if eq .ServerForm.CredentialStrategy "agent_ready" }}selected{{ end }}>{{ t "servers.form.cred_agent" }}</option>
           </select>
           {{ with index .ServerForm.Errors "credential_strategy" }}<small class="field-error">{{ . }}</small>{{ end }}
         </label>
@@ -67,12 +67,12 @@
         {{/* Stored / Runtime: show a password field */}}
         <div id="cred-section-stored" class="cred-section">
           <label class="form-field">
-            <span><i data-lucide="key-round" class="icon-in-button"></i> SSH password</span>
+            <span><i data-lucide="key-round" class="icon-in-button"></i> {{ t "servers.form.ssh_password" }}</span>
             <input type="password" name="credential_ref" id="cred-ref-stored"
                    value="{{ if or (eq .ServerForm.CredentialStrategy "stored") (eq .ServerForm.CredentialStrategy "runtime") (eq .ServerForm.CredentialStrategy "") }}{{ .ServerForm.CredentialRef }}{{ end }}"
-                   placeholder="Enter SSH password"
+                   placeholder="{{ t "servers.form.ssh_password_placeholder" }}"
                    autocomplete="current-password">
-            <small class="field-hint">Stored encrypted at rest. The scheduler uses this to run monitoring automatically.</small>
+            <small class="field-hint">{{ t "servers.form.stored_hint" }}</small>
             {{ with index .ServerForm.Errors "credential_ref" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
         </div>
@@ -80,12 +80,12 @@
         {{/* External reference: key=value textarea */}}
         <div id="cred-section-external_ref" class="cred-section" hidden>
           <label class="form-field">
-            <span><i data-lucide="file-code" class="icon-in-button"></i> Credential reference</span>
+            <span><i data-lucide="file-code" class="icon-in-button"></i> {{ t "servers.form.cred_ref" }}</span>
             <textarea name="credential_ref_ext" id="cred-ref-ext" rows="3"
                       class="cmd-textarea"
                       placeholder="password_env=MY_SSH_PASS&#10;traffic_interface=eth0">{{ if eq .ServerForm.CredentialStrategy "external_ref" }}{{ .ServerForm.CredentialRef }}{{ end }}</textarea>
-            <small class="field-hint">Non-secret pointers resolved at connection time.
-              Supported keys: <code>password_env</code>, <code>password_file</code>,
+            <small class="field-hint">{{ t "servers.form.extref_hint" }}
+              {{ t "servers.form.supported_keys" }} <code>password_env</code>, <code>password_file</code>,
               <code>key_env</code>, <code>key_file</code>, <code>passphrase_env</code>,
               <code>passphrase_file</code>, <code>traffic_interface</code>.
             </small>
@@ -96,58 +96,57 @@
         {{/* Agent-ready: no credential field needed */}}
         <div id="cred-section-agent_ready" class="cred-section" hidden>
           <p class="cred-note"><i data-lucide="bot" class="icon-in-button"></i>
-            Nodexia will use the <code>SSH_AUTH_SOCK</code> environment variable set at startup.
-            No credentials to enter here.
+            {{ tsafe "servers.form.agent_note" }}
           </p>
         </div>
 
         {{/* Runtime-only note */}}
         <div id="cred-section-runtime" class="cred-section" hidden>
           <label class="form-field">
-            <span><i data-lucide="key-round" class="icon-in-button"></i> SSH password <span class="badge badge--warn">optional</span></span>
+            <span><i data-lucide="key-round" class="icon-in-button"></i> {{ t "servers.form.ssh_password" }} <span class="badge badge--warn">{{ t "common.optional" }}</span></span>
             <input type="password" name="credential_ref" id="cred-ref-runtime"
                    value="{{ if eq .ServerForm.CredentialStrategy "runtime" }}{{ .ServerForm.CredentialRef }}{{ end }}"
-                   placeholder="Enter SSH password (optional)"
+                   placeholder="{{ t "servers.form.ssh_password_optional_placeholder" }}"
                    autocomplete="current-password">
-            <small class="field-hint">Leave blank to enter credentials on every request. If filled in, the scheduler can also use this password.</small>
+            <small class="field-hint">{{ t "servers.form.runtime_hint" }}</small>
             {{ with index .ServerForm.Errors "credential_ref" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
         </div>
 
         <label class="form-field">
-          <span><i data-lucide="tags" class="icon-in-button"></i> Labels</span>
+          <span><i data-lucide="tags" class="icon-in-button"></i> {{ t "servers.form.labels" }}</span>
           <input type="text" name="tags" value="{{ .ServerForm.Tags }}" placeholder="prod, eu, rebecca">
           {{ with index .ServerForm.Errors "tags" }}<small class="field-error">{{ . }}</small>{{ end }}
         </label>
 
         <label class="form-field">
-          <span><i data-lucide="file-text" class="icon-in-button"></i> Notes</span>
-          <textarea name="note" rows="4" placeholder="Ubuntu 24 VPS for production traffic">{{ .ServerForm.Note }}</textarea>
+          <span><i data-lucide="file-text" class="icon-in-button"></i> {{ t "servers.form.notes" }}</span>
+          <textarea name="note" rows="4" placeholder="{{ t "servers.form.notes_placeholder" }}">{{ .ServerForm.Note }}</textarea>
         </label>
 
         <div class="form-actions">
-          <button type="submit" class="btn btn--primary">{{ if .IsEditingServer }}Save changes{{ else }}Create server{{ end }}</button>
-          <a class="btn btn--secondary" href="/servers"><i data-lucide="list" class="icon-in-button"></i> Back to list</a>
+          <button type="submit" class="btn btn--primary">{{ if .IsEditingServer }}{{ t "servers.form.save" }}{{ else }}{{ t "servers.form.create" }}{{ end }}</button>
+          <a class="btn btn--secondary" href="/servers"><i data-lucide="list" class="icon-in-button"></i> {{ t "servers.form.back_to_list" }}</a>
         </div>
       </form>
 
       {{ if .IsEditingServer }}
       <div class="danger-zone">
-        <p>Quick access to this server's management pages.</p>
+        <p>{{ t "servers.form.quick_access" }}</p>
         <div class="form-actions">
-          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> Monitoring</a>
-          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> Nodes</a>
-          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> System</a>
-          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
-          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
+          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "common.monitoring" }}</a>
+          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "common.nodes" }}</a>
+          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
+          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
+          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
         </div>
         <form method="post" action="/servers/{{ .ServerForm.ID }}/forget-host-key" class="inline-form">
           <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-          <button type="submit" class="btn btn--ghost" data-confirm="Remove the stored host key? The next connection will trust whatever key the server presents."><i data-lucide="key" class="icon-in-button"></i> Forget stored host key</button>
+          <button type="submit" class="btn btn--ghost" data-confirm="{{ t "servers.form.forget_host_key_confirm" }}"><i data-lucide="key" class="icon-in-button"></i> {{ t "servers.form.forget_host_key" }}</button>
         </form>
         <form method="post" action="{{ .ServerDeleteAction }}" class="inline-form">
           <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-          <button type="submit" class="btn btn--danger" data-confirm="Delete server &quot;{{ .ServerForm.Name }}&quot;? This cannot be undone."><i data-lucide="trash-2" class="icon-in-button"></i> Delete server</button>
+          <button type="submit" class="btn btn--danger" data-confirm="{{ t "servers.card.delete_confirm" "name" .ServerForm.Name }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "servers.form.delete_server" }}</button>
         </form>
       </div>
       {{ end }}
@@ -155,32 +154,27 @@
 
     <article class="card card--info">
       <div class="card__header">
-        <h3><i data-lucide="calendar-clock"></i> Scheduler &amp; credentials</h3>
+        <h3><i data-lucide="calendar-clock"></i> {{ t "servers.form.info_title" }}</h3>
       </div>
       <ul class="credential-info">
         <li>
-          <strong><i data-lucide="shield-check" class="icon-in-button"></i> Stored</strong>
-          The SSH password is saved in Nodexia. The background scheduler uses it
-          automatically for monitoring (every 15 min) and node discovery (every 12 h).
-          <span class="badge badge--ok" style="margin-left:4px">scheduler ✓</span>
+          <strong><i data-lucide="shield-check" class="icon-in-button"></i> {{ t "servers.form.info_stored_title" }}</strong>
+          {{ tsafe "servers.form.info_stored_desc" }}
+          <span class="badge badge--ok" style="margin-left:4px">{{ t "servers.form.scheduler_ok" }}</span>
         </li>
         <li>
-          <strong><i data-lucide="play" class="icon-in-button"></i> Runtime</strong>
-          You enter the password each time you open a monitoring or nodes page.
-          If you also fill in the password field, the scheduler can use it too.
+          <strong><i data-lucide="play" class="icon-in-button"></i> {{ t "servers.form.info_runtime_title" }}</strong>
+          {{ t "servers.form.info_runtime_desc" }}
         </li>
         <li>
-          <strong><i data-lucide="external-link" class="icon-in-button"></i> External reference</strong>
-          Store a non-secret pointer such as <code>password_env=MY_VAR</code> or
-          <code>key_file=/run/secrets/ssh_key</code>. Best for key-based auth and
-          production deployments.
-          <span class="badge badge--ok" style="margin-left:4px">scheduler ✓</span>
+          <strong><i data-lucide="external-link" class="icon-in-button"></i> {{ t "servers.form.info_external_title" }}</strong>
+          {{ tsafe "servers.form.info_external_desc" }}
+          <span class="badge badge--ok" style="margin-left:4px">{{ t "servers.form.scheduler_ok" }}</span>
         </li>
         <li>
-          <strong><i data-lucide="bot" class="icon-in-button"></i> Agent</strong>
-          Nodexia inherits the <code>SSH_AUTH_SOCK</code> socket from its own process
-          environment. No credentials stored.
-          <span class="badge badge--ok" style="margin-left:4px">scheduler ✓</span>
+          <strong><i data-lucide="bot" class="icon-in-button"></i> {{ t "servers.form.info_agent_title" }}</strong>
+          {{ tsafe "servers.form.info_agent_desc" }}
+          <span class="badge badge--ok" style="margin-left:4px">{{ t "servers.form.scheduler_ok" }}</span>
         </li>
       </ul>
     </article>

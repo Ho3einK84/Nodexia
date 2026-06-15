@@ -310,12 +310,12 @@ func validateCredentialReference(value string) error {
 	}
 
 	allowedKeys := map[string]struct{}{
-		"password_env":    {},
-		"password_file":   {},
-		"key_env":         {},
-		"key_file":        {},
-		"passphrase_env":  {},
-		"passphrase_file": {},
+		"password_env":      {},
+		"password_file":     {},
+		"key_env":           {},
+		"key_file":          {},
+		"passphrase_env":    {},
+		"passphrase_file":   {},
 		"traffic_interface": {},
 	}
 

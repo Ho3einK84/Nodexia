@@ -955,10 +955,11 @@ func NewRenderer() (*Renderer, error) {
 			fmt.Sscanf(s, "%f", &v)
 			return v
 		},
-		// t/tn are placeholders so the templates parse; Render rebinds them to
-		// the request's active language by cloning the template set per render.
-		"t":  func(key string, _ ...any) string { return key },
-		"tn": func(key string, _ int, _ ...any) string { return key },
+		// t/tn/tsafe are placeholders so the templates parse; Render rebinds them
+		// to the request's active language by cloning the template set per render.
+		"t":     func(key string, _ ...any) string { return key },
+		"tn":    func(key string, _ int, _ ...any) string { return key },
+		"tsafe": func(key string, _ ...any) template.HTML { return template.HTML(key) },
 	}
 	templates, err := template.New("").Funcs(funcMap).ParseFS(assets.Templates(), "web/templates/*.gohtml")
 	if err != nil {
@@ -991,8 +992,9 @@ func (r *Renderer) Render(w http.ResponseWriter, statusCode int, data PageData) 
 	}
 	loc := data.localizer
 	tmpl.Funcs(template.FuncMap{
-		"t":  loc.T,
-		"tn": loc.Tn,
+		"t":     loc.T,
+		"tn":    loc.Tn,
+		"tsafe": func(key string, args ...any) template.HTML { return template.HTML(loc.Tsafe(key, args...)) },
 	})
 
 	var content bytes.Buffer
