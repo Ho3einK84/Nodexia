@@ -82,12 +82,12 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	page := view.NewPageData(h.deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
-	page.Title = "Analytics"
+	page.Title = page.T("nav.analytics")
 	page.ActiveNav = "/analytics"
 	page.ContentTemplate = "content-analytics"
-	page.PageTitle = "Analytics for " + server.Name
+	page.PageTitle = page.T("analytics.page_title", "server", server.Name)
 	page.SetServerCountry(server.CountryCode, server.CountryName)
-	page.PageDescription = "Historical metrics, trends, and bandwidth forecasting."
+	page.PageDescription = page.T("analytics.page_description")
 	if h.deps.Database != nil {
 		page.MigrationCount = h.deps.Database.MigrationCount()
 	}
@@ -191,11 +191,11 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	page := view.NewPageData(h.deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
-	page.Title = "Analytics"
+	page.Title = page.T("nav.analytics")
 	page.ActiveNav = "/analytics"
 	page.ContentTemplate = "content-analytics-global"
-	page.PageTitle = "Analytics Overview"
-	page.PageDescription = "Global resource usage and bandwidth consumption across all servers."
+	page.PageTitle = page.T("analytics.global_title")
+	page.PageDescription = page.T("analytics.global_description")
 	if h.deps.Database != nil {
 		page.MigrationCount = h.deps.Database.MigrationCount()
 	}

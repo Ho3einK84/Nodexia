@@ -9,13 +9,13 @@
     <span class="badge badge--auth-{{ .AnalyticsTarget.AuthMode }}">{{ .AnalyticsTarget.AuthMode }}</span>
     {{ range .AnalyticsTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
     <div class="info-strip__actions">
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .AnalyticsTarget.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> Monitoring</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .AnalyticsTarget.ID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> Nodes</a>
-      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> Servers</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .AnalyticsTarget.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "common.monitoring" }}</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .AnalyticsTarget.ID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "common.nodes" }}</a>
+      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nav.servers" }}</a>
     </div>
   </div>
 
-  <div class="analytics-range-tabs" id="globalRangeTabs" role="tablist" aria-label="Time range">
+  <div class="analytics-range-tabs" id="globalRangeTabs" role="tablist" aria-label="{{ t "analytics.time_range" }}">
     <button class="range-tab" data-range="1h" role="tab">1H</button>
     <button class="range-tab active" data-range="24h" role="tab" aria-selected="true">24H</button>
     <button class="range-tab" data-range="7d" role="tab">7D</button>
@@ -29,7 +29,7 @@
       <div class="chart-card__header">
         <div class="chart-card__title">
           <i data-lucide="cpu" class="chart-icon"></i>
-          <span>CPU Usage</span>
+          <span>{{ t "analytics.cpu_usage" }}</span>
         </div>
         <span class="chart-card__unit">%</span>
       </div>
@@ -38,11 +38,11 @@
         <div class="chart-container" id="chart-cpu" data-metric="cpu" data-server="{{ .AnalyticsTarget.ID }}" style="display:none"></div>
         <div class="chart-empty" id="empty-cpu" style="display:none">
           <i data-lucide="bar-chart-2"></i>
-          <p>No data yet for this range</p>
+          <p>{{ t "analytics.no_data_range" }}</p>
         </div>
         <div class="chart-error" id="error-cpu" style="display:none">
           <i data-lucide="alert-circle"></i>
-          <p>Failed to load chart data</p>
+          <p>{{ t "analytics.chart_error" }}</p>
         </div>
       </div>
       <div class="chart-card__footer" id="footer-cpu"></div>
@@ -52,7 +52,7 @@
       <div class="chart-card__header">
         <div class="chart-card__title">
           <i data-lucide="memory-stick" class="chart-icon"></i>
-          <span>Memory Usage</span>
+          <span>{{ t "analytics.memory_usage" }}</span>
         </div>
         <span class="chart-card__unit">%</span>
       </div>
@@ -61,11 +61,11 @@
         <div class="chart-container" id="chart-ram" data-metric="ram" data-server="{{ .AnalyticsTarget.ID }}" style="display:none"></div>
         <div class="chart-empty" id="empty-ram" style="display:none">
           <i data-lucide="bar-chart-2"></i>
-          <p>No data yet for this range</p>
+          <p>{{ t "analytics.no_data_range" }}</p>
         </div>
         <div class="chart-error" id="error-ram" style="display:none">
           <i data-lucide="alert-circle"></i>
-          <p>Failed to load chart data</p>
+          <p>{{ t "analytics.chart_error" }}</p>
         </div>
       </div>
       <div class="chart-card__footer" id="footer-ram"></div>
@@ -75,7 +75,7 @@
       <div class="chart-card__header">
         <div class="chart-card__title">
           <i data-lucide="hard-drive" class="chart-icon"></i>
-          <span>Disk Usage</span>
+          <span>{{ t "analytics.disk_usage" }}</span>
         </div>
         <span class="chart-card__unit">%</span>
       </div>
@@ -84,11 +84,11 @@
         <div class="chart-container" id="chart-disk" data-metric="disk" data-server="{{ .AnalyticsTarget.ID }}" style="display:none"></div>
         <div class="chart-empty" id="empty-disk" style="display:none">
           <i data-lucide="bar-chart-2"></i>
-          <p>No data yet for this range</p>
+          <p>{{ t "analytics.no_data_range" }}</p>
         </div>
         <div class="chart-error" id="error-disk" style="display:none">
           <i data-lucide="alert-circle"></i>
-          <p>Failed to load chart data</p>
+          <p>{{ t "analytics.chart_error" }}</p>
         </div>
       </div>
       <div class="chart-card__footer" id="footer-disk"></div>
@@ -98,7 +98,7 @@
       <div class="chart-card__header">
         <div class="chart-card__title">
           <i data-lucide="activity" class="chart-icon"></i>
-          <span>Load Average</span>
+          <span>{{ t "analytics.load_average" }}</span>
         </div>
         <span class="chart-card__unit"></span>
       </div>
@@ -107,11 +107,11 @@
         <div class="chart-container" id="chart-load" data-metric="load" data-server="{{ .AnalyticsTarget.ID }}" style="display:none"></div>
         <div class="chart-empty" id="empty-load" style="display:none">
           <i data-lucide="bar-chart-2"></i>
-          <p>No data yet for this range</p>
+          <p>{{ t "analytics.no_data_range" }}</p>
         </div>
         <div class="chart-error" id="error-load" style="display:none">
           <i data-lucide="alert-circle"></i>
-          <p>Failed to load chart data</p>
+          <p>{{ t "analytics.chart_error" }}</p>
         </div>
       </div>
       <div class="chart-card__footer" id="footer-load"></div>
@@ -124,19 +124,19 @@
   {{ if .HasData }}
   <div class="traffic-summary">
     <div class="traffic-summary__card traffic-summary__card--dl">
-      <div class="traffic-summary__label"><i data-lucide="arrow-down"></i> Download</div>
+      <div class="traffic-summary__label"><i data-lucide="arrow-down"></i> {{ t "analytics.download" }}</div>
       <div class="traffic-summary__value">{{ .Download }}</div>
-      <div class="traffic-summary__sub">This month · {{ .MonthLabel }}</div>
+      <div class="traffic-summary__sub">{{ t "analytics.this_month" "label" .MonthLabel }}</div>
     </div>
     <div class="traffic-summary__card traffic-summary__card--ul">
-      <div class="traffic-summary__label"><i data-lucide="arrow-up"></i> Upload</div>
+      <div class="traffic-summary__label"><i data-lucide="arrow-up"></i> {{ t "analytics.upload" }}</div>
       <div class="traffic-summary__value">{{ .Upload }}</div>
-      <div class="traffic-summary__sub">This month · {{ .MonthLabel }}</div>
+      <div class="traffic-summary__sub">{{ t "analytics.this_month" "label" .MonthLabel }}</div>
     </div>
     <div class="traffic-summary__card traffic-summary__card--total">
-      <div class="traffic-summary__label"><i data-lucide="arrows-up-down"></i> Total</div>
+      <div class="traffic-summary__label"><i data-lucide="arrows-up-down"></i> {{ t "analytics.total" }}</div>
       <div class="traffic-summary__value">{{ .Total }}</div>
-      <div class="traffic-summary__sub">This month · {{ .MonthLabel }}</div>
+      <div class="traffic-summary__sub">{{ t "analytics.this_month" "label" .MonthLabel }}</div>
     </div>
   </div>
   {{ end }}
@@ -147,8 +147,8 @@
     <div class="chart-card__header">
       <div class="chart-card__title">
         <i data-lucide="network" class="chart-icon"></i>
-        <span>Network Traffic</span>
-        <span class="chart-badge">Last 30 days</span>
+        <span>{{ t "analytics.network_traffic" }}</span>
+        <span class="chart-badge">{{ t "analytics.last_30_days" }}</span>
       </div>
       <span class="chart-card__unit">GiB/day</span>
     </div>
@@ -157,12 +157,12 @@
       <div class="chart-container" id="chart-traffic" data-metric="traffic" data-server="{{ .AnalyticsTarget.ID }}" style="display:none"></div>
       <div class="chart-empty" id="empty-traffic" style="display:none">
         <i data-lucide="wifi-off"></i>
-        <p>No vnStat traffic data for this server</p>
-        <small>Collect a monitoring snapshot to populate traffic history</small>
+        <p>{{ t "analytics.no_traffic" }}</p>
+        <small>{{ t "analytics.no_traffic_sub" }}</small>
       </div>
       <div class="chart-error" id="error-traffic" style="display:none">
         <i data-lucide="alert-circle"></i>
-        <p>Failed to load traffic data</p>
+        <p>{{ t "analytics.traffic_error" }}</p>
       </div>
     </div>
     <div class="chart-legend" id="legend-traffic"></div>
@@ -170,9 +170,9 @@
 
   <!-- Bandwidth Forecast (download only) -->
   <div class="forecast-header">
-    <p class="eyebrow">Bandwidth Forecasting</p>
-    <h2 class="analytics-title">Usage Forecast <span class="forecast-scope"><i data-lucide="arrow-down"></i> Download</span></h2>
-    <p class="analytics-subtitle">Projected <strong>download</strong> consumption based on historical download-traffic patterns.</p>
+    <p class="eyebrow">{{ t "analytics.forecast_eyebrow" }}</p>
+    <h2 class="analytics-title">{{ t "analytics.usage_forecast" }} <span class="forecast-scope"><i data-lucide="arrow-down"></i> {{ t "analytics.download" }}</span></h2>
+    <p class="analytics-subtitle">{{ tsafe "analytics.forecast_subtitle" }}</p>
   </div>
 
   <div class="forecast-grid" id="forecastGrid">
@@ -186,7 +186,7 @@
     <div class="chart-card__header">
       <div class="chart-card__title">
         <i data-lucide="trending-up" class="chart-icon"></i>
-        <span>Actual vs Predicted</span>
+        <span>{{ t "analytics.actual_vs_predicted" }}</span>
         <span class="forecast-algo" id="forecastAlgo"></span>
       </div>
     </div>
@@ -206,23 +206,23 @@
   {{ if eq .GlobalAnalytics.ServerCount 0 }}
   <article class="card card--empty">
     <i data-lucide="bar-chart-2" class="empty-icon"></i>
-    <h3>No analytics data yet</h3>
-    <p>Collect at least one monitoring snapshot to populate the analytics overview.</p>
-    <a class="btn btn--primary" href="/servers">Go to Servers</a>
+    <h3>{{ t "analytics.global_empty_title" }}</h3>
+    <p>{{ t "analytics.global_empty_desc" }}</p>
+    <a class="btn btn--primary" href="/servers">{{ t "analytics.go_servers" }}</a>
   </article>
   {{ else }}
 
   <!-- Top consumers by CPU / RAM / Disk -->
   <article class="card">
-    <h3><i data-lucide="cpu"></i> Top Servers by Resource Usage</h3>
+    <h3><i data-lucide="cpu"></i> {{ t "analytics.top_resource" }}</h3>
     <div class="analytics-table-wrap">
       <table class="analytics-table">
         <thead>
           <tr>
-            <th>Server</th>
-            <th class="text-right">CPU</th>
-            <th class="text-right">RAM</th>
-            <th class="text-right">Disk</th>
+            <th>{{ t "common.server" }}</th>
+            <th class="text-right">{{ t "home.metric.cpu" }}</th>
+            <th class="text-right">{{ t "home.metric.ram" }}</th>
+            <th class="text-right">{{ t "home.metric.disk" }}</th>
             <th></th>
           </tr>
         </thead>
@@ -238,7 +238,7 @@
             <td class="text-right"><span class="metric-badge metric-badge--disk">{{ .Disk }}</span></td>
             <td class="text-right">
               <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics">
-                <i data-lucide="bar-chart-2" class="icon-in-button"></i> Analytics
+                <i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}
               </a>
             </td>
           </tr>
@@ -251,15 +251,15 @@
   {{ if .GlobalAnalytics.TopTraffic }}
   <!-- Top consumers by bandwidth -->
   <article class="card">
-    <h3><i data-lucide="network"></i> Top Servers by This Month's Traffic</h3>
+    <h3><i data-lucide="network"></i> {{ t "analytics.top_traffic" }}</h3>
     <div class="analytics-table-wrap">
       <table class="analytics-table">
         <thead>
           <tr>
-            <th>Server</th>
-            <th class="text-right"><i data-lucide="arrow-down" class="th-icon th-icon--dl"></i> Download</th>
-            <th class="text-right"><i data-lucide="arrow-up" class="th-icon th-icon--ul"></i> Upload</th>
-            <th class="text-right">Total ({{ (index .GlobalAnalytics.TopTraffic 0).MonthLabel }})</th>
+            <th>{{ t "common.server" }}</th>
+            <th class="text-right"><i data-lucide="arrow-down" class="th-icon th-icon--dl"></i> {{ t "analytics.download" }}</th>
+            <th class="text-right"><i data-lucide="arrow-up" class="th-icon th-icon--ul"></i> {{ t "analytics.upload" }}</th>
+            <th class="text-right">{{ t "analytics.total_month" "label" (index .GlobalAnalytics.TopTraffic 0).MonthLabel }}</th>
             <th></th>
           </tr>
         </thead>
@@ -281,7 +281,7 @@
             </td>
             <td class="text-right">
               <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics">
-                <i data-lucide="bar-chart-2" class="icon-in-button"></i> Analytics
+                <i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}
               </a>
             </td>
           </tr>

@@ -13,7 +13,7 @@ import (
 // dotted segment) so the smoke test fails if any {{ t }} call references a key
 // missing from the catalog — the fallback renders the raw key, which this
 // catches in both languages.
-var rawKeyPattern = regexp.MustCompile(`\b(servers|common|nav|home|diagnostics|login|bulk|terminal|files|system|error|module|pagination|shell|lang|drawer|commands|monitoring)\.[a-z_]+(\.[a-z_]+)*\b`)
+var rawKeyPattern = regexp.MustCompile(`\b(servers|common|nav|home|diagnostics|login|bulk|terminal|files|system|error|module|pagination|shell|lang|drawer|commands|monitoring|analytics)\.[a-z_]+(\.[a-z_]+)*\b`)
 
 // translatedPages enumerates the content templates that phase 2 has localized.
 // Each renders end-to-end in every supported locale; any raw-key leak or
@@ -38,9 +38,11 @@ func translatedPages() map[string]func(p *PageData) {
 			p.FileForm = FileFormView{Errors: map[string]string{}}
 			p.FileListing = FileListingView{Available: true}
 		},
-		"content-system":     func(p *PageData) { p.SystemForm = SystemFormView{Errors: map[string]string{}} },
-		"content-commands":   func(p *PageData) { p.CommandForm = CommandFormView{Errors: map[string]string{}} },
-		"content-monitoring": func(p *PageData) { p.MonitoringForm = MonitoringFormView{Errors: map[string]string{}} },
+		"content-system":           func(p *PageData) { p.SystemForm = SystemFormView{Errors: map[string]string{}} },
+		"content-commands":         func(p *PageData) { p.CommandForm = CommandFormView{Errors: map[string]string{}} },
+		"content-monitoring":       func(p *PageData) { p.MonitoringForm = MonitoringFormView{Errors: map[string]string{}} },
+		"content-analytics":        func(p *PageData) {},
+		"content-analytics-global": func(p *PageData) { p.GlobalAnalytics = GlobalAnalyticsView{ServerCount: 0} },
 	}
 }
 
