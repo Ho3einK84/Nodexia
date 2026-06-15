@@ -268,6 +268,7 @@ func renderPage(
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-system"
 	page.PageTitle = "System facts for " + server.Name
+	page.SetServerCountry(server.CountryCode, server.CountryName)
 	page.PageDescription = "Collect and review core host metadata such as OS version, kernel, architecture, uptime, and recent package update signals."
 	if deps.Database != nil {
 		page.MigrationCount = deps.Database.MigrationCount()

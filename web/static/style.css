@@ -186,6 +186,16 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* Country flag badge next to a server name in a page header. Like the list
+   badge, this is a regional-indicator emoji that degrades to the ISO letters on
+   platforms without flag-emoji glyphs. */
+.page-header__flag {
+  font-size: 1.4rem;
+  line-height: 1;
+  vertical-align: middle;
+  cursor: default;
+}
+
 .page-description {
   max-width: 640px;
   margin: 0;
@@ -2866,6 +2876,23 @@ body.modal-open {
   font-weight: 600;
   font-size: 0.92rem;
   color: #f1f5f9;
+}
+
+/* Country flag badge in the server identity strip. Regional-indicator emoji
+   that degrades to the ISO letters on platforms lacking flag-emoji glyphs. */
+.info-strip__flag {
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: default;
+}
+
+/* Generic flag badge next to a server name (home dashboard cards, diagnostics
+   job rows). Same regional-indicator emoji with letter fallback. */
+.server-flag {
+  font-size: 1.05rem;
+  line-height: 1;
+  vertical-align: middle;
+  cursor: default;
 }
 
 .info-strip__addr {

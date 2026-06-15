@@ -11,11 +11,20 @@ import (
 
 	"github.com/Ho3einK84/Nodexia/internal/config"
 	"github.com/Ho3einK84/Nodexia/internal/db"
+	"github.com/Ho3einK84/Nodexia/internal/geoip"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
 	"github.com/Ho3einK84/Nodexia/internal/module/monitoring"
+	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 	"github.com/Ho3einK84/Nodexia/internal/scheduler"
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
+
+// countryBadge is a resolved flag emoji + country name for one server, used to
+// decorate the home dashboard's server listings.
+type countryBadge struct {
+	Flag string
+	Name string
+}
 
 type HomeHandler struct {
 	config      config.Config
@@ -50,7 +59,12 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	page.MigrationCount = db.BootstrapMigrationCount()
 	page.RouteGroups = h.routeGroups
 
-	page.SchedulerOverview = schedulerOverviewView(h.scheduler, 1, 8, func(p int) string {
+	// Resolve each server's detected country once so both dashboard listings
+	// (resource snapshots and scheduler jobs) can show a flag next to the name
+	// without any extra per-row query.
+	countries := serverCountryBadges(h.database)
+
+	page.SchedulerOverview = schedulerOverviewView(h.scheduler, 1, 8, countries, func(p int) string {
 		return homeURL(snapPage, p)
 	})
 
@@ -68,6 +82,10 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			page.DashboardSnapshots = make([]view.DashboardMonitoringView, 0, end-start)
 			for _, snapshot := range allSnaps[start:end] {
 				v := monitoringDashboardView(snapshot)
+				if badge, ok := countries[snapshot.ServerID]; ok {
+					v.FlagEmoji = badge.Flag
+					v.CountryName = badge.Name
+				}
 				if traffic, err := snapshotRepo.GetLatestTrafficByServer(ctx, snapshot.ServerID); err == nil && traffic.Available {
 					currentMonth := time.Now().UTC().Format("2006-01")
 					for _, row := range traffic.MonthlyRows {
@@ -88,6 +106,29 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := h.renderer.Render(w, http.StatusOK, page); err != nil {
 		http.Error(w, "render page", http.StatusInternalServerError)
 	}
+}
+
+// serverCountryBadges loads every server's detected country and returns the ones
+// with a renderable flag, keyed by server id. Servers without a detected country
+// are omitted (callers treat a missing key as "no flag"). Any error yields an
+// empty map so the page simply renders without flags. Shared by the home
+// dashboard and the diagnostics scheduler view.
+func serverCountryBadges(database *db.Runtime) map[int64]countryBadge {
+	badges := map[int64]countryBadge{}
+	if database == nil || database.SQL == nil {
+		return badges
+	}
+	repo := servers.NewSQLRepository(database.SQL)
+	list, err := repo.List(context.Background())
+	if err != nil {
+		return badges
+	}
+	for _, server := range list {
+		if flag := geoip.FlagEmoji(server.CountryCode); flag != "" {
+			badges[server.ID] = countryBadge{Flag: flag, Name: server.CountryName}
+		}
+	}
+	return badges
 }
 
 // homeURL builds a home-page URL for snapshot pagination.
@@ -127,7 +168,7 @@ func paginateSlice(total, page, perPage int) (totalPages, currentPage, start, en
 
 // schedulerOverviewView builds a paginated scheduler view.
 // makePageURL generates the URL for a given page number (called by buildPaginationView).
-func schedulerOverviewView(s *scheduler.Runtime, page, perPage int, makePageURL func(int) string) view.SchedulerOverviewView {
+func schedulerOverviewView(s *scheduler.Runtime, page, perPage int, countries map[int64]countryBadge, makePageURL func(int) string) view.SchedulerOverviewView {
 	if s == nil {
 		return view.SchedulerOverviewView{}
 	}
@@ -142,9 +183,12 @@ func schedulerOverviewView(s *scheduler.Runtime, page, perPage int, makePageURL 
 		if detail == "" {
 			detail = strings.TrimSpace(job.Reason)
 		}
+		badge := countries[job.ServerID]
 		allJobs = append(allJobs, view.ScheduledJobView{
 			ServerID:            job.ServerID,
 			ServerName:          job.ServerName,
+			FlagEmoji:           badge.Flag,
+			CountryName:         badge.Name,
 			JobType:             string(job.JobType),
 			Status:              job.Status,
 			Detail:              detail,

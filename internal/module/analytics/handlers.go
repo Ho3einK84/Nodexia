@@ -85,6 +85,7 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	page.ActiveNav = "/analytics"
 	page.ContentTemplate = "content-analytics"
 	page.PageTitle = "Analytics for " + server.Name
+	page.SetServerCountry(server.CountryCode, server.CountryName)
 	page.PageDescription = "Historical metrics, trends, and bandwidth forecasting."
 	if h.deps.Database != nil {
 		page.MigrationCount = h.deps.Database.MigrationCount()

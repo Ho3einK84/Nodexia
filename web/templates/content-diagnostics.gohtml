@@ -184,7 +184,7 @@
       {{ range .SchedulerOverview.Jobs }}
       <article class="dashboard-item">
         <div class="server-item__header">
-          <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }} &middot; <span style="font-weight:400; color: var(--text-dim)">{{ .JobType }}</span></h4>
+          <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }} &middot; <span style="font-weight:400; color: var(--text-dim)">{{ .JobType }}</span></h4>
           <div style="display:flex;align-items:center;gap:8px">
             {{ if .Paused }}
             <span class="status-pill status-pill--idle">paused</span>

@@ -389,6 +389,7 @@ func renderPage(
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-monitoring"
 	page.PageTitle = "Monitoring for " + server.Name
+	page.SetServerCountry(server.CountryCode, server.CountryName)
 	page.PageDescription = "Collect CPU, memory, disk, load average, uptime, and network summary snapshots over SSH."
 	if deps.Database != nil {
 		page.MigrationCount = deps.Database.MigrationCount()

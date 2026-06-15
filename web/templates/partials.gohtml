@@ -106,7 +106,7 @@
 <div class="page-header">
   <div>
     <p class="section-label">{{ .Environment }}</p>
-    <h2>{{ .PageTitle }}</h2>
+    <h2>{{ .PageTitle }}{{ if .PageFlag }} <span class="page-header__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}</h2>
     {{ if .PageDescription }}
     <p class="page-description">{{ .PageDescription }}</p>
     {{ end }}

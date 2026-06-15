@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	assets "github.com/Ho3einK84/Nodexia"
+	"github.com/Ho3einK84/Nodexia/internal/geoip"
 )
 
 type PageData struct {
@@ -35,6 +36,8 @@ type PageData struct {
 	NavigationItems             []NavItem
 	PageTitle                   string
 	PageDescription             string
+	PageFlag                    string // server-scoped country flag emoji; set via SetServerCountry
+	PageFlagTitle               string // country name shown on the flag's hover title
 	StatusCode                  int
 	ErrorTitle                  string
 	ErrorMessage                string
@@ -111,6 +114,14 @@ type PageData struct {
 	AnalyticsTarget       AnalyticsTargetView
 	AnalyticsTrafficMonth AnalyticsTrafficSummaryView
 	GlobalAnalytics       GlobalAnalyticsView
+}
+
+// SetServerCountry attaches a server's detected country to the page header so a
+// flag badge renders next to the server name on any server-scoped page. It is
+// safe to call with an empty/unknown code — the flag simply does not render.
+func (p *PageData) SetServerCountry(code, name string) {
+	p.PageFlag = geoip.FlagEmoji(code)
+	p.PageFlagTitle = name
 }
 
 // PaginationView describes a rendered pagination control. It is reusable across
@@ -326,6 +337,8 @@ type SchedulerOverviewView struct {
 type ScheduledJobView struct {
 	ServerID            int64
 	ServerName          string
+	FlagEmoji           string
+	CountryName         string
 	JobType             string
 	Status              string
 	Detail              string
@@ -486,6 +499,8 @@ type MonitoringTrafficRowView struct {
 type DashboardMonitoringView struct {
 	ServerID       int64
 	ServerName     string
+	FlagEmoji      string
+	CountryName    string
 	CPUUsage       string
 	RAMUsage       string
 	DiskUsage      string

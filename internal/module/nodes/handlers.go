@@ -562,6 +562,7 @@ func (h *Handlers) InstallJob(w http.ResponseWriter, r *http.Request) {
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-node-install"
 	page.PageTitle = "Installing PasarGuard node on " + server.Name
+	page.SetServerCountry(server.CountryCode, server.CountryName)
 	page.PageDescription = "The official PasarGuard install script is running over SSH. After it finishes, the API key and SSL certificate needed to register the node in the panel are shown here."
 	if h.deps.Database != nil {
 		page.MigrationCount = h.deps.Database.MigrationCount()
@@ -691,6 +692,7 @@ func (h *Handlers) renderPage(w http.ResponseWriter, r *http.Request, server ser
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-nodes"
 	page.PageTitle = "Nodes on " + server.Name
+	page.SetServerCountry(server.CountryCode, server.CountryName)
 	page.PageDescription = "Discover PasarGuard and Rebecca node installations over SSH, manage them through their official CLIs, and install new PasarGuard nodes."
 	if h.deps.Database != nil {
 		page.MigrationCount = h.deps.Database.MigrationCount()

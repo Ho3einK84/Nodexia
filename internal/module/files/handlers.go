@@ -280,6 +280,7 @@ func renderPage(
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-files"
 	page.PageTitle = "File browser for " + server.Name
+	page.SetServerCountry(server.CountryCode, server.CountryName)
 	page.PageDescription = "Browse remote directories over SFTP and download files with runtime credentials only."
 	if deps.Database != nil {
 		page.MigrationCount = deps.Database.MigrationCount()

@@ -427,6 +427,7 @@ func renderTerminalPage(
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-terminal"
 	page.PageTitle = "Terminal — " + server.Name
+	page.SetServerCountry(server.CountryCode, server.CountryName)
 	page.PageDescription = "Interactive SSH shell for " + server.Name + "."
 	if deps.Database != nil {
 		page.MigrationCount = deps.Database.MigrationCount()

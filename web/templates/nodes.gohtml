@@ -4,6 +4,7 @@
   <div class="info-strip">
     <i data-lucide="server" class="info-strip__icon"></i>
     <span class="info-strip__name">{{ .NodeTarget.Name }}</span>
+    {{ if .PageFlag }}<span class="info-strip__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}
     <span class="info-strip__addr">{{ .NodeTarget.Username }}@{{ .NodeTarget.Host }}:{{ .NodeTarget.Port }}</span>
     <span class="badge badge--auth-{{ .NodeTarget.AuthMode }}">{{ .NodeTarget.AuthMode }}</span>
     {{ range .NodeTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
@@ -487,6 +488,7 @@
   <div class="info-strip">
     <i data-lucide="server" class="info-strip__icon"></i>
     <span class="info-strip__name">{{ .NodeTarget.Name }}</span>
+    {{ if .PageFlag }}<span class="info-strip__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}
     <span class="info-strip__addr">{{ .NodeTarget.Username }}@{{ .NodeTarget.Host }}:{{ .NodeTarget.Port }}</span>
     <div class="info-strip__actions">
       <a class="btn btn--ghost btn--sm" href="{{ .NodeInstall.NodesURL }}"><i data-lucide="arrow-left" class="icon-in-button"></i> Back to nodes</a>

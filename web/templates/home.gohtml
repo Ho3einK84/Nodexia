@@ -45,7 +45,7 @@
         {{ range .DashboardSnapshots }}
         <article class="dashboard-item">
           <div class="server-item__header">
-            <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}</h4>
+            <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</h4>
             <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> Monitor</a>
           </div>
           <div class="mini-metrics">
@@ -116,7 +116,7 @@
         {{ range .SchedulerOverview.Jobs }}
         <article class="dashboard-item">
           <div class="server-item__header">
-            <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}</h4>
+            <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</h4>
             <span class="status-pill status-pill--{{ if or (eq .Status "running") (eq .Status "scheduled") }}ok{{ else if eq .Status "retrying" }}crit{{ else if eq .Status "blocked" }}warn{{ else }}idle{{ end }}">{{ .Status }}</span>
           </div>
           <div class="dashboard-item__meta">

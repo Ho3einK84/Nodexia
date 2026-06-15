@@ -468,6 +468,7 @@ func renderPage(
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-commands"
 	page.PageTitle = "Command center for " + server.Name
+	page.SetServerCountry(server.CountryCode, server.CountryName)
 	page.PageDescription = "Run one-off SSH commands, stream long output, and review recent command history without persisting secrets."
 	if deps.Database != nil {
 		page.MigrationCount = deps.Database.MigrationCount()

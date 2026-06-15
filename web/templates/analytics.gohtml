@@ -4,6 +4,7 @@
   <div class="info-strip">
     <i data-lucide="bar-chart-2" class="info-strip__icon"></i>
     <span class="info-strip__name">{{ .AnalyticsTarget.Name }}</span>
+    {{ if .PageFlag }}<span class="info-strip__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}
     <span class="info-strip__addr">{{ .AnalyticsTarget.Username }}@{{ .AnalyticsTarget.Host }}:{{ .AnalyticsTarget.Port }}</span>
     <span class="badge badge--auth-{{ .AnalyticsTarget.AuthMode }}">{{ .AnalyticsTarget.AuthMode }}</span>
     {{ range .AnalyticsTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}

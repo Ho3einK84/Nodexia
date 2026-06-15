@@ -4,6 +4,7 @@
   <div class="info-strip">
     <i data-lucide="server" class="info-strip__icon"></i>
     <span class="info-strip__name">{{ .CommandTarget.Name }}</span>
+    {{ if .PageFlag }}<span class="info-strip__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}
     <span class="info-strip__addr">{{ .CommandTarget.Username }}@{{ .CommandTarget.Host }}:{{ .CommandTarget.Port }}</span>
     <span class="badge badge--auth-{{ .CommandTarget.AuthMode }}">{{ .CommandTarget.AuthMode }}</span>
     {{ range .CommandTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}

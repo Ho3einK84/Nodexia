@@ -45,7 +45,7 @@ func (h DiagnosticsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	page.PageDescription = "Runtime health, background jobs, and support signals without reading application logs manually."
 	schPage, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("sch_page")))
 	page.Diagnostics = h.buildDiagnostics(r)
-	page.SchedulerOverview = schedulerOverviewView(h.scheduler, schPage, 10, func(p int) string {
+	page.SchedulerOverview = schedulerOverviewView(h.scheduler, schPage, 10, serverCountryBadges(h.database), func(p int) string {
 		if p <= 1 {
 			return "/ops/diagnostics"
 		}
