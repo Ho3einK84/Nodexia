@@ -53,13 +53,15 @@ type webManifest struct {
 	StartURL    string `json:"start_url"`
 	Scope       string `json:"scope"`
 	Display     string `json:"display"`
-	// Orientation is deliberately omitted. Declaring an explicit value (notably
-	// "any") makes an installed PWA request an orientation lock from the OS,
-	// which overrides the user's system rotation lock and force-rotates the app
-	// even when they have locked portrait. With no orientation member the
-	// platform's auto-rotate / rotation-lock setting governs the app: locked
-	// portrait stays portrait, and an unlocked device is free to rotate (so the
-	// SSH terminal can still be used in landscape when the user allows it).
+	// Orientation locks the installed PWA to portrait so it never rotates to
+	// landscape — not even when the phone is turned sideways with the system
+	// rotation lock off. "portrait" (rather than "portrait-primary") is the most
+	// broadly honoured value across Android Chrome installs and keeps the app
+	// upright. Note: this manifest member is honoured by installed PWAs on
+	// Android/Chromium; iOS Safari historically ignores the orientation field, so
+	// a runtime screen.orientation.lock('portrait') call backs it up where the
+	// platform supports it (see web/static/app.js).
+	Orientation     string             `json:"orientation"`
 	ThemeColor      string             `json:"theme_color"`
 	BackgroundColor string             `json:"background_color"`
 	Lang            string             `json:"lang"`
@@ -85,6 +87,7 @@ func NewManifestHandler(cfg config.Config) ManifestHandler {
 		StartURL:        "/",
 		Scope:           "/",
 		Display:         "standalone",
+		Orientation:     "portrait",
 		ThemeColor:      "#0f172a",
 		BackgroundColor: "#0f172a",
 		Lang:            "en",

@@ -546,6 +546,12 @@
       vv.addEventListener('resize', scheduleViewportUpdate);
       vv.addEventListener('scroll', scheduleViewportUpdate);
     }
+    // The app is locked to portrait (manifest orientation + app.js runtime lock),
+    // so orientationchange should no longer fire on installed/locked clients —
+    // this listener is now effectively a no-op there. It is kept as a harmless
+    // safety net for any browser that still allows a rotation (e.g. a desktop
+    // tab, or a platform that ignores the lock): if the viewport ever does flip,
+    // the grid still reflows correctly instead of being left mis-sized.
     window.addEventListener('orientationchange', function () {
       setTimeout(scheduleViewportUpdate, 250);
     });

@@ -101,12 +101,12 @@ func TestManifestServedPublicly(t *testing.T) {
 	}
 }
 
-// TestManifestRespectsRotationLock verifies the manifest does not declare an
-// orientation lock. An explicit orientation (notably "any") makes an installed
-// PWA override the device's system rotation lock and force-rotate even when the
-// user has locked portrait. Omitting the member hands control back to the OS
-// auto-rotate / rotation-lock setting, which is the behaviour we want.
-func TestManifestRespectsRotationLock(t *testing.T) {
+// TestManifestLocksPortrait verifies the manifest locks the installed PWA to
+// portrait so it never rotates to landscape — not even when the phone is turned
+// sideways with the system rotation lock off. The value must be exactly
+// "portrait"; the runtime screen.orientation.lock('portrait') call in app.js
+// backs this up where the platform honours it.
+func TestManifestLocksPortrait(t *testing.T) {
 	server := newPWATestServer(t)
 
 	resp := mustGet(t, server.URL+"/manifest.webmanifest")
@@ -117,9 +117,9 @@ func TestManifestRespectsRotationLock(t *testing.T) {
 		t.Fatalf("decode manifest: %v", err)
 	}
 
-	if v, ok := manifest["orientation"]; ok {
-		t.Fatalf("manifest declares orientation=%v; it must be omitted so the "+
-			"installed PWA honours the device rotation lock", v)
+	if got := manifest["orientation"]; got != "portrait" {
+		t.Fatalf("manifest orientation = %v, want \"portrait\" so the installed "+
+			"PWA stays locked to portrait and never rotates", got)
 	}
 }
 
