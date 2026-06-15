@@ -46,6 +46,12 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 		LiveMetrics:     liveMetrics,
 		Renderer:        renderer,
 	}
+	// Assign the scheduler as the country resolver only when it is actually
+	// present, so the interface field stays a true nil (not a typed nil) when the
+	// scheduler is unavailable and handlers can rely on a plain nil check.
+	if backgroundScheduler != nil {
+		deps.CountryResolver = backgroundScheduler
+	}
 
 	health := handlers.NewHealthHandler(cfg, database)
 

@@ -77,7 +77,7 @@
               aria-label="Select {{ .Name }}">
           </div>
           <div class="server-card__identity">
-            <h4 class="server-card__name"><i data-lucide="server" class="icon-in-button"></i> {{ .Name }}</h4>
+            <h4 class="server-card__name"><i data-lucide="server" class="icon-in-button"></i> {{ .Name }}{{ if .FlagEmoji }} <span class="server-card__flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</h4>
             <span class="server-card__host">{{ .Username }}@{{ .Host }}:{{ .Port }}</span>
             {{ if .IsOnline }}
             <span class="server-card__status server-status--online"><span class="status-pulse"></span>Online</span>

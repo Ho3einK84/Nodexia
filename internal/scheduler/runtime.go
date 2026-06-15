@@ -201,9 +201,10 @@ func (r *Runtime) Start() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	r.cancel = cancel
-	r.wg.Add(2)
+	r.wg.Add(3)
 	go r.loop(ctx)
 	go r.analyticsLoop(ctx)
+	go r.countryLoop(ctx)
 }
 
 // analyticsLoop runs hourly metric rollups and daily cleanup on independent
@@ -489,7 +490,13 @@ func (r *Runtime) launchJob(parent context.Context, server servers.Server, jobTy
 	}()
 }
 
-func (r *Runtime) executeJob(ctx context.Context, server servers.Server, jobType JobType) (string, error) {
+// connectionRequestFor resolves a server's SSH credentials (honouring its
+// credential strategy) and builds a CommandRequest ready for a command to be
+// attached. It is shared by the monitoring/nodes jobs and the country resolver
+// so credential handling stays in exactly one place. It also returns the
+// resolved credential so callers that need its extra fields (e.g. the traffic
+// interface) can use them.
+func (r *Runtime) connectionRequestFor(server servers.Server) (sshclient.CommandRequest, resolvedCredential, error) {
 	var credentials resolvedCredential
 	authMode := server.AuthMode
 
@@ -511,7 +518,7 @@ func (r *Runtime) executeJob(ctx context.Context, server servers.Server, jobType
 		var err error
 		credentials, err = resolveCredential(server.AuthMode, server.CredentialRef)
 		if err != nil {
-			return "", err
+			return sshclient.CommandRequest{}, resolvedCredential{}, err
 		}
 	}
 
@@ -527,6 +534,14 @@ func (r *Runtime) executeJob(ctx context.Context, server servers.Server, jobType
 			ConnectTimeout: r.cfg.ConnectTimeout,
 		},
 		CommandTimeout: r.cfg.CommandTimeout,
+	}
+	return req, credentials, nil
+}
+
+func (r *Runtime) executeJob(ctx context.Context, server servers.Server, jobType JobType) (string, error) {
+	req, credentials, err := r.connectionRequestFor(server)
+	if err != nil {
+		return "", err
 	}
 
 	switch jobType {

@@ -279,3 +279,16 @@ CREATE TABLE IF NOT EXISTS metric_rollups_daily (
 
 CREATE INDEX IF NOT EXISTS idx_metric_rollups_daily_server_period
   ON metric_rollups_daily (server_id, period_start);
+
+-- ── Geo / country detection ───────────────────────────────────────────────────
+-- Each server's detected public-IP country is cached on the row so it never has
+-- to be looked up on a page render. Detection runs over the established SSH
+-- connection to the node (see internal/geoip), so the code reflects the node's
+-- own egress IP rather than the panel's network. Appended as standalone
+-- statements so existing databases pick them up as new bootstrap migrations.
+-- country_checked_at records the last resolution attempt (success OR empty) so
+-- the scheduler can back off and refresh on a generous cadence instead of
+-- hammering the rate-limited geo services.
+ALTER TABLE servers ADD COLUMN country_code TEXT NOT NULL DEFAULT '';
+ALTER TABLE servers ADD COLUMN country_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE servers ADD COLUMN country_checked_at DATETIME;

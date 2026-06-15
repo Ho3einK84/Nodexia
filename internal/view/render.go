@@ -150,6 +150,12 @@ type ServerSummary struct {
 	// older snapshot data; both are empty when no snapshots exist.
 	IsOnline   bool
 	LastSeenAt string
+	// FlagEmoji is the detected country's flag (regional-indicator emoji), or ""
+	// when the country is unknown/undetected. CountryName is the human-readable
+	// name shown on hover; CountryCode is the ISO 3166-1 alpha-2 code.
+	FlagEmoji   string
+	CountryCode string
+	CountryName string
 }
 
 type ServerFormView struct {
