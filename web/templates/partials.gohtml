@@ -18,6 +18,11 @@
   <link rel="icon" href="/static/icon-192.png" sizes="192x192" type="image/png">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 
+  {{/* Self-hosted Exo 2: preload the Latin variable WOFF2 so the download
+       starts alongside the stylesheet instead of after the @font-face is
+       parsed. latin-ext is intentionally not preloaded — it is fetched only
+       when a non-Basic-Latin glyph is rendered. */}}
+  <link rel="preload" href="/static/fonts/exo2-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/style.css">
   {{ range .PageStyles }}<link rel="stylesheet" href="{{ . }}">
   {{ end }}<script src="/static/lucide.min.js" defer></script>

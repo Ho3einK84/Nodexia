@@ -59,7 +59,7 @@
 .breadcrumb__seg--current {
   color: #cbd5e1;
   cursor: default;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .breadcrumb__seg--current:hover {
@@ -119,7 +119,7 @@
 
 .file-creds__title {
   font-size: 0.8rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -184,7 +184,7 @@
   padding: 6px 10px;
   font-size: 0.7rem;
   color: #1e293b;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-bottom: 1px solid rgba(148, 163, 184, 0.06);
@@ -244,7 +244,7 @@
 
 .file-row--dir .file-row__name-text {
   color: #93c5fd;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .file-row__mode {
@@ -258,7 +258,7 @@
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   font-size: 0.78rem;
   color: #475569;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: var(--num);
 }
 
 .file-row__date {
@@ -440,7 +440,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #475569;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .file-sort select {
@@ -555,7 +555,7 @@
   font-size: 0.74rem;
   color: #64748b;
   text-align: right;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: var(--num);
 }
 
 .file-upload--ok .file-upload__fill { background: #22c55e; }

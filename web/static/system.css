@@ -29,7 +29,7 @@
   align-items: center;
   gap: 5px;
   font-size: 0.68rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: #475569;
@@ -43,16 +43,17 @@
 }
 
 .sys-fact-hero__value {
+  font-variant-numeric: var(--num);
   font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
   font-size: 0.95rem;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: #e2e8f0;
   line-height: 1.3;
   word-break: break-word;
 }
 
 .sys-fact-version {
-  font-weight: 400;
+  font-weight: var(--fw-regular);
   color: #64748b;
   font-size: 0.82rem;
 }
@@ -81,7 +82,7 @@
   align-items: center;
   gap: 5px;
   font-size: 0.68rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: #475569;
@@ -94,6 +95,7 @@
 }
 
 .sys-fact-item__value {
+  font-variant-numeric: var(--num);
   font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
   font-size: 0.82rem;
   color: #94a3b8;
