@@ -12,9 +12,16 @@
  *     {"type":"error","message":"<string>"}
  *
  * Mobile enhancements (only active under the same 700px breakpoint the rest of
- * the UI uses): a scrollable key toolbar (with Copy/Paste), visualViewport-driven
- * reflow so the grid never gets squished by the soft keyboard, native long-press
- * text selection, and a persisted font size. Desktop behaviour is unchanged.
+ * the UI uses): a scrollable key toolbar, visualViewport-driven reflow so the
+ * grid never gets squished by the soft keyboard, and a persisted font size.
+ *
+ * Copying terminal output on a phone is the hard part: xterm's live rows are not
+ * reliably selectable by a native long-press, so the toolbar offers explicit
+ * actions instead — a "Select" mode that overlays the scrollback as plain,
+ * natively-selectable text, a one-tap "Copy all", and a "Copy" that grabs the
+ * current selection. All copy paths fall back to a hidden-textarea execCommand
+ * when the async clipboard API is unavailable (e.g. an HTTP-served panel), so
+ * copy works outside secure contexts too. Desktop behaviour is unchanged.
  */
 (function () {
   'use strict';
@@ -115,20 +122,26 @@
     '?ticket=' + encodeURIComponent(ticket);
   var ws = new WebSocket(wsURL);
 
+  // Auto-run an initial command (e.g. an interactive command forwarded from the
+  // command center) exactly once. A fixed delay races the shell startup, so we
+  // wait for the first output (the prompt) and add a short settle delay; a
+  // generous fallback timer covers shells that emit nothing before the prompt.
+  var initSent = false;
+  function maybeSendInitCmd() {
+    if (initSent || !initCmd) return;
+    initSent = true;
+    setTimeout(function () {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'input', data: initCmd + '\n' }));
+      }
+    }, 150);
+  }
+
   ws.onopen = function () {
     setStatus('connected', 'connected');
     fitAndResize();
     term.focus();
-
-    // Auto-run an initial command (e.g. an interactive command forwarded from
-    // the command center). Defer briefly so the shell prompt is ready.
-    if (initCmd) {
-      setTimeout(function () {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'input', data: initCmd + '\n' }));
-        }
-      }, 350);
-    }
+    if (initCmd) setTimeout(maybeSendInitCmd, 1200);
   };
 
   ws.onmessage = function (event) {
@@ -136,6 +149,7 @@
       var msg = JSON.parse(event.data);
       if (msg.type === 'output') {
         term.write(msg.data);
+        maybeSendInitCmd();
       } else if (msg.type === 'error') {
         showError(msg.message);
         setStatus('error', 'error');
@@ -232,28 +246,75 @@
     if (isMobile) {
       try { window.localStorage.setItem(FONT_KEY, String(px)); } catch (e) { /* ignore */ }
     }
-    fitAndResize();
+    if (selectPre) selectPre.style.fontSize = px + 'px';
+    // Defer the fit one frame so xterm has recomputed its cell dimensions for the
+    // new font size; fitting synchronously here can size the grid from stale dims.
+    requestAnimationFrame(fitAndResize);
   }
 
-  /* ── Clipboard paste ──────────────────────────────────── */
-  function clipboardAvailable() {
-    return !!(navigator.clipboard && navigator.clipboard.readText);
+  /* ── Clipboard write (with non-secure-context fallback) ── */
+  // navigator.clipboard only exists in secure contexts (HTTPS or localhost). When
+  // it is missing — or rejects — fall back to a hidden <textarea> + execCommand so
+  // copy still works on HTTP-served panels. Returns a Promise.
+  function fallbackCopy(text) {
+    return new Promise(function (resolve, reject) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.width = '1px';
+      ta.style.height = '1px';
+      ta.style.padding = '0';
+      ta.style.border = 'none';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      // Preserve any existing (e.g. select-mode) selection across the copy.
+      var sel = window.getSelection ? window.getSelection() : null;
+      var saved = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+      ta.focus();
+      ta.select();
+      try { ta.setSelectionRange(0, text.length); } catch (e) { /* ignore */ }
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      if (saved && sel) { sel.removeAllRanges(); sel.addRange(saved); }
+      ok ? resolve() : reject();
+    });
   }
 
+  function writeClipboard(text) {
+    if (!text) return Promise.reject();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () {
+        return fallbackCopy(text);
+      });
+    }
+    return fallbackCopy(text);
+  }
+
+  /* ── Clipboard paste (with non-secure-context fallback) ── */
   function doPaste() {
-    if (!clipboardAvailable()) return;
-    navigator.clipboard.readText().then(function (text) {
-      sendInput(text);
-    }).catch(function () { /* permission denied / unavailable */ });
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(sendInput).catch(promptPaste);
+    } else {
+      promptPaste();
+    }
   }
 
-  /* ── Clipboard copy ───────────────────────────────────── */
-  function canWriteClipboard() {
-    return !!(navigator.clipboard && navigator.clipboard.writeText);
+  // Without the async clipboard API there is no way to read the clipboard
+  // silently, so ask the user — they can paste into the prompt on any browser.
+  function promptPaste() {
+    try {
+      var text = window.prompt('Paste text to send to the terminal:');
+      if (text) sendInput(text);
+    } catch (e) { /* prompt unavailable */ }
   }
 
-  // Prefer the user's native long-press selection over the DOM-rendered rows;
-  // fall back to xterm's own selection (a desktop mouse drag, say).
+  /* ── Selection sources ────────────────────────────────── */
+  // Prefer a live DOM selection (the select-mode overlay, or a desktop mouse
+  // drag over selectable text); fall back to xterm's own selection.
   function currentSelection() {
     var sel = '';
     try { sel = window.getSelection ? String(window.getSelection()) : ''; } catch (e) { /* ignore */ }
@@ -261,22 +322,89 @@
     try { return term.hasSelection() ? term.getSelection() : ''; } catch (e) { return ''; }
   }
 
+  // Extract plain text straight from xterm's buffer (scrollback + screen) rather
+  // than the DOM, so "Copy all" works regardless of what is selected or visible.
+  function getBufferText(visibleOnly) {
+    try {
+      var buf = term.buffer.active;
+      var start = 0;
+      var end = buf.length;
+      if (visibleOnly) {
+        start = buf.viewportY;
+        end = Math.min(buf.length, start + term.rows);
+      }
+      var lines = [];
+      for (var i = start; i < end; i++) {
+        var line = buf.getLine(i);
+        lines.push(line ? line.translateToString(true) : '');
+      }
+      while (lines.length && lines[lines.length - 1] === '') lines.pop();
+      return lines.join('\n');
+    } catch (e) { return ''; }
+  }
+
   function flashCopied(btn) {
     if (!btn) return;
+    var orig = btn.getAttribute('data-label') || btn.textContent;
     btn.textContent = 'Copied!';
     btn.classList.add('is-copied');
     setTimeout(function () {
-      btn.textContent = 'Copy';
+      btn.textContent = orig;
       btn.classList.remove('is-copied');
     }, 1000);
   }
 
-  function doCopy(btn) {
-    var text = currentSelection();
-    if (!text || !canWriteClipboard()) return;
-    navigator.clipboard.writeText(text).then(function () {
+  function doCopy(text, btn) {
+    writeClipboard(text).then(function () {
       flashCopied(btn);
-    }).catch(function () { /* permission denied / unavailable */ });
+    }).catch(function () { /* nothing selected / copy blocked */ });
+  }
+
+  /* ── Select mode (mobile) ─────────────────────────────── */
+  // Overlay the scrollback as plain, natively-selectable text so a phone user can
+  // long-press and drag-handle a region, then Copy (or use the OS copy menu, which
+  // works even without the clipboard API). Built lazily on first use.
+  var selecting = false;
+  var selectOverlay = null;
+  var selectPre = null;
+  var selectBtn = null;
+
+  function buildSelectOverlay() {
+    selectOverlay = document.createElement('div');
+    selectOverlay.className = 'terminal-select-overlay';
+    selectOverlay.hidden = true;
+    selectPre = document.createElement('pre');
+    selectPre.className = 'terminal-select-text';
+    selectOverlay.appendChild(selectPre);
+    container.appendChild(selectOverlay);
+  }
+
+  function setSelectMode(on) {
+    if (on && !selectOverlay) buildSelectOverlay();
+    if (!selectOverlay) return;
+    selecting = on;
+    if (on) {
+      selectPre.style.fontSize = term.options.fontSize + 'px';
+      selectPre.textContent = getBufferText(false);
+      selectOverlay.hidden = false;
+      selectOverlay.scrollTop = selectOverlay.scrollHeight; // mirror the live view
+      // Drop keyboard focus so the soft keyboard hides, leaving room to select.
+      var ta = container.querySelector('textarea');
+      if (ta && ta.blur) ta.blur();
+    } else {
+      selectOverlay.hidden = true;
+      selectPre.textContent = '';
+      try {
+        var sel = window.getSelection && window.getSelection();
+        if (sel && sel.removeAllRanges) sel.removeAllRanges();
+      } catch (e) { /* ignore */ }
+      term.focus();
+    }
+    if (selectBtn) {
+      selectBtn.classList.toggle('is-active', on);
+      selectBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      selectBtn.textContent = on ? 'Done' : 'Select';
+    }
   }
 
   /* ── Mobile key toolbar ───────────────────────────────── */
@@ -303,19 +431,27 @@
     { label: 'Home',  kind: 'seq', key: 'home' },
     { label: 'End',   kind: 'seq', key: 'end' },
     { label: 'Del',   kind: 'seq', key: 'del' },
-    { label: 'Copy',  kind: 'copy' },
-    { label: 'Paste', kind: 'paste' },
+    { label: 'Select',   kind: 'select', aria: 'Select text' },
+    { label: 'Copy',     kind: 'copy', aria: 'Copy selection' },
+    { label: 'Copy all', kind: 'copyall', aria: 'Copy all output' },
+    { label: 'Paste',    kind: 'paste' },
     { label: 'A−',    kind: 'font', key: 'dec', aria: 'Smaller font' },
     { label: 'A+',    kind: 'font', key: 'inc', aria: 'Larger font' },
   ];
 
+  // Actions that touch (or depend on) a text selection must not pull focus back
+  // to the terminal — that would clear the selection and pop the soft keyboard.
+  var NO_REFOCUS = { select: true, copy: true, copyall: true };
+
   function handleKey(def, btn) {
     switch (def.kind) {
-      case 'seq':   sendInput(SEQ[def.key]); break;
-      case 'ctrl':  setCtrl(!ctrlPending); break;
-      case 'copy':  doCopy(btn); break;
-      case 'paste': doPaste(); break;
-      case 'font':  setFontSize(term.options.fontSize + (def.key === 'inc' ? 1 : -1)); break;
+      case 'seq':     sendInput(SEQ[def.key]); break;
+      case 'ctrl':    setCtrl(!ctrlPending); break;
+      case 'select':  setSelectMode(!selecting); break;
+      case 'copy':    doCopy(currentSelection(), btn); break;
+      case 'copyall': doCopy(getBufferText(false), btn); break;
+      case 'paste':   doPaste(); break;
+      case 'font':    setFontSize(term.options.fontSize + (def.key === 'inc' ? 1 : -1)); break;
     }
   }
 
@@ -326,20 +462,25 @@
     bar.setAttribute('aria-label', 'Terminal keys');
 
     BUTTONS.forEach(function (def) {
-      if (def.kind === 'paste' && !clipboardAvailable()) return;
-      if (def.kind === 'copy' && !canWriteClipboard()) return;
-
+      // Copy/Paste are always offered now: even without the async clipboard API
+      // they fall back to execCommand / prompt, so HTTP panels keep a copy path.
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'terminal-key';
       btn.textContent = def.label;
       btn.tabIndex = -1;
+      btn.setAttribute('data-label', def.label);
       btn.setAttribute('aria-label', def.aria || def.label);
 
       if (def.kind === 'ctrl') {
         btn.classList.add('terminal-key--ctrl');
         btn.setAttribute('aria-pressed', 'false');
         ctrlBtn = btn;
+      }
+      if (def.kind === 'select') {
+        btn.classList.add('terminal-key--select');
+        btn.setAttribute('aria-pressed', 'false');
+        selectBtn = btn;
       }
 
       // Prevent the button from stealing focus from the xterm textarea, which
@@ -348,9 +489,9 @@
       btn.addEventListener('click', function (e) {
         e.preventDefault();
         handleKey(def, btn);
-        // Copy must keep the user's selection and not pop the keyboard, so it
-        // is the one action that does not pull focus back to the terminal.
-        if (def.kind !== 'copy') term.focus();
+        // Selection-related actions manage focus themselves; everything else
+        // pulls focus back to the terminal to keep the keyboard up.
+        if (!NO_REFOCUS[def.kind]) term.focus();
       });
 
       bar.appendChild(btn);
