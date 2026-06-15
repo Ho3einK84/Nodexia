@@ -64,24 +64,26 @@ func flashKind(r *http.Request) string {
 	}
 }
 
+// flashMessage returns a translation key for the flash marker; renderOverview
+// resolves it in the request's active language.
 func flashMessage(r *http.Request) string {
 	switch r.URL.Query().Get("flash") {
 	case "rule-created":
-		return "Alert rule created successfully."
+		return "alerts.flash.rule_created"
 	case "rule-updated":
-		return "Alert rule updated successfully."
+		return "alerts.flash.rule_updated"
 	case "rule-deleted":
-		return "Alert rule deleted successfully."
+		return "alerts.flash.rule_deleted"
 	case "channel-created":
-		return "Notification channel created successfully."
+		return "alerts.flash.channel_created"
 	case "channel-updated":
-		return "Notification channel updated successfully."
+		return "alerts.flash.channel_updated"
 	case "channel-deleted":
-		return "Notification channel deleted successfully."
+		return "alerts.flash.channel_deleted"
 	case "silenced":
-		return "Metric silenced for the selected server."
+		return "alerts.flash.silenced"
 	case "silence-removed":
-		return "Silence removed."
+		return "alerts.flash.silence_removed"
 	default:
 		return ""
 	}

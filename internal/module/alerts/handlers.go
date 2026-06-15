@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Ho3einK84/Nodexia/internal/i18n"
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 	"github.com/Ho3einK84/Nodexia/internal/notify"
@@ -40,7 +41,7 @@ func (h Handlers) Overview(w http.ResponseWriter, r *http.Request) {
 	eventsPage, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("events_page")))
 	overview, err := h.overviewModel(r.Context(), eventsPage)
 	if err != nil {
-		renderError(w, r, h.deps, err, "Could not load alerts", "The alerts page could not be loaded.")
+		renderError(w, r, h.deps, err, "alerts.error.load_title", "alerts.error.load_message")
 		return
 	}
 	renderOverview(w, r, h.deps, http.StatusOK, overview, flashKind(r), flashMessage(r))
@@ -114,14 +115,13 @@ func (h Handlers) RuleNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form := buildRuleFormView(0, DefaultRuleFormInput(), ValidationErrors{}, "/alerts/rules", "", refs, channels)
-	renderRuleForm(w, r, h.deps, http.StatusOK, "New alert rule",
-		"Fire a notification when a metric crosses a threshold. Leave the server unset to apply the rule to every server.",
+	renderRuleForm(w, r, h.deps, http.StatusOK, "alerts.rule_form_new", "alerts.rule_form_new_desc",
 		form, "", "")
 }
 
 func (h Handlers) RuleCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		renderError(w, r, h.deps, err, "Invalid form request", "The submitted alert rule form could not be parsed.")
+		renderError(w, r, h.deps, err, "alerts.error.invalid_form_title", "alerts.error.invalid_rule_message")
 		return
 	}
 	refs, channels, ok := h.loadRuleFormDeps(w, r)
@@ -133,14 +133,13 @@ func (h Handlers) RuleCreate(w http.ResponseWriter, r *http.Request) {
 	h.checkRuleAssociations(validated.Rule, refs, channels, errs)
 	if errs.HasAny() {
 		form := buildRuleFormView(0, validated.Input, errs, "/alerts/rules", "", refs, channels)
-		renderRuleForm(w, r, h.deps, http.StatusUnprocessableEntity, "New alert rule",
-			"Fix the highlighted fields and create the rule again.", form, "error",
-			"Please fix the highlighted fields before saving.")
+		renderRuleForm(w, r, h.deps, http.StatusUnprocessableEntity, "alerts.rule_form_new", "alerts.rule_form_fix_create", form, "error",
+			"alerts.fix_fields")
 		return
 	}
 
 	if _, err := h.repo.CreateRule(r.Context(), validated.Rule); err != nil {
-		renderError(w, r, h.deps, err, "Could not create rule", "The alert rule could not be created.")
+		renderError(w, r, h.deps, err, "alerts.error.create_rule_title", "alerts.error.create_rule_message")
 		return
 	}
 	http.Redirect(w, r, redirectURL("rule-created"), http.StatusSeeOther)
@@ -149,12 +148,12 @@ func (h Handlers) RuleCreate(w http.ResponseWriter, r *http.Request) {
 func (h Handlers) RuleEdit(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
-		renderError(w, r, h.deps, ErrNotFound, "Rule not found", "The requested alert rule does not exist.")
+		renderError(w, r, h.deps, ErrNotFound, "alerts.error.rule_not_found_title", "alerts.error.rule_not_found_message")
 		return
 	}
 	rule, err := h.repo.GetRule(r.Context(), id)
 	if err != nil {
-		renderError(w, r, h.deps, err, "Could not load rule", "The requested alert rule could not be loaded.")
+		renderError(w, r, h.deps, err, "alerts.error.load_rule_title", "alerts.error.load_rule_message")
 		return
 	}
 	refs, channels, ok := h.loadRuleFormDeps(w, r)
@@ -170,18 +169,18 @@ func (h Handlers) RuleEdit(w http.ResponseWriter, r *http.Request) {
 		"/alerts/rules/"+formatID(rule.ID)+"/delete",
 		refs, channels,
 	)
-	renderRuleForm(w, r, h.deps, http.StatusOK, "Edit alert rule",
-		"Update the threshold, channel, or noise controls for this rule.", form, "", "")
+	renderRuleForm(w, r, h.deps, http.StatusOK, "alerts.rule_form_edit",
+		"alerts.rule_form_edit_desc", form, "", "")
 }
 
 func (h Handlers) RuleUpdate(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
-		renderError(w, r, h.deps, ErrNotFound, "Rule not found", "The requested alert rule does not exist.")
+		renderError(w, r, h.deps, ErrNotFound, "alerts.error.rule_not_found_title", "alerts.error.rule_not_found_message")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		renderError(w, r, h.deps, err, "Invalid form request", "The submitted alert rule form could not be parsed.")
+		renderError(w, r, h.deps, err, "alerts.error.invalid_form_title", "alerts.error.invalid_rule_message")
 		return
 	}
 	refs, channels, ok := h.loadRuleFormDeps(w, r)
@@ -199,14 +198,14 @@ func (h Handlers) RuleUpdate(w http.ResponseWriter, r *http.Request) {
 			"/alerts/rules/"+formatID(id)+"/delete",
 			refs, channels,
 		)
-		renderRuleForm(w, r, h.deps, http.StatusUnprocessableEntity, "Edit alert rule",
-			"Fix the highlighted fields and save the rule again.", form, "error",
-			"Please fix the highlighted fields before saving.")
+		renderRuleForm(w, r, h.deps, http.StatusUnprocessableEntity, "alerts.rule_form_edit",
+			"alerts.rule_form_fix_save", form, "error",
+			"alerts.fix_fields")
 		return
 	}
 
 	if _, err := h.repo.UpdateRule(r.Context(), validated.Rule); err != nil {
-		renderError(w, r, h.deps, err, "Could not update rule", "The alert rule could not be updated.")
+		renderError(w, r, h.deps, err, "alerts.error.update_rule_title", "alerts.error.update_rule_message")
 		return
 	}
 	http.Redirect(w, r, redirectURL("rule-updated"), http.StatusSeeOther)
@@ -215,11 +214,11 @@ func (h Handlers) RuleUpdate(w http.ResponseWriter, r *http.Request) {
 func (h Handlers) RuleDelete(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
-		renderError(w, r, h.deps, ErrNotFound, "Rule not found", "The requested alert rule does not exist.")
+		renderError(w, r, h.deps, ErrNotFound, "alerts.error.rule_not_found_title", "alerts.error.rule_not_found_message")
 		return
 	}
 	if err := h.repo.DeleteRule(r.Context(), id); err != nil {
-		renderError(w, r, h.deps, err, "Could not delete rule", "The alert rule could not be deleted.")
+		renderError(w, r, h.deps, err, "alerts.error.delete_rule_title", "alerts.error.delete_rule_message")
 		return
 	}
 	http.Redirect(w, r, redirectURL("rule-deleted"), http.StatusSeeOther)
@@ -229,27 +228,27 @@ func (h Handlers) RuleDelete(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) ChannelNew(w http.ResponseWriter, r *http.Request) {
 	form := buildChannelFormView(0, DefaultChannelFormInput(), ValidationErrors{}, "/alerts/channels", "")
-	renderChannelForm(w, r, h.deps, http.StatusOK, "New channel",
-		"Route alert notifications to a Telegram chat or channel.", form, "", "")
+	renderChannelForm(w, r, h.deps, http.StatusOK, "alerts.channel_form_new",
+		"alerts.channel_form_new_desc", form, "", "")
 }
 
 func (h Handlers) ChannelCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		renderError(w, r, h.deps, err, "Invalid form request", "The submitted channel form could not be parsed.")
+		renderError(w, r, h.deps, err, "alerts.error.invalid_form_title", "alerts.error.invalid_channel_message")
 		return
 	}
 
 	validated, errs := ValidateChannelForm(channelFormInputFromRequest(r))
 	if errs.HasAny() {
 		form := buildChannelFormView(0, validated.Input, errs, "/alerts/channels", "")
-		renderChannelForm(w, r, h.deps, http.StatusUnprocessableEntity, "New channel",
-			"Fix the highlighted fields and create the channel again.", form, "error",
-			"Please fix the highlighted fields before saving.")
+		renderChannelForm(w, r, h.deps, http.StatusUnprocessableEntity, "alerts.channel_form_new",
+			"alerts.channel_form_fix_create", form, "error",
+			"alerts.fix_fields")
 		return
 	}
 
 	if _, err := h.repo.CreateChannel(r.Context(), validated.Channel); err != nil {
-		renderError(w, r, h.deps, err, "Could not create channel", "The notification channel could not be created.")
+		renderError(w, r, h.deps, err, "alerts.error.create_channel_title", "alerts.error.create_channel_message")
 		return
 	}
 	http.Redirect(w, r, redirectURL("channel-created"), http.StatusSeeOther)
@@ -258,12 +257,12 @@ func (h Handlers) ChannelCreate(w http.ResponseWriter, r *http.Request) {
 func (h Handlers) ChannelEdit(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
-		renderError(w, r, h.deps, ErrNotFound, "Channel not found", "The requested channel does not exist.")
+		renderError(w, r, h.deps, ErrNotFound, "alerts.error.channel_not_found_title", "alerts.error.channel_not_found_message")
 		return
 	}
 	channel, err := h.repo.GetChannel(r.Context(), id)
 	if err != nil {
-		renderError(w, r, h.deps, err, "Could not load channel", "The requested channel could not be loaded.")
+		renderError(w, r, h.deps, err, "alerts.error.load_channel_title", "alerts.error.load_channel_message")
 		return
 	}
 
@@ -274,18 +273,18 @@ func (h Handlers) ChannelEdit(w http.ResponseWriter, r *http.Request) {
 		"/alerts/channels/"+formatID(channel.ID)+"/edit",
 		"/alerts/channels/"+formatID(channel.ID)+"/delete",
 	)
-	renderChannelForm(w, r, h.deps, http.StatusOK, "Edit channel",
-		"Update where this channel delivers notifications.", form, "", "")
+	renderChannelForm(w, r, h.deps, http.StatusOK, "alerts.channel_form_edit",
+		"alerts.channel_form_edit_desc", form, "", "")
 }
 
 func (h Handlers) ChannelUpdate(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
-		renderError(w, r, h.deps, ErrNotFound, "Channel not found", "The requested channel does not exist.")
+		renderError(w, r, h.deps, ErrNotFound, "alerts.error.channel_not_found_title", "alerts.error.channel_not_found_message")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		renderError(w, r, h.deps, err, "Invalid form request", "The submitted channel form could not be parsed.")
+		renderError(w, r, h.deps, err, "alerts.error.invalid_form_title", "alerts.error.invalid_channel_message")
 		return
 	}
 
@@ -297,14 +296,14 @@ func (h Handlers) ChannelUpdate(w http.ResponseWriter, r *http.Request) {
 			"/alerts/channels/"+formatID(id)+"/edit",
 			"/alerts/channels/"+formatID(id)+"/delete",
 		)
-		renderChannelForm(w, r, h.deps, http.StatusUnprocessableEntity, "Edit channel",
-			"Fix the highlighted fields and save the channel again.", form, "error",
-			"Please fix the highlighted fields before saving.")
+		renderChannelForm(w, r, h.deps, http.StatusUnprocessableEntity, "alerts.channel_form_edit",
+			"alerts.channel_form_fix_save", form, "error",
+			"alerts.fix_fields")
 		return
 	}
 
 	if _, err := h.repo.UpdateChannel(r.Context(), validated.Channel); err != nil {
-		renderError(w, r, h.deps, err, "Could not update channel", "The notification channel could not be updated.")
+		renderError(w, r, h.deps, err, "alerts.error.update_channel_title", "alerts.error.update_channel_message")
 		return
 	}
 	http.Redirect(w, r, redirectURL("channel-updated"), http.StatusSeeOther)
@@ -313,11 +312,11 @@ func (h Handlers) ChannelUpdate(w http.ResponseWriter, r *http.Request) {
 func (h Handlers) ChannelDelete(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
-		renderError(w, r, h.deps, ErrNotFound, "Channel not found", "The requested channel does not exist.")
+		renderError(w, r, h.deps, ErrNotFound, "alerts.error.channel_not_found_title", "alerts.error.channel_not_found_message")
 		return
 	}
 	if err := h.repo.DeleteChannel(r.Context(), id); err != nil {
-		renderError(w, r, h.deps, err, "Could not delete channel", "The notification channel could not be deleted.")
+		renderError(w, r, h.deps, err, "alerts.error.delete_channel_title", "alerts.error.delete_channel_message")
 		return
 	}
 	http.Redirect(w, r, redirectURL("channel-deleted"), http.StatusSeeOther)
@@ -330,20 +329,20 @@ func (h Handlers) ChannelDelete(w http.ResponseWriter, r *http.Request) {
 func (h Handlers) ChannelTest(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
-		renderError(w, r, h.deps, ErrNotFound, "Channel not found", "The requested channel does not exist.")
+		renderError(w, r, h.deps, ErrNotFound, "alerts.error.channel_not_found_title", "alerts.error.channel_not_found_message")
 		return
 	}
 	channel, err := h.repo.GetChannel(r.Context(), id)
 	if err != nil {
-		renderError(w, r, h.deps, err, "Could not load channel", "The requested channel could not be loaded.")
+		renderError(w, r, h.deps, err, "alerts.error.load_channel_title", "alerts.error.load_channel_message")
 		return
 	}
 
-	kind, message, statusCode := h.sendTestMessage(r.Context(), channel)
+	kind, message, statusCode := h.sendTestMessage(r.Context(), localizerFromRequest(r), channel)
 
 	overview, err := h.overviewModel(r.Context(), 1)
 	if err != nil {
-		renderError(w, r, h.deps, err, "Could not load alerts", "The alerts page could not be loaded.")
+		renderError(w, r, h.deps, err, "alerts.error.load_title", "alerts.error.load_message")
 		return
 	}
 	renderOverview(w, r, h.deps, statusCode, overview, kind, message)
@@ -352,23 +351,23 @@ func (h Handlers) ChannelTest(w http.ResponseWriter, r *http.Request) {
 // sendTestMessage renders and dispatches a sample alert to the channel, mapping
 // the outcome to a flash kind, message, and HTTP status. The Telegram client
 // redacts the bot token from any error, so the message is safe to surface.
-func (h Handlers) sendTestMessage(ctx context.Context, channel Channel) (kind, message string, statusCode int) {
+func (h Handlers) sendTestMessage(ctx context.Context, loc *i18n.Localizer, channel Channel) (kind, message string, statusCode int) {
 	if !h.tokenConfigured() {
-		return "warn", "Telegram bot token not configured. Set NODEXIA_TELEGRAM_BOT_TOKEN to send test messages.", http.StatusOK
+		return "warn", loc.T("alerts.test.no_token"), http.StatusOK
 	}
 
 	text, err := notify.RenderMessage(channel.MessageTemplate, sampleAlertMessage())
 	if err != nil {
-		return "error", "Could not render the test message — check this channel's template: " + err.Error(), http.StatusUnprocessableEntity
+		return "error", loc.T("alerts.test.render_failed", "error", err.Error()), http.StatusUnprocessableEntity
 	}
 
 	sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	if err := h.notifier.Send(sendCtx, channel.ChatID, text); err != nil {
-		return "error", "Test message to " + channel.Name + " failed: " + err.Error(), http.StatusBadGateway
+		return "error", loc.T("alerts.test.send_failed", "name", channel.Name, "error", err.Error()), http.StatusBadGateway
 	}
 
-	return "success", "Test message sent to " + channel.Name + ".", http.StatusOK
+	return "success", loc.T("alerts.test.sent", "name", channel.Name), http.StatusOK
 }
 
 // sampleAlertMessage is the canned alert used by the channel test action.
@@ -387,7 +386,7 @@ func sampleAlertMessage() notify.AlertMessage {
 
 func (h Handlers) SilenceCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		renderError(w, r, h.deps, err, "Invalid form request", "The submitted silence form could not be parsed.")
+		renderError(w, r, h.deps, err, "alerts.error.invalid_form_title", "alerts.error.invalid_silence_message")
 		return
 	}
 
@@ -395,7 +394,7 @@ func (h Handlers) SilenceCreate(w http.ResponseWriter, r *http.Request) {
 	validated, errs := ValidateSilenceForm(input, time.Now())
 	if !errs.HasAny() {
 		if _, err := h.serverRepo.GetByID(r.Context(), validated.Silence.ServerID); err != nil {
-			errs.Add("server_id", "Select an existing server.")
+			errs.Add("server_id", localizerFromRequest(r).T("alerts.validation.server_exists"))
 		}
 	}
 
@@ -405,7 +404,7 @@ func (h Handlers) SilenceCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.repo.CreateSilence(r.Context(), validated.Silence); err != nil {
-		renderError(w, r, h.deps, err, "Could not create silence", "The silence could not be created.")
+		renderError(w, r, h.deps, err, "alerts.error.create_silence_title", "alerts.error.create_silence_message")
 		return
 	}
 	http.Redirect(w, r, redirectURL("silenced"), http.StatusSeeOther)
@@ -414,11 +413,11 @@ func (h Handlers) SilenceCreate(w http.ResponseWriter, r *http.Request) {
 func (h Handlers) SilenceDelete(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
-		renderError(w, r, h.deps, ErrNotFound, "Silence not found", "The requested silence does not exist.")
+		renderError(w, r, h.deps, ErrNotFound, "alerts.error.silence_not_found_title", "alerts.error.silence_not_found_message")
 		return
 	}
 	if err := h.repo.DeleteSilence(r.Context(), id); err != nil {
-		renderError(w, r, h.deps, err, "Could not remove silence", "The silence could not be removed.")
+		renderError(w, r, h.deps, err, "alerts.error.remove_silence_title", "alerts.error.remove_silence_message")
 		return
 	}
 	http.Redirect(w, r, redirectURL("silence-removed"), http.StatusSeeOther)
@@ -429,15 +428,15 @@ func (h Handlers) SilenceDelete(w http.ResponseWriter, r *http.Request) {
 func (h Handlers) ServerSilence(w http.ResponseWriter, r *http.Request) {
 	serverID, ok := pathID(r)
 	if !ok {
-		renderError(w, r, h.deps, servers.ErrNotFound, "Server not found", "The requested server does not exist.")
+		renderError(w, r, h.deps, servers.ErrNotFound, "alerts.error.server_not_found_title", "alerts.error.server_not_found_message")
 		return
 	}
 	if _, err := h.serverRepo.GetByID(r.Context(), serverID); err != nil {
-		renderError(w, r, h.deps, err, "Could not load server", "The selected server could not be loaded.")
+		renderError(w, r, h.deps, err, "alerts.error.load_server_title", "alerts.error.load_server_message")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		renderError(w, r, h.deps, err, "Invalid form request", "The submitted silence form could not be parsed.")
+		renderError(w, r, h.deps, err, "alerts.error.invalid_form_title", "alerts.error.invalid_silence_message")
 		return
 	}
 
@@ -448,12 +447,12 @@ func (h Handlers) ServerSilence(w http.ResponseWriter, r *http.Request) {
 	}
 	validated, errs := ValidateSilenceForm(input, time.Now())
 	if errs.HasAny() {
-		renderError(w, r, h.deps, ErrNotFound, "Invalid silence", "The metric to silence is missing or unsupported.")
+		renderError(w, r, h.deps, ErrNotFound, "alerts.error.invalid_silence_title", "alerts.error.invalid_silence_metric")
 		return
 	}
 
 	if _, err := h.repo.CreateSilence(r.Context(), validated.Silence); err != nil {
-		renderError(w, r, h.deps, err, "Could not create silence", "The silence could not be created.")
+		renderError(w, r, h.deps, err, "alerts.error.create_silence_title", "alerts.error.create_silence_message")
 		return
 	}
 	http.Redirect(w, r, redirectURL("silenced"), http.StatusSeeOther)
@@ -465,18 +464,18 @@ func (h Handlers) renderOverviewWithSilenceErrors(w http.ResponseWriter, r *http
 	ctx := r.Context()
 	overview, err := h.overviewModel(ctx, 1)
 	if err != nil {
-		renderError(w, r, h.deps, err, "Could not load alerts", "The alerts page could not be loaded.")
+		renderError(w, r, h.deps, err, "alerts.error.load_title", "alerts.error.load_message")
 		return
 	}
 	refs, err := h.loadServerRefs(ctx)
 	if err != nil {
-		renderError(w, r, h.deps, err, "Could not load servers", "The server registry could not be loaded.")
+		renderError(w, r, h.deps, err, "alerts.error.load_servers_title", "alerts.error.load_servers_message")
 		return
 	}
 	overview.SilenceForm = buildSilenceFormView(input, errs, refs)
 
 	renderOverview(w, r, h.deps, http.StatusUnprocessableEntity, overview, "error",
-		"Please fix the highlighted fields before muting.")
+		"alerts.fix_fields_mute")
 }
 
 func (h Handlers) loadServerRefs(ctx context.Context) ([]serverRef, error) {
@@ -496,12 +495,12 @@ func (h Handlers) loadServerRefs(ctx context.Context) ([]serverRef, error) {
 func (h Handlers) loadRuleFormDeps(w http.ResponseWriter, r *http.Request) ([]serverRef, []Channel, bool) {
 	refs, err := h.loadServerRefs(r.Context())
 	if err != nil {
-		renderError(w, r, h.deps, err, "Could not load servers", "The server registry could not be loaded.")
+		renderError(w, r, h.deps, err, "alerts.error.load_servers_title", "alerts.error.load_servers_message")
 		return nil, nil, false
 	}
 	channels, err := h.repo.ListChannels(r.Context())
 	if err != nil {
-		renderError(w, r, h.deps, err, "Could not load channels", "The notification channels could not be loaded.")
+		renderError(w, r, h.deps, err, "alerts.error.load_channels_title", "alerts.error.load_channels_message")
 		return nil, nil, false
 	}
 	return refs, channels, true
