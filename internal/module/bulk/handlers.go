@@ -177,12 +177,16 @@ func (h ActionHandler) runJob(job *job, action string, targets []bulkTarget) {
 	var run func(servers.Server) view.BulkServerResultView
 	switch action {
 	case "update":
-		run = func(s servers.Server) view.BulkServerResultView { return h.execOne(ctx, s, updateCommand, bulkUpdateTimeout) }
+		run = func(s servers.Server) view.BulkServerResultView {
+			return h.execOne(ctx, s, updateCommand, bulkUpdateTimeout)
+		}
 	case "node-restart", "node-update":
 		actionKey := nodeActionKeys[action]
 		run = func(s servers.Server) view.BulkServerResultView { return h.execNodeAction(ctx, s, actionKey) }
 	default: // reboot
-		run = func(s servers.Server) view.BulkServerResultView { return h.execOne(ctx, s, rebootCommand, bulkRebootTimeout) }
+		run = func(s servers.Server) view.BulkServerResultView {
+			return h.execOne(ctx, s, rebootCommand, bulkRebootTimeout)
+		}
 	}
 
 	queue := make(chan bulkTarget, len(targets))
@@ -373,15 +377,18 @@ func (h JobPageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	page := view.NewPageData(h.deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
-	page.Title = "Bulk action results"
+	page.Title = page.T("bulk.title")
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-bulk-result"
-	page.PageTitle = "Bulk action results"
-	actionLabel := humanizeBulkAction(job.action)
+	page.PageTitle = page.T("bulk.title")
+	actionLabel := bulkActionLabel(&page, job.action)
+	// Show the action label in the page's active language (summarize set the
+	// English default).
+	result.ActionLabel = actionLabel
 	if finished {
-		page.PageDescription = "Per-server outcome for the bulk " + actionLabel + " operation."
+		page.PageDescription = page.T("bulk.description_done", "action", actionLabel)
 	} else {
-		page.PageDescription = "The bulk " + actionLabel + " operation is running — this page refreshes automatically."
+		page.PageDescription = page.T("bulk.description_running", "action", actionLabel)
 	}
 	if h.deps.Database != nil {
 		page.MigrationCount = h.deps.Database.MigrationCount()
@@ -408,6 +415,25 @@ func humanizeBulkAction(action string) string {
 		return "node update"
 	case "update":
 		return "package update"
+	default:
+		return action
+	}
+}
+
+// bulkActionLabel returns the human-facing action label in the page's active
+// language. Unknown actions fall back to the raw action string.
+func bulkActionLabel(page *view.PageData, action string) string {
+	switch action {
+	case "reboot":
+		return page.T("bulk.action.reboot")
+	case "update":
+		return page.T("bulk.action.update")
+	case "delete":
+		return page.T("bulk.action.delete")
+	case "node-restart":
+		return page.T("bulk.action.node_restart")
+	case "node-update":
+		return page.T("bulk.action.node_update")
 	default:
 		return action
 	}
