@@ -7,14 +7,14 @@
     <h3><i data-lucide="alert-triangle"></i> {{ .ErrorTitle }}</h3>
     <p>{{ .ErrorMessage }}</p>
     {{ if .RequestID }}
-    <p><i data-lucide="hash" class="icon-in-button"></i> Request ID: <code>{{ .RequestID }}</code></p>
+    <p><i data-lucide="hash" class="icon-in-button"></i> {{ t "error.request_id" }} <code>{{ .RequestID }}</code></p>
     {{ end }}
     {{ if .ErrorDetail }}
     <p class="error-inline">{{ .ErrorDetail }}</p>
     {{ end }}
     <div class="form-actions">
-      <a class="btn btn--primary" href="/"><i data-lucide="layout-dashboard" class="icon-in-button"></i> Back to overview</a>
-      <a class="btn btn--secondary" href="/servers"><i data-lucide="server" class="icon-in-button"></i> Servers</a>
+      <a class="btn btn--primary" href="/"><i data-lucide="layout-dashboard" class="icon-in-button"></i> {{ t "error.back_to_overview" }}</a>
+      <a class="btn btn--secondary" href="/servers"><i data-lucide="server" class="icon-in-button"></i> {{ t "nav.servers" }}</a>
     </div>
   </div>
 </section>
