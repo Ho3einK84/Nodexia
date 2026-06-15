@@ -231,7 +231,7 @@
           <tr>
             <td class="server-name-cell">
               <i data-lucide="server" class="table-icon"></i>
-              {{ .ServerName }}
+              {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}
             </td>
             <td class="text-right"><span class="metric-badge metric-badge--cpu">{{ .CPU }}</span></td>
             <td class="text-right"><span class="metric-badge metric-badge--ram">{{ .RAM }}</span></td>
@@ -268,7 +268,7 @@
           <tr>
             <td class="server-name-cell">
               <i data-lucide="server" class="table-icon"></i>
-              {{ .ServerName }}
+              {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}
             </td>
             <td class="text-right">
               <span class="traffic-badge traffic-badge--dl">{{ .Download }}</span>

@@ -70,10 +70,14 @@ type TrafficMonth struct {
 type ServerMetricSummary struct {
 	ServerID   int64
 	ServerName string
-	AvgCPU     float64
-	AvgRAM     float64
-	AvgDisk    float64
-	AvgSwap    float64
+	// CountryCode is the server's detected ISO 3166-1 alpha-2 code (or "" when
+	// unknown), folded into the metric query so the overview can show a flag
+	// without an extra per-row lookup.
+	CountryCode string
+	AvgCPU      float64
+	AvgRAM      float64
+	AvgDisk     float64
+	AvgSwap     float64
 }
 
 // ServerTrafficSummary holds the current-month traffic totals for one server,
@@ -81,10 +85,14 @@ type ServerMetricSummary struct {
 type ServerTrafficSummary struct {
 	ServerID   int64
 	ServerName string
-	MonthRX    int64
-	MonthTX    int64
-	MonthBytes int64
-	MonthLabel string
+	// CountryCode is the server's detected ISO 3166-1 alpha-2 code (or "" when
+	// unknown), folded into the traffic query so the overview can show a flag
+	// without an extra per-row lookup.
+	CountryCode string
+	MonthRX     int64
+	MonthTX     int64
+	MonthBytes  int64
+	MonthLabel  string
 }
 
 // Repository abstracts all analytics data access.

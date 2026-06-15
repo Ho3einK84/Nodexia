@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Ho3einK84/Nodexia/internal/geoip"
 	"github.com/Ho3einK84/Nodexia/internal/http/httperrors"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
 	"github.com/Ho3einK84/Nodexia/internal/module"
@@ -156,11 +157,13 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	metricViews := make([]view.TopServerMetricView, 0, len(topMetrics))
 	for _, s := range topMetrics {
 		metricViews = append(metricViews, view.TopServerMetricView{
-			ServerID:   s.ServerID,
-			ServerName: s.ServerName,
-			CPU:        fmt.Sprintf("%.1f%%", s.AvgCPU),
-			RAM:        fmt.Sprintf("%.1f%%", s.AvgRAM),
-			Disk:       fmt.Sprintf("%.1f%%", s.AvgDisk),
+			ServerID:    s.ServerID,
+			ServerName:  s.ServerName,
+			FlagEmoji:   geoip.FlagEmoji(s.CountryCode),
+			CountryName: geoip.CountryName(s.CountryCode),
+			CPU:         fmt.Sprintf("%.1f%%", s.AvgCPU),
+			RAM:         fmt.Sprintf("%.1f%%", s.AvgRAM),
+			Disk:        fmt.Sprintf("%.1f%%", s.AvgDisk),
 		})
 	}
 
@@ -175,12 +178,14 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	trafficViews := make([]view.TopServerTrafficView, 0, len(topTraffic))
 	for _, s := range topTraffic {
 		trafficViews = append(trafficViews, view.TopServerTrafficView{
-			ServerID:   s.ServerID,
-			ServerName: s.ServerName,
-			Download:   formatBytes(s.MonthRX),
-			Upload:     formatBytes(s.MonthTX),
-			MonthBytes: formatBytes(s.MonthBytes),
-			MonthLabel: s.MonthLabel,
+			ServerID:    s.ServerID,
+			ServerName:  s.ServerName,
+			FlagEmoji:   geoip.FlagEmoji(s.CountryCode),
+			CountryName: geoip.CountryName(s.CountryCode),
+			Download:    formatBytes(s.MonthRX),
+			Upload:      formatBytes(s.MonthTX),
+			MonthBytes:  formatBytes(s.MonthBytes),
+			MonthLabel:  s.MonthLabel,
 		})
 	}
 

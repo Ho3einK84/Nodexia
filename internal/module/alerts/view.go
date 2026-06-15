@@ -5,15 +5,18 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Ho3einK84/Nodexia/internal/geoip"
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
 
 // serverRef is the minimal server identity the alerts views need. The handler
 // builds these from the servers repository so this module stays decoupled from
-// the full server record.
+// the full server record. CountryCode is the detected ISO 3166-1 alpha-2 code
+// (or "" when unknown) used to render a flag badge next to the server.
 type serverRef struct {
-	ID   int64
-	Name string
+	ID          int64
+	Name        string
+	CountryCode string
 }
 
 func serverNameMap(refs []serverRef) map[int64]string {
@@ -22,6 +25,16 @@ func serverNameMap(refs []serverRef) map[int64]string {
 		names[ref.ID] = ref.Name
 	}
 	return names
+}
+
+// serverCountryMap indexes each server's detected country code by id so event
+// rows can render a flag without an extra lookup per event.
+func serverCountryMap(refs []serverRef) map[int64]string {
+	codes := make(map[int64]string, len(refs))
+	for _, ref := range refs {
+		codes[ref.ID] = ref.CountryCode
+	}
+	return codes
 }
 
 func channelNameMap(channels []Channel) map[int64]string {
@@ -45,6 +58,7 @@ func buildOverview(
 	now time.Time,
 ) view.AlertsOverviewView {
 	names := serverNameMap(servers)
+	countries := serverCountryMap(servers)
 	channelNames := channelNameMap(channels)
 
 	notice := ""
@@ -56,7 +70,7 @@ func buildOverview(
 		Rules:           buildRuleRows(rules, names, channelNames, streaks),
 		Channels:        buildChannelRows(channels),
 		Silences:        buildSilenceRows(silences, names, now),
-		Events:          buildEventRows(events, names),
+		Events:          buildEventRows(events, names, countries),
 		SilenceForm:     buildSilenceFormView(SilenceFormInput{}, ValidationErrors{}, servers),
 		HasServers:      len(servers) > 0,
 		NewRuleURL:      "/alerts/rules/new",
@@ -66,7 +80,7 @@ func buildOverview(
 	}
 }
 
-func buildEventRows(events []Event, serverNames map[int64]string) []view.AlertEventView {
+func buildEventRows(events []Event, serverNames, serverCountries map[int64]string) []view.AlertEventView {
 	rows := make([]view.AlertEventView, 0, len(events))
 	for _, event := range events {
 		serverID := event.ServerID
@@ -75,8 +89,11 @@ func buildEventRows(events []Event, serverNames map[int64]string) []view.AlertEv
 			resolvedAt = formatTimestamp(*event.ResolvedAt)
 		}
 
+		code := serverCountries[serverID]
 		rows = append(rows, view.AlertEventView{
 			ServerLabel: serverLabel(serverNames, &serverID),
+			FlagEmoji:   geoip.FlagEmoji(code),
+			CountryName: geoip.CountryName(code),
 			MetricLabel: MetricLabel(event.Metric),
 			Value:       FormatThresholdWithUnit(event.Metric, event.ObservedValue),
 			Threshold:   FormatThresholdWithUnit(event.Metric, event.Threshold),

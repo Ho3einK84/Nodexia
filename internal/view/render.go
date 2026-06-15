@@ -690,6 +690,10 @@ type AlertSilenceView struct {
 // AlertEventView renders one row in the alert history section.
 type AlertEventView struct {
 	ServerLabel string
+	// FlagEmoji is the event server's country flag (or "" when undetected);
+	// CountryName is shown on hover. Mirrors the servers-list badge.
+	FlagEmoji   string
+	CountryName string
 	MetricLabel string
 	Value       string
 	Threshold   string
@@ -838,18 +842,28 @@ type AnalyticsTargetView struct {
 type TopServerMetricView struct {
 	ServerID   int64
 	ServerName string
-	CPU        string
-	RAM        string
-	Disk       string
+	// FlagEmoji is the server's country flag (or "" when undetected); CountryName
+	// is shown on hover. Mirrors the servers-list badge so the overview stays
+	// visually consistent.
+	FlagEmoji   string
+	CountryName string
+	CPU         string
+	RAM         string
+	Disk        string
 }
 
 type TopServerTrafficView struct {
 	ServerID   int64
 	ServerName string
-	Download   string // current-month RX, human-readable
-	Upload     string // current-month TX, human-readable
-	MonthBytes string // current-month total, human-readable
-	MonthLabel string
+	// FlagEmoji is the server's country flag (or "" when undetected); CountryName
+	// is shown on hover. Mirrors the servers-list badge so the overview stays
+	// visually consistent.
+	FlagEmoji   string
+	CountryName string
+	Download    string // current-month RX, human-readable
+	Upload      string // current-month TX, human-readable
+	MonthBytes  string // current-month total, human-readable
+	MonthLabel  string
 }
 
 type GlobalAnalyticsView struct {

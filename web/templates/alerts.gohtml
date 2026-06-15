@@ -208,7 +208,7 @@
         <tbody>
           {{ range .Events }}
           <tr>
-            <td>{{ .ServerLabel }}</td>
+            <td>{{ .ServerLabel }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</td>
             <td>{{ .MetricLabel }}</td>
             <td><code>{{ .Value }}</code></td>
             <td><code>{{ .Threshold }}</code></td>
