@@ -486,7 +486,7 @@ func (h Handlers) loadServerRefs(ctx context.Context) ([]serverRef, error) {
 	}
 	refs := make([]serverRef, 0, len(list))
 	for _, server := range list {
-		refs = append(refs, serverRef{ID: server.ID, Name: server.Name})
+		refs = append(refs, serverRef{ID: server.ID, Name: server.Name, CountryCode: server.CountryCode})
 	}
 	return refs, nil
 }
