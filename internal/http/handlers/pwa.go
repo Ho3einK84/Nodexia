@@ -46,14 +46,20 @@ type manifestShortcut struct {
 }
 
 type webManifest struct {
-	Name            string             `json:"name"`
-	ShortName       string             `json:"short_name"`
-	Description     string             `json:"description"`
-	ID              string             `json:"id"`
-	StartURL        string             `json:"start_url"`
-	Scope           string             `json:"scope"`
-	Display         string             `json:"display"`
-	Orientation     string             `json:"orientation"`
+	Name        string `json:"name"`
+	ShortName   string `json:"short_name"`
+	Description string `json:"description"`
+	ID          string `json:"id"`
+	StartURL    string `json:"start_url"`
+	Scope       string `json:"scope"`
+	Display     string `json:"display"`
+	// Orientation is deliberately omitted. Declaring an explicit value (notably
+	// "any") makes an installed PWA request an orientation lock from the OS,
+	// which overrides the user's system rotation lock and force-rotates the app
+	// even when they have locked portrait. With no orientation member the
+	// platform's auto-rotate / rotation-lock setting governs the app: locked
+	// portrait stays portrait, and an unlocked device is free to rotate (so the
+	// SSH terminal can still be used in landscape when the user allows it).
 	ThemeColor      string             `json:"theme_color"`
 	BackgroundColor string             `json:"background_color"`
 	Lang            string             `json:"lang"`
@@ -79,7 +85,6 @@ func NewManifestHandler(cfg config.Config) ManifestHandler {
 		StartURL:        "/",
 		Scope:           "/",
 		Display:         "standalone",
-		Orientation:     "any",
 		ThemeColor:      "#0f172a",
 		BackgroundColor: "#0f172a",
 		Lang:            "en",

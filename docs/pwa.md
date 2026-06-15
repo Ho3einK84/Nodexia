@@ -144,7 +144,29 @@ the login page (and any future redirect-based navigation is equally safe). A
 test asserts each shortcut target cleanly returns `303 → /login` rather than a
 404 or an empty body.
 
-### 11. CSP unchanged
+### 11. Orientation: omitted so the OS rotation lock wins
+
+The manifest declares **no `orientation` member**. An explicit value — including
+the spec default `"any"` — makes an installed PWA request an orientation lock
+from the OS, which *overrides* the user's system rotation lock: a phone locked to
+portrait still force-rotates to landscape when turned sideways (the bug this
+fixes). Omitting the member requests no lock, so the platform's auto-rotate /
+rotation-lock setting governs the app — locked portrait stays portrait, and an
+unlocked device is free to rotate.
+
+We deliberately did **not** use `"portrait"` or `"natural"`: both *force* a fixed
+orientation rather than respecting the user's choice, and would prevent using the
+in-browser SSH terminal in landscape. There is **no per-page terminal exception**
+— a page-level `screen.orientation.lock()` would need fullscreen, add client JS
+against the minimal-`web/static` constraint, and would fight a hard rotation lock,
+reintroducing the original complaint. With orientation omitted the terminal
+already rotates to landscape whenever the user has rotation unlocked, which covers
+the long-line use case without overriding anyone's lock.
+
+Note: installed PWAs cache the manifest, so an already-installed app must be
+**reinstalled** (or its manifest cache cleared) before this change takes effect.
+
+### 12. CSP unchanged
 
 The existing policy (`default-src 'self'`, `script-src 'self'`) already permits
 a same-origin worker (`worker-src` falls back to `default-src`), the manifest
