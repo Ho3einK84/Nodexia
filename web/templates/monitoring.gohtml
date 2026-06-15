@@ -9,25 +9,25 @@
     <span class="badge badge--auth-{{ .MonitoringTarget.AuthMode }}">{{ .MonitoringTarget.AuthMode }}</span>
     {{ range .MonitoringTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
     <div class="info-strip__actions">
-      <form method="post" action="/servers/{{ .MonitoringTarget.ID }}/alerts/silence" class="inline-form silence-quick" title="Mute alert notifications for this server">
+      <form method="post" action="/servers/{{ .MonitoringTarget.ID }}/alerts/silence" class="inline-form silence-quick" title="{{ t "monitoring.silence_title" }}">
         <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-        <select name="metric" aria-label="Metric to silence">
-          <option value="all">All metrics</option>
-          <option value="cpu">CPU</option>
-          <option value="ram">RAM</option>
-          <option value="disk">Disk</option>
-          <option value="load1">Load (1m)</option>
-          <option value="load5">Load (5m)</option>
-          <option value="load15">Load (15m)</option>
-          <option value="traffic_total">Traffic total</option>
-          <option value="bandwidth_mbps">Download bandwidth</option>
+        <select name="metric" aria-label="{{ t "monitoring.metric_aria" }}">
+          <option value="all">{{ t "monitoring.metric_all" }}</option>
+          <option value="cpu">{{ t "home.metric.cpu" }}</option>
+          <option value="ram">{{ t "home.metric.ram" }}</option>
+          <option value="disk">{{ t "home.metric.disk" }}</option>
+          <option value="load1">{{ t "monitoring.load_1m" }}</option>
+          <option value="load5">{{ t "monitoring.load_5m" }}</option>
+          <option value="load15">{{ t "monitoring.load_15m" }}</option>
+          <option value="traffic_total">{{ t "monitoring.traffic_total" }}</option>
+          <option value="bandwidth_mbps">{{ t "monitoring.download_bandwidth" }}</option>
         </select>
-        <button type="submit" class="btn btn--ghost btn--sm"><i data-lucide="bell-off" class="icon-in-button"></i> Silence</button>
+        <button type="submit" class="btn btn--ghost btn--sm"><i data-lucide="bell-off" class="icon-in-button"></i> {{ t "monitoring.silence" }}</button>
       </form>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> System</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
-      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> Servers</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
+      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nav.servers" }}</a>
     </div>
   </div>
 
@@ -43,52 +43,52 @@
   <article class="card live-card{{ if not .MonitoringLive.Enabled }} live-card--static{{ end }}"
     {{ if .MonitoringLive.Enabled }}data-live-url="{{ .MonitoringLive.WSURL }}" data-live-interval="{{ .MonitoringLive.IntervalSeconds }}"{{ end }}>
     <div class="live-head">
-      <h3><i data-lucide="gauge"></i> Resource health</h3>
+      <h3><i data-lucide="gauge"></i> {{ t "monitoring.resource_health" }}</h3>
       {{ if .MonitoringLive.Enabled }}
-      <span class="live-status live-status--connecting" data-live-status title="Live — sampled every {{ .MonitoringLive.IntervalSeconds }}s over a shared SSH session">
-        <span class="live-status__dot"></span><span data-live-status-text>Connecting…</span>
+      <span class="live-status live-status--connecting" data-live-status title="{{ t "monitoring.live_title" "interval" .MonitoringLive.IntervalSeconds }}">
+        <span class="live-status__dot"></span><span data-live-status-text>{{ t "monitoring.connecting" }}</span>
       </span>
       {{ else }}
-      <span class="live-status live-status--idle" title="Showing the latest stored snapshot. Store SSH credentials for this server to stream live.">
-        <span class="live-status__dot"></span>Snapshot
+      <span class="live-status live-status--idle" title="{{ t "monitoring.snapshot_title" }}">
+        <span class="live-status__dot"></span>{{ t "monitoring.snapshot" }}
       </span>
       {{ end }}
     </div>
 
     {{ if or .MonitoringSnapshot.Available .MonitoringLive.Enabled }}
     <div class="gauge-grid">
-      <div class="gauge" data-gauge="{{ if .MonitoringSnapshot.Available }}{{ trimSuffix .MonitoringSnapshot.CPUUsage "%" }}{{ else }}0{{ end }}" data-gauge-metric="cpu" role="img" aria-label="CPU usage">
+      <div class="gauge" data-gauge="{{ if .MonitoringSnapshot.Available }}{{ trimSuffix .MonitoringSnapshot.CPUUsage "%" }}{{ else }}0{{ end }}" data-gauge-metric="cpu" role="img" aria-label="{{ t "monitoring.cpu_usage" }}">
         <svg class="gauge__svg" viewBox="0 0 200 118" preserveAspectRatio="xMidYMid meet">
           <path class="gauge__track" d="M20 100 A 80 80 0 0 1 180 100"></path>
           <path class="gauge__arc" d="M20 100 A 80 80 0 0 1 180 100"></path>
         </svg>
         <div class="gauge__center">
           <span class="gauge__value" data-gauge-value>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.CPUUsage }}{{ else }}–{{ end }}</span>
-          <span class="gauge__label"><i data-lucide="cpu"></i> CPU</span>
+          <span class="gauge__label"><i data-lucide="cpu"></i> {{ t "home.metric.cpu" }}</span>
         </div>
         <div class="gauge__scale"><span>0</span><span>100</span></div>
         <span class="gauge__detail" data-live-cpu-detail></span>
       </div>
-      <div class="gauge" data-gauge="{{ if .MonitoringSnapshot.Available }}{{ trimSuffix .MonitoringSnapshot.RAMUsage "%" }}{{ else }}0{{ end }}" data-gauge-metric="ram" role="img" aria-label="RAM usage">
+      <div class="gauge" data-gauge="{{ if .MonitoringSnapshot.Available }}{{ trimSuffix .MonitoringSnapshot.RAMUsage "%" }}{{ else }}0{{ end }}" data-gauge-metric="ram" role="img" aria-label="{{ t "monitoring.ram_usage" }}">
         <svg class="gauge__svg" viewBox="0 0 200 118" preserveAspectRatio="xMidYMid meet">
           <path class="gauge__track" d="M20 100 A 80 80 0 0 1 180 100"></path>
           <path class="gauge__arc" d="M20 100 A 80 80 0 0 1 180 100"></path>
         </svg>
         <div class="gauge__center">
           <span class="gauge__value" data-gauge-value>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.RAMUsage }}{{ else }}–{{ end }}</span>
-          <span class="gauge__label"><i data-lucide="memory-stick"></i> RAM</span>
+          <span class="gauge__label"><i data-lucide="memory-stick"></i> {{ t "home.metric.ram" }}</span>
         </div>
         <div class="gauge__scale"><span>0</span><span>100</span></div>
         <span class="gauge__detail" data-live-mem-detail></span>
       </div>
-      <div class="gauge" data-gauge="{{ if .MonitoringSnapshot.Available }}{{ trimSuffix .MonitoringSnapshot.DiskUsage "%" }}{{ else }}0{{ end }}" data-gauge-metric="disk" role="img" aria-label="Disk usage">
+      <div class="gauge" data-gauge="{{ if .MonitoringSnapshot.Available }}{{ trimSuffix .MonitoringSnapshot.DiskUsage "%" }}{{ else }}0{{ end }}" data-gauge-metric="disk" role="img" aria-label="{{ t "monitoring.disk_usage" }}">
         <svg class="gauge__svg" viewBox="0 0 200 118" preserveAspectRatio="xMidYMid meet">
           <path class="gauge__track" d="M20 100 A 80 80 0 0 1 180 100"></path>
           <path class="gauge__arc" d="M20 100 A 80 80 0 0 1 180 100"></path>
         </svg>
         <div class="gauge__center">
           <span class="gauge__value" data-gauge-value>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.DiskUsage }}{{ else }}–{{ end }}</span>
-          <span class="gauge__label"><i data-lucide="hard-drive"></i> Disk</span>
+          <span class="gauge__label"><i data-lucide="hard-drive"></i> {{ t "home.metric.disk" }}</span>
         </div>
         <div class="gauge__scale"><span>0</span><span>100</span></div>
         <span class="gauge__detail" data-live-disk-detail></span>
@@ -97,7 +97,7 @@
 
     <div class="metric-strip">
       <div class="metric-strip__item">
-        <span class="metric-strip__label"><i data-lucide="activity"></i> Load average</span>
+        <span class="metric-strip__label"><i data-lucide="activity"></i> {{ t "monitoring.load_average" }}</span>
         <span class="metric-strip__value metric-strip__value--load">
           <span class="badge badge--load" data-live-load1>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.LoadAverage1 }}{{ else }}–{{ end }}</span>
           <span class="badge badge--load" data-live-load5>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.LoadAverage5 }}{{ else }}–{{ end }}</span>
@@ -105,27 +105,27 @@
         </span>
       </div>
       <div class="metric-strip__item">
-        <span class="metric-strip__label"><i data-lucide="download"></i> This month DL</span>
+        <span class="metric-strip__label"><i data-lucide="download"></i> {{ t "home.metric.this_month_dl" }}</span>
         <span class="metric-strip__value">{{ .MonitoringTraffic.CurrentMonthRX }}</span>
       </div>
       <div class="metric-strip__item">
-        <span class="metric-strip__label"><i data-lucide="gauge"></i> Bandwidth</span>
+        <span class="metric-strip__label"><i data-lucide="gauge"></i> {{ t "monitoring.bandwidth" }}</span>
         <span class="metric-strip__value" data-live-bandwidth>{{ if .MonitoringLive.Enabled }}–{{ else }}n/a{{ end }}</span>
       </div>
       <div class="metric-strip__item">
-        <span class="metric-strip__label"><i data-lucide="clock"></i> Uptime</span>
+        <span class="metric-strip__label"><i data-lucide="clock"></i> {{ t "system.uptime" }}</span>
         <span class="metric-strip__value" data-live-uptime>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.UptimeHuman }}{{ else }}–{{ end }}</span>
       </div>
       <div class="metric-strip__item">
-        <span class="metric-strip__label"><i data-lucide="refresh-cw"></i> Updated</span>
+        <span class="metric-strip__label"><i data-lucide="refresh-cw"></i> {{ t "monitoring.updated" }}</span>
         <span class="metric-strip__value" data-live-updated>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.CollectedAt }}{{ else }}–{{ end }}</span>
       </div>
     </div>
     {{ else }}
     <div class="empty-state-card">
       <span class="empty-state-icon"><i data-lucide="gauge"></i></span>
-      <p class="empty-state-title">No resource snapshot yet</p>
-      <p class="empty-state-desc">Use the refresh panel below to collect CPU, memory, disk, load, and network metrics over SSH.</p>
+      <p class="empty-state-title">{{ t "monitoring.empty_snapshot_title" }}</p>
+      <p class="empty-state-desc">{{ t "monitoring.empty_snapshot_desc" }}</p>
     </div>
     {{ end }}
   </article>
@@ -136,7 +136,7 @@
 
     <div class="traffic-header">
       <div class="traffic-iface">
-        <span class="traffic-iface__label"><i data-lucide="activity"></i> Traffic</span>
+        <span class="traffic-iface__label"><i data-lucide="activity"></i> {{ t "monitoring.traffic" }}</span>
         <span class="traffic-iface__name">{{ .MonitoringTraffic.InterfaceName }}</span>
         {{ if gt (len .MonitoringTraffic.AvailableInterfaces) 1 }}
         <div class="traffic-iface__others">
@@ -150,14 +150,14 @@
     {{ if or (ne .MonitoringTraffic.PeakMbps "-") (ne .MonitoringTraffic.AvgMbps "-") }}
     <div class="traffic-bw">
       <div class="traffic-bw__item">
-        <span class="traffic-bw__label"><i data-lucide="zap"></i> Peak download</span>
-        <span class="traffic-bw__value" title="Peak download (RX) bandwidth. Upload is excluded so this lines up with the download-only port speed VPS providers advertise.">{{ .MonitoringTraffic.PeakMbps }}</span>
-        <span class="traffic-bw__sub">max download (RX) per hour</span>
+        <span class="traffic-bw__label"><i data-lucide="zap"></i> {{ t "home.metric.peak_download" }}</span>
+        <span class="traffic-bw__value" title="{{ t "home.metric.peak_download_title" }}">{{ .MonitoringTraffic.PeakMbps }}</span>
+        <span class="traffic-bw__sub">{{ t "monitoring.peak_sub" }}</span>
       </div>
       <div class="traffic-bw__item">
-        <span class="traffic-bw__label"><i data-lucide="trending-up"></i> Avg download</span>
-        <span class="traffic-bw__value" title="Average download (RX) bandwidth. Upload is excluded so this lines up with the download-only port speed VPS providers advertise.">{{ .MonitoringTraffic.AvgMbps }}</span>
-        <span class="traffic-bw__sub">mean download (RX) over available hours</span>
+        <span class="traffic-bw__label"><i data-lucide="trending-up"></i> {{ t "monitoring.avg_download" }}</span>
+        <span class="traffic-bw__value" title="{{ t "monitoring.avg_title" }}">{{ .MonitoringTraffic.AvgMbps }}</span>
+        <span class="traffic-bw__sub">{{ t "monitoring.avg_sub" }}</span>
       </div>
     </div>
     {{ end }}
@@ -166,8 +166,8 @@
 
       <div class="traffic-section">
         <div class="traffic-section__head">
-          <span><i data-lucide="calendar-days" class="icon-in-button"></i> Recent days</span>
-          {{ if .MonitoringTraffic.DailyRows }}<span class="traffic-section__count">{{ len .MonitoringTraffic.DailyRows }} days</span>{{ end }}
+          <span><i data-lucide="calendar-days" class="icon-in-button"></i> {{ t "monitoring.recent_days" }}</span>
+          {{ if .MonitoringTraffic.DailyRows }}<span class="traffic-section__count">{{ t "monitoring.days_count" "count" (len .MonitoringTraffic.DailyRows) }}</span>{{ end }}
         </div>
         {{ if .MonitoringTraffic.DailyRows }}
         <div class="traffic-rows">
@@ -184,14 +184,14 @@
           {{ end }}
         </div>
         {{ else }}
-        <p class="empty-state">No daily data available yet.</p>
+        <p class="empty-state">{{ t "monitoring.no_daily" }}</p>
         {{ end }}
       </div>
 
       <div class="traffic-section">
         <div class="traffic-section__head">
-          <span><i data-lucide="calendar-range" class="icon-in-button"></i> Monthly</span>
-          {{ if .MonitoringTraffic.MonthlyRows }}<span class="traffic-section__count">{{ len .MonitoringTraffic.MonthlyRows }} months</span>{{ end }}
+          <span><i data-lucide="calendar-range" class="icon-in-button"></i> {{ t "monitoring.monthly" }}</span>
+          {{ if .MonitoringTraffic.MonthlyRows }}<span class="traffic-section__count">{{ t "monitoring.months_count" "count" (len .MonitoringTraffic.MonthlyRows) }}</span>{{ end }}
         </div>
         {{ if .MonitoringTraffic.MonthlyRows }}
         <div class="traffic-rows">
@@ -208,7 +208,7 @@
           {{ end }}
         </div>
         {{ else }}
-        <p class="empty-state">No monthly data available yet.</p>
+        <p class="empty-state">{{ t "monitoring.no_monthly" }}</p>
         {{ end }}
       </div>
 
@@ -219,7 +219,7 @@
       <div class="collapsible">
         <button class="collapsible__toggle" data-collapse-key="traffic_collect">
           <i data-lucide="chevron-right" class="collapsible__icon"></i>
-          <span>vnStat collector output</span>
+          <span>{{ t "monitoring.vnstat_output" }}</span>
           <code class="result-duration">{{ .MonitoringTrafficCollection.Duration }}</code>
         </button>
         <div class="collapsible__content">
@@ -238,14 +238,14 @@
     <p class="empty-state-title">{{ .MonitoringTraffic.Message }}</p>
     <p class="empty-state-desc">
       {{ if .MonitoringTraffic.AvailableInterfaces }}
-      Available interfaces:{{ range .MonitoringTraffic.AvailableInterfaces }} <code>{{ . }}</code>{{ end }}
+      {{ t "monitoring.available_interfaces" }}{{ range .MonitoringTraffic.AvailableInterfaces }} <code>{{ . }}</code>{{ end }}
       {{ else }}
-      vnStat may not be installed or the interface has no data yet.
+      {{ t "monitoring.vnstat_missing_hint" }}
       {{ end }}
     </p>
     {{ if .MonitoringTraffic.VnstatMissing }}
     <a class="btn btn--primary" href="/servers/{{ .MonitoringTarget.ID }}/commands?preset=install-vnstat">
-      <i data-lucide="terminal" class="icon-in-button"></i> Install via Commands
+      <i data-lucide="terminal" class="icon-in-button"></i> {{ t "monitoring.install_via_commands" }}
     </a>
     {{ end }}
   </div>
@@ -256,7 +256,7 @@
 
     <article class="card">
       <div class="card__header">
-        <h3><i data-lucide="refresh-cw"></i> Refresh snapshot</h3>
+        <h3><i data-lucide="refresh-cw"></i> {{ t "monitoring.refresh_snapshot" }}</h3>
       </div>
 
       <form method="post" action="{{ .MonitoringForm.Action }}" id="mon-form">
@@ -265,12 +265,12 @@
         {{- $monAdvErr := or (index .MonitoringForm.Errors "password") (index .MonitoringForm.Errors "private_key") (index .MonitoringForm.Errors "connect_timeout") (index .MonitoringForm.Errors "command_timeout") -}}
 
         {{ if .MonitoringForm.StoredCredentialsAvailable }}
-        <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> Stored credentials will be used automatically.</p>
+        <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> {{ t "system.stored_note" }}</p>
         {{ end }}
 
         <label class="form-field">
-          <span><i data-lucide="wifi" class="icon-in-button"></i> vnStat interface</span>
-          <input type="text" name="traffic_interface" value="{{ .MonitoringForm.TrafficInterface }}" placeholder="auto-detect">
+          <span><i data-lucide="wifi" class="icon-in-button"></i> {{ t "monitoring.vnstat_interface" }}</span>
+          <input type="text" name="traffic_interface" value="{{ .MonitoringForm.TrafficInterface }}" placeholder="{{ t "monitoring.autodetect" }}">
           {{ with index .MonitoringForm.Errors "traffic_interface" }}<small class="field-error">{{ . }}</small>{{ end }}
           {{ if .MonitoringTraffic.AvailableInterfaces }}
           <div class="iface-hints">
@@ -286,46 +286,46 @@
         >
           <div class="form-grid">
             <label class="form-field">
-              <span>Connect timeout</span>
+              <span>{{ t "common.connect_timeout" }}</span>
               <input type="text" name="connect_timeout" value="{{ .MonitoringForm.ConnectTimeout }}" placeholder="10s">
               {{ with index .MonitoringForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
             </label>
             <label class="form-field">
-              <span>Command timeout</span>
+              <span>{{ t "common.command_timeout" }}</span>
               <input type="text" name="command_timeout" value="{{ .MonitoringForm.CommandTimeout }}" placeholder="20s">
               {{ with index .MonitoringForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
             </label>
           </div>
           {{ if not .MonitoringForm.StoredCredentialsAvailable }}
           <label class="form-field">
-            <span>SSH password</span>
-            <input type="password" name="password" placeholder="Runtime password" autocomplete="current-password">
+            <span>{{ t "monitoring.ssh_password" }}</span>
+            <input type="password" name="password" placeholder="{{ t "monitoring.password_placeholder" }}" autocomplete="current-password">
             {{ with index .MonitoringForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
           <label class="form-field">
-            <span>Private key</span>
+            <span>{{ t "monitoring.private_key" }}</span>
             <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
             {{ with index .MonitoringForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
           <label class="form-field">
-            <span>Key passphrase</span>
-            <input type="password" name="key_passphrase" placeholder="Optional">
+            <span>{{ t "monitoring.passphrase" }}</span>
+            <input type="password" name="key_passphrase" placeholder="{{ t "monitoring.optional_placeholder" }}">
           </label>
           {{ end }}
         </div>
 
         <div class="sys-form__actions">
           <button type="submit" class="btn btn--primary">
-            <i data-lucide="refresh-cw" class="icon-in-button"></i> Refresh now
+            <i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "monitoring.refresh_now" }}
           </button>
           {{ if .MonitoringForm.StoredCredentialsAvailable }}
           <button type="button" class="btn btn--ghost" data-refresh-now="{{ .MonitoringForm.RefreshURL }}?refresh=1">
-            <i data-lucide="zap" class="icon-in-button"></i> Quick refresh
+            <i data-lucide="zap" class="icon-in-button"></i> {{ t "system.quick_refresh" }}
           </button>
           <label class="auto-refresh-toggle">
-            <span>Auto:</span>
+            <span>{{ t "common.auto_label" }}</span>
             <select id="auto-refresh-select" data-refresh-url="{{ .MonitoringForm.RefreshURL }}" data-refresh-key="mon_{{ .MonitoringTarget.ID }}">
-              <option value="0">Off</option>
+              <option value="0">{{ t "common.off" }}</option>
               <option value="5000">5s</option>
               <option value="10000">10s</option>
               <option value="30000">30s</option>
@@ -333,7 +333,7 @@
             </select>
           </label>
           <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="mon-advanced" aria-expanded="false">
-            <i data-lucide="settings-2" class="icon-in-button"></i> Advanced
+            <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
           </button>
           {{ end }}
         </div>
@@ -346,7 +346,7 @@
       <div class="result-header">
         <span class="result-header__label">
           <i data-lucide="{{ if .MonitoringCollection.Error }}alert-circle{{ else }}check-circle{{ end }}" class="icon-in-button"></i>
-          {{ if .MonitoringCollection.Error }}Collection failed{{ else }}Collection complete{{ end }}
+          {{ if .MonitoringCollection.Error }}{{ t "system.collection_failed" }}{{ else }}{{ t "system.collection_complete" }}{{ end }}
         </span>
         <code class="result-duration">{{ .MonitoringCollection.Duration }}</code>
       </div>
@@ -355,7 +355,7 @@
       {{ if .MonitoringCollection.Stdout }}
       <div class="collapsible">
         <button class="collapsible__toggle" data-collapse-key="mon_stdout">
-          <i data-lucide="chevron-right" class="collapsible__icon"></i> Stdout
+          <i data-lucide="chevron-right" class="collapsible__icon"></i> {{ t "common.stdout" }}
         </button>
         <div class="collapsible__content">
           <pre class="output-block scrollable">{{ .MonitoringCollection.Stdout }}</pre>
@@ -365,7 +365,7 @@
       {{ if .MonitoringCollection.Stderr }}
       <div class="collapsible">
         <button class="collapsible__toggle" data-collapse-key="mon_stderr">
-          <i data-lucide="chevron-right" class="collapsible__icon"></i> Stderr
+          <i data-lucide="chevron-right" class="collapsible__icon"></i> {{ t "common.stderr" }}
         </button>
         <div class="collapsible__content">
           <pre class="output-block output-block--error scrollable">{{ .MonitoringCollection.Stderr }}</pre>

@@ -385,12 +385,12 @@ func renderPage(
 ) {
 	page := view.NewPageData(deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
-	page.Title = "Monitoring"
+	page.Title = page.T("monitoring.title")
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-monitoring"
-	page.PageTitle = "Monitoring for " + server.Name
+	page.PageTitle = page.T("monitoring.page_title", "server", server.Name)
 	page.SetServerCountry(server.CountryCode, server.CountryName)
-	page.PageDescription = "Collect CPU, memory, disk, load average, uptime, and network summary snapshots over SSH."
+	page.PageDescription = page.T("monitoring.page_description")
 	if deps.Database != nil {
 		page.MigrationCount = deps.Database.MigrationCount()
 	}
