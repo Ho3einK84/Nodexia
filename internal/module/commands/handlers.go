@@ -464,12 +464,12 @@ func renderPage(
 ) {
 	page := view.NewPageData(deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
-	page.Title = "Commands"
+	page.Title = page.T("commands.title")
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-commands"
-	page.PageTitle = "Command center for " + server.Name
+	page.PageTitle = page.T("commands.page_title", "server", server.Name)
 	page.SetServerCountry(server.CountryCode, server.CountryName)
-	page.PageDescription = "Run one-off SSH commands, stream long output, and review recent command history without persisting secrets."
+	page.PageDescription = page.T("commands.page_description")
 	if deps.Database != nil {
 		page.MigrationCount = deps.Database.MigrationCount()
 	}

@@ -9,10 +9,10 @@
     <span class="badge badge--auth-{{ .CommandTarget.AuthMode }}">{{ .CommandTarget.AuthMode }}</span>
     {{ range .CommandTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
     <div class="info-strip__actions">
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/terminal"><i data-lucide="terminal-square" class="icon-in-button"></i> Terminal</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> Edit</a>
-      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> Servers</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/terminal"><i data-lucide="terminal-square" class="icon-in-button"></i> {{ t "common.terminal" }}</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> {{ t "common.edit" }}</a>
+      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nav.servers" }}</a>
     </div>
   </div>
 
@@ -24,7 +24,7 @@
 
   {{ if .CommandPresets }}
   <div class="preset-chips">
-    <span class="preset-chips__label"><i data-lucide="zap"></i> Quick:</span>
+    <span class="preset-chips__label"><i data-lucide="zap"></i> {{ t "commands.quick" }}</span>
     {{ range .CommandPresets }}
     <button type="button" class="preset-chip" data-preset-cmd="{{ .Command }}" title="{{ .Description }}">{{ .Label }}</button>
     {{ end }}
@@ -42,8 +42,8 @@
 
           <label class="form-field">
             <div class="cmd-label-row">
-              <span><i data-lucide="terminal" class="icon-in-button"></i> Command</span>
-              <span class="cmd-hint">Ctrl+Enter to run</span>
+              <span><i data-lucide="terminal" class="icon-in-button"></i> {{ t "commands.command_label" }}</span>
+              <span class="cmd-hint">{{ t "commands.ctrl_enter" }}</span>
             </div>
             <textarea
               name="command"
@@ -60,23 +60,23 @@
           <div class="cmd-actions">
             <div class="cmd-actions__primary">
               <button type="submit" name="intent" value="run" class="btn btn--primary" id="cmd-run-btn">
-                <i data-lucide="play" class="icon-in-button"></i> Run
+                <i data-lucide="play" class="icon-in-button"></i> {{ t "commands.run" }}
               </button>
               <button type="submit" name="intent" value="terminal" class="btn btn--secondary" id="cmd-terminal-btn">
-                <i data-lucide="terminal-square" class="icon-in-button"></i> Run in terminal
+                <i data-lucide="terminal-square" class="icon-in-button"></i> {{ t "commands.run_in_terminal" }}
               </button>
               <button type="submit" name="intent" value="test" class="btn btn--ghost">
-                <i data-lucide="wifi" class="icon-in-button"></i> Test SSH
+                <i data-lucide="wifi" class="icon-in-button"></i> {{ t "commands.test_ssh" }}
               </button>
             </div>
             <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="cmd-advanced" aria-expanded="false">
-              <i data-lucide="settings-2" class="icon-in-button"></i> Advanced
+              <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
             </button>
           </div>
 
           <p class="cmd-terminal-note" id="cmd-terminal-note" hidden>
             <i data-lucide="terminal-square" class="icon-in-button"></i>
-            Interactive command detected — it will open in the Terminal with a real PTY.
+            {{ t "commands.interactive_note" }}
           </p>
 
           {{ with index .CommandForm.Errors "intent" }}<small class="field-error">{{ . }}</small>{{ end }}
@@ -89,12 +89,12 @@
           >
             <div class="form-grid">
               <label class="form-field">
-                <span>Connect timeout</span>
+                <span>{{ t "common.connect_timeout" }}</span>
                 <input type="text" name="connect_timeout" value="{{ .CommandForm.ConnectTimeout }}" placeholder="10s">
                 {{ with index .CommandForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
               </label>
               <label class="form-field">
-                <span>Command timeout</span>
+                <span>{{ t "common.command_timeout" }}</span>
                 <input type="text" name="command_timeout" value="{{ .CommandForm.CommandTimeout }}" placeholder="20s">
                 {{ with index .CommandForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
               </label>
@@ -102,18 +102,18 @@
 
             {{ if not .CommandForm.StoredCredentialsAvailable }}
             <label class="form-field">
-              <span>SSH password</span>
-              <input type="password" name="password" placeholder="Runtime password" autocomplete="current-password">
+              <span>{{ t "commands.ssh_password" }}</span>
+              <input type="password" name="password" placeholder="{{ t "commands.password_placeholder" }}" autocomplete="current-password">
               {{ with index .CommandForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
             </label>
             <label class="form-field">
-              <span>Private key</span>
+              <span>{{ t "commands.private_key" }}</span>
               <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
               {{ with index .CommandForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
             </label>
             <label class="form-field">
-              <span>Key passphrase</span>
-              <input type="password" name="key_passphrase" placeholder="Optional">
+              <span>{{ t "commands.passphrase" }}</span>
+              <input type="password" name="key_passphrase" placeholder="{{ t "commands.optional_placeholder" }}">
             </label>
             {{ end }}
           </div>
@@ -123,15 +123,15 @@
 
       {{ if .CommandStream.Available }}
       <article class="card cmd-result-card stream-card{{ if .CommandStream.IsRunning }} cmd-result-card--live{{ end }}"
-        {{ if .CommandStream.IsRunning }}data-stream-sse-url="/servers/{{ .CommandTarget.ID }}/commands/stream/{{ .CommandStream.ID }}/events" data-stream-page-url="{{ .CommandStream.RefreshURL }}" data-stream-label-done="Stream complete" data-stream-label-error="Stream failed"{{ end }}
+        {{ if .CommandStream.IsRunning }}data-stream-sse-url="/servers/{{ .CommandTarget.ID }}/commands/stream/{{ .CommandStream.ID }}/events" data-stream-page-url="{{ .CommandStream.RefreshURL }}" data-stream-label-done="{{ t "commands.stream_complete" }}" data-stream-label-error="{{ t "commands.stream_failed" }}"{{ end }}
       >
         <div class="result-header">
           <span class="result-header__label" data-stream-label>
-            {{ if .CommandStream.IsRunning }}<span class="spinner"></span> Live stream{{ else }}<i data-lucide="terminal" class="icon-in-button"></i> Stream complete{{ end }}
+            {{ if .CommandStream.IsRunning }}<span class="spinner"></span> {{ t "commands.live_stream" }}{{ else }}<i data-lucide="terminal" class="icon-in-button"></i> {{ t "commands.stream_complete" }}{{ end }}
           </span>
           <div class="result-header__meta" data-stream-meta>
             {{ if not .CommandStream.IsRunning }}
-            <span class="result-exit {{ if eq .CommandStream.ExitCode "0" }}result-exit--ok{{ else }}result-exit--err{{ end }}">exit {{ .CommandStream.ExitCode }}</span>
+            <span class="result-exit {{ if eq .CommandStream.ExitCode "0" }}result-exit--ok{{ else }}result-exit--err{{ end }}">{{ t "commands.exit" "code" .CommandStream.ExitCode }}</span>
             {{ end }}
             <code class="result-duration">{{ .CommandStream.Duration }}</code>
           </div>
@@ -141,13 +141,13 @@
         {{ if .CommandStream.IsRunning }}
         <pre class="output-block scrollable" data-stream-stdout>{{ .CommandStream.Stdout }}</pre>
         <pre class="output-block output-block--error scrollable" data-stream-stderr{{ if not .CommandStream.Stderr }} hidden{{ end }}>{{ .CommandStream.Stderr }}</pre>
-        <p class="result-message" data-stream-status><span class="live-dot"></span> Streaming live output…</p>
+        <p class="result-message" data-stream-status><span class="live-dot"></span> {{ t "commands.streaming" }}</p>
         <div class="stream-connecting" aria-hidden="true"><span class="spinner spinner--lg"></span></div>
         {{ else }}
         {{ if .CommandStream.Stdout }}
         <pre class="output-block scrollable">{{ .CommandStream.Stdout }}</pre>
         {{ else }}
-        <p class="empty-state">No stdout captured.</p>
+        <p class="empty-state">{{ t "commands.no_stdout" }}</p>
         {{ end }}
         {{ if .CommandStream.Stderr }}
         <pre class="output-block output-block--error scrollable">{{ .CommandStream.Stderr }}</pre>
@@ -160,7 +160,7 @@
         <div class="result-header">
           <span class="result-header__label">
             <i data-lucide="{{ if .ConnectionResult.Error }}x-circle{{ else }}check-circle{{ end }}" class="icon-in-button"></i>
-            Connection test
+            {{ t "commands.connection_test" }}
           </span>
           <code class="result-duration">{{ .ConnectionResult.Duration }}</code>
         </div>
@@ -171,9 +171,9 @@
       {{ else if .CommandResult.Available }}
       <article class="card cmd-result-card{{ if .CommandResult.Error }} cmd-result-card--error{{ end }}">
         <div class="result-header">
-          <span class="result-header__label"><i data-lucide="terminal" class="icon-in-button"></i> Output</span>
+          <span class="result-header__label"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "commands.output" }}</span>
           <div class="result-header__meta">
-            <span class="result-exit {{ if eq .CommandResult.ExitCode "0" }}result-exit--ok{{ else }}result-exit--err{{ end }}">exit {{ .CommandResult.ExitCode }}</span>
+            <span class="result-exit {{ if eq .CommandResult.ExitCode "0" }}result-exit--ok{{ else }}result-exit--err{{ end }}">{{ t "commands.exit" "code" .CommandResult.ExitCode }}</span>
             <code class="result-duration">{{ .CommandResult.Duration }}</code>
           </div>
         </div>
@@ -182,7 +182,7 @@
         {{ if .CommandResult.Stdout }}
         <pre class="output-block scrollable">{{ .CommandResult.Stdout }}</pre>
         {{ else }}
-        <p class="empty-state">No stdout output captured.</p>
+        <p class="empty-state">{{ t "commands.no_stdout_output" }}</p>
         {{ end }}
         {{ if .CommandResult.Stderr }}
         <pre class="output-block output-block--error scrollable">{{ .CommandResult.Stderr }}</pre>
@@ -195,7 +195,7 @@
     <div class="cmd-sidebar">
       <article class="card">
         <div class="card__header">
-          <h3><i data-lucide="clock"></i> History</h3>
+          <h3><i data-lucide="clock"></i> {{ t "commands.history" }}</h3>
           {{ if .CommandHistory }}<span class="badge badge--id">{{ len .CommandHistory }}</span>{{ end }}
         </div>
         {{ if .CommandHistory }}
@@ -205,7 +205,7 @@
             <div class="history-row__top">
               <span class="history-row__cmd">{{ .Command }}</span>
               <div class="history-row__right">
-                <button type="button" class="rerun-btn" data-cmd="{{ .Command }}" title="Load into editor" aria-label="Load into editor">
+                <button type="button" class="rerun-btn" data-cmd="{{ .Command }}" title="{{ t "commands.load_into_editor" }}" aria-label="{{ t "commands.load_into_editor" }}">
                   <i data-lucide="corner-up-left"></i>
                 </button>
                 <span class="history-row__exit {{ if eq .ExitCode "0" }}history-row__exit--ok{{ else if eq .ExitCode "n/a" }}history-row__exit--na{{ else }}history-row__exit--err{{ end }}">{{ .ExitCode }}</span>
@@ -215,13 +215,13 @@
             <div class="history-row__detail">
               {{ if .Stdout }}<pre class="output-block output-block--sm scrollable--sm">{{ .Stdout }}</pre>{{ end }}
               {{ if .Stderr }}<pre class="output-block output-block--error output-block--sm scrollable--sm">{{ .Stderr }}</pre>{{ end }}
-              {{ if and (not .Stdout) (not .Stderr) }}<p class="empty-state">No output captured.</p>{{ end }}
+              {{ if and (not .Stdout) (not .Stderr) }}<p class="empty-state">{{ t "commands.no_output" }}</p>{{ end }}
             </div>
           </div>
           {{ end }}
         </div>
         {{ else }}
-        <p class="empty-state">No command history for this server yet.</p>
+        <p class="empty-state">{{ t "commands.no_history" }}</p>
         {{ end }}
       </article>
     </div>
