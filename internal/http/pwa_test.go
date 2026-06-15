@@ -101,6 +101,28 @@ func TestManifestServedPublicly(t *testing.T) {
 	}
 }
 
+// TestManifestRespectsRotationLock verifies the manifest does not declare an
+// orientation lock. An explicit orientation (notably "any") makes an installed
+// PWA override the device's system rotation lock and force-rotate even when the
+// user has locked portrait. Omitting the member hands control back to the OS
+// auto-rotate / rotation-lock setting, which is the behaviour we want.
+func TestManifestRespectsRotationLock(t *testing.T) {
+	server := newPWATestServer(t)
+
+	resp := mustGet(t, server.URL+"/manifest.webmanifest")
+	defer resp.Body.Close()
+
+	var manifest map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+
+	if v, ok := manifest["orientation"]; ok {
+		t.Fatalf("manifest declares orientation=%v; it must be omitted so the "+
+			"installed PWA honours the device rotation lock", v)
+	}
+}
+
 // TestManifestShortcutsHaveIcons verifies every manifest shortcut declares a
 // target URL and its own icon at the Android-baseline 96x96 size. A shortcut
 // without icons renders a blank placeholder in the launcher (the bug this guards
