@@ -18,8 +18,8 @@
   {{/* ── Rules ─────────────────────────────────────────── */}}
   <article class="card">
     <div class="card__header">
-      <h3><i data-lucide="siren"></i> Alert rules</h3>
-      <a href="{{ .NewRuleURL }}" class="btn btn--primary btn--sm"><i data-lucide="plus" class="icon-in-button"></i> New rule</a>
+      <h3><i data-lucide="siren"></i> {{ t "alerts.rules_title" }}</h3>
+      <a href="{{ .NewRuleURL }}" class="btn btn--primary btn--sm"><i data-lucide="plus" class="icon-in-button"></i> {{ t "alerts.new_rule" }}</a>
     </div>
 
     {{ if .Rules }}
@@ -27,26 +27,26 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>Scope</th><th>Metric</th><th>Condition</th><th>Severity</th>
-            <th>Hits</th><th>Cooldown</th><th>Channel</th><th>Status</th><th></th>
+            <th>{{ t "alerts.th_scope" }}</th><th>{{ t "alerts.th_metric" }}</th><th>{{ t "alerts.th_condition" }}</th><th>{{ t "alerts.th_severity" }}</th>
+            <th>{{ t "alerts.th_hits" }}</th><th>{{ t "alerts.th_cooldown" }}</th><th>{{ t "alerts.th_channel" }}</th><th>{{ t "common.status" }}</th><th></th>
           </tr>
         </thead>
         <tbody>
           {{ range .Rules }}
           <tr>
-            <td>{{ if .IsGlobal }}<span class="badge badge--id">All servers</span>{{ else }}{{ .ServerLabel }}{{ end }}</td>
+            <td>{{ if .IsGlobal }}<span class="badge badge--id">{{ t "alerts.all_servers" }}</span>{{ else }}{{ .ServerLabel }}{{ end }}</td>
             <td>{{ .MetricLabel }}</td>
             <td><code>{{ .ComparatorSymbol }} {{ .ThresholdDisplay }}</code></td>
-            <td><span class="severity-badge severity-badge--{{ .Severity }}">{{ .Severity }}</span></td>
-            <td>{{ .ConsecutiveHits }}{{ if .StreakSummary }} <span class="badge badge--warn" title="Pending breach streak — alert fires when streak reaches {{ .ConsecutiveHits }}">{{ .StreakSummary }}</span>{{ end }}</td>
+            <td><span class="severity-badge severity-badge--{{ .Severity }}">{{ t (printf "alerts.severity.%s" .Severity) }}</span></td>
+            <td>{{ .ConsecutiveHits }}{{ if .StreakSummary }} <span class="badge badge--warn" title="{{ t "alerts.streak_title" "count" .ConsecutiveHits }}">{{ .StreakSummary }}</span>{{ end }}</td>
             <td>{{ .Cooldown }}</td>
             <td>{{ .ChannelLabel }}</td>
-            <td>{{ if .Enabled }}<span class="badge badge--ok">enabled</span>{{ else }}<span class="badge badge--warn">disabled</span>{{ end }}</td>
+            <td>{{ if .Enabled }}<span class="badge badge--ok">{{ t "common.enabled" }}</span>{{ else }}<span class="badge badge--warn">{{ t "common.disabled" }}</span>{{ end }}</td>
             <td class="data-table__actions">
-              <a class="btn btn--ghost btn--sm" href="{{ .EditURL }}" aria-label="Edit rule"><i data-lucide="pencil"></i></a>
+              <a class="btn btn--ghost btn--sm" href="{{ .EditURL }}" aria-label="{{ t "alerts.edit_rule_aria" }}"><i data-lucide="pencil"></i></a>
               <form method="post" action="{{ .DeleteURL }}" class="inline-form">
                 <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-                <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" aria-label="Delete rule" data-confirm="Delete this alert rule? This cannot be undone."><i data-lucide="trash-2"></i></button>
+                <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" aria-label="{{ t "alerts.delete_rule_aria" }}" data-confirm="{{ t "alerts.delete_rule_confirm" }}"><i data-lucide="trash-2"></i></button>
               </form>
             </td>
           </tr>
@@ -60,9 +60,9 @@
     {{ else }}
     <div class="empty-state-card">
       <span class="empty-state-icon"><i data-lucide="siren"></i></span>
-      <p class="empty-state-title">No alert rules yet</p>
-      <p class="empty-state-desc">Create a rule to get notified when CPU, RAM, disk, load, or traffic crosses a threshold.</p>
-      <a class="btn btn--primary" href="{{ .NewRuleURL }}"><i data-lucide="plus" class="icon-in-button"></i> Create a rule</a>
+      <p class="empty-state-title">{{ t "alerts.empty_rules_title" }}</p>
+      <p class="empty-state-desc">{{ t "alerts.empty_rules_desc" }}</p>
+      <a class="btn btn--primary" href="{{ .NewRuleURL }}"><i data-lucide="plus" class="icon-in-button"></i> {{ t "alerts.create_rule" }}</a>
     </div>
     {{ end }}
   </article>
@@ -70,16 +70,16 @@
   {{/* ── Channels ──────────────────────────────────────── */}}
   <article class="card">
     <div class="card__header">
-      <h3><i data-lucide="send"></i> Notification channels</h3>
-      <a href="{{ .NewChannelURL }}" class="btn btn--primary btn--sm"><i data-lucide="plus" class="icon-in-button"></i> New channel</a>
+      <h3><i data-lucide="send"></i> {{ t "alerts.channels_title" }}</h3>
+      <a href="{{ .NewChannelURL }}" class="btn btn--primary btn--sm"><i data-lucide="plus" class="icon-in-button"></i> {{ t "alerts.new_channel" }}</a>
     </div>
-    <p class="field-hint">The Telegram bot token is read from <code>NODEXIA_TELEGRAM_BOT_TOKEN</code> and is never stored here — only the chat id lives in the database.</p>
+    <p class="field-hint">{{ tsafe "alerts.channels_hint" }}</p>
 
     {{ if .Channels }}
     <div class="data-table-wrap">
       <table class="data-table">
         <thead>
-          <tr><th>Name</th><th>Kind</th><th>Chat id</th><th>Template</th><th>Status</th><th></th></tr>
+          <tr><th>{{ t "common.name" }}</th><th>{{ t "alerts.th_kind" }}</th><th>{{ t "alerts.th_chat_id" }}</th><th>{{ t "alerts.th_template" }}</th><th>{{ t "common.status" }}</th><th></th></tr>
         </thead>
         <tbody>
           {{ range .Channels }}
@@ -87,17 +87,17 @@
             <td>{{ .Name }}</td>
             <td><span class="badge badge--id">{{ .Kind }}</span></td>
             <td><code>{{ .ChatID }}</code></td>
-            <td>{{ if .HasTemplate }}custom{{ else }}default{{ end }}</td>
-            <td>{{ if .Enabled }}<span class="badge badge--ok">enabled</span>{{ else }}<span class="badge badge--warn">disabled</span>{{ end }}</td>
+            <td>{{ if .HasTemplate }}{{ t "alerts.tpl_custom" }}{{ else }}{{ t "alerts.tpl_default" }}{{ end }}</td>
+            <td>{{ if .Enabled }}<span class="badge badge--ok">{{ t "common.enabled" }}</span>{{ else }}<span class="badge badge--warn">{{ t "common.disabled" }}</span>{{ end }}</td>
             <td class="data-table__actions">
               <form method="post" action="{{ .TestURL }}" class="inline-form">
                 <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-                <button type="submit" class="btn btn--ghost btn--sm" aria-label="Send test message" title="Send a test message to this channel"><i data-lucide="send-horizontal"></i></button>
+                <button type="submit" class="btn btn--ghost btn--sm" aria-label="{{ t "alerts.send_test_aria" }}" title="{{ t "alerts.send_test_title" }}"><i data-lucide="send-horizontal"></i></button>
               </form>
-              <a class="btn btn--ghost btn--sm" href="{{ .EditURL }}" aria-label="Edit channel"><i data-lucide="pencil"></i></a>
+              <a class="btn btn--ghost btn--sm" href="{{ .EditURL }}" aria-label="{{ t "alerts.edit_channel_aria" }}"><i data-lucide="pencil"></i></a>
               <form method="post" action="{{ .DeleteURL }}" class="inline-form">
                 <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-                <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" aria-label="Delete channel" data-confirm="Delete this channel? Rules pointing at it will fall back to all enabled channels."><i data-lucide="trash-2"></i></button>
+                <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" aria-label="{{ t "alerts.delete_channel_aria" }}" data-confirm="{{ t "alerts.delete_channel_confirm" }}"><i data-lucide="trash-2"></i></button>
               </form>
             </td>
           </tr>
@@ -108,9 +108,9 @@
     {{ else }}
     <div class="empty-state-card">
       <span class="empty-state-icon"><i data-lucide="send"></i></span>
-      <p class="empty-state-title">No channels yet</p>
-      <p class="empty-state-desc">Add a Telegram channel so fired alerts have somewhere to go.</p>
-      <a class="btn btn--primary" href="{{ .NewChannelURL }}"><i data-lucide="plus" class="icon-in-button"></i> Add a channel</a>
+      <p class="empty-state-title">{{ t "alerts.empty_channels_title" }}</p>
+      <p class="empty-state-desc">{{ t "alerts.empty_channels_desc" }}</p>
+      <a class="btn btn--primary" href="{{ .NewChannelURL }}"><i data-lucide="plus" class="icon-in-button"></i> {{ t "alerts.add_channel" }}</a>
     </div>
     {{ end }}
   </article>
@@ -118,7 +118,7 @@
   {{/* ── Silences ──────────────────────────────────────── */}}
   <article class="card">
     <div class="card__header">
-      <h3><i data-lucide="bell-off"></i> Silences</h3>
+      <h3><i data-lucide="bell-off"></i> {{ t "alerts.silences_title" }}</h3>
     </div>
 
     {{ if .HasServers }}
@@ -126,7 +126,7 @@
       <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
       <div class="form-grid form-grid--silence">
         <label class="form-field">
-          <span><i data-lucide="server" class="icon-in-button"></i> Server</span>
+          <span><i data-lucide="server" class="icon-in-button"></i> {{ t "common.server" }}</span>
           <select name="server_id">
             {{ range .SilenceForm.ServerOptions }}
             <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}>{{ .Label }}</option>
@@ -135,7 +135,7 @@
           {{ with index .SilenceForm.Errors "server_id" }}<small class="field-error">{{ . }}</small>{{ end }}
         </label>
         <label class="form-field">
-          <span><i data-lucide="activity" class="icon-in-button"></i> Metric</span>
+          <span><i data-lucide="activity" class="icon-in-button"></i> {{ t "alerts.th_metric" }}</span>
           <select name="metric">
             {{ range .SilenceForm.MetricOptions }}
             <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}>{{ .Label }}</option>
@@ -144,29 +144,29 @@
           {{ with index .SilenceForm.Errors "metric" }}<small class="field-error">{{ . }}</small>{{ end }}
         </label>
         <label class="form-field">
-          <span><i data-lucide="clock" class="icon-in-button"></i> Expires in (hours)</span>
-          <input type="number" name="expires_hours" min="0" step="0.5" value="{{ .SilenceForm.ExpiresHours }}" placeholder="blank = until removed">
+          <span><i data-lucide="clock" class="icon-in-button"></i> {{ t "alerts.expires_hours" }}</span>
+          <input type="number" name="expires_hours" min="0" step="0.5" value="{{ .SilenceForm.ExpiresHours }}" placeholder="{{ t "alerts.expires_placeholder" }}">
           {{ with index .SilenceForm.Errors "expires_hours" }}<small class="field-error">{{ . }}</small>{{ end }}
         </label>
       </div>
       <label class="form-field">
-        <span><i data-lucide="message-square" class="icon-in-button"></i> Reason <span class="badge badge--warn">optional</span></span>
-        <input type="text" name="reason" value="{{ .SilenceForm.Reason }}" placeholder="Maintenance window, known noisy host…">
+        <span><i data-lucide="message-square" class="icon-in-button"></i> {{ t "alerts.reason" }} <span class="badge badge--warn">{{ t "common.optional" }}</span></span>
+        <input type="text" name="reason" value="{{ .SilenceForm.Reason }}" placeholder="{{ t "alerts.reason_placeholder" }}">
         {{ with index .SilenceForm.Errors "reason" }}<small class="field-error">{{ . }}</small>{{ end }}
       </label>
       <div class="form-actions">
-        <button type="submit" class="btn btn--secondary"><i data-lucide="bell-off" class="icon-in-button"></i> Mute metric</button>
+        <button type="submit" class="btn btn--secondary"><i data-lucide="bell-off" class="icon-in-button"></i> {{ t "alerts.mute_metric" }}</button>
       </div>
     </form>
     {{ else }}
-    <p class="field-hint">Register a server first to mute its metrics.</p>
+    <p class="field-hint">{{ t "alerts.no_servers_hint" }}</p>
     {{ end }}
 
     {{ if .Silences }}
     <div class="data-table-wrap">
       <table class="data-table">
         <thead>
-          <tr><th>Server</th><th>Metric</th><th>Reason</th><th>Expires</th><th>Status</th><th></th></tr>
+          <tr><th>{{ t "common.server" }}</th><th>{{ t "alerts.th_metric" }}</th><th>{{ t "alerts.th_reason" }}</th><th>{{ t "alerts.th_expires" }}</th><th>{{ t "common.status" }}</th><th></th></tr>
         </thead>
         <tbody>
           {{ range .Silences }}
@@ -175,11 +175,11 @@
             <td>{{ .MetricLabel }}</td>
             <td>{{ if .Reason }}{{ .Reason }}{{ else }}<span class="muted">—</span>{{ end }}</td>
             <td>{{ .Expires }}</td>
-            <td>{{ if .Active }}<span class="badge badge--ok">active</span>{{ else }}<span class="badge badge--warn">expired</span>{{ end }}</td>
+            <td>{{ if .Active }}<span class="badge badge--ok">{{ t "alerts.silence_active" }}</span>{{ else }}<span class="badge badge--warn">{{ t "alerts.silence_expired" }}</span>{{ end }}</td>
             <td class="data-table__actions">
               <form method="post" action="{{ .DeleteURL }}" class="inline-form">
                 <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-                <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" aria-label="Remove silence" data-confirm="Remove this silence?"><i data-lucide="trash-2"></i></button>
+                <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" aria-label="{{ t "alerts.remove_silence_aria" }}" data-confirm="{{ t "alerts.remove_silence_confirm" }}"><i data-lucide="trash-2"></i></button>
               </form>
             </td>
           </tr>
@@ -188,14 +188,14 @@
       </table>
     </div>
     {{ else }}
-    <p class="empty-state">No active silences. Every server reports on every metric.</p>
+    <p class="empty-state">{{ t "alerts.no_silences" }}</p>
     {{ end }}
   </article>
 
   {{/* ── History ───────────────────────────────────────── */}}
   <article class="card" id="alert-history">
     <div class="card__header">
-      <h3><i data-lucide="history"></i> Recent alert activity</h3>
+      <h3><i data-lucide="history"></i> {{ t "alerts.history_title" }}</h3>
       {{ if .EventsTotal }}<span class="badge badge--id">{{ .EventsTotal }}</span>{{ end }}
     </div>
 
@@ -203,7 +203,7 @@
     <div class="data-table-wrap">
       <table class="data-table">
         <thead>
-          <tr><th>Server</th><th>Metric</th><th>Observed</th><th>Threshold</th><th>Severity</th><th>State</th><th>Fired</th><th>Resolved</th></tr>
+          <tr><th>{{ t "common.server" }}</th><th>{{ t "alerts.th_metric" }}</th><th>{{ t "alerts.th_observed" }}</th><th>{{ t "alerts.th_threshold" }}</th><th>{{ t "alerts.th_severity" }}</th><th>{{ t "alerts.th_state" }}</th><th>{{ t "alerts.th_fired" }}</th><th>{{ t "alerts.th_resolved" }}</th></tr>
         </thead>
         <tbody>
           {{ range .Events }}
@@ -212,8 +212,8 @@
             <td>{{ .MetricLabel }}</td>
             <td><code>{{ .Value }}</code></td>
             <td><code>{{ .Threshold }}</code></td>
-            <td><span class="severity-badge severity-badge--{{ .Severity }}">{{ .Severity }}</span></td>
-            <td>{{ if eq .State "firing" }}<span class="badge badge--warn">firing</span>{{ else }}<span class="badge badge--ok">resolved</span>{{ end }}</td>
+            <td><span class="severity-badge severity-badge--{{ .Severity }}">{{ t (printf "alerts.severity.%s" .Severity) }}</span></td>
+            <td>{{ if eq .State "firing" }}<span class="badge badge--warn">{{ t "alerts.state_firing" }}</span>{{ else }}<span class="badge badge--ok">{{ t "alerts.state_resolved" }}</span>{{ end }}</td>
             <td>{{ .FiredAt }}</td>
             <td>{{ if .ResolvedAt }}{{ .ResolvedAt }}{{ else }}<span class="muted">—</span>{{ end }}</td>
           </tr>
@@ -223,7 +223,7 @@
     </div>
     {{ template "pagination" .EventsPagination }}
     {{ else }}
-    <p class="empty-state">No alerts have fired yet. Rules are evaluated after each background monitoring run.</p>
+    <p class="empty-state">{{ t "alerts.no_events" }}</p>
     {{ end }}
   </article>
   {{ end }}
@@ -243,12 +243,12 @@
 
   <div class="grid">
     <article class="card">
-      <h3><i data-lucide="{{ if .IsEditingAlertRule }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingAlertRule }}Edit alert rule{{ else }}New alert rule{{ end }}</h3>
+      <h3><i data-lucide="{{ if .IsEditingAlertRule }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingAlertRule }}{{ t "alerts.rule_form_edit" }}{{ else }}{{ t "alerts.rule_form_new" }}{{ end }}</h3>
       <form method="post" action="{{ .AlertRuleForm.Action }}" class="server-form">
         <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
 
         <label class="form-field">
-          <span><i data-lucide="server" class="icon-in-button"></i> Server scope</span>
+          <span><i data-lucide="server" class="icon-in-button"></i> {{ t "alerts.server_scope" }}</span>
           <select name="server_id">
             {{ range .AlertRuleForm.ServerOptions }}
             <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}>{{ .Label }}</option>
@@ -259,7 +259,7 @@
 
         <div class="form-grid">
           <label class="form-field">
-            <span><i data-lucide="activity" class="icon-in-button"></i> Metric</span>
+            <span><i data-lucide="activity" class="icon-in-button"></i> {{ t "alerts.th_metric" }}</span>
             <select name="metric">
               {{ range .AlertRuleForm.MetricOptions }}
               <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}>{{ .Label }}</option>
@@ -269,10 +269,10 @@
           </label>
 
           <label class="form-field">
-            <span><i data-lucide="equal" class="icon-in-button"></i> Comparator</span>
+            <span><i data-lucide="equal" class="icon-in-button"></i> {{ t "alerts.comparator" }}</span>
             <select name="comparator">
-              <option value="gte" {{ if eq .AlertRuleForm.Comparator "gte" }}selected{{ end }}>≥ at or above</option>
-              <option value="gt"  {{ if eq .AlertRuleForm.Comparator "gt" }}selected{{ end }}>&gt; strictly above</option>
+              <option value="gte" {{ if eq .AlertRuleForm.Comparator "gte" }}selected{{ end }}>{{ t "alerts.cmp_gte" }}</option>
+              <option value="gt"  {{ if eq .AlertRuleForm.Comparator "gt" }}selected{{ end }}>&gt; {{ t "alerts.cmp_gt" }}</option>
             </select>
             {{ with index .AlertRuleForm.Errors "comparator" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
@@ -280,18 +280,18 @@
 
         <div class="form-grid">
           <label class="form-field">
-            <span><i data-lucide="gauge" class="icon-in-button"></i> Threshold</span>
+            <span><i data-lucide="gauge" class="icon-in-button"></i> {{ t "alerts.threshold" }}</span>
             <input type="number" name="threshold" step="any" min="0" value="{{ .AlertRuleForm.Threshold }}">
-            <small class="field-hint">Percent for cpu/ram/disk, raw value for load, GiB for monthly traffic, Mbps for bandwidth.</small>
+            <small class="field-hint">{{ t "alerts.threshold_hint" }}</small>
             {{ with index .AlertRuleForm.Errors "threshold" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
 
           <label class="form-field">
-            <span><i data-lucide="shield-alert" class="icon-in-button"></i> Severity</span>
+            <span><i data-lucide="shield-alert" class="icon-in-button"></i> {{ t "alerts.th_severity" }}</span>
             <select name="severity">
-              <option value="info"     {{ if eq .AlertRuleForm.Severity "info" }}selected{{ end }}>Info</option>
-              <option value="warning"  {{ if eq .AlertRuleForm.Severity "warning" }}selected{{ end }}>Warning</option>
-              <option value="critical" {{ if eq .AlertRuleForm.Severity "critical" }}selected{{ end }}>Critical</option>
+              <option value="info"     {{ if eq .AlertRuleForm.Severity "info" }}selected{{ end }}>{{ t "alerts.sev_info" }}</option>
+              <option value="warning"  {{ if eq .AlertRuleForm.Severity "warning" }}selected{{ end }}>{{ t "alerts.sev_warning" }}</option>
+              <option value="critical" {{ if eq .AlertRuleForm.Severity "critical" }}selected{{ end }}>{{ t "alerts.sev_critical" }}</option>
             </select>
             {{ with index .AlertRuleForm.Errors "severity" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
@@ -299,22 +299,22 @@
 
         <div class="form-grid">
           <label class="form-field">
-            <span><i data-lucide="repeat" class="icon-in-button"></i> Consecutive hits</span>
+            <span><i data-lucide="repeat" class="icon-in-button"></i> {{ t "alerts.consecutive_hits" }}</span>
             <input type="number" name="consecutive_hits" min="1" step="1" value="{{ .AlertRuleForm.ConsecutiveHits }}">
-            <small class="field-hint">Consecutive breaching cycles required before the first alert fires. 1 = alert on first breach (recommended). Higher values suppress noise but add delay — with a 15-min monitoring interval, 3 hits means a 45-min wait.</small>
+            <small class="field-hint">{{ t "alerts.consecutive_hits_hint" }}</small>
             {{ with index .AlertRuleForm.Errors "consecutive_hits" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
 
           <label class="form-field">
-            <span><i data-lucide="timer" class="icon-in-button"></i> Cooldown (seconds)</span>
+            <span><i data-lucide="timer" class="icon-in-button"></i> {{ t "alerts.cooldown_seconds" }}</span>
             <input type="number" name="cooldown_seconds" min="0" step="1" value="{{ .AlertRuleForm.CooldownSeconds }}">
-            <small class="field-hint">Minimum gap between repeat notifications while still firing.</small>
+            <small class="field-hint">{{ t "alerts.cooldown_hint" }}</small>
             {{ with index .AlertRuleForm.Errors "cooldown_seconds" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
         </div>
 
         <label class="form-field">
-          <span><i data-lucide="send" class="icon-in-button"></i> Channel</span>
+          <span><i data-lucide="send" class="icon-in-button"></i> {{ t "alerts.th_channel" }}</span>
           <select name="channel_id">
             {{ range .AlertRuleForm.ChannelOptions }}
             <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}>{{ .Label }}</option>
@@ -324,19 +324,19 @@
         </label>
 
         <label class="form-field">
-          <span><i data-lucide="file-text" class="icon-in-button"></i> Note</span>
-          <textarea name="note" rows="2" placeholder="Optional context shown next to the rule">{{ .AlertRuleForm.Note }}</textarea>
+          <span><i data-lucide="file-text" class="icon-in-button"></i> {{ t "common.note" }}</span>
+          <textarea name="note" rows="2" placeholder="{{ t "alerts.note_placeholder" }}">{{ .AlertRuleForm.Note }}</textarea>
           {{ with index .AlertRuleForm.Errors "note" }}<small class="field-error">{{ . }}</small>{{ end }}
         </label>
 
         <label class="checkbox-field">
           <input type="checkbox" name="enabled" {{ if .AlertRuleForm.Enabled }}checked{{ end }}>
-          <span>Rule enabled</span>
+          <span>{{ t "alerts.rule_enabled" }}</span>
         </label>
 
         <div class="form-actions">
           <button type="submit" class="btn btn--primary">{{ if .IsEditingAlertRule }}Save changes{{ else }}Create rule{{ end }}</button>
-          <a class="btn btn--secondary" href="/alerts"><i data-lucide="list" class="icon-in-button"></i> Back to alerts</a>
+          <a class="btn btn--secondary" href="/alerts"><i data-lucide="list" class="icon-in-button"></i> {{ t "alerts.back_to_alerts" }}</a>
         </div>
       </form>
 
@@ -344,7 +344,7 @@
       <div class="danger-zone">
         <form method="post" action="{{ .AlertRuleForm.DeleteAction }}" class="inline-form">
           <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-          <button type="submit" class="btn btn--danger" data-confirm="Delete this alert rule? This cannot be undone."><i data-lucide="trash-2" class="icon-in-button"></i> Delete rule</button>
+          <button type="submit" class="btn btn--danger" data-confirm="{{ t "alerts.delete_rule_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "alerts.delete_rule_btn" }}</button>
         </form>
       </div>
       {{ end }}
@@ -366,38 +366,38 @@
 
   <div class="grid">
     <article class="card">
-      <h3><i data-lucide="{{ if .IsEditingAlertChannel }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingAlertChannel }}Edit channel{{ else }}New channel{{ end }}</h3>
+      <h3><i data-lucide="{{ if .IsEditingAlertChannel }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingAlertChannel }}{{ t "alerts.channel_form_edit" }}{{ else }}{{ t "alerts.channel_form_new" }}{{ end }}</h3>
       <form method="post" action="{{ .AlertChannelForm.Action }}" class="server-form">
         <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
         <input type="hidden" name="kind" value="telegram">
 
         <label class="form-field">
-          <span><i data-lucide="tag" class="icon-in-button"></i> Name</span>
-          <input type="text" name="name" value="{{ .AlertChannelForm.Name }}" placeholder="Ops Telegram">
+          <span><i data-lucide="tag" class="icon-in-button"></i> {{ t "common.name" }}</span>
+          <input type="text" name="name" value="{{ .AlertChannelForm.Name }}" placeholder="{{ t "alerts.channel_name_placeholder" }}">
           {{ with index .AlertChannelForm.Errors "name" }}<small class="field-error">{{ . }}</small>{{ end }}
         </label>
 
         <label class="form-field">
-          <span><i data-lucide="hash" class="icon-in-button"></i> Telegram chat id</span>
+          <span><i data-lucide="hash" class="icon-in-button"></i> {{ t "alerts.chat_id" }}</span>
           <input type="text" name="chat_id" value="{{ .AlertChannelForm.ChatID }}" placeholder="-1001234567890">
-          <small class="field-hint">The chat or channel id alerts are delivered to. The bot token comes from <code>NODEXIA_TELEGRAM_BOT_TOKEN</code> and is never stored.</small>
+          <small class="field-hint">{{ tsafe "alerts.chat_id_hint" }}</small>
           {{ with index .AlertChannelForm.Errors "chat_id" }}<small class="field-error">{{ . }}</small>{{ end }}
         </label>
 
         <label class="form-field">
-          <span><i data-lucide="file-code" class="icon-in-button"></i> Message template <span class="badge badge--warn">optional</span></span>
-          <textarea name="message_template" rows="4" class="cmd-textarea" placeholder="Leave blank to use the default alert message.">{{ .AlertChannelForm.MessageTemplate }}</textarea>
+          <span><i data-lucide="file-code" class="icon-in-button"></i> {{ t "alerts.message_template" }} <span class="badge badge--warn">{{ t "common.optional" }}</span></span>
+          <textarea name="message_template" rows="4" class="cmd-textarea" placeholder="{{ t "alerts.message_template_placeholder" }}">{{ .AlertChannelForm.MessageTemplate }}</textarea>
           {{ with index .AlertChannelForm.Errors "message_template" }}<small class="field-error">{{ . }}</small>{{ end }}
         </label>
 
         <label class="checkbox-field">
           <input type="checkbox" name="enabled" {{ if .AlertChannelForm.Enabled }}checked{{ end }}>
-          <span>Channel enabled</span>
+          <span>{{ t "alerts.channel_enabled" }}</span>
         </label>
 
         <div class="form-actions">
           <button type="submit" class="btn btn--primary">{{ if .IsEditingAlertChannel }}Save changes{{ else }}Create channel{{ end }}</button>
-          <a class="btn btn--secondary" href="/alerts"><i data-lucide="list" class="icon-in-button"></i> Back to alerts</a>
+          <a class="btn btn--secondary" href="/alerts"><i data-lucide="list" class="icon-in-button"></i> {{ t "alerts.back_to_alerts" }}</a>
         </div>
       </form>
 
@@ -405,7 +405,7 @@
       <div class="danger-zone">
         <form method="post" action="{{ .AlertChannelForm.DeleteAction }}" class="inline-form">
           <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-          <button type="submit" class="btn btn--danger" data-confirm="Delete this channel? Rules pointing at it will fall back to all enabled channels."><i data-lucide="trash-2" class="icon-in-button"></i> Delete channel</button>
+          <button type="submit" class="btn btn--danger" data-confirm="{{ t "alerts.delete_channel_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "alerts.delete_channel_btn" }}</button>
         </form>
       </div>
       {{ end }}
