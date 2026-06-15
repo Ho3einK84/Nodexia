@@ -276,12 +276,12 @@ func renderPage(
 ) {
 	page := view.NewPageData(deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
-	page.Title = "Files"
+	page.Title = page.T("files.title")
 	page.ActiveNav = "/servers"
 	page.ContentTemplate = "content-files"
-	page.PageTitle = "File browser for " + server.Name
+	page.PageTitle = page.T("files.page_title", "server", server.Name)
 	page.SetServerCountry(server.CountryCode, server.CountryName)
-	page.PageDescription = "Browse remote directories over SFTP and download files with runtime credentials only."
+	page.PageDescription = page.T("files.page_description")
 	if deps.Database != nil {
 		page.MigrationCount = deps.Database.MigrationCount()
 	}
