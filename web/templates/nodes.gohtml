@@ -9,11 +9,11 @@
     <span class="badge badge--auth-{{ .NodeTarget.AuthMode }}">{{ .NodeTarget.AuthMode }}</span>
     {{ range .NodeTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
     <div class="info-strip__actions">
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> Monitoring</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> System</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> Commands</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> Files</a>
-      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> Servers</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "common.monitoring" }}</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
+      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nav.servers" }}</a>
     </div>
   </div>
 
@@ -28,15 +28,15 @@
   <article class="card cmd-result-card stream-card{{ if .NodeStream.IsRunning }} cmd-result-card--live{{ end }}"
     data-node-result
     data-node-clean-url="/servers/{{ .NodeTarget.ID }}/nodes"
-    {{ if .NodeStream.IsRunning }}data-stream-sse-url="/servers/{{ .NodeTarget.ID }}/nodes/stream/{{ .NodeStream.ID }}/events" data-stream-page-url="{{ .NodeStream.RefreshURL }}" data-stream-label-done="Node action complete" data-stream-label-error="Node action failed"{{ else }}data-node-failed="{{ if and (eq .NodeStream.ExitCode "0") (not .NodeStream.Error) }}false{{ else }}true{{ end }}"{{ end }}
+    {{ if .NodeStream.IsRunning }}data-stream-sse-url="/servers/{{ .NodeTarget.ID }}/nodes/stream/{{ .NodeStream.ID }}/events" data-stream-page-url="{{ .NodeStream.RefreshURL }}" data-stream-label-done="{{ t "nodes.action_complete" }}" data-stream-label-error="{{ t "nodes.action_failed" }}"{{ else }}data-node-failed="{{ if and (eq .NodeStream.ExitCode "0") (not .NodeStream.Error) }}false{{ else }}true{{ end }}"{{ end }}
   >
     <div class="result-header">
       <span class="result-header__label" data-stream-label>
-        {{ if .NodeStream.IsRunning }}<span class="spinner"></span> Node action running{{ else }}<i data-lucide="terminal" class="icon-in-button"></i> Node action complete{{ end }}
+        {{ if .NodeStream.IsRunning }}<span class="spinner"></span> {{ t "nodes.action_running" }}{{ else }}<i data-lucide="terminal" class="icon-in-button"></i> {{ t "nodes.action_complete" }}{{ end }}
       </span>
       <div class="result-header__meta" data-stream-meta>
         {{ if not .NodeStream.IsRunning }}
-        <span class="result-exit {{ if eq .NodeStream.ExitCode "0" }}result-exit--ok{{ else }}result-exit--err{{ end }}">exit {{ .NodeStream.ExitCode }}</span>
+        <span class="result-exit {{ if eq .NodeStream.ExitCode "0" }}result-exit--ok{{ else }}result-exit--err{{ end }}">{{ t "commands.exit" "code" .NodeStream.ExitCode }}</span>
         {{ end }}
         <code class="result-duration">{{ .NodeStream.Duration }}</code>
       </div>
@@ -46,13 +46,13 @@
     {{ if .NodeStream.IsRunning }}
     <pre class="output-block scrollable" data-stream-stdout>{{ .NodeStream.Stdout }}</pre>
     <pre class="output-block output-block--error scrollable" data-stream-stderr{{ if not .NodeStream.Stderr }} hidden{{ end }}>{{ .NodeStream.Stderr }}</pre>
-    <p class="result-message" data-stream-status><span class="live-dot"></span> Streaming live output…</p>
+    <p class="result-message" data-stream-status><span class="live-dot"></span> {{ t "commands.streaming" }}</p>
     <div class="stream-connecting" aria-hidden="true"><span class="spinner spinner--lg"></span></div>
     {{ else }}
     {{ if .NodeStream.Stdout }}
     <pre class="output-block scrollable">{{ .NodeStream.Stdout }}</pre>
     {{ else }}
-    <p class="empty-state">No output captured.</p>
+    <p class="empty-state">{{ t "commands.no_output" }}</p>
     {{ end }}
     {{/* stderr is only an error when the action actually failed (exit != 0). On a
          clean exit, tools that log progress to stderr must not look like errors. */}}
@@ -81,7 +81,7 @@
           <code class="node-card__type">{{ .TypeLabel }}</code>
         </div>
         <div class="node-card__head-end">
-          <div class="node-confidence node-confidence--{{ .Confidence }}" title="Detection confidence: {{ .Confidence }}">
+          <div class="node-confidence node-confidence--{{ .Confidence }}" title="{{ t "nodes.confidence_title" "level" .Confidence }}">
             <span class="node-confidence__meter">
               <span class="node-confidence__seg"></span>
               <span class="node-confidence__seg"></span>
@@ -92,11 +92,11 @@
 
           {{ if .Actions }}
           <div class="action-menu action-menu--below node-card__menu" data-action-menu>
-            <button type="button" class="btn btn--ghost btn--sm action-menu__toggle node-card__menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="Actions for {{ .Name }}">
+            <button type="button" class="btn btn--ghost btn--sm action-menu__toggle node-card__menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="{{ t "nodes.actions_aria" "name" .Name }}">
               <i data-lucide="ellipsis-vertical"></i>
             </button>
             <div class="action-menu__panel" role="menu">
-              <span class="action-menu__caption"><i data-lucide="wrench"></i> Node actions</span>
+              <span class="action-menu__caption"><i data-lucide="wrench"></i> {{ t "nodes.node_actions" }}</span>
               <div class="action-menu__divider" role="separator"></div>
               {{ if .ActionsEnabled }}
               <form method="post" action="/servers/{{ $.NodeTarget.ID }}/nodes/actions" class="action-menu__form">
@@ -111,14 +111,14 @@
                   value="{{ .Key }}"
                   role="menuitem"
                   class="action-menu__item{{ if .Danger }} action-menu__item--danger{{ end }}"
-                  {{ if .Danger }}data-confirm="Really {{ .Label }} {{ $node.Name }}? This runs the official CLI with auto-confirm and cannot be undone."{{ end }}
+                  {{ if .Danger }}data-confirm="{{ t "nodes.action_confirm" "action" .Label "name" $node.Name }}"{{ end }}
                 >
                   <i data-lucide="{{ .Icon }}" class="icon-in-button"></i> {{ .Label }}
                 </button>
                 {{ end }}
               </form>
               {{ else }}
-              <span class="action-menu__note"><i data-lucide="key-round"></i> Store SSH credentials for this server to manage this node.</span>
+              <span class="action-menu__note"><i data-lucide="key-round"></i> {{ t "nodes.store_creds_manage" }}</span>
               {{ end }}
             </div>
           </div>
@@ -142,11 +142,11 @@
 
       <div class="node-facts">
         <div class="node-fact">
-          <span class="node-fact__label"><i data-lucide="tag"></i> Version</span>
+          <span class="node-fact__label"><i data-lucide="tag"></i> {{ t "common.version" }}</span>
           <span class="node-fact__value">{{ .Version }}</span>
         </div>
         <div class="node-fact">
-          <span class="node-fact__label"><i data-lucide="plug"></i> Service port</span>
+          <span class="node-fact__label"><i data-lucide="plug"></i> {{ t "nodes.service_port" }}</span>
           <span class="node-fact__value">
             {{ if and (ne .ServicePort "-") (ne .ServicePort "") }}
             <code class="node-port node-port--service">{{ .ServicePort }}</code>
@@ -154,7 +154,7 @@
           </span>
         </div>
         <div class="node-fact">
-          <span class="node-fact__label"><i data-lucide="webhook"></i> API port</span>
+          <span class="node-fact__label"><i data-lucide="webhook"></i> {{ t "nodes.api_port" }}</span>
           <span class="node-fact__value">
             {{ if and (ne .APIPort "-") (ne .APIPort "") }}
             <code class="node-port node-port--api">{{ .APIPort }}</code>
@@ -162,23 +162,23 @@
           </span>
         </div>
         <div class="node-fact node-fact--wide">
-          <span class="node-fact__label"><i data-lucide="folder"></i> Data directory</span>
+          <span class="node-fact__label"><i data-lucide="folder"></i> {{ t "nodes.data_directory" }}</span>
           <span class="node-fact__value"><code class="node-path">{{ .DataDir }}</code></span>
         </div>
       </div>
 
       {{ if eq .NodeType "pasarguard-node" }}
       <div class="node-section node-credentials">
-        <span class="node-section__label"><i data-lucide="key-round"></i> Credentials</span>
+        <span class="node-section__label"><i data-lucide="key-round"></i> {{ t "nodes.credentials" }}</span>
         {{ if .ActionsEnabled }}
         <button type="button" class="btn btn--ghost btn--sm node-credentials__btn"
                 data-node-credentials
                 data-url="/servers/{{ $.NodeTarget.ID }}/nodes/credentials?type={{ .NodeType }}&amp;name={{ .Name }}">
-          <i data-lucide="key-round" class="icon-in-button"></i> Show API key &amp; certificate
+          <i data-lucide="key-round" class="icon-in-button"></i> {{ t "nodes.show_api_cert" }}
         </button>
         <div class="node-credentials__out" hidden></div>
         {{ else }}
-        <p class="node-actions-note"><i data-lucide="key-round" class="icon-in-button"></i> Store SSH credentials to view this node's API key and certificate.</p>
+        <p class="node-actions-note"><i data-lucide="key-round" class="icon-in-button"></i> {{ t "nodes.store_creds_view" }}</p>
         {{ end }}
       </div>
       {{ end }}
@@ -186,7 +186,7 @@
       {{ if .ActivePorts }}
       {{ $apiPort := .APIPort }}{{ $servicePort := .ServicePort }}
       <div class="node-section">
-        <span class="node-section__label"><i data-lucide="network"></i> Active ports</span>
+        <span class="node-section__label"><i data-lucide="network"></i> {{ t "nodes.active_ports" }}</span>
         <div class="node-chips">
           {{ range .ActivePorts }}
           <code class="node-port{{ if eq . $apiPort }} node-port--api{{ else if eq . $servicePort }} node-port--service{{ end }}">{{ . }}</code>
@@ -197,7 +197,7 @@
 
       {{ if .XrayPorts }}
       <div class="node-section">
-        <span class="node-section__label"><i data-lucide="arrow-left-right"></i> Xray proxy ports</span>
+        <span class="node-section__label"><i data-lucide="arrow-left-right"></i> {{ t "nodes.xray_ports" }}</span>
         <div class="node-chips">
           {{ range .XrayPorts }}<code class="node-port node-port--xray">{{ . }}</code>{{ end }}
         </div>
@@ -206,7 +206,7 @@
 
       {{ if .Dependencies }}
       <div class="node-section">
-        <span class="node-section__label"><i data-lucide="package-check"></i> Dependencies</span>
+        <span class="node-section__label"><i data-lucide="package-check"></i> {{ t "nodes.dependencies" }}</span>
         <div class="node-chips">
           {{ range .Dependencies }}<code class="node-dep{{ if hasSuffix . ":missing" }} node-dep--missing{{ end }}">{{ . }}</code>{{ end }}
         </div>
@@ -217,7 +217,7 @@
       <div class="node-evidence collapsible">
         <button class="collapsible__toggle" data-collapse-key="evidence_{{ .NodeType }}_{{ .Name }}">
           <i data-lucide="chevron-right" class="collapsible__icon"></i>
-          <span>Evidence</span>
+          <span>{{ t "nodes.evidence" }}</span>
           <span class="node-evidence__count">{{ len .Evidence }}</span>
         </button>
         <div class="collapsible__content">
@@ -239,17 +239,17 @@
   {{ else if $noneOnly }}
   <div class="empty-state-card">
     <span class="empty-state-icon"><i data-lucide="search-x"></i></span>
-    <p class="empty-state-title">No node installation detected</p>
-    <p class="empty-state-desc">Discovery ran but no PasarGuard or Rebecca installation was found. Install a PasarGuard node, or inspect the raw probe output below for clues.</p>
+    <p class="empty-state-title">{{ t "nodes.empty_none_title" }}</p>
+    <p class="empty-state-desc">{{ t "nodes.empty_none_desc" }}</p>
     <button type="button" class="btn btn--primary" data-modal-open="install-node-modal">
-      <i data-lucide="container" class="icon-in-button"></i> Install PasarGuard node
+      <i data-lucide="container" class="icon-in-button"></i> {{ t "nodes.install_pasarguard" }}
     </button>
   </div>
   {{ else }}
   <div class="empty-state-card">
     <span class="empty-state-icon"><i data-lucide="radar"></i></span>
-    <p class="empty-state-title">No discovery snapshot yet</p>
-    <p class="empty-state-desc">Run a discovery sweep to find PasarGuard and Rebecca node installations and manage them from here.</p>
+    <p class="empty-state-title">{{ t "nodes.empty_nosnap_title" }}</p>
+    <p class="empty-state-desc">{{ t "nodes.empty_nosnap_desc" }}</p>
   </div>
   {{ end }}
 
@@ -258,7 +258,7 @@
 
     <article class="card">
       <div class="card__header">
-        <h3><i data-lucide="radar"></i> Run discovery</h3>
+        <h3><i data-lucide="radar"></i> {{ t "nodes.run_discovery" }}</h3>
       </div>
 
       <form method="post" action="{{ .NodeForm.Action }}" id="node-form">
@@ -267,7 +267,7 @@
         {{- $nodeAdvErr := or (index .NodeForm.Errors "password") (index .NodeForm.Errors "private_key") (index .NodeForm.Errors "connect_timeout") (index .NodeForm.Errors "command_timeout") -}}
 
         {{ if .NodeForm.StoredCredentialsAvailable }}
-        <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> Stored credentials will be used automatically.</p>
+        <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> {{ t "system.stored_note" }}</p>
         {{ end }}
 
         <div
@@ -277,12 +277,12 @@
         >
           <div class="form-grid">
             <label class="form-field">
-              <span>Connect timeout</span>
+              <span>{{ t "common.connect_timeout" }}</span>
               <input type="text" name="connect_timeout" value="{{ .NodeForm.ConnectTimeout }}" placeholder="10s">
               {{ with index .NodeForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
             </label>
             <label class="form-field">
-              <span>Command timeout</span>
+              <span>{{ t "common.command_timeout" }}</span>
               <input type="text" name="command_timeout" value="{{ .NodeForm.CommandTimeout }}" placeholder="20s">
               {{ with index .NodeForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
             </label>
@@ -290,32 +290,32 @@
 
           {{ if not .NodeForm.StoredCredentialsAvailable }}
           <label class="form-field">
-            <span>SSH password</span>
-            <input type="password" name="password" placeholder="Runtime password" autocomplete="current-password">
+            <span>{{ t "nodes.ssh_password" }}</span>
+            <input type="password" name="password" placeholder="{{ t "nodes.password_placeholder" }}" autocomplete="current-password">
             {{ with index .NodeForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
           <label class="form-field">
-            <span>Private key</span>
+            <span>{{ t "nodes.private_key" }}</span>
             <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
             {{ with index .NodeForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
           <label class="form-field">
-            <span>Key passphrase</span>
-            <input type="password" name="key_passphrase" placeholder="Optional">
+            <span>{{ t "nodes.passphrase" }}</span>
+            <input type="password" name="key_passphrase" placeholder="{{ t "nodes.optional_placeholder" }}">
           </label>
           {{ end }}
         </div>
 
         <div class="sys-form__actions">
           <button type="submit" class="btn btn--primary">
-            <i data-lucide="radar" class="icon-in-button"></i> Run discovery
+            <i data-lucide="radar" class="icon-in-button"></i> {{ t "nodes.run_discovery" }}
           </button>
           {{ if .NodeForm.StoredCredentialsAvailable }}
           <button type="button" class="btn btn--ghost" data-refresh-now="{{ .NodeForm.RefreshURL }}?refresh=1">
-            <i data-lucide="zap" class="icon-in-button"></i> Quick scan
+            <i data-lucide="zap" class="icon-in-button"></i> {{ t "nodes.quick_scan" }}
           </button>
           <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="node-advanced" aria-expanded="false">
-            <i data-lucide="settings-2" class="icon-in-button"></i> Advanced
+            <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
           </button>
           {{ end }}
         </div>
@@ -325,18 +325,18 @@
 
     <article class="card node-install-launch">
       <div class="card__header">
-        <h3><i data-lucide="plus-circle"></i> Install a node</h3>
+        <h3><i data-lucide="plus-circle"></i> {{ t "nodes.install_node_title" }}</h3>
       </div>
 
-      <p class="node-install-launch__lead">Provision a new node on <strong>{{ .NodeTarget.Name }}</strong>. PasarGuard installs through the official script; Rebecca nodes are detect-and-manage only.</p>
+      <p class="node-install-launch__lead">{{ tsafe "nodes.install_lead" "server" .NodeTarget.Name }}</p>
 
       <div class="node-install-launch__actions">
         <button type="button" class="btn btn--primary node-install-launch__btn" data-modal-open="install-node-modal">
-          <i data-lucide="container" class="icon-in-button"></i> Install PasarGuard node
+          <i data-lucide="container" class="icon-in-button"></i> {{ t "nodes.install_pasarguard" }}
         </button>
-        <button type="button" class="btn node-install-launch__btn node-install-soon" data-tooltip="Rebecca install is coming soon" aria-disabled="true" aria-label="Install Rebecca node — coming soon">
-          <i data-lucide="package" class="icon-in-button"></i> Install Rebecca node
-          <span class="coming-soon-badge">Soon</span>
+        <button type="button" class="btn node-install-launch__btn node-install-soon" data-tooltip="{{ t "nodes.rebecca_soon_tooltip" }}" aria-disabled="true" aria-label="{{ t "nodes.rebecca_soon_aria" }}">
+          <i data-lucide="package" class="icon-in-button"></i> {{ t "nodes.install_rebecca" }}
+          <span class="coming-soon-badge">{{ t "nodes.soon" }}</span>
         </button>
       </div>
     </article>
@@ -346,13 +346,13 @@
       <div class="result-header">
         <span class="result-header__label">
           <i data-lucide="{{ if .NodeCollection.Error }}alert-circle{{ else }}check-circle{{ end }}" class="icon-in-button"></i>
-          {{ if .NodeCollection.Error }}Discovery had errors{{ else }}Discovery complete{{ end }}
+          {{ if .NodeCollection.Error }}{{ t "nodes.discovery_errors" }}{{ else }}{{ t "nodes.discovery_complete" }}{{ end }}
         </span>
         <code class="result-duration">{{ .NodeCollection.Duration }}</code>
       </div>
 
       <div class="node-collect-meta">
-        <span class="node-collect-meta__item"><i data-lucide="list"></i> {{ .NodeCollection.ProbeCount }} probes</span>
+        <span class="node-collect-meta__item"><i data-lucide="list"></i> {{ t "nodes.probes_count" "count" .NodeCollection.ProbeCount }}</span>
         <span class="node-collect-meta__item"><i data-lucide="calendar"></i> {{ .NodeCollection.CollectedAt }}</span>
       </div>
 
@@ -365,7 +365,7 @@
           <button class="collapsible__toggle" data-collapse-key="probe_{{ .Label }}">
             <i data-lucide="chevron-right" class="collapsible__icon"></i>
             <span class="node-probe__label">{{ .Label }}</span>
-            {{ if .Error }}<span class="node-probe__badge node-probe__badge--err">error</span>{{ end }}
+            {{ if .Error }}<span class="node-probe__badge node-probe__badge--err">{{ t "nodes.probe_error" }}</span>{{ end }}
             <code class="result-duration">{{ .Duration }}</code>
           </button>
           <div class="collapsible__content">
@@ -374,7 +374,7 @@
             {{ if .Stdout }}
             <pre class="output-block scrollable">{{ .Stdout }}</pre>
             {{ else }}
-            <p class="empty-state">No stdout captured.</p>
+            <p class="empty-state">{{ t "commands.no_stdout" }}</p>
             {{ end }}
             {{ if .Stderr }}<pre class="output-block output-block--error scrollable">{{ .Stderr }}</pre>{{ end }}
           </div>
@@ -382,7 +382,7 @@
         {{ end }}
       </div>
       {{ else }}
-      <p class="empty-state">No probe output was captured for this run.</p>
+      <p class="empty-state">{{ t "nodes.no_probe_output" }}</p>
       {{ end }}
     </article>
     {{ end }}
@@ -395,7 +395,7 @@
     <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="install-node-modal-title">
       <header class="modal__header">
         <h3 class="modal__title" id="install-node-modal-title"><i data-lucide="container"></i> Install PasarGuard node</h3>
-        <button type="button" class="modal__close" data-modal-close aria-label="Close install dialog">
+        <button type="button" class="modal__close" data-modal-close aria-label="{{ t "nodes.close_install" }}">
           <i data-lucide="x"></i>
         </button>
       </header>
@@ -404,31 +404,31 @@
         <form method="post" action="{{ .NodeInstallForm.Action }}">
           <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
           <label class="form-field">
-            <span>Node name</span>
+            <span>{{ t "nodes.node_name" }}</span>
             <input type="text" name="node_name" value="{{ .NodeInstallForm.NodeName }}" placeholder="node" maxlength="64" required data-modal-autofocus>
             {{ with index .NodeInstallForm.Errors "node_name" }}<small class="field-error">{{ . }}</small>{{ end }}
-            <small class="field-hint">Each instance gets its own <code>/opt/&lt;name&gt;</code> and <code>/var/lib/&lt;name&gt;</code>, so several nodes can run side by side (node, node2, …).</small>
+            <small class="field-hint">{{ tsafe "nodes.node_name_hint" }}</small>
           </label>
 
           <div class="form-grid">
             <label class="form-field">
-              <span>Service port</span>
+              <span>{{ t "nodes.service_port" }}</span>
               <input type="number" name="service_port" value="{{ .NodeInstallForm.ServicePort }}" placeholder="62050" min="1" max="65535">
               {{ with index .NodeInstallForm.Errors "service_port" }}<small class="field-error">{{ . }}</small>{{ end }}
             </label>
             <label class="form-field">
-              <span>API port <small class="field-optional">(optional)</small></span>
+              <span>{{ t "nodes.api_port" }} <small class="field-optional">{{ t "nodes.optional_paren" }}</small></span>
               <input type="number" name="api_port" value="{{ .NodeInstallForm.APIPort }}" placeholder="62051" min="1" max="65535">
               {{ with index .NodeInstallForm.Errors "api_port" }}<small class="field-error">{{ . }}</small>{{ end }}
             </label>
           </div>
 
           <fieldset class="form-field node-proto-choice">
-            <span>Connection type</span>
+            <span>{{ t "nodes.connection_type" }}</span>
             <div class="node-proto-options">
               <label class="node-proto-option">
                 <input type="radio" name="protocol" value="grpc" {{ if ne .NodeInstallForm.Protocol "rest" }}checked{{ end }}>
-                <span><i data-lucide="layers" class="icon-in-button"></i> gRPC <small>recommended</small></span>
+                <span><i data-lucide="layers" class="icon-in-button"></i> gRPC <small>{{ t "nodes.recommended" }}</small></span>
               </label>
               <label class="node-proto-option">
                 <input type="radio" name="protocol" value="rest" {{ if eq .NodeInstallForm.Protocol "rest" }}checked{{ end }}>
@@ -439,21 +439,21 @@
           </fieldset>
 
           <label class="form-field">
-            <span>API key <small class="field-optional">(optional)</small></span>
-            <input type="text" name="api_key" value="{{ .NodeInstallForm.APIKey }}" placeholder="Leave blank to auto-generate a UUID" autocomplete="off" spellcheck="false">
+            <span>{{ t "nodes.api_key" }} <small class="field-optional">{{ t "nodes.optional_paren" }}</small></span>
+            <input type="text" name="api_key" value="{{ .NodeInstallForm.APIKey }}" placeholder="{{ t "nodes.api_key_placeholder" }}" autocomplete="off" spellcheck="false">
             {{ with index .NodeInstallForm.Errors "api_key" }}<small class="field-error">{{ . }}</small>{{ end }}
-            <small class="field-hint">Must be a valid UUID. Leave blank and the installer generates one for you.</small>
+            <small class="field-hint">{{ t "nodes.api_key_hint" }}</small>
           </label>
 
           <div class="sys-form__actions">
-            <button type="submit" class="btn btn--primary" data-confirm="Run the official PasarGuard install script on this server? This installs Docker-based services and may take several minutes.">
-              <i data-lucide="download" class="icon-in-button"></i> Install node
+            <button type="submit" class="btn btn--primary" data-confirm="{{ t "nodes.install_confirm" }}">
+              <i data-lucide="download" class="icon-in-button"></i> {{ t "nodes.install_node_btn" }}
             </button>
           </div>
-          <p class="node-install-note">Runs the official installer, applies your ports and connection type to <code>/opt/&lt;name&gt;/.env</code>, restarts the node through its CLI, and then shows the API key and SSL certificate needed to register it in the PasarGuard panel. Rebecca nodes are detect-and-manage only.</p>
+          <p class="node-install-note">{{ tsafe "nodes.install_note" }}</p>
         </form>
         {{ else }}
-        <p class="empty-state">Installing a node needs stored SSH credentials. Edit the server and store credentials first.</p>
+        <p class="empty-state">{{ t "nodes.install_needs_creds" }}</p>
         {{ end }}
       </div>
     </div>
@@ -464,15 +464,15 @@
     <div class="collapsible">
       <button class="collapsible__toggle" data-collapse-key="node_scope">
         <i data-lucide="chevron-right" class="collapsible__icon"></i>
-        <span><i data-lucide="book-open" class="icon-in-button"></i> How node management works</span>
+        <span><i data-lucide="book-open" class="icon-in-button"></i> {{ t "nodes.scope_title" }}</span>
       </button>
       <div class="collapsible__content">
         <ul class="node-scope__list">
-          <li>Each node family has a <strong>provider</strong> that knows how to discover instances from configuration files and drive the official CLI — node names are never hardcoded and any number of instances is supported.</li>
-          <li><strong>PasarGuard</strong> nodes are Docker based: every instance owns <code>/opt/&lt;name&gt;</code> (compose + <code>.env</code>) and <code>/var/lib/&lt;name&gt;</code> (certs, xray core). Actions run through <code>pg-node --name &lt;name&gt;</code>; new nodes are installed with the official install script.</li>
-          <li><strong>Rebecca</strong> nodes live under <code>/opt/rebecca-node</code>; the version comes from <code>.binary-release.json</code> and ports from <code>.env</code>. Actions run through the <code>rebecca-node</code> CLI. Existing installs are detected and managed — Nodexia does not install Rebecca nodes.</li>
-          <li><strong>Service port</strong> is what the panel uses to reach the node API; <strong>API port</strong> is the Xray management API; <strong>Xray proxy ports</strong> carry tunnelled traffic.</li>
-          <li>Long actions (update, uninstall, install) run as background sessions with live output — runtime credentials stay request-scoped and the API key / certificate shown after an install are never stored.</li>
+          <li>{{ tsafe "nodes.scope_provider" }}</li>
+          <li>{{ tsafe "nodes.scope_pasarguard" }}</li>
+          <li>{{ tsafe "nodes.scope_rebecca" }}</li>
+          <li>{{ tsafe "nodes.scope_ports" }}</li>
+          <li>{{ tsafe "nodes.scope_actions" }}</li>
         </ul>
       </div>
     </div>
@@ -491,7 +491,7 @@
     {{ if .PageFlag }}<span class="info-strip__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}
     <span class="info-strip__addr">{{ .NodeTarget.Username }}@{{ .NodeTarget.Host }}:{{ .NodeTarget.Port }}</span>
     <div class="info-strip__actions">
-      <a class="btn btn--ghost btn--sm" href="{{ .NodeInstall.NodesURL }}"><i data-lucide="arrow-left" class="icon-in-button"></i> Back to nodes</a>
+      <a class="btn btn--ghost btn--sm" href="{{ .NodeInstall.NodesURL }}"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nodes.back_to_nodes" }}</a>
     </div>
   </div>
 
@@ -500,9 +500,9 @@
   >
     <div class="result-header">
       <span class="result-header__label" data-stream-label>
-        {{ if .NodeInstall.IsRunning }}<span class="spinner"></span> Installing node "{{ .NodeInstall.NodeName }}"
-        {{ else if .NodeInstall.Error }}<i data-lucide="x-circle" class="icon-in-button"></i> Install failed
-        {{ else }}<i data-lucide="check-circle" class="icon-in-button"></i> Node "{{ .NodeInstall.NodeName }}" installed
+        {{ if .NodeInstall.IsRunning }}<span class="spinner"></span> {{ t "nodes.installing" "name" .NodeInstall.NodeName }}
+        {{ else if .NodeInstall.Error }}<i data-lucide="x-circle" class="icon-in-button"></i> {{ t "nodes.install_failed" }}
+        {{ else }}<i data-lucide="check-circle" class="icon-in-button"></i> {{ t "nodes.installed" "name" .NodeInstall.NodeName }}
         {{ end }}
       </span>
       <div class="result-header__meta" data-stream-meta>
@@ -513,13 +513,13 @@
     {{ if .NodeInstall.Error }}<pre class="output-block output-block--error">{{ .NodeInstall.Error }}</pre>{{ end }}
     {{ if .NodeInstall.IsRunning }}
     <pre class="output-block scrollable" data-stream-stdout>{{ .NodeInstall.Output }}</pre>
-    <p class="result-message" data-stream-status><span class="live-dot"></span> The official PasarGuard install script is running — output streams live below.</p>
+    <p class="result-message" data-stream-status><span class="live-dot"></span> {{ t "nodes.install_streaming" }}</p>
     <div class="stream-connecting" aria-hidden="true"><span class="spinner spinner--lg"></span></div>
     {{ else }}
     {{ if .NodeInstall.Output }}
     <pre class="output-block scrollable">{{ .NodeInstall.Output }}</pre>
     {{ else }}
-    <p class="empty-state">Waiting for installer output…</p>
+    <p class="empty-state">{{ t "nodes.waiting_output" }}</p>
     {{ end }}
     {{ end }}
   </article>
@@ -527,53 +527,53 @@
   {{ if .NodeInstall.Info.Available }}
   <article class="card node-register-card">
     <div class="card__header">
-      <h3><i data-lucide="badge-check"></i> Register this node in the PasarGuard panel</h3>
+      <h3><i data-lucide="badge-check"></i> {{ t "nodes.register_title" }}</h3>
     </div>
-    <p class="node-install-note">Copy the API key and SSL certificate below into the panel's node registration form. These values are shown once and are not stored by Nodexia.</p>
+    <p class="node-install-note">{{ t "nodes.register_note" }}</p>
 
     <div class="node-facts">
       <div class="node-fact">
-        <span class="node-fact__label"><i data-lucide="box"></i> Node name</span>
+        <span class="node-fact__label"><i data-lucide="box"></i> {{ t "nodes.node_name" }}</span>
         <span class="node-fact__value"><code>{{ .NodeInstall.Info.NodeName }}</code></span>
       </div>
       <div class="node-fact">
-        <span class="node-fact__label"><i data-lucide="globe"></i> Node IP</span>
+        <span class="node-fact__label"><i data-lucide="globe"></i> {{ t "nodes.node_ip" }}</span>
         <span class="node-fact__value"><code>{{ .NodeInstall.Info.NodeIP }}</code></span>
       </div>
       <div class="node-fact">
-        <span class="node-fact__label"><i data-lucide="plug"></i> Service port</span>
+        <span class="node-fact__label"><i data-lucide="plug"></i> {{ t "nodes.service_port" }}</span>
         <span class="node-fact__value"><code class="node-port node-port--service">{{ .NodeInstall.Info.ServicePort }}</code></span>
       </div>
       <div class="node-fact">
-        <span class="node-fact__label"><i data-lucide="layers"></i> Protocol</span>
+        <span class="node-fact__label"><i data-lucide="layers"></i> {{ t "nodes.protocol" }}</span>
         <span class="node-fact__value"><code>{{ .NodeInstall.Info.Protocol }}</code></span>
       </div>
     </div>
 
     <div class="node-section">
       <div class="node-section__head">
-        <span class="node-section__label"><i data-lucide="key-round"></i> API key</span>
-        <button type="button" class="btn btn--ghost btn--sm copy-inline" data-copy-target="#nodeApiKeyValue" aria-label="Copy API key"><i data-lucide="copy" class="icon-in-button"></i> Copy</button>
+        <span class="node-section__label"><i data-lucide="key-round"></i> {{ t "nodes.api_key" }}</span>
+        <button type="button" class="btn btn--ghost btn--sm copy-inline" data-copy-target="#nodeApiKeyValue" aria-label="{{ t "nodes.copy_api_key" }}"><i data-lucide="copy" class="icon-in-button"></i> {{ t "nodes.copy" }}</button>
       </div>
       <pre id="nodeApiKeyValue" class="output-block node-secret-block" data-secret data-no-auto-copy>{{ .NodeInstall.Info.APIKey }}</pre>
     </div>
 
     <div class="node-section">
       <div class="node-section__head">
-        <span class="node-section__label"><i data-lucide="shield-check"></i> SSL certificate</span>
+        <span class="node-section__label"><i data-lucide="shield-check"></i> {{ t "nodes.ssl_cert" }}</span>
         {{ if .NodeInstall.Info.Certificate }}
-        <button type="button" class="btn btn--ghost btn--sm copy-inline" data-copy-target="#nodeCertValue" aria-label="Copy certificate"><i data-lucide="copy" class="icon-in-button"></i> Copy</button>
+        <button type="button" class="btn btn--ghost btn--sm copy-inline" data-copy-target="#nodeCertValue" aria-label="{{ t "nodes.copy_cert" }}"><i data-lucide="copy" class="icon-in-button"></i> {{ t "nodes.copy" }}</button>
         {{ end }}
       </div>
       {{ if .NodeInstall.Info.Certificate }}
       <pre id="nodeCertValue" class="output-block scrollable node-secret-block" data-no-auto-copy>{{ .NodeInstall.Info.Certificate }}</pre>
       {{ else }}
-      <p class="empty-state">The certificate could not be read from /var/lib/{{ .NodeInstall.Info.NodeName }}/certs/ssl_cert.pem — fetch it manually or run "Renew cert" on the node card.</p>
+      <p class="empty-state">{{ t "nodes.cert_missing" "name" .NodeInstall.Info.NodeName }}</p>
       {{ end }}
     </div>
 
     <div class="sys-form__actions">
-      <a class="btn btn--primary" href="{{ .NodeInstall.NodesURL }}?refresh=1"><i data-lucide="radar" class="icon-in-button"></i> Re-run discovery</a>
+      <a class="btn btn--primary" href="{{ .NodeInstall.NodesURL }}?refresh=1"><i data-lucide="radar" class="icon-in-button"></i> {{ t "nodes.rerun_discovery" }}</a>
     </div>
   </article>
   {{ end }}
@@ -587,5 +587,5 @@
 {{- end }}
 
 {{ define "node-health-label" -}}
-{{ if eq . "running" }}Running{{ else if eq . "stopped" }}Stopped{{ else if eq . "detected" }}Detected{{ else if eq . "not_detected" }}Not detected{{ else }}Unknown{{ end }}
+{{ if eq . "running" }}{{ t "nodes.health_running" }}{{ else if eq . "stopped" }}{{ t "nodes.health_stopped" }}{{ else if eq . "detected" }}{{ t "nodes.health_detected" }}{{ else if eq . "not_detected" }}{{ t "nodes.health_not_detected" }}{{ else }}{{ t "nodes.health_unknown" }}{{ end }}
 {{- end }}
