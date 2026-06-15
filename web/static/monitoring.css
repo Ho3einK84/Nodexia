@@ -106,12 +106,12 @@
   flex-direction: column;
   align-items: center;
   padding: 18px 20px 16px;
-  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  border-inline-end: 1px solid rgba(148, 163, 184, 0.1);
   gap: 4px;
 }
 
 .traffic-bw__item:last-child {
-  border-right: none;
+  border-inline-end: none;
 }
 
 .traffic-bw__label {
@@ -155,7 +155,7 @@
     grid-template-columns: 1fr;
   }
   .traffic-bw__item {
-    border-right: none;
+    border-inline-end: none;
     border-bottom: 1px solid rgba(148, 163, 184, 0.1);
     padding: 14px 20px 12px;
   }
@@ -177,12 +177,12 @@
 
 .traffic-section {
   padding: 0;
-  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  border-inline-end: 1px solid rgba(148, 163, 184, 0.1);
   min-width: 0;
 }
 
 .traffic-section:last-child {
-  border-right: none;
+  border-inline-end: none;
 }
 
 .traffic-section__head {
@@ -285,7 +285,7 @@
   font-variant-numeric: var(--num);
   color: #e2e8f0;
   font-weight: var(--fw-semibold);
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .traffic-row__rx svg,
@@ -338,7 +338,7 @@
     grid-template-columns: 1fr;
   }
   .traffic-section {
-    border-right: none;
+    border-inline-end: none;
     border-bottom: 1px solid rgba(148, 163, 184, 0.1);
   }
   .traffic-section:last-child {
@@ -355,7 +355,7 @@
     gap: 8px;
   }
   .traffic-row__total {
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 }
 
@@ -413,8 +413,8 @@
 .gauge__center {
   position: absolute;
   top: 52%;
-  left: 0;
-  right: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -501,7 +501,7 @@
 }
 
 .metric-strip__value .badge--load {
-  margin-right: 2px;
+  margin-inline-end: 2px;
 }
 
 /* ── Live metrics (real-time WebSocket stream) ───────────────────────────── */
@@ -592,5 +592,5 @@
 }
 
 .metric-strip__value--load .badge--load {
-  margin-right: 2px;
+  margin-inline-end: 2px;
 }

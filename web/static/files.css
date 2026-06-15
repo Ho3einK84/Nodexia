@@ -343,7 +343,7 @@
   color: #cbd5e1;
   font: inherit;
   font-size: 0.86rem;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   transition: background 0.1s ease, color 0.1s ease;
 }
@@ -395,7 +395,7 @@
 
 .file-search__icon {
   position: absolute;
-  left: 10px;
+  inset-inline-start: 10px;
   top: 50%;
   transform: translateY(-50%);
   width: 15px;
@@ -500,7 +500,7 @@
 
 .file-th--active::after {
   content: '↑';
-  margin-left: 4px;
+  margin-inline-start: 4px;
   font-size: 0.7em;
 }
 
@@ -554,7 +554,7 @@
 .file-upload__pct {
   font-size: 0.74rem;
   color: #64748b;
-  text-align: right;
+  text-align: end;
   font-variant-numeric: var(--num);
 }
 
@@ -574,7 +574,7 @@
 
 .file-toast-host {
   position: fixed;
-  right: 16px;
+  inset-inline-end: 16px;
   bottom: 16px;
   z-index: 1500;
   display: flex;
@@ -696,8 +696,8 @@
   }
 
   .file-toast-host {
-    left: 16px;
-    right: 16px;
+    inset-inline-start: 16px;
+    inset-inline-end: 16px;
     max-width: none;
   }
 }

@@ -80,7 +80,7 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page := view.NewPageData(h.deps.Config)
+	page := view.NewPageData(h.deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = "Analytics"
 	page.ActiveNav = "/analytics"
@@ -189,7 +189,7 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	page := view.NewPageData(h.deps.Config)
+	page := view.NewPageData(h.deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = "Analytics"
 	page.ActiveNav = "/analytics"

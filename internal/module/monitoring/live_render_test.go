@@ -22,7 +22,7 @@ func TestMonitoringPageRendersLivePanel(t *testing.T) {
 	}
 
 	basePage := func() view.PageData {
-		pd := view.NewPageData(cfg)
+		pd := view.NewPageData(cfg, httptest.NewRequest(http.MethodGet, "/", nil))
 		pd.ContentTemplate = "content-monitoring"
 		pd.Title = "Monitoring"
 		pd.MonitoringTarget = view.MonitoringTargetView{ID: 5, Name: "lab", Host: "10.0.0.1", Port: 22}

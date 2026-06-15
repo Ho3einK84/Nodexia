@@ -16,7 +16,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 22px 24px;
-  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  border-inline-end: 1px solid rgba(148, 163, 184, 0.1);
   transition: background 0.15s ease;
 }
 
@@ -70,11 +70,11 @@
   flex-direction: column;
   gap: 5px;
   padding: 14px 24px;
-  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  border-inline-end: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .sys-fact-item:last-child {
-  border-right: none;
+  border-inline-end: none;
 }
 
 .sys-fact-item__label {
@@ -112,11 +112,11 @@
     grid-template-columns: repeat(2, 1fr);
   }
   .sys-fact-item:nth-child(2) {
-    border-right: none;
+    border-inline-end: none;
   }
   .sys-fact-item:last-child {
     grid-column: span 2;
-    border-right: none;
+    border-inline-end: none;
     border-top: 1px solid rgba(148, 163, 184, 0.1);
   }
 }
@@ -132,7 +132,7 @@
     grid-template-columns: 1fr;
   }
   .sys-fact-item {
-    border-right: none;
+    border-inline-end: none;
     border-top: 1px solid rgba(148, 163, 184, 0.1);
   }
   .sys-fact-item:first-child {

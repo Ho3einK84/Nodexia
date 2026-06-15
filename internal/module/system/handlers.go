@@ -262,7 +262,7 @@ func renderPage(
 	flashKind string,
 	flashMessage string,
 ) {
-	page := view.NewPageData(deps.Config)
+	page := view.NewPageData(deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = "System"
 	page.ActiveNav = "/servers"

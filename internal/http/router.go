@@ -11,6 +11,7 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/db"
 	"github.com/Ho3einK84/Nodexia/internal/http/handlers"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
+	"github.com/Ho3einK84/Nodexia/internal/i18n"
 	"github.com/Ho3einK84/Nodexia/internal/livemetrics"
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/registry"
@@ -72,6 +73,10 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 	mux.HandleFunc("GET /healthz/live", health.Live)
 	mux.HandleFunc("GET /healthz/ready", health.Ready)
 
+	// Language switcher: persists an explicit locale choice and redirects back.
+	localeBundle := i18n.MustDefault()
+	mux.Handle("GET /lang/{code}", handlers.NewLangHandler(localeBundle, cfg.Security.SessionCookieSecure))
+
 	mux.Handle("GET /static/", staticAssetHandler(staticFiles))
 
 	// Progressive Web App entry points. The manifest and service worker are
@@ -89,6 +94,7 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 		middleware.RequestID(),
 		middleware.SecurityHeaders(),
 		middleware.Session(cfg),
+		middleware.Locale(localeBundle),
 		middleware.CSRF(cfg),
 		middleware.RequireAuth(cfg),
 		middleware.Logging(),

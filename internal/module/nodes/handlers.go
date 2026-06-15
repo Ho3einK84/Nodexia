@@ -556,7 +556,7 @@ func (h *Handlers) InstallJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	page := view.NewPageData(h.deps.Config)
+	page := view.NewPageData(h.deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = "Install node"
 	page.ActiveNav = "/servers"
@@ -686,7 +686,7 @@ func (h *Handlers) loadStreamView(streamID string, serverID int64) (view.Command
 }
 
 func (h *Handlers) renderPage(w http.ResponseWriter, r *http.Request, server servers.Server, state pageView) {
-	page := view.NewPageData(h.deps.Config)
+	page := view.NewPageData(h.deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = "Nodes"
 	page.ActiveNav = "/servers"

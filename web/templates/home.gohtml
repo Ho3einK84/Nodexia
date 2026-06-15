@@ -7,38 +7,38 @@
       <span class="kpi-card__icon"><i data-lucide="server"></i></span>
       <div class="kpi-card__body">
         <span class="kpi-card__value">{{ len .DashboardSnapshots }}</span>
-        <span class="kpi-card__label">Monitored servers</span>
+        <span class="kpi-card__label">{{ t "home.kpi.monitored_servers" }}</span>
       </div>
     </div>
     <div class="kpi-card kpi-card--violet">
       <span class="kpi-card__icon"><i data-lucide="calendar-clock"></i></span>
       <div class="kpi-card__body">
         <span class="kpi-card__value">{{ .SchedulerOverview.EligibleJobs }}</span>
-        <span class="kpi-card__label">Scheduled jobs</span>
+        <span class="kpi-card__label">{{ t "home.kpi.scheduled_jobs" }}</span>
       </div>
     </div>
     <div class="kpi-card{{ if gt .SchedulerOverview.RunningJobs 0 }} kpi-card--ok{{ end }}">
       <span class="kpi-card__icon"><i data-lucide="activity"></i></span>
       <div class="kpi-card__body">
         <span class="kpi-card__value">{{ .SchedulerOverview.RunningJobs }}</span>
-        <span class="kpi-card__label">Running now</span>
+        <span class="kpi-card__label">{{ t "home.kpi.running_now" }}</span>
       </div>
     </div>
     <div class="kpi-card{{ if .SchedulerOverview.Enabled }} kpi-card--ok{{ else }} kpi-card--warn{{ end }}">
       <span class="kpi-card__icon"><i data-lucide="clock"></i></span>
       <div class="kpi-card__body">
-        <span class="kpi-card__value">{{ if .SchedulerOverview.Enabled }}Active{{ else }}Off{{ end }}</span>
-        <span class="kpi-card__label">Collection scheduler</span>
+        <span class="kpi-card__value">{{ if .SchedulerOverview.Enabled }}{{ t "home.scheduler.active" }}{{ else }}{{ t "home.scheduler.off" }}{{ end }}</span>
+        <span class="kpi-card__label">{{ t "home.kpi.collection_scheduler" }}</span>
       </div>
     </div>
   </div>
 
-  <p class="dash-section"><i data-lucide="activity"></i> Live activity</p>
+  <p class="dash-section"><i data-lucide="activity"></i> {{ t "home.section.live_activity" }}</p>
   <div class="dashboard-feeds">
     <article class="card">
       <div class="card__header">
-        <h3><i data-lucide="gauge"></i> Resource snapshots</h3>
-        <span class="badge badge--info">{{ .DashboardSnapshotTotal }} server{{ if ne .DashboardSnapshotTotal 1 }}s{{ end }}</span>
+        <h3><i data-lucide="gauge"></i> {{ t "home.card.resource_snapshots" }}</h3>
+        <span class="badge badge--info">{{ tn "home.server_count" .DashboardSnapshotTotal }}</span>
       </div>
       {{ if .DashboardSnapshots }}
       <div class="dashboard-list">
@@ -46,26 +46,26 @@
         <article class="dashboard-item">
           <div class="server-item__header">
             <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</h4>
-            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> Monitor</a>
+            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "home.monitor" }}</a>
           </div>
           <div class="mini-metrics">
             <div class="mini-metric">
               <div class="mini-metric__top">
-                <span class="mini-metric__label"><i data-lucide="cpu"></i> CPU</span>
+                <span class="mini-metric__label"><i data-lucide="cpu"></i> {{ t "home.metric.cpu" }}</span>
                 <span class="mini-metric__value">{{ .CPUUsage }}</span>
               </div>
               <div class="mini-metric__bar"><span class="mini-metric__fill mini-metric__fill--{{ if le (trimSuffix .CPUUsage "%" | float64) 60.0 }}green{{ else if le (trimSuffix .CPUUsage "%" | float64) 80.0 }}yellow{{ else }}red{{ end }}" style="width: {{ trimSuffix .CPUUsage "%" }}%"></span></div>
             </div>
             <div class="mini-metric">
               <div class="mini-metric__top">
-                <span class="mini-metric__label"><i data-lucide="memory-stick"></i> RAM</span>
+                <span class="mini-metric__label"><i data-lucide="memory-stick"></i> {{ t "home.metric.ram" }}</span>
                 <span class="mini-metric__value">{{ .RAMUsage }}</span>
               </div>
               <div class="mini-metric__bar"><span class="mini-metric__fill mini-metric__fill--{{ if le (trimSuffix .RAMUsage "%" | float64) 60.0 }}green{{ else if le (trimSuffix .RAMUsage "%" | float64) 80.0 }}yellow{{ else }}red{{ end }}" style="width: {{ trimSuffix .RAMUsage "%" }}%"></span></div>
             </div>
             <div class="mini-metric">
               <div class="mini-metric__top">
-                <span class="mini-metric__label"><i data-lucide="hard-drive"></i> Disk</span>
+                <span class="mini-metric__label"><i data-lucide="hard-drive"></i> {{ t "home.metric.disk" }}</span>
                 <span class="mini-metric__value">{{ .DiskUsage }}</span>
               </div>
               <div class="mini-metric__bar"><span class="mini-metric__fill mini-metric__fill--{{ if le (trimSuffix .DiskUsage "%" | float64) 60.0 }}green{{ else if le (trimSuffix .DiskUsage "%" | float64) 80.0 }}yellow{{ else }}red{{ end }}" style="width: {{ trimSuffix .DiskUsage "%" }}%"></span></div>
@@ -75,21 +75,21 @@
           <div class="mini-bw-stats">
             {{ if .CurrentMonthDL }}
             <div class="mini-bw-stat mini-bw-stat--dl">
-              <span class="mini-bw-stat__label"><i data-lucide="download"></i> This month DL</span>
+              <span class="mini-bw-stat__label"><i data-lucide="download"></i> {{ t "home.metric.this_month_dl" }}</span>
               <span class="mini-bw-stat__value">{{ .CurrentMonthDL }}</span>
             </div>
             {{ end }}
             {{ if .PeakBandwidth }}
             <div class="mini-bw-stat mini-bw-stat--peak">
-              <span class="mini-bw-stat__label"><i data-lucide="zap"></i> Peak download</span>
-              <span class="mini-bw-stat__value" title="Peak download (RX) bandwidth. Upload is excluded so this lines up with the download-only port speed VPS providers advertise.">{{ .PeakBandwidth }}</span>
+              <span class="mini-bw-stat__label"><i data-lucide="zap"></i> {{ t "home.metric.peak_download" }}</span>
+              <span class="mini-bw-stat__value" title="{{ t "home.metric.peak_download_title" }}">{{ .PeakBandwidth }}</span>
             </div>
             {{ end }}
           </div>
           {{ end }}
           <div class="dashboard-item__meta">
-            <span><i data-lucide="activity"></i> Load {{ .LoadAverage }}</span>
-            <span><i data-lucide="clock"></i> Up {{ .UptimeHuman }}</span>
+            <span><i data-lucide="activity"></i> {{ t "home.meta.load" "value" .LoadAverage }}</span>
+            <span><i data-lucide="clock"></i> {{ t "home.meta.up" "value" .UptimeHuman }}</span>
             <span><i data-lucide="calendar"></i> {{ .CollectedAt }}</span>
           </div>
         </article>
@@ -99,17 +99,17 @@
       {{ else }}
       <div class="empty-state-card">
         <span class="empty-state-icon"><i data-lucide="gauge"></i></span>
-        <p class="empty-state-title">No snapshots yet</p>
-        <p class="empty-state-desc">Open a server's monitoring page and refresh it to start collecting resource snapshots.</p>
-        <a class="btn btn--primary" href="/servers"><i data-lucide="server" class="icon-in-button"></i> Go to servers</a>
+        <p class="empty-state-title">{{ t "home.empty.snapshots_title" }}</p>
+        <p class="empty-state-desc">{{ t "home.empty.snapshots_desc" }}</p>
+        <a class="btn btn--primary" href="/servers"><i data-lucide="server" class="icon-in-button"></i> {{ t "home.empty.go_to_servers" }}</a>
       </div>
       {{ end }}
     </article>
 
     <article class="card">
       <div class="card__header">
-        <h3><i data-lucide="calendar-clock"></i> Background jobs</h3>
-        <span class="status-pill status-pill--{{ if .SchedulerOverview.Enabled }}ok{{ else }}idle{{ end }}">{{ if .SchedulerOverview.Enabled }}Active{{ else }}Off{{ end }}</span>
+        <h3><i data-lucide="calendar-clock"></i> {{ t "home.card.background_jobs" }}</h3>
+        <span class="status-pill status-pill--{{ if .SchedulerOverview.Enabled }}ok{{ else }}idle{{ end }}">{{ if .SchedulerOverview.Enabled }}{{ t "home.scheduler.active" }}{{ else }}{{ t "home.scheduler.off" }}{{ end }}</span>
       </div>
       {{ if .SchedulerOverview.Jobs }}
       <div class="dashboard-list dashboard-list--scrollable">
@@ -122,62 +122,62 @@
           <div class="dashboard-item__meta">
             <span><i data-lucide="layers"></i> {{ .JobType }}</span>
             {{ if eq .JobType "monitoring" }}
-            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> Monitor</a>
+            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "home.monitor" }}</a>
             {{ else }}
-            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> Nodes</a>
+            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "home.nodes" }}</a>
             {{ end }}
           </div>
           <div class="dashboard-item__meta">
-            <span><i data-lucide="timer"></i> Next {{ .NextRunAt }}</span>
-            <span><i data-lucide="circle-check"></i> Last OK {{ .LastSuccessAt }}</span>
-            {{ if gt .ConsecutiveFailures 0 }}<span class="status-pill status-pill--crit"><i data-lucide="circle-alert" class="icon-in-button"></i> {{ .ConsecutiveFailures }} failures</span>{{ end }}
+            <span><i data-lucide="timer"></i> {{ t "home.job.next" "value" .NextRunAt }}</span>
+            <span><i data-lucide="circle-check"></i> {{ t "home.job.last_ok" "value" .LastSuccessAt }}</span>
+            {{ if gt .ConsecutiveFailures 0 }}<span class="status-pill status-pill--crit"><i data-lucide="circle-alert" class="icon-in-button"></i> {{ tn "home.failures" .ConsecutiveFailures }}</span>{{ end }}
           </div>
           {{ if .LastError }}<p class="error-inline">{{ .LastError }}</p>{{ end }}
         </article>
         {{ end }}
         {{ if gt .SchedulerOverview.MoreJobs 0 }}
-        <p class="dashboard-list__more"><i data-lucide="ellipsis"></i> And {{ .SchedulerOverview.MoreJobs }} more…</p>
+        <p class="dashboard-list__more"><i data-lucide="ellipsis"></i> {{ tn "home.more_jobs" .SchedulerOverview.MoreJobs }}</p>
         {{ end }}
       </div>
       {{ else }}
       <div class="empty-state-card">
         <span class="empty-state-icon"><i data-lucide="calendar-clock"></i></span>
-        <p class="empty-state-title">No background jobs yet</p>
-        <p class="empty-state-desc">The scheduler populates this panel after its first sweep of registered servers.</p>
+        <p class="empty-state-title">{{ t "home.empty.jobs_title" }}</p>
+        <p class="empty-state-desc">{{ t "home.empty.jobs_desc" }}</p>
       </div>
       {{ end }}
     </article>
   </div>
 
-  <p class="dash-section"><i data-lucide="settings"></i> Runtime &amp; configuration</p>
+  <p class="dash-section"><i data-lucide="settings"></i> {{ t "home.section.runtime_config" }}</p>
   <div class="dashboard-meta">
     <article class="card">
       <div class="card__header">
-        <h3><i data-lucide="server-cog"></i> Runtime</h3>
+        <h3><i data-lucide="server-cog"></i> {{ t "home.card.runtime" }}</h3>
       </div>
       <ul class="fact-list">
         <li>
-          <span class="fact-list__key"><i data-lucide="globe" class="icon-in-button"></i> HTTP address</span>
+          <span class="fact-list__key"><i data-lucide="globe" class="icon-in-button"></i> {{ t "home.runtime.http_address" }}</span>
           <code>{{ .HTTPAddress }}</code>
         </li>
         <li>
-          <span class="fact-list__key"><i data-lucide="settings" class="icon-in-button"></i> Environment</span>
+          <span class="fact-list__key"><i data-lucide="settings" class="icon-in-button"></i> {{ t "home.runtime.environment" }}</span>
           <code>{{ .Environment }}</code>
         </li>
         <li>
-          <span class="fact-list__key"><i data-lucide="tag" class="icon-in-button"></i> Version</span>
+          <span class="fact-list__key"><i data-lucide="tag" class="icon-in-button"></i> {{ t "home.runtime.version" }}</span>
           <code>{{ .Version }}</code>
         </li>
         <li>
-          <span class="fact-list__key"><i data-lucide="database" class="icon-in-button"></i> Driver</span>
+          <span class="fact-list__key"><i data-lucide="database" class="icon-in-button"></i> {{ t "home.runtime.driver" }}</span>
           <code>{{ .DatabaseDriver }}</code>
         </li>
         <li>
-          <span class="fact-list__key"><i data-lucide="hard-drive" class="icon-in-button"></i> DB target</span>
+          <span class="fact-list__key"><i data-lucide="hard-drive" class="icon-in-button"></i> {{ t "home.runtime.db_target" }}</span>
           <code>{{ .DatabaseTarget }}</code>
         </li>
         <li>
-          <span class="fact-list__key"><i data-lucide="list" class="icon-in-button"></i> Migrations</span>
+          <span class="fact-list__key"><i data-lucide="list" class="icon-in-button"></i> {{ t "home.runtime.migrations" }}</span>
           <code>{{ .MigrationCount }}</code>
         </li>
       </ul>
@@ -185,44 +185,44 @@
 
     <article class="card">
       <div class="card__header">
-        <h3><i data-lucide="clock"></i> Collection scheduler</h3>
+        <h3><i data-lucide="clock"></i> {{ t "home.card.collection_scheduler" }}</h3>
         {{ if .SchedulerOverview.Enabled }}
-        <span class="status-pill status-pill--ok">Active</span>
+        <span class="status-pill status-pill--ok">{{ t "home.scheduler.active" }}</span>
         {{ else }}
-        <span class="status-pill status-pill--idle">Off</span>
+        <span class="status-pill status-pill--idle">{{ t "home.scheduler.off" }}</span>
         {{ end }}
       </div>
       <ul class="fact-list">
         <li>
-          <span class="fact-list__key"><i data-lucide="gauge" class="icon-in-button"></i> Monitoring every</span>
+          <span class="fact-list__key"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "home.scheduler.monitoring_every" }}</span>
           <code>{{ .SchedulerOverview.MonitoringInterval }}</code>
         </li>
         <li>
-          <span class="fact-list__key"><i data-lucide="boxes" class="icon-in-button"></i> Node scan every</span>
+          <span class="fact-list__key"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "home.scheduler.node_scan_every" }}</span>
           <code>{{ .SchedulerOverview.NodesInterval }}</code>
         </li>
         <li>
-          <span class="fact-list__key"><i data-lucide="repeat" class="icon-in-button"></i> Sweep interval</span>
+          <span class="fact-list__key"><i data-lucide="repeat" class="icon-in-button"></i> {{ t "home.scheduler.sweep_interval" }}</span>
           <code>{{ .SchedulerOverview.SweepInterval }}</code>
         </li>
         <li>
-          <span class="fact-list__key"><i data-lucide="circle-check" class="icon-in-button"></i> Eligible jobs</span>
+          <span class="fact-list__key"><i data-lucide="circle-check" class="icon-in-button"></i> {{ t "home.scheduler.eligible_jobs" }}</span>
           <code>{{ .SchedulerOverview.EligibleJobs }}</code>
         </li>
         <li>
-          <span class="fact-list__key"><i data-lucide="circle-alert" class="icon-in-button"></i> Blocked jobs</span>
+          <span class="fact-list__key"><i data-lucide="circle-alert" class="icon-in-button"></i> {{ t "home.scheduler.blocked_jobs" }}</span>
           <code>{{ .SchedulerOverview.BlockedJobs }}</code>
         </li>
       </ul>
-      <p class="field-hint" style="margin-top: 14px">Credentials resolved from <code>external_ref</code> pointers — never stored in the database.</p>
+      <p class="field-hint" style="margin-top: 14px">{{ t "home.scheduler.credentials_note" }}</p>
     </article>
 
     <article class="card">
       <div class="card__header">
-        <h3><i data-lucide="route"></i> Route groups</h3>
+        <h3><i data-lucide="route"></i> {{ t "home.card.route_groups" }}</h3>
         <span class="badge badge--id">{{ len .RouteGroups }}</span>
       </div>
-      <p class="field-hint">Modules registered in this build.</p>
+      <p class="field-hint">{{ t "home.route_groups.note" }}</p>
       <div class="token-list">
         {{ range .RouteGroups }}
         <code>{{ . }}</code>

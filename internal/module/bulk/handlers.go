@@ -371,7 +371,7 @@ func (h JobPageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		result.RefreshURL = jobURL(job.id)
 	}
 
-	page := view.NewPageData(h.deps.Config)
+	page := view.NewPageData(h.deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = "Bulk action results"
 	page.ActiveNav = "/servers"

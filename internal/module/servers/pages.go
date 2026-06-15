@@ -17,8 +17,8 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
 
-func newServersPage(deps module.Dependencies) view.PageData {
-	page := view.NewPageData(deps.Config)
+func newServersPage(deps module.Dependencies, r *http.Request) view.PageData {
+	page := view.NewPageData(deps.Config, r)
 	page.Title = "Servers"
 	page.ActiveNav = "/servers"
 	page.MigrationCount = deps.Database.MigrationCount()
@@ -71,7 +71,7 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 		showingTo = showingFrom + len(items) - 1
 	}
 
-	pd := newServersPage(deps)
+	pd := newServersPage(deps, r)
 	pd.CSRFToken = middleware.GetCSRFToken(r.Context())
 	pd.ContentTemplate = "content-servers-list"
 	pd.PageTitle = "Server registry"
@@ -361,7 +361,7 @@ func renderFormPage(
 	flashKind string,
 	flashMessage string,
 ) {
-	page := newServersPage(deps)
+	page := newServersPage(deps, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.ContentTemplate = "content-server-form"
 	page.PageTitle = pageTitle
@@ -390,7 +390,7 @@ func renderFormPage(
 	}
 }
 
-func renderRepositoryError(w http.ResponseWriter, deps module.Dependencies, err error, fallbackTitle string, fallbackMessage string) {
+func renderRepositoryError(w http.ResponseWriter, r *http.Request, deps module.Dependencies, err error, fallbackTitle string, fallbackMessage string) {
 	statusCode := http.StatusInternalServerError
 	title := fallbackTitle
 	message := fallbackMessage
@@ -406,7 +406,7 @@ func renderRepositoryError(w http.ResponseWriter, deps module.Dependencies, err 
 		slog.String("error", err.Error()),
 	)
 
-	page := view.NewErrorPageData(deps.Config, statusCode, title, message)
+	page := view.NewErrorPageData(deps.Config, r, statusCode, title, message)
 	page.ActiveNav = "/servers"
 	if renderErr := deps.Renderer.Render(w, statusCode, page); renderErr != nil {
 		http.Error(w, fallbackMessage, statusCode)

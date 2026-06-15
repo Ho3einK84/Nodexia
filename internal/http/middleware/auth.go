@@ -74,6 +74,10 @@ func shouldSkipAuth(r *http.Request) bool {
 		return true
 	case r.URL.Path == "/login":
 		return true
+	case strings.HasPrefix(r.URL.Path, "/lang/"):
+		// The language switcher is a safe, same-origin-validated preference
+		// write; allow it pre-login so the choice persists into the login page.
+		return true
 	default:
 		return false
 	}

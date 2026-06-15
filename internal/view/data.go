@@ -1,15 +1,28 @@
 package view
 
-import "github.com/Ho3einK84/Nodexia/internal/config"
+import (
+	"net/http"
+
+	"github.com/Ho3einK84/Nodexia/internal/config"
+	"github.com/Ho3einK84/Nodexia/internal/i18n"
+)
 
 type NavItem struct {
+	// Label is the English name; it doubles as the stable identifier the
+	// templates switch on to pick an icon, so it stays English regardless of
+	// locale. Key is the translation key used to render the visible text.
 	Label  string
+	Key    string
 	Href   string
 	Active bool
 }
 
-func NewPageData(cfg config.Config) PageData {
-	return PageData{
+// NewPageData builds the base page data for a request. It attaches the active
+// localizer resolved by the locale middleware (falling back to the default
+// language when absent) so every page renders in the user's language and with
+// the correct text direction.
+func NewPageData(cfg config.Config, r *http.Request) PageData {
+	data := PageData{
 		AppName:         cfg.App.Name,
 		Environment:     cfg.Environment,
 		Version:         cfg.Version,
@@ -21,10 +34,24 @@ func NewPageData(cfg config.Config) PageData {
 		FooterNote:      "Open-source, self-hosted monitoring and node management for Rebecca and PasarGuard.",
 		NavigationItems: defaultNavigation(""),
 	}
+	data.SetLocalizer(localizerFor(r))
+	return data
 }
 
-func NewErrorPageData(cfg config.Config, statusCode int, title, message string) PageData {
-	data := NewPageData(cfg)
+// localizerFor returns the request's active localizer, falling back to the
+// default-language localizer when the request carries none (e.g. it bypassed
+// the locale middleware).
+func localizerFor(r *http.Request) *i18n.Localizer {
+	if r != nil {
+		if loc := i18n.FromContext(r.Context()); loc != nil {
+			return loc
+		}
+	}
+	return i18n.MustDefault().Localizer(i18n.DefaultLanguage)
+}
+
+func NewErrorPageData(cfg config.Config, r *http.Request, statusCode int, title, message string) PageData {
+	data := NewPageData(cfg, r)
 	data.Title = title
 	data.Description = message
 	data.ContentTemplate = "content-error"
@@ -46,11 +73,11 @@ func DatabaseTarget(cfg config.Config) string {
 
 func defaultNavigation(activeHref string) []NavItem {
 	items := []NavItem{
-		{Label: "Overview", Href: "/"},
-		{Label: "Servers", Href: "/servers"},
-		{Label: "Analytics", Href: "/analytics"},
-		{Label: "Alerts", Href: "/alerts"},
-		{Label: "Diagnostics", Href: "/ops/diagnostics"},
+		{Label: "Overview", Key: "nav.overview", Href: "/"},
+		{Label: "Servers", Key: "nav.servers", Href: "/servers"},
+		{Label: "Analytics", Key: "nav.analytics", Href: "/analytics"},
+		{Label: "Alerts", Key: "nav.alerts", Href: "/alerts"},
+		{Label: "Diagnostics", Key: "nav.diagnostics", Href: "/ops/diagnostics"},
 	}
 
 	for index := range items {

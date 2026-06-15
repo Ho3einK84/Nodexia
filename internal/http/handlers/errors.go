@@ -27,8 +27,8 @@ func NewErrorHandler(cfg config.Config, renderer *view.Renderer, statusCode int,
 	}
 }
 
-func (h ErrorHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
-	page := view.NewErrorPageData(h.config, h.statusCode, h.title, h.message)
+func (h ErrorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	page := view.NewErrorPageData(h.config, r, h.statusCode, h.title, h.message)
 	page.ActiveNav = h.activeNavHref
 
 	if err := h.renderer.Render(w, h.statusCode, page); err != nil {

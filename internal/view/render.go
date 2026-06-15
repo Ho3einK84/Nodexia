@@ -9,6 +9,7 @@ import (
 
 	assets "github.com/Ho3einK84/Nodexia"
 	"github.com/Ho3einK84/Nodexia/internal/geoip"
+	"github.com/Ho3einK84/Nodexia/internal/i18n"
 )
 
 type PageData struct {
@@ -114,6 +115,58 @@ type PageData struct {
 	AnalyticsTarget       AnalyticsTargetView
 	AnalyticsTrafficMonth AnalyticsTrafficSummaryView
 	GlobalAnalytics       GlobalAnalyticsView
+
+	// Internationalization. Lang/Dir drive the <html lang>/<html dir>
+	// attributes; LanguageOptions backs the header language switcher. localizer
+	// is the active translator bound into the {{ t }}/{{ tn }} template funcs at
+	// render time; it is unexported because templates resolve strings through
+	// those funcs, not the field.
+	Lang            string
+	Dir             string
+	LanguageOptions []LanguageOption
+	localizer       *i18n.Localizer
+}
+
+// T resolves a translation key in the page's active language. Handlers use it
+// to localize values they set on PageData (e.g. PageTitle) without reaching
+// into the request context. It mirrors the {{ t }} template func and falls back
+// to the default-language localizer when none is attached.
+func (p *PageData) T(key string, args ...any) string {
+	if p.localizer == nil {
+		p.localizer = i18n.MustDefault().Localizer(i18n.DefaultLanguage)
+	}
+	return p.localizer.T(key, args...)
+}
+
+// LanguageOption is one entry in the header language switcher.
+type LanguageOption struct {
+	Code      string
+	Label     string // endonym, e.g. "English", "فارسی"
+	Active    bool
+	SwitchURL string
+}
+
+// SetLocalizer attaches an active translator to the page and derives the
+// Lang/Dir attributes and switcher options from it. Handlers call this
+// indirectly via NewPageData; it is exported so request paths that build
+// PageData by hand (errors, recover) can localize too.
+func (p *PageData) SetLocalizer(loc *i18n.Localizer) {
+	if loc == nil {
+		return
+	}
+	p.localizer = loc
+	p.Lang = loc.Lang()
+	p.Dir = loc.Dir()
+	options := make([]LanguageOption, 0, len(loc.Languages()))
+	for _, lang := range loc.Languages() {
+		options = append(options, LanguageOption{
+			Code:      lang.Code,
+			Label:     lang.NativeName,
+			Active:    lang.Code == loc.Lang(),
+			SwitchURL: "/lang/" + lang.Code,
+		})
+	}
+	p.LanguageOptions = options
 }
 
 // SetServerCountry attaches a server's detected country to the page header so a
@@ -885,9 +938,15 @@ type AnalyticsTrafficSummaryView struct {
 
 type Renderer struct {
 	templates *template.Template
+	bundle    *i18n.Bundle
 }
 
 func NewRenderer() (*Renderer, error) {
+	bundle, err := i18n.Default()
+	if err != nil {
+		return nil, err
+	}
+
 	funcMap := template.FuncMap{
 		"trimSuffix": strings.TrimSuffix,
 		"hasSuffix":  strings.HasSuffix,
@@ -896,16 +955,25 @@ func NewRenderer() (*Renderer, error) {
 			fmt.Sscanf(s, "%f", &v)
 			return v
 		},
+		// t/tn are placeholders so the templates parse; Render rebinds them to
+		// the request's active language by cloning the template set per render.
+		"t":  func(key string, _ ...any) string { return key },
+		"tn": func(key string, _ int, _ ...any) string { return key },
 	}
 	templates, err := template.New("").Funcs(funcMap).ParseFS(assets.Templates(), "web/templates/*.gohtml")
 	if err != nil {
 		return nil, err
 	}
 
-	return &Renderer{templates: templates}, nil
+	return &Renderer{templates: templates, bundle: bundle}, nil
 }
 
 func (r *Renderer) Render(w http.ResponseWriter, statusCode int, data PageData) error {
+	// Ensure the page has an active localizer (default language for request
+	// paths that never set one), then bind the {{ t }}/{{ tn }} funcs to it.
+	if data.localizer == nil {
+		data.SetLocalizer(r.bundle.Localizer(i18n.DefaultLanguage))
+	}
 	data = normalizePageData(data)
 
 	contentName := strings.TrimSpace(data.ContentTemplate)
@@ -913,24 +981,45 @@ func (r *Renderer) Render(w http.ResponseWriter, statusCode int, data PageData) 
 		return fmt.Errorf("view: content template name is required")
 	}
 
+	// Clone the parsed set per render and rebind the translation funcs to the
+	// active language. Cloning is cheap relative to the work a request already
+	// does, and it lets {{ t "key" }} resolve the right language anywhere in the
+	// templates — including inside range blocks — without threading the dot.
+	tmpl, err := r.templates.Clone()
+	if err != nil {
+		return fmt.Errorf("view: clone templates: %w", err)
+	}
+	loc := data.localizer
+	tmpl.Funcs(template.FuncMap{
+		"t":  loc.T,
+		"tn": loc.Tn,
+	})
+
 	var content bytes.Buffer
-	if err := r.templates.ExecuteTemplate(&content, contentName, data); err != nil {
+	if err := tmpl.ExecuteTemplate(&content, contentName, data); err != nil {
 		return fmt.Errorf("view: render %s: %w", contentName, err)
 	}
 	data.MainHTML = template.HTML(content.String())
 
 	var buffer bytes.Buffer
-	if err := r.templates.ExecuteTemplate(&buffer, "layout", data); err != nil {
+	if err := tmpl.ExecuteTemplate(&buffer, "layout", data); err != nil {
 		return fmt.Errorf("view: render layout: %w", err)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(statusCode)
-	_, err := buffer.WriteTo(w)
+	_, err = buffer.WriteTo(w)
 	return err
 }
 
 func normalizePageData(data PageData) PageData {
+	if data.Lang == "" {
+		data.Lang = i18n.DefaultLanguage
+	}
+	if data.Dir == "" {
+		data.Dir = "ltr"
+	}
+
 	if data.Title == "" {
 		data.Title = data.AppName
 	}

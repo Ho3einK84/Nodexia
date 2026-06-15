@@ -104,6 +104,12 @@
   min-width: 0;
   padding: 8px;
   background: #000;
+  /* The terminal is a monospace, column-aligned surface: keep it strictly LTR
+     so cursor movement, line wrapping and the xterm canvas stay correct even
+     when the surrounding UI is in a right-to-left language. */
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
 }
 
 /* Prevent xterm's internal canvas from overflowing on small screens. */
