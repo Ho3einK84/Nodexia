@@ -3703,3 +3703,32 @@ html[lang="fa"] {
   direction: ltr;
   unicode-bidi: isolate;
 }
+
+/* Measurement values pair a number with a Latin unit (e.g. "56 TiB",
+   "2.1 GiB / 11.7 GiB", "↓ 5 ↑ 3 Mbps"). Under an RTL base direction the unit
+   and number get reordered to the visually wrong "TiB 56", so every value
+   surface is forced LTR + isolated, mirroring the code rule above. */
+[dir="rtl"] .gauge__value,
+[dir="rtl"] .gauge__detail,
+[dir="rtl"] .metric-strip__value,
+[dir="rtl"] .badge--load,
+[dir="rtl"] .traffic-bw__value,
+[dir="rtl"] .traffic-row__rx,
+[dir="rtl"] .traffic-row__tx,
+[dir="rtl"] .traffic-row__total,
+[dir="rtl"] .mini-metric__value,
+[dir="rtl"] .mini-bw-stat__value,
+[dir="rtl"] .traffic-summary__value,
+[dir="rtl"] .metric-badge,
+[dir="rtl"] .traffic-badge {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* The semicircular gauges fill from the geometric left (0%) to the right
+   (100%), so their 0 / 100 scale must stay pinned that way too. Letting the
+   flex row mirror under RTL swaps the labels onto the wrong ends, making a low
+   reading look like it sits next to "100". */
+[dir="rtl"] .gauge__scale {
+  direction: ltr;
+}

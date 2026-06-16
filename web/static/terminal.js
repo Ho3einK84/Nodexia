@@ -96,6 +96,21 @@
 
   term.open(container);
 
+  /* ── Soft-keyboard hardening ──────────────────────────── */
+  // xterm's helper <textarea> already disables autocorrect/autocapitalize/
+  // spellcheck, but not autocomplete. Mobile keyboards (notably Gboard) keep a
+  // predictive "composing" region active and will re-insert a whole suggested
+  // word as you keep typing — e.g. "rebecca-" silently becomes
+  // "rebecca-rebecca". Turning autocomplete off and forcing plain Latin input
+  // (no smart prediction) stops the duplicated keystrokes.
+  if (term.textarea) {
+    term.textarea.setAttribute('autocomplete', 'off');
+    term.textarea.setAttribute('autocorrect', 'off');
+    term.textarea.setAttribute('autocapitalize', 'none');
+    term.textarea.setAttribute('spellcheck', 'false');
+    term.textarea.setAttribute('inputmode', 'text');
+  }
+
   /* ── Fit helper ───────────────────────────────────────── */
   function fitAndResize() {
     if (fitAddon) {
