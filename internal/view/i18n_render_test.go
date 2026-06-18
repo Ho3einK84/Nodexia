@@ -60,7 +60,7 @@ func TestHomeRendersPersianRTL(t *testing.T) {
 		`<html lang="fa" dir="rtl">`, // direction flips for Persian
 		"نمای کلی عملیات",            // localized page title
 		"سرورها",                     // nav servers
-		"سرورهای پایش‌شده",           // home KPI
+		"سرورهای تحت پایش",           // home KPI
 	}
 	for _, want := range wants {
 		if !strings.Contains(body, want) {
