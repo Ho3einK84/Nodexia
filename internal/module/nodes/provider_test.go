@@ -36,8 +36,9 @@ func TestProviderByType(t *testing.T) {
 	if !ok || provider.DisplayName() != "Rebecca" {
 		t.Fatalf("ProviderByType(rebecca-node) = %v, %v", provider, ok)
 	}
-	if provider.SupportsInstall() {
-		t.Errorf("Rebecca provider must not support installation")
+	// Rebecca now installs the dev/beta channel from the panel.
+	if !provider.SupportsInstall() {
+		t.Errorf("Rebecca provider must support installation (dev channel)")
 	}
 
 	if _, ok := ProviderByType(providers, "unknown"); ok {

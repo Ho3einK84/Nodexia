@@ -53,7 +53,12 @@ func translatedPages() map[string]func(p *PageData) {
 		"content-alert-channel-form": func(p *PageData) { p.AlertChannelForm = AlertChannelFormView{Errors: map[string]string{}} },
 		"content-nodes": func(p *PageData) {
 			p.NodeForm = NodeFormView{Errors: map[string]string{}}
-			p.NodeInstallForm = NodeInstallFormView{Errors: map[string]string{}}
+			p.NodeInstallForm = NodeInstallFormView{Enabled: true, Errors: map[string]string{}}
+			p.NodeRebeccaInstallForm = NodeRebeccaInstallFormView{
+				Enabled:  true,
+				Channels: []NodeInstallChannelView{{Key: "dev", Enabled: true}, {Key: "stable", Enabled: false}},
+				Errors:   map[string]string{},
+			}
 		},
 		"content-node-install": func(p *PageData) { p.NodeInstall = NodeInstallView{Available: true} },
 	}

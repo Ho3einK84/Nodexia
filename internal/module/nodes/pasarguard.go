@@ -565,6 +565,53 @@ func (PasarGuardProvider) normalizeInstallInput(in installFormInput) (InstallCon
 	return config, errs
 }
 
+// BuildInstallPlan assembles the PasarGuard install procedure from its existing
+// (unchanged) command builders: run the official script (tolerating the 124
+// log-tail timeout), patch /opt/<name>/.env, then read the API key + cert back.
+// This is the seam that lets runInstall drive PasarGuard through the generic
+// InstallPlan without changing any of the fragile prompt-order stdin logic.
+func (p PasarGuardProvider) BuildInstallPlan(nodeName string, in installFormInput) (InstallPlan, ValidationErrors) {
+	config, errs := p.normalizeInstallInput(in)
+	if errs.HasAny() {
+		return InstallPlan{}, errs
+	}
+
+	installCmd, err := p.InstallCommand(nodeName, config)
+	if err != nil {
+		errs["node_name"] = err.Error()
+		return InstallPlan{}, errs
+	}
+	configureCmd, configTimeout, err := p.ConfigureCommand(nodeName, config)
+	if err != nil {
+		errs["node_name"] = err.Error()
+		return InstallPlan{}, errs
+	}
+	infoCmd, err := p.RegistrationInfoCommand(nodeName)
+	if err != nil {
+		errs["node_name"] = err.Error()
+		return InstallPlan{}, errs
+	}
+
+	plan := InstallPlan{
+		Steps: []InstallStep{
+			{Command: installCmd, Timeout: installCommandTimeout, TolerateTimeout: true},
+			{
+				StartLog: fmt.Sprintf("\n[configuring node: service port %s, protocol %s]\n", config.ServicePort, config.Protocol),
+				Command:  configureCmd,
+				Timeout:  configTimeout,
+			},
+		},
+		Readback: InstallReadback{
+			Command: infoCmd,
+			Parse: func(stdout string) (RegistrationInfo, bool) {
+				return ParseRegistrationInfo(nodeName, stdout)
+			},
+			NotFoundMessage: fmt.Sprintf("Install did not produce /opt/%s/.env — inspect the output above for the script error.", nodeName),
+		},
+	}
+	return plan, errs
+}
+
 // ConfigureCommand patches /opt/<name>/.env with the chosen ports/protocol/key
 // (deleting any prior commented or active line for each key, then appending the
 // desired value — mirroring the install script's own .env handling) and

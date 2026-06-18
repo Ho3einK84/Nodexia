@@ -14,6 +14,7 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/commandstream"
 	"github.com/Ho3einK84/Nodexia/internal/http/httperrors"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
+	"github.com/Ho3einK84/Nodexia/internal/i18n"
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 	"github.com/Ho3einK84/Nodexia/internal/sshclient"
@@ -61,14 +62,16 @@ func (v ValidationErrors) HasAny() bool {
 
 // pageView bundles everything the nodes page template renders.
 type pageView struct {
-	status       int
-	form         view.NodeFormView
-	snapshots    []view.NodeSnapshotView
-	collection   view.NodeCollectionResultView
-	stream       view.CommandStreamView
-	installForm  view.NodeInstallFormView
-	flashKind    string
-	flashMessage string
+	status           int
+	form             view.NodeFormView
+	snapshots        []view.NodeSnapshotView
+	collection       view.NodeCollectionResultView
+	stream           view.CommandStreamView
+	installForm      view.NodeInstallFormView
+	rebeccaForm      view.NodeRebeccaInstallFormView
+	openRebeccaModal bool
+	flashKind        string
+	flashMessage     string
 }
 
 // ── GET /servers/{id}/nodes ───────────────────────────────────────────────────
@@ -450,11 +453,9 @@ func (h *Handlers) InstallStart(w http.ResponseWriter, r *http.Request) {
 		installErrors["node_name"] = "A node with this name already exists on this server — pick another name."
 	}
 
-	config, cfgErr := PasarGuardProvider{}.normalizeInstallInput(input)
-	if cfgErr != nil {
-		for field, message := range cfgErr {
-			installErrors[field] = message
-		}
+	plan, cfgErr := PasarGuardProvider{}.BuildInstallPlan(nodeName, input)
+	for field, message := range cfgErr {
+		installErrors[field] = message
 	}
 
 	if installErrors.HasAny() {
@@ -474,8 +475,86 @@ func (h *Handlers) InstallStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	connReq := h.runtimeConnRequest(server)
+	job := h.installs.create(server.ID, nodeName, plan)
+	go runInstall(job, h.deps.SSH, connReq, server.Host)
+
+	http.Redirect(w, r, installJobURL(server.ID, job.id), http.StatusSeeOther)
+}
+
+// RebeccaInstallStart handles POST /servers/{id}/nodes/install/rebecca — the
+// dev/beta Rebecca install. Unlike PasarGuard, the user supplies the
+// certificate (from their Rebecca panel) plus the two ports; nothing is read
+// back. The node is pinned to the fixed instance name "rebecca-node" so
+// discovery picks it up.
+func (h *Handlers) RebeccaInstallStart(w http.ResponseWriter, r *http.Request) {
+	server, ok := h.loadServer(w, r)
+	if !ok {
+		return
+	}
+
+	if !servers.HasStoredCredentials(server) {
+		http.Redirect(w, r, nodesURL(server.ID)+"?flash=nodes-no-credentials", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		httperrors.RenderPage(w, r, h.deps, err, "/servers", "Invalid install request", "The submitted node install request could not be parsed.")
+		return
+	}
+
+	input := installFormInput{
+		ServicePort: strings.TrimSpace(r.FormValue("service_port")),
+		APIPort:     strings.TrimSpace(r.FormValue("api_port")),
+		Certificate: r.FormValue("certificate"),
+		Channel:     strings.TrimSpace(r.FormValue("channel")),
+	}
+	if input.Channel == "" {
+		input.Channel = channelDev
+	}
+
+	installErrors := ValidationErrors{}
+	if h.nodeNameTaken(r.Context(), server.ID, rebeccaInstallName) {
+		installErrors["certificate"] = h.t(r, "nodes.err_rebecca_exists")
+	}
+
+	plan, cfgErr := RebeccaProvider{}.BuildInstallPlan(input)
+	for field, key := range cfgErr {
+		// Rebecca validation returns i18n keys; translate for display.
+		installErrors[field] = h.t(r, key)
+	}
+
+	if installErrors.HasAny() {
+		snapshots, err := h.storedSnapshotViews(r.Context(), server, true)
+		if err != nil {
+			httperrors.RenderPage(w, r, h.deps, err, "/servers", "Could not load node snapshots", "The latest node discovery snapshot could not be loaded.")
+			return
+		}
+		h.renderPage(w, r, server, pageView{
+			status:           http.StatusUnprocessableEntity,
+			form:             h.defaultFormView(server, true),
+			snapshots:        snapshots,
+			installForm:      h.installFormView(server, true),
+			rebeccaForm:      h.rebeccaInstallFormViewFromInput(server, true, input, installErrors),
+			flashKind:        "error",
+			flashMessage:     "Please fix the Rebecca install form before starting the installation.",
+			openRebeccaModal: true,
+		})
+		return
+	}
+
+	connReq := h.runtimeConnRequest(server)
+	job := h.installs.create(server.ID, rebeccaInstallName, plan)
+	go runInstall(job, h.deps.SSH, connReq, server.Host)
+
+	http.Redirect(w, r, installJobURL(server.ID, job.id), http.StatusSeeOther)
+}
+
+// runtimeConnRequest builds the request-scoped SSH connection from a server's
+// stored credentials.
+func (h *Handlers) runtimeConnRequest(server servers.Server) sshclient.ConnectionRequest {
 	password, privateKey, keyPassphrase := servers.ResolveCredentials(server)
-	connReq := sshclient.ConnectionRequest{
+	return sshclient.ConnectionRequest{
 		Host:           server.Host,
 		Port:           server.Port,
 		Username:       server.Username,
@@ -485,11 +564,16 @@ func (h *Handlers) InstallStart(w http.ResponseWriter, r *http.Request) {
 		KeyPassphrase:  keyPassphrase,
 		ConnectTimeout: h.deps.Config.SSH.ConnectTimeout,
 	}
+}
 
-	job := h.installs.create(server.ID, nodeName, config)
-	go runInstall(job, h.deps.SSH, connReq, PasarGuardProvider{}, server.Host)
-
-	http.Redirect(w, r, installJobURL(server.ID, job.id), http.StatusSeeOther)
+// t translates a key using the request's active localizer, falling back to the
+// default language. Used to localize provider-side validation messages.
+func (h *Handlers) t(r *http.Request, key string, args ...any) string {
+	loc := i18n.FromContext(r.Context())
+	if loc == nil {
+		loc = i18n.MustDefault().Localizer(i18n.DefaultLanguage)
+	}
+	return loc.T(key, args...)
 }
 
 // nodeNameTaken guards against re-running the install script over an existing
@@ -703,6 +787,12 @@ func (h *Handlers) renderPage(w http.ResponseWriter, r *http.Request, server ser
 	page.NodeCollection = state.collection
 	page.NodeStream = state.stream
 	page.NodeInstallForm = state.installForm
+	rebeccaForm := state.rebeccaForm
+	if rebeccaForm.Action == "" {
+		rebeccaForm = h.rebeccaInstallFormView(server, servers.HasStoredCredentials(server))
+	}
+	rebeccaForm.OpenInitial = state.openRebeccaModal
+	page.NodeRebeccaInstallForm = rebeccaForm
 	page.FlashKind = state.flashKind
 	page.FlashMessage = state.flashMessage
 	page.PageStyles = []string{"/static/nodes.css"}
@@ -743,12 +833,16 @@ func (h *Handlers) defaultFormView(server servers.Server, hasStoredCreds bool) v
 }
 
 // installFormInput is the raw pre-install configuration submitted by the user.
+// It is shared across providers: PasarGuard uses Protocol/APIKey; Rebecca uses
+// Certificate/Channel. Each provider reads only the fields it needs.
 type installFormInput struct {
 	NodeName    string
 	ServicePort string
 	APIPort     string
 	Protocol    string
 	APIKey      string
+	Certificate string // Rebecca: client certificate PEM from the panel
+	Channel     string // Rebecca: install channel (dev/stable)
 }
 
 // installFormView returns the default install form (fresh page load).
@@ -776,6 +870,49 @@ func (h *Handlers) installFormViewFromInput(server servers.Server, enabled bool,
 		APIPort:     input.APIPort,
 		Protocol:    protocol,
 		APIKey:      input.APIKey,
+		Enabled:     enabled,
+		Errors:      formErrors,
+	}
+}
+
+// rebeccaInstallFormView returns the default Rebecca install form (fresh load),
+// pre-filling the default ports and the enabled channels.
+func (h *Handlers) rebeccaInstallFormView(server servers.Server, enabled bool) view.NodeRebeccaInstallFormView {
+	return h.rebeccaInstallFormViewFromInput(server, enabled, installFormInput{
+		ServicePort: rebeccaDefaultServicePort,
+		APIPort:     rebeccaDefaultAPIPort,
+		Channel:     channelDev,
+	}, nil)
+}
+
+// rebeccaInstallFormViewFromInput re-renders the Rebecca install form preserving
+// the user's port entries and surfacing field errors. The certificate is never
+// echoed back into the form (it is sensitive and should be re-pasted).
+func (h *Handlers) rebeccaInstallFormViewFromInput(server servers.Server, enabled bool, input installFormInput, formErrors ValidationErrors) view.NodeRebeccaInstallFormView {
+	if formErrors == nil {
+		formErrors = ValidationErrors{}
+	}
+	servicePort := input.ServicePort
+	if servicePort == "" {
+		servicePort = rebeccaDefaultServicePort
+	}
+	apiPort := input.APIPort
+	if apiPort == "" {
+		apiPort = rebeccaDefaultAPIPort
+	}
+
+	channels := make([]view.NodeInstallChannelView, 0, 2)
+	for _, c := range (RebeccaProvider{}).InstallChannels() {
+		channels = append(channels, view.NodeInstallChannelView{Key: c.Key, Enabled: c.Enabled})
+	}
+
+	return view.NodeRebeccaInstallFormView{
+		Action:      nodesURL(server.ID) + "/install/rebecca",
+		NodeName:    rebeccaInstallName,
+		ServicePort: servicePort,
+		APIPort:     apiPort,
+		Channel:     channelDev,
+		Channels:    channels,
 		Enabled:     enabled,
 		Errors:      formErrors,
 	}
