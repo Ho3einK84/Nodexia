@@ -36,6 +36,12 @@ func NewDiagnosticsHandler(cfg config.Config, database *db.Runtime, renderer *vi
 }
 
 func (h DiagnosticsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.renderPage(w, r, http.StatusOK, "", "")
+}
+
+// renderPage renders the diagnostics page, optionally with a flash banner.
+// Export/restore handlers reuse it so their results land back on the same page.
+func (h DiagnosticsHandler) renderPage(w http.ResponseWriter, r *http.Request, status int, flashKind, flashMessage string) {
 	page := view.NewPageData(h.config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = page.T("diagnostics.title")
@@ -43,6 +49,9 @@ func (h DiagnosticsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	page.ActiveNav = "/ops/diagnostics"
 	page.PageTitle = page.T("diagnostics.page_title")
 	page.PageDescription = page.T("diagnostics.page_description")
+	page.FlashKind = flashKind
+	page.FlashMessage = flashMessage
+	page.BackupCanRun = h.database != nil && h.database.SQL != nil
 	schPage, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("sch_page")))
 	page.Diagnostics = h.buildDiagnostics(r)
 	page.SchedulerOverview = schedulerOverviewView(h.scheduler, schPage, 10, serverCountryBadges(h.database), func(p int) string {
@@ -52,7 +61,7 @@ func (h DiagnosticsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return "/ops/diagnostics?sch_page=" + strconv.Itoa(p)
 	})
 
-	if err := h.renderer.Render(w, http.StatusOK, page); err != nil {
+	if err := h.renderer.Render(w, status, page); err != nil {
 		http.Error(w, "render diagnostics page", http.StatusInternalServerError)
 	}
 }

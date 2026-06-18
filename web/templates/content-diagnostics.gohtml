@@ -2,6 +2,12 @@
 <section class="hero">
   {{ template "page-header" . }}
 
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
   <div class="kpi-grid">
     <div class="kpi-card">
       <span class="kpi-card__icon"><i data-lucide="timer"></i></span>
@@ -211,5 +217,72 @@
     <p class="field-hint">{{ t "diagnostics.no_jobs" }}</p>
     {{ end }}
   </article>
+
+  <p class="dash-section"><i data-lucide="archive"></i> {{ t "backup.section" }}</p>
+  {{ if .BackupCanRun }}
+  <div class="dashboard-meta">
+    <article class="card">
+      <div class="card__header">
+        <h3><i data-lucide="download"></i> {{ t "backup.export.title" }}</h3>
+      </div>
+      <p class="field-hint">{{ t "backup.export.description" }}</p>
+      <div class="flash-banner flash-banner--ok" style="margin:12px 0">
+        <p>{{ t "backup.export.warning" }}</p>
+      </div>
+      <form method="post" action="/ops/backup/export" class="server-form">
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+        <label class="checkbox-field">
+          <input type="checkbox" name="include_secrets" value="on">
+          <span><i data-lucide="key" class="icon-in-button"></i> {{ t "backup.export.include_secrets" }}</span>
+        </label>
+        <p class="field-hint">{{ t "backup.export.include_secrets_hint" }}</p>
+        <label class="form-field">
+          <span><i data-lucide="lock" class="icon-in-button"></i> {{ t "backup.export.passphrase" }}</span>
+          <input type="password" name="passphrase" autocomplete="new-password" placeholder="{{ t "backup.export.passphrase_placeholder" }}">
+        </label>
+        <p class="field-hint">{{ t "backup.export.passphrase_hint" }}</p>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary"><i data-lucide="download" class="icon-in-button"></i> {{ t "backup.export.button" }}</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="card">
+      <div class="card__header">
+        <h3><i data-lucide="upload"></i> {{ t "backup.restore.title" }}</h3>
+      </div>
+      <p class="field-hint">{{ t "backup.restore.description" }}</p>
+      <div class="flash-banner flash-banner--warn" style="margin:12px 0">
+        <p>{{ t "backup.restore.warning" }}</p>
+      </div>
+      {{/* The CSRF token also rides in the query string: the CSRF middleware
+           validates via r.ParseForm(), which reads the URL query but not a
+           multipart body, so a hidden field alone would not be seen here. */}}
+      <form method="post" action="/ops/backup/import?_csrf_token={{ .CSRFToken }}" enctype="multipart/form-data" class="server-form">
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+        <label class="form-field">
+          <span><i data-lucide="file-up" class="icon-in-button"></i> {{ t "backup.restore.file" }}</span>
+          <input type="file" name="backup_file" accept=".json,.enc,application/json" required>
+        </label>
+        <label class="form-field">
+          <span><i data-lucide="lock" class="icon-in-button"></i> {{ t "backup.restore.passphrase" }}</span>
+          <input type="password" name="passphrase" autocomplete="new-password" placeholder="{{ t "backup.restore.passphrase_placeholder" }}">
+        </label>
+        <p class="field-hint">{{ t "backup.restore.passphrase_hint" }}</p>
+        <label class="checkbox-field">
+          <input type="checkbox" name="confirm" value="on" required>
+          <span><i data-lucide="triangle-alert" class="icon-in-button"></i> {{ t "backup.restore.confirm" }}</span>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--danger" data-confirm="{{ t "backup.restore.confirm_prompt" }}"><i data-lucide="upload" class="icon-in-button"></i> {{ t "backup.restore.button" }}</button>
+        </div>
+      </form>
+    </article>
+  </div>
+  {{ else }}
+  <article class="card">
+    <p class="field-hint">{{ t "backup.flash.unavailable" }}</p>
+  </article>
+  {{ end }}
 </section>
 {{ end }}
