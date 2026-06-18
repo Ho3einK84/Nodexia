@@ -90,19 +90,22 @@ type PageData struct {
 	DashboardSnapshotTotal      int
 	DashboardSnapshotPagination PaginationView
 	SchedulerOverview           SchedulerOverviewView
-	NodeTarget                  NodeTargetView
-	NodeForm                    NodeFormView
-	NodeSnapshots               []NodeSnapshotView
-	NodeCollection              NodeCollectionResultView
-	NodeStream                  CommandStreamView
-	NodeInstallForm             NodeInstallFormView
-	NodeRebeccaInstallForm      NodeRebeccaInstallFormView
-	NodeInstall                 NodeInstallView
-	AlertsOverview              AlertsOverviewView
-	AlertRuleForm               AlertRuleFormView
-	AlertChannelForm            AlertChannelFormView
-	IsEditingAlertRule          bool
-	IsEditingAlertChannel       bool
+	// BackupCanRun gates the diagnostics backup/restore section; it is false
+	// when the database runtime is unavailable.
+	BackupCanRun           bool
+	NodeTarget             NodeTargetView
+	NodeForm               NodeFormView
+	NodeSnapshots          []NodeSnapshotView
+	NodeCollection         NodeCollectionResultView
+	NodeStream             CommandStreamView
+	NodeInstallForm        NodeInstallFormView
+	NodeRebeccaInstallForm NodeRebeccaInstallFormView
+	NodeInstall            NodeInstallView
+	AlertsOverview         AlertsOverviewView
+	AlertRuleForm          AlertRuleFormView
+	AlertChannelForm       AlertChannelFormView
+	IsEditingAlertRule     bool
+	IsEditingAlertChannel  bool
 
 	// Bulk actions result page.
 	BulkActionResult BulkActionResultView

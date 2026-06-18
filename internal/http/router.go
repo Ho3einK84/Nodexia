@@ -67,6 +67,8 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 	diagHandler := handlers.NewDiagnosticsHandler(cfg, database, renderer, backgroundScheduler, commandStreams)
 	mux.Handle("GET /ops/diagnostics", diagHandler)
 	mux.HandleFunc("POST /ops/scheduler/{serverID}/{jobType}/toggle", diagHandler.SchedulerToggle)
+	mux.HandleFunc("POST /ops/backup/export", diagHandler.BackupExport)
+	mux.HandleFunc("POST /ops/backup/import", diagHandler.BackupImport)
 	mux.Handle("GET /errors/not-found", notFoundHandler)
 	mux.Handle("GET /errors/internal", internalErrorPreviewHandler)
 	mux.HandleFunc("GET /healthz", health.Liveness)
