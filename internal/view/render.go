@@ -96,6 +96,7 @@ type PageData struct {
 	NodeCollection              NodeCollectionResultView
 	NodeStream                  CommandStreamView
 	NodeInstallForm             NodeInstallFormView
+	NodeRebeccaInstallForm      NodeRebeccaInstallFormView
 	NodeInstall                 NodeInstallView
 	AlertsOverview              AlertsOverviewView
 	AlertRuleForm               AlertRuleFormView
@@ -629,6 +630,29 @@ type NodeInstallFormView struct {
 	Protocol    string // selected protocol: "rest" or "grpc"
 	APIKey      string
 	Enabled     bool
+	Errors      map[string]string
+}
+
+// NodeInstallChannelView is one release channel offered in the Rebecca install
+// UI. Enabled=false renders as a disabled "coming soon" option.
+type NodeInstallChannelView struct {
+	Key     string
+	Enabled bool
+}
+
+// NodeRebeccaInstallFormView powers the "Install Rebecca node (dev/beta)" form.
+// Rebecca's model is the inverse of PasarGuard's: the user supplies the
+// certificate (from their Rebecca panel) plus the two ports, and nothing is
+// read back. The certificate is intentionally never echoed back into the form.
+type NodeRebeccaInstallFormView struct {
+	Action      string
+	NodeName    string
+	ServicePort string
+	APIPort     string
+	Channel     string // selected channel: "dev"
+	Channels    []NodeInstallChannelView
+	Enabled     bool
+	OpenInitial bool // reopen the modal after a validation error
 	Errors      map[string]string
 }
 

@@ -35,12 +35,54 @@ const (
 	maxInstallOutputBytes = 1 << 20 // 1 MiB of streamed script output
 )
 
-// installJob tracks one background PasarGuard node installation.
+// InstallStep is one streamed remote command in a provider's install plan.
+type InstallStep struct {
+	// StartLog, when non-empty, is appended to the live output before the step
+	// runs. The command string itself is NEVER logged: it may carry secrets
+	// (e.g. the Rebecca certificate is base64-embedded in the install command).
+	StartLog string
+	Command  string
+	// Timeout backstops this step's SSH session. 0 falls back to
+	// installCommandTimeout.
+	Timeout time.Duration
+	// TolerateTimeout reports whether the remote `timeout` exit code (124)
+	// counts as success — true for scripts that tail logs forever after a
+	// successful install (PasarGuard), false otherwise (Rebecca detaches).
+	TolerateTimeout bool
+}
+
+// InstallReadback optionally re-reads the installed configuration so the job
+// page can show registration details. Providers whose install model has the
+// user supply credentials up front (Rebecca: the cert comes FROM the panel)
+// leave it zero — there is nothing to read back.
+type InstallReadback struct {
+	Command string
+	// Parse turns the readback stdout into registration info. found=false means
+	// the install did not actually produce the expected configuration.
+	Parse func(stdout string) (RegistrationInfo, bool)
+	// NotFoundMessage is the failure shown when Parse reports found=false.
+	NotFoundMessage string
+}
+
+// InstallPlan is the provider-agnostic recipe runInstall executes: an ordered
+// sequence of streamed steps, then an optional registration readback. Modeling
+// the install as data lets new providers (Rebecca) and channels (dev/stable)
+// plug in without runInstall ever knowing the concrete provider type — the
+// PasarGuard read-back model and the Rebecca user-supplied-cert model are both
+// just different plans.
+type InstallPlan struct {
+	Steps    []InstallStep
+	Readback InstallReadback
+}
+
+// installJob tracks one background node installation. The plan it carries may
+// embed secrets (the Rebecca certificate) in its command strings, so the job
+// is in-memory only and the command strings are never written to job.output.
 type installJob struct {
 	id       string
 	serverID int64
 	nodeName string
-	config   InstallConfig
+	plan     InstallPlan
 
 	mu         sync.Mutex
 	createdAt  time.Time
@@ -69,11 +111,11 @@ func (j *installJob) appendOutput(chunk string) {
 	j.output += chunk
 }
 
-func (j *installJob) complete(info RegistrationInfo) {
+func (j *installJob) complete(info *RegistrationInfo) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.status = installStatusCompleted
-	j.info = &info
+	j.info = info
 	j.finishedAt = time.Now().UTC()
 }
 
@@ -130,12 +172,12 @@ func newInstallStore() *installStore {
 	return &installStore{jobs: map[string]*installJob{}}
 }
 
-func (s *installStore) create(serverID int64, nodeName string, config InstallConfig) *installJob {
+func (s *installStore) create(serverID int64, nodeName string, plan InstallPlan) *installJob {
 	job := &installJob{
 		id:        randomInstallJobID(),
 		serverID:  serverID,
 		nodeName:  nodeName,
-		config:    config,
+		plan:      plan,
 		status:    installStatusRunning,
 		createdAt: time.Now().UTC(),
 	}
@@ -176,79 +218,60 @@ func randomInstallJobID() string {
 	return hex.EncodeToString(buf)
 }
 
-// runInstall executes the official install script and then verifies the
-// result by reading the installed configuration.  It runs in a goroutine with
-// context.Background(): the work must survive the redirected HTTP request.
-func runInstall(job *installJob, ssh *sshclient.Service, conn sshclient.ConnectionRequest, provider PasarGuardProvider, nodeHost string) {
+// runInstall executes the provider's install plan — a sequence of streamed
+// remote commands followed by an optional configuration readback — and records
+// the outcome on the job. It runs in a goroutine with context.Background():
+// the work must survive the redirected HTTP request. The orchestration is fully
+// provider-agnostic; everything provider-specific lives in the InstallPlan.
+func runInstall(job *installJob, ssh *sshclient.Service, conn sshclient.ConnectionRequest, nodeHost string) {
 	ctx := context.Background()
 
-	installCmd, err := provider.InstallCommand(job.nodeName, job.config)
-	if err != nil {
-		job.fail(err.Error())
-		return
+	for _, step := range job.plan.Steps {
+		if step.StartLog != "" {
+			job.appendOutput(step.StartLog)
+		}
+		timeout := step.Timeout
+		if timeout <= 0 {
+			timeout = installCommandTimeout
+		}
+		stepCtx, cancel := context.WithTimeout(ctx, timeout)
+		result, runErr := ssh.StreamCommand(stepCtx, sshclient.CommandRequest{
+			ConnectionRequest: conn,
+			Command:           step.Command,
+			CommandTimeout:    timeout,
+		}, sshclient.StreamHandlers{
+			OnStdout: job.appendOutput,
+			OnStderr: job.appendOutput,
+		})
+		cancel()
+		if runErr != nil {
+			job.appendOutput("\n[install error] " + runErr.Error() + "\n")
+			job.fail("Install command failed: " + runErr.Error())
+			return
+		}
+
+		exitCode := -1
+		if result.ExitCode != nil {
+			exitCode = *result.ExitCode
+		}
+		// Some scripts tail container logs after a successful install, so the
+		// remote `timeout` cutting them off (124) is expected and the readback
+		// below decides success. Steps that detach (Rebecca) treat 124 as a
+		// real failure.
+		if exitCode == exitRemoteTimeout && step.TolerateTimeout {
+			job.appendOutput("\n[log streaming stopped — applying configuration]\n")
+			continue
+		}
+		if exitCode != 0 {
+			job.fail(installFailureMessage(exitCode, result.Stderr))
+			return
+		}
 	}
 
-	result, runErr := ssh.StreamCommand(ctx, sshclient.CommandRequest{
-		ConnectionRequest: conn,
-		Command:           installCmd,
-		CommandTimeout:    installCommandTimeout,
-	}, sshclient.StreamHandlers{
-		OnStdout: job.appendOutput,
-		OnStderr: job.appendOutput,
-	})
-
-	if runErr != nil {
-		job.appendOutput("\n[install error] " + runErr.Error() + "\n")
-		job.fail("Install command failed: " + runErr.Error())
-		return
-	}
-
-	exitCode := -1
-	if result.ExitCode != nil {
-		exitCode = *result.ExitCode
-	}
-	// The script tails container logs after a successful install, so the
-	// remote `timeout` cutting it off (124) is expected — the verification
-	// probe below decides whether the install actually succeeded.
-	if exitCode != 0 && exitCode != exitRemoteTimeout {
-		job.fail(installFailureMessage(exitCode, result.Stderr))
-		return
-	}
-	if exitCode == exitRemoteTimeout {
-		job.appendOutput("\n[log streaming stopped — applying configuration]\n")
-	}
-
-	// The service port was already piped to the install script. Apply
-	// the protocol and API key (and confirm the port) by patching
-	// /opt/<name>/.env and restarting through the official CLI.
-	configureCmd, timeout, err := provider.ConfigureCommand(job.nodeName, job.config)
-	if err != nil {
-		job.fail(err.Error())
-		return
-	}
-	job.appendOutput(fmt.Sprintf("\n[configuring node: service port %s, protocol %s]\n", job.config.ServicePort, job.config.Protocol))
-	configCtx, cancelConfig := context.WithTimeout(ctx, timeout)
-	configResult, configErr := ssh.StreamCommand(configCtx, sshclient.CommandRequest{
-		ConnectionRequest: conn,
-		Command:           configureCmd,
-		CommandTimeout:    timeout,
-	}, sshclient.StreamHandlers{
-		OnStdout: job.appendOutput,
-		OnStderr: job.appendOutput,
-	})
-	cancelConfig()
-	if configErr != nil {
-		job.fail("Node installed but applying the configuration failed: " + configErr.Error())
-		return
-	}
-	if configResult.ExitCode != nil && *configResult.ExitCode != 0 {
-		job.fail(fmt.Sprintf("Node installed but configuration exited with code %d. Check the output above.", *configResult.ExitCode))
-		return
-	}
-
-	infoCmd, err := provider.RegistrationInfoCommand(job.nodeName)
-	if err != nil {
-		job.fail(err.Error())
+	// No readback configured: the provider supplied everything needed up front
+	// (Rebecca's user-provided certificate), so a clean exit is success.
+	if job.plan.Readback.Command == "" {
+		job.complete(nil)
 		return
 	}
 
@@ -256,7 +279,7 @@ func runInstall(job *installJob, ssh *sshclient.Service, conn sshclient.Connecti
 	defer cancel()
 	infoResult, infoErr := ssh.RunCommand(infoCtx, sshclient.CommandRequest{
 		ConnectionRequest: conn,
-		Command:           infoCmd,
+		Command:           job.plan.Readback.Command,
 		CommandTimeout:    installInfoTimeout,
 	})
 	if infoErr != nil {
@@ -264,13 +287,13 @@ func runInstall(job *installJob, ssh *sshclient.Service, conn sshclient.Connecti
 		return
 	}
 
-	info, found := ParseRegistrationInfo(job.nodeName, infoResult.Stdout)
+	info, found := job.plan.Readback.Parse(infoResult.Stdout)
 	if !found {
-		job.fail(fmt.Sprintf("Install did not produce /opt/%s/.env — inspect the output above for the script error.", job.nodeName))
+		job.fail(job.plan.Readback.NotFoundMessage)
 		return
 	}
 	info.NodeIP = strings.TrimSpace(nodeHost)
-	job.complete(info)
+	job.complete(&info)
 }
 
 func installFailureMessage(exitCode int, stderr string) string {

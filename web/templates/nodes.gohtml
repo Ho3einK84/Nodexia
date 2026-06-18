@@ -334,8 +334,12 @@
         <button type="button" class="btn btn--primary node-install-launch__btn" data-modal-open="install-node-modal">
           <i data-lucide="container" class="icon-in-button"></i> {{ t "nodes.install_pasarguard" }}
         </button>
-        <button type="button" class="btn node-install-launch__btn node-install-soon" data-tooltip="{{ t "nodes.rebecca_soon_tooltip" }}" aria-disabled="true" aria-label="{{ t "nodes.rebecca_soon_aria" }}">
-          <i data-lucide="package" class="icon-in-button"></i> {{ t "nodes.install_rebecca" }}
+        <button type="button" class="btn node-install-launch__btn" data-modal-open="install-rebecca-modal">
+          <i data-lucide="package" class="icon-in-button"></i> {{ t "nodes.install_rebecca_dev" }}
+          <span class="beta-badge">{{ t "nodes.beta" }}</span>
+        </button>
+        <button type="button" class="btn node-install-launch__btn node-install-soon" data-tooltip="{{ t "nodes.rebecca_stable_soon_tooltip" }}" aria-disabled="true" aria-label="{{ t "nodes.rebecca_stable_soon_aria" }}">
+          <i data-lucide="package" class="icon-in-button"></i> {{ t "nodes.install_rebecca_stable" }}
           <span class="coming-soon-badge">{{ t "nodes.soon" }}</span>
         </button>
       </div>
@@ -451,6 +455,61 @@
             </button>
           </div>
           <p class="node-install-note">{{ tsafe "nodes.install_note" }}</p>
+        </form>
+        {{ else }}
+        <p class="empty-state">{{ t "nodes.install_needs_creds" }}</p>
+        {{ end }}
+      </div>
+    </div>
+  </div>
+
+  {{/* ── Install Rebecca node (dev / beta) modal ───────── */}}
+  <div class="modal" id="install-rebecca-modal" data-modal hidden {{ if .NodeRebeccaInstallForm.OpenInitial }}data-modal-open-initial{{ end }}>
+    <div class="modal__backdrop" data-modal-close></div>
+    <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="install-rebecca-modal-title">
+      <header class="modal__header">
+        <h3 class="modal__title" id="install-rebecca-modal-title">
+          <i data-lucide="package"></i> {{ t "nodes.install_rebecca_title" }}
+          <span class="beta-badge">{{ t "nodes.beta" }}</span>
+        </h3>
+        <button type="button" class="modal__close" data-modal-close aria-label="{{ t "nodes.close_rebecca_install" }}">
+          <i data-lucide="x"></i>
+        </button>
+      </header>
+      <div class="modal__body">
+        {{ if .NodeRebeccaInstallForm.Enabled }}
+        <p class="node-install-note">{{ tsafe "nodes.rebecca_install_lead" }}</p>
+        <form method="post" action="{{ .NodeRebeccaInstallForm.Action }}">
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+          <input type="hidden" name="channel" value="dev">
+
+          <label class="form-field">
+            <span>{{ t "nodes.certificate" }}</span>
+            <textarea name="certificate" rows="8" class="cmd-textarea" placeholder="{{ t "nodes.certificate_placeholder" }}" spellcheck="false" autocomplete="off" required data-modal-autofocus></textarea>
+            {{ with index .NodeRebeccaInstallForm.Errors "certificate" }}<small class="field-error">{{ . }}</small>{{ end }}
+            <small class="field-hint">{{ tsafe "nodes.certificate_hint" }}</small>
+          </label>
+
+          <div class="form-grid">
+            <label class="form-field">
+              <span>{{ t "nodes.service_port" }}</span>
+              <input type="number" name="service_port" value="{{ .NodeRebeccaInstallForm.ServicePort }}" placeholder="62050" min="1" max="65535">
+              {{ with index .NodeRebeccaInstallForm.Errors "service_port" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>{{ t "nodes.api_port" }}</span>
+              <input type="number" name="api_port" value="{{ .NodeRebeccaInstallForm.APIPort }}" placeholder="62051" min="1" max="65535">
+              {{ with index .NodeRebeccaInstallForm.Errors "api_port" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+          </div>
+          {{ with index .NodeRebeccaInstallForm.Errors "channel" }}<small class="field-error">{{ . }}</small>{{ end }}
+
+          <div class="sys-form__actions">
+            <button type="submit" class="btn btn--primary" data-confirm="{{ t "nodes.rebecca_install_confirm" }}">
+              <i data-lucide="download" class="icon-in-button"></i> {{ t "nodes.rebecca_install_btn" }}
+            </button>
+          </div>
+          <p class="node-install-note">{{ tsafe "nodes.rebecca_install_note" }}</p>
         </form>
         {{ else }}
         <p class="empty-state">{{ t "nodes.install_needs_creds" }}</p>

@@ -42,6 +42,17 @@ func TestGeneratedShellSyntax(t *testing.T) {
 	}
 	commands = append(commands, configure)
 
+	rebeccaInstall, err := RebeccaProvider{}.InstallCommand(RebeccaInstallConfig{
+		Channel:     "dev",
+		ServicePort: "62050",
+		APIPort:     "62051",
+		Certificate: testRebeccaCertPEM,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commands = append(commands, rebeccaInstall)
+
 	for _, command := range commands {
 		// Each command is "sh -c '<script>'" — extract the script and syntax-check it.
 		inner := strings.TrimSuffix(strings.TrimPrefix(command, "sh -c '"), "'")
