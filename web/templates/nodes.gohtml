@@ -484,10 +484,10 @@
           <input type="hidden" name="channel" value="dev">
 
           <label class="form-field">
-            <span>{{ t "nodes.certificate" }}</span>
-            <textarea name="certificate" rows="8" class="cmd-textarea" placeholder="{{ t "nodes.certificate_placeholder" }}" spellcheck="false" autocomplete="off" required data-modal-autofocus></textarea>
-            {{ with index .NodeRebeccaInstallForm.Errors "certificate" }}<small class="field-error">{{ . }}</small>{{ end }}
-            <small class="field-hint">{{ tsafe "nodes.certificate_hint" }}</small>
+            <span>{{ t "nodes.bundle" }}</span>
+            <textarea name="bundle" rows="10" class="cmd-textarea" placeholder="{{ t "nodes.bundle_placeholder" }}" spellcheck="false" autocomplete="off" required data-modal-autofocus></textarea>
+            {{ with index .NodeRebeccaInstallForm.Errors "bundle" }}<small class="field-error">{{ . }}</small>{{ end }}
+            <small class="field-hint">{{ tsafe "nodes.bundle_hint" }}</small>
           </label>
 
           <div class="form-grid">

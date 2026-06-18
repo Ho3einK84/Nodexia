@@ -3,19 +3,19 @@ package nodes
 import (
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
 
 // RebeccaProvider drives Rebecca nodes (https://github.com/rebeccapanel/Rebecca-node).
 //
-// Rebecca installs are detected and managed only — Nodexia never installs
-// them.  A single instance lives under /opt/rebecca-node (configuration in
-// .env, version metadata in .binary-release.json) with data under
-// /var/lib/rebecca-node.  Management goes through the official `rebecca-node`
-// CLI.
+// A single instance lives under /opt/rebecca-node (configuration in .env,
+// version metadata in .binary-release.json) with data under /var/lib/rebecca-node.
+// Management goes through the official `rebecca-node` CLI. Nodexia can install
+// the dev/beta channel from the panel (binary mode); the stable channel is
+// declared but not yet enabled. See the Installation section below.
 type RebeccaProvider struct{}
 
 const (
@@ -290,43 +290,59 @@ func (p RebeccaProvider) ActionCommand(nodeName, actionKey string) (string, time
 //
 // Rebecca's install model is the OPPOSITE of PasarGuard's. PasarGuard generates
 // an API key + self-signed cert on the node and the panel reads them back.
-// Rebecca does not hand anything back: the USER takes the node certificate from
-// their Rebecca panel and provides it to the installer. So the install input is
-// the certificate plus the two ports, and there is no readback step.
+// Rebecca does not hand anything back: the USER takes the node install bundle
+// from their Rebecca panel and provides it to the installer. So the install
+// input is that bundle plus the two ports, and there is no readback step.
 //
-// How rebecca-node.sh "@ install --dev" consumes its inputs (verified against
-// the script): with the default flavor it installs in DOCKER mode, and
-// install_rebecca_node() reads stdin in this exact order —
-//  1. the client certificate PEM, line by line, terminated by a BLANK line;
+// We install Rebecca-node in BINARY mode (native systemd service, no Docker) —
+// that is the supported footprint and it is what discovery reads (.env,
+// .binary-release.json, .install-mode=binary, the rebecca-node systemd unit).
+// The script's default flavor is docker, and requesting binary against a
+// docker-flavored run is rejected, so we force binary with
+// REBECCA_NODE_SCRIPT_FLAVOR=binary (passed via `env` so it survives sudo).
+//
+// How rebecca-node.sh consumes its inputs in binary mode (verified against the
+// script's read_node_certificate_bundle + configure_binary_node_env): it reads
+// stdin in this exact order —
+//  1. the node install BUNDLE — the client CERTIFICATE block followed by its
+//     PRIVATE KEY block. The reader appends lines until it sees the
+//     "-----END <type> PRIVATE KEY-----" line with the certificate already
+//     present, so the certificate MUST come before the key;
 //  2. the SERVICE_PORT (the protocol is auto-set to REST, no prompt);
 //  3. the XRAY_API_PORT (must differ from SERVICE_PORT).
-// It then writes docker-compose.yml and runs `compose up -d` (detached).
+// It then writes /opt/rebecca-node/.env + the binary release metadata and
+// enables the systemd unit (`systemctl enable --now`, which returns at once).
 //
-// The certificate is multi-line PEM, so a bare interactive `read` can't carry
-// it. We deliver it robustly by base64-encoding the PEM on our side and
-// decoding it into a temp stdin file on the remote, then appending the blank
-// line + the two ports. base64 has no quotes/newlines/metacharacters, so it is
-// safe inside the outer `sh -c '...'` (no single quote ever appears — the
+// The bundle is multi-line PEM, so a bare interactive `read` can't carry it. We
+// deliver it robustly by base64-encoding the (re-ordered) bundle on our side and
+// decoding it into a temp stdin file on the remote, then appending the two
+// ports. base64 has no quotes/newlines/metacharacters, so it is safe inside the
+// outer `sh -c '...'` (no single quote ever appears — the
 // TestGeneratedShellSyntax guard) and immune to set -e / non-tty / SSH issues.
+// The private key is sensitive: it only ever exists as in-memory base64, is
+// never persisted, and the script echoes "bundle saved", never its contents.
 
 // RebeccaInstallConfig carries the pre-install choices for a Rebecca dev install.
-// Certificate is the client certificate PEM obtained from the Rebecca panel.
+// Bundle is the node install bundle from the Rebecca panel: the client
+// certificate PEM followed by its private key PEM.
 type RebeccaInstallConfig struct {
 	Channel     string
 	ServicePort string
 	APIPort     string
-	Certificate string
+	Bundle      string
 }
 
 // Normalize fills port defaults and validates each field, returning a cleaned
-// copy. Field-keyed validation lives in normalizeInstallInput; this guards the
-// command builder so a malformed config can never reach the shell.
+// copy whose Bundle is re-assembled as certificate-then-key (the order the
+// script's bundle reader requires). Field-keyed validation lives in
+// normalizeInstallInput; this guards the command builder so a malformed config
+// can never reach the shell.
 func (c RebeccaInstallConfig) Normalize() (RebeccaInstallConfig, error) {
 	out := RebeccaInstallConfig{
 		Channel:     strings.ToLower(strings.TrimSpace(c.Channel)),
 		ServicePort: strings.TrimSpace(c.ServicePort),
 		APIPort:     strings.TrimSpace(c.APIPort),
-		Certificate: strings.TrimSpace(c.Certificate),
+		Bundle:      strings.TrimSpace(c.Bundle),
 	}
 	if out.Channel == "" {
 		out.Channel = channelDev
@@ -346,21 +362,37 @@ func (c RebeccaInstallConfig) Normalize() (RebeccaInstallConfig, error) {
 	if out.ServicePort == out.APIPort {
 		return RebeccaInstallConfig{}, fmt.Errorf("nodes: rebecca: service and API ports must differ")
 	}
-	if !looksLikePEMCertificate(out.Certificate) {
-		return RebeccaInstallConfig{}, fmt.Errorf("nodes: rebecca: certificate is not a PEM certificate block")
+	bundle, ok := normalizeRebeccaBundle(out.Bundle)
+	if !ok {
+		return RebeccaInstallConfig{}, fmt.Errorf("nodes: rebecca: bundle must contain a certificate and a private key")
 	}
+	out.Bundle = bundle
 	if !rebeccaChannelEnabled(out.Channel) {
 		return RebeccaInstallConfig{}, fmt.Errorf("nodes: rebecca: channel %q is not available for install", out.Channel)
 	}
 	return out, nil
 }
 
-// looksLikePEMCertificate reports whether s decodes to a PEM block whose type is
-// a CERTIFICATE — mirroring the script's grep for BEGIN/END CERTIFICATE while
-// being stricter (it must actually decode).
-func looksLikePEMCertificate(s string) bool {
-	block, _ := pem.Decode([]byte(strings.TrimSpace(s)))
-	return block != nil && strings.Contains(strings.ToUpper(block.Type), "CERTIFICATE")
+// rebeccaCertBlockPattern / rebeccaKeyBlockPattern extract the whole PEM blocks
+// from a pasted bundle. The key pattern mirrors the script's terminator
+// (`-----END .+PRIVATE KEY-----`): the key type must carry a prefix word
+// (RSA / EC / ENCRYPTED …), exactly what the installer accepts.
+var (
+	rebeccaCertBlockPattern = regexp.MustCompile(`(?s)-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----`)
+	rebeccaKeyBlockPattern  = regexp.MustCompile(`(?s)-----BEGIN [^\n-]+PRIVATE KEY-----.*?-----END [^\n-]+PRIVATE KEY-----`)
+)
+
+// normalizeRebeccaBundle pulls the certificate and private-key blocks out of a
+// pasted bundle and returns them re-joined as cert-then-key (the order the
+// script's reader requires), regardless of how the user pasted them. ok=false
+// when either block is missing.
+func normalizeRebeccaBundle(s string) (string, bool) {
+	cert := rebeccaCertBlockPattern.FindString(s)
+	key := rebeccaKeyBlockPattern.FindString(s)
+	if cert == "" || key == "" {
+		return "", false
+	}
+	return strings.TrimSpace(cert) + "\n" + strings.TrimSpace(key) + "\n", true
 }
 
 // normalizeInstallInput validates the raw install form fields for a Rebecca
@@ -373,7 +405,7 @@ func (RebeccaProvider) normalizeInstallInput(in installFormInput) (RebeccaInstal
 		Channel:     strings.ToLower(strings.TrimSpace(in.Channel)),
 		ServicePort: strings.TrimSpace(in.ServicePort),
 		APIPort:     strings.TrimSpace(in.APIPort),
-		Certificate: strings.TrimSpace(in.Certificate),
+		Bundle:      strings.TrimSpace(in.Bundle),
 	}
 	if cfg.Channel == "" {
 		cfg.Channel = channelDev
@@ -395,10 +427,10 @@ func (RebeccaProvider) normalizeInstallInput(in installFormInput) (RebeccaInstal
 	} else if validPort(servicePort) != "" && servicePort == apiPort {
 		errs["api_port"] = "nodes.err_ports_equal"
 	}
-	if cfg.Certificate == "" {
-		errs["certificate"] = "nodes.err_cert_required"
-	} else if !looksLikePEMCertificate(cfg.Certificate) {
-		errs["certificate"] = "nodes.err_cert_pem"
+	if cfg.Bundle == "" {
+		errs["bundle"] = "nodes.err_bundle_required"
+	} else if _, ok := normalizeRebeccaBundle(cfg.Bundle); !ok {
+		errs["bundle"] = "nodes.err_bundle_pem"
 	}
 	if !rebeccaChannelEnabled(cfg.Channel) {
 		errs["channel"] = "nodes.err_channel_disabled"
@@ -409,15 +441,15 @@ func (RebeccaProvider) normalizeInstallInput(in installFormInput) (RebeccaInstal
 
 	normalized, err := cfg.Normalize()
 	if err != nil {
-		errs["certificate"] = "nodes.err_cert_pem"
+		errs["bundle"] = "nodes.err_bundle_pem"
 		return RebeccaInstallConfig{}, errs
 	}
 	return normalized, errs
 }
 
 // InstallCommand downloads and runs the official rebecca-node dev install
-// script, feeding the certificate (base64-decoded into a temp stdin file) and
-// the two ports the way the docker install path reads them.
+// script in BINARY mode, feeding the install bundle (base64-decoded into a temp
+// stdin file) and the two ports the way the binary install path reads them.
 func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) {
 	normalized, err := cfg.Normalize()
 	if err != nil {
@@ -425,24 +457,28 @@ func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) 
 	}
 	scriptURL := rebeccaDevScriptURL // only dev wired today; stable adds its URL here
 
-	// The certificate never appears literally in the command — only as base64,
-	// which carries no quotes/newlines and so is safe inside sh -c '...'.
-	certB64 := base64.StdEncoding.EncodeToString([]byte(strings.TrimSpace(normalized.Certificate) + "\n"))
+	// The bundle (cert + private key) never appears literally in the command —
+	// only as base64, which carries no quotes/newlines and so is safe inside
+	// sh -c '...'. The script's bundle reader stops at the END PRIVATE KEY line,
+	// so the ports follow immediately (no terminating blank line needed).
+	bundleB64 := base64.StdEncoding.EncodeToString([]byte(normalized.Bundle))
 
 	command := `sh -c '` + sudoPreamble +
 		`SCRIPT="$(mktemp /tmp/nodexia-rebecca-node.XXXXXX)" || exit 1; ` +
 		`if command -v curl >/dev/null 2>&1; then curl -fsSL ` + scriptURL + ` -o "$SCRIPT" || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + scriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`else echo "curl or wget is required to install" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
-		// Build the stdin the script expects: certificate, a blank line to end
-		// the cert read loop, then SERVICE_PORT and XRAY_API_PORT.
+		// Build the stdin the binary install expects: the bundle (cert+key),
+		// then SERVICE_PORT and XRAY_API_PORT.
 		`IN="$(mktemp /tmp/nodexia-rebecca-in.XXXXXX)" || { rm -f "$SCRIPT"; exit 1; }; ` +
-		`printf "%s" "` + certB64 + `" | base64 -d > "$IN" || { echo "certificate decode failed" >&2; rm -f "$SCRIPT" "$IN"; exit 1; }; ` +
-		`printf "\n` + normalized.ServicePort + `\n` + normalized.APIPort + `\n" >> "$IN"; ` +
+		`printf "%s" "` + bundleB64 + `" | base64 -d > "$IN" || { echo "bundle decode failed" >&2; rm -f "$SCRIPT" "$IN"; exit 1; }; ` +
+		`printf "` + normalized.ServicePort + `\n` + normalized.APIPort + `\n" >> "$IN"; ` +
 		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + rebeccaInstallScriptTimeout + `"; fi; ` +
-		// --name pins the instance to rebecca-node (discovery keys on it). The
+		// Force binary mode (the script defaults to docker and rejects a binary
+		// request on a docker-flavored run). env carries the flavor through sudo.
+		// --name pins the instance to rebecca-node (discovery keys on it); the
 		// COMMAND (install) must be parsed before --name, so order matters.
-		`$TMO $SUDO bash "$SCRIPT" install --name ` + rebeccaInstallName + ` --dev <"$IN"; ` +
+		`$TMO $SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" install --name ` + rebeccaInstallName + ` --binary --dev <"$IN"; ` +
 		`STATUS=$?; rm -f "$SCRIPT" "$IN"; ` +
 		`if [ "$STATUS" -ne 0 ]; then echo "[rebecca-node install script exited with status $STATUS]" >&2; fi; ` +
 		`exit $STATUS'`
@@ -451,7 +487,7 @@ func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) 
 
 // BuildInstallPlan assembles the Rebecca dev install procedure: a single
 // streamed step that runs the official script. There is no configure step and
-// no readback — the certificate came from the user, not the node.
+// no readback — the bundle came from the user, not the node.
 func (p RebeccaProvider) BuildInstallPlan(in installFormInput) (InstallPlan, ValidationErrors) {
 	cfg, errs := p.normalizeInstallInput(in)
 	if errs.HasAny() {
@@ -459,7 +495,7 @@ func (p RebeccaProvider) BuildInstallPlan(in installFormInput) (InstallPlan, Val
 	}
 	installCmd, err := p.InstallCommand(cfg)
 	if err != nil {
-		errs["certificate"] = "nodes.err_cert_pem"
+		errs["bundle"] = "nodes.err_bundle_pem"
 		return InstallPlan{}, errs
 	}
 	plan := InstallPlan{

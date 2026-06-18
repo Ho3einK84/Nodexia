@@ -506,7 +506,7 @@ func (h *Handlers) RebeccaInstallStart(w http.ResponseWriter, r *http.Request) {
 	input := installFormInput{
 		ServicePort: strings.TrimSpace(r.FormValue("service_port")),
 		APIPort:     strings.TrimSpace(r.FormValue("api_port")),
-		Certificate: r.FormValue("certificate"),
+		Bundle:      r.FormValue("bundle"),
 		Channel:     strings.TrimSpace(r.FormValue("channel")),
 	}
 	if input.Channel == "" {
@@ -515,7 +515,7 @@ func (h *Handlers) RebeccaInstallStart(w http.ResponseWriter, r *http.Request) {
 
 	installErrors := ValidationErrors{}
 	if h.nodeNameTaken(r.Context(), server.ID, rebeccaInstallName) {
-		installErrors["certificate"] = h.t(r, "nodes.err_rebecca_exists")
+		installErrors["bundle"] = h.t(r, "nodes.err_rebecca_exists")
 	}
 
 	plan, cfgErr := RebeccaProvider{}.BuildInstallPlan(input)
@@ -841,7 +841,7 @@ type installFormInput struct {
 	APIPort     string
 	Protocol    string
 	APIKey      string
-	Certificate string // Rebecca: client certificate PEM from the panel
+	Bundle      string // Rebecca: node install bundle (certificate + private key) from the panel
 	Channel     string // Rebecca: install channel (dev/stable)
 }
 

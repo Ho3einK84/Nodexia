@@ -46,7 +46,7 @@ func TestGeneratedShellSyntax(t *testing.T) {
 		Channel:     "dev",
 		ServicePort: "62050",
 		APIPort:     "62051",
-		Certificate: testRebeccaCertPEM,
+		Bundle:      testRebeccaBundle,
 	})
 	if err != nil {
 		t.Fatal(err)
