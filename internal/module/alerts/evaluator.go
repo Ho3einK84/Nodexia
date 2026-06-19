@@ -34,6 +34,17 @@ type Metrics struct {
 	TrafficTotalGiB  float64
 	PeakMbps         float64
 	AvgMbps          float64
+
+	// ForecastAvailable gates the predictive (forecast-derived) metrics. It is
+	// true only when the server has a monthly RX limit configured AND there is
+	// enough traffic history to project. When false, projected_exceed_limit and
+	// days_to_exhaustion rules are skipped this cycle — neither fired nor
+	// resolved — exactly like an unavailable traffic snapshot. This keeps streaks
+	// and cooldowns sane across availability gaps and guarantees servers without a
+	// limit never trigger the predictive metrics.
+	ForecastAvailable     bool
+	ProjectedExceedsLimit bool    // month-end RX projected over the limit (or already over)
+	DaysToExhaustion      float64 // full days until the limit is reached; DaysToExhaustionSafe when not projected to exhaust
 }
 
 // valueFor returns the observed value for a metric and whether it is available
@@ -59,6 +70,16 @@ func (m Metrics) valueFor(metric string) (float64, bool) {
 		// period. Upload (TX) is excluded so the threshold lines up with the
 		// download-only port speed VPS providers advertise.
 		return m.PeakMbps, m.TrafficAvailable
+	case MetricProjectedExceedLimit:
+		if !m.ForecastAvailable {
+			return 0, false
+		}
+		if m.ProjectedExceedsLimit {
+			return 1, true
+		}
+		return 0, true
+	case MetricDaysToExhaustion:
+		return m.DaysToExhaustion, m.ForecastAvailable
 	default:
 		return 0, false
 	}

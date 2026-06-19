@@ -120,6 +120,80 @@ func TestValidateRuleFormRejectsBadFields(t *testing.T) {
 	}
 }
 
+// TestValidateRuleFormProjectedExceedLimit verifies the boolean projection metric
+// normalises its comparator/threshold to "≥ 1" regardless of what the form sends,
+// so the stored rule is always coherent.
+func TestValidateRuleFormProjectedExceedLimit(t *testing.T) {
+	// Submit deliberately irrelevant comparator/threshold; both are overridden.
+	validated, errs := ValidateRuleForm(RuleFormInput{
+		ServerID:   "4",
+		Metric:     MetricProjectedExceedLimit,
+		Comparator: "lt",
+		Threshold:  "999",
+		Severity:   SeverityCritical,
+		Enabled:    true,
+	})
+	if errs.HasAny() {
+		t.Fatalf("unexpected validation errors: %#v", errs)
+	}
+	if validated.Rule.Comparator != ComparatorGTE {
+		t.Fatalf("Comparator = %q, want forced gte", validated.Rule.Comparator)
+	}
+	if validated.Rule.Threshold != 1 {
+		t.Fatalf("Threshold = %v, want forced 1", validated.Rule.Threshold)
+	}
+}
+
+// TestValidateRuleFormDaysToExhaustion verifies the days metric forces the "≤"
+// comparator, accepts a sane day count, and rejects nonsensical ones.
+func TestValidateRuleFormDaysToExhaustion(t *testing.T) {
+	validated, errs := ValidateRuleForm(RuleFormInput{
+		ServerID:   "4",
+		Metric:     MetricDaysToExhaustion,
+		Comparator: "gte", // ignored — forced to lte
+		Threshold:  "3",
+		Severity:   SeverityWarning,
+		Enabled:    true,
+	})
+	if errs.HasAny() {
+		t.Fatalf("unexpected validation errors: %#v", errs)
+	}
+	if validated.Rule.Comparator != ComparatorLTE {
+		t.Fatalf("Comparator = %q, want forced lte", validated.Rule.Comparator)
+	}
+	if validated.Rule.Threshold != 3 {
+		t.Fatalf("Threshold = %v, want 3", validated.Rule.Threshold)
+	}
+
+	// Out-of-range and missing day counts are rejected on the threshold field.
+	for name, value := range map[string]string{
+		"too large": "61",
+		"negative":  "-1",
+		"empty":     "",
+		"non-num":   "soon",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, errs := ValidateRuleForm(RuleFormInput{
+				ServerID: "4", Metric: MetricDaysToExhaustion, Threshold: value,
+			})
+			if _, ok := errs["threshold"]; !ok {
+				t.Fatalf("expected threshold error for %q, got %#v", value, errs)
+			}
+		})
+	}
+}
+
+// TestValidateRuleFormRejectsLowerComparatorOnObservedMetric ensures a
+// "lower is worse" comparator cannot be applied to an observed metric like cpu.
+func TestValidateRuleFormRejectsLowerComparatorOnObservedMetric(t *testing.T) {
+	_, errs := ValidateRuleForm(RuleFormInput{
+		Metric: MetricCPU, Threshold: "90", Comparator: ComparatorLTE,
+	})
+	if _, ok := errs["comparator"]; !ok {
+		t.Fatalf("expected comparator error for lte on cpu, got %#v", errs)
+	}
+}
+
 func TestValidateChannelForm(t *testing.T) {
 	validated, errs := ValidateChannelForm(ChannelFormInput{
 		Kind:    ChannelKindTelegram,

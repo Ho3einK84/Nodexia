@@ -606,7 +606,7 @@
   "alerts.cmp_gte": "≥ at or above",
   "alerts.cmp_gt": "strictly above",
   "alerts.threshold": "Threshold",
-  "alerts.threshold_hint": "Percent for cpu/ram/disk, raw value for load, GiB for monthly traffic, Mbps for bandwidth.",
+  "alerts.threshold_hint": "Percent for cpu/ram/disk, raw value for load, GiB for monthly traffic, Mbps for bandwidth. For “projected to exceed monthly limit” the threshold and comparator are ignored; for “days until monthly limit reached” enter the number of days remaining — the alert fires at or below it. Both predictive metrics need a monthly limit set on the server.",
   "alerts.sev_info": "Info",
   "alerts.sev_warning": "Warning",
   "alerts.sev_critical": "Critical",
