@@ -292,3 +292,20 @@ CREATE INDEX IF NOT EXISTS idx_metric_rollups_daily_server_period
 ALTER TABLE servers ADD COLUMN country_code TEXT NOT NULL DEFAULT '';
 ALTER TABLE servers ADD COLUMN country_name TEXT NOT NULL DEFAULT '';
 ALTER TABLE servers ADD COLUMN country_checked_at DATETIME;
+
+-- ── Per-server traffic limits ─────────────────────────────────────────────────
+-- An OPTIONAL monthly DOWNLOAD (RX) traffic cap per server, used by the analytics
+-- forecast to flag exhaustion risk and project days-to-limit. The limit is kept
+-- in its own table (one row per server, server_id is the primary key) rather than
+-- a column on servers so the feature stays self-contained and revertable, and the
+-- core servers row is never touched by a forecasting concern. No row means "no
+-- limit configured", which preserves today's behaviour for every existing server.
+-- Semantics are RX-only on purpose: the whole forecast projects download (RX)
+-- traffic, and the current-month value it compares against is the monthly RX from
+-- vnstat — so the cap is measured against the exact metric the forecast predicts.
+CREATE TABLE IF NOT EXISTS server_traffic_limits (
+  server_id           INTEGER PRIMARY KEY,
+  monthly_limit_bytes INTEGER NOT NULL,
+  updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+);

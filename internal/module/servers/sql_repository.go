@@ -224,6 +224,7 @@ func (r SQLRepository) Delete(ctx context.Context, id int64) error {
 		`DELETE FROM system_snapshots WHERE server_id = ?`,
 		`DELETE FROM server_system_facts WHERE server_id = ?`,
 		`DELETE FROM vnstat_snapshots WHERE server_id = ?`,
+		`DELETE FROM server_traffic_limits WHERE server_id = ?`,
 		`DELETE FROM alert_events WHERE server_id = ?`,
 		`DELETE FROM alert_silences WHERE server_id = ?`,
 		`DELETE FROM alert_rules WHERE server_id = ?`,

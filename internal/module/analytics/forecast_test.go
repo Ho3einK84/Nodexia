@@ -146,7 +146,7 @@ func TestForecastServiceSmokeTest(t *testing.T) {
 		}
 	}
 
-	out := svc.Compute(days, nil)
+	out := svc.Compute(days, nil, 0)
 	if out.Algorithm == "" {
 		t.Error("expected non-empty algorithm name")
 	}
@@ -172,8 +172,8 @@ func TestForecastUsesDownloadOnly(t *testing.T) {
 		high[i] = TrafficDay{Label: label, RX: rx, TX: 99 * rx, Total: 100 * rx}
 	}
 
-	lo := svc.Compute(low, nil)
-	hi := svc.Compute(high, nil)
+	lo := svc.Compute(low, nil, 0)
+	hi := svc.Compute(high, nil, 0)
 	if lo.ThisMonth.PredictedBytes != hi.ThisMonth.PredictedBytes {
 		t.Errorf("forecast must depend only on download (RX): low=%d high=%d",
 			lo.ThisMonth.PredictedBytes, hi.ThisMonth.PredictedBytes)
@@ -200,7 +200,7 @@ func TestForecastMonthMatchesMonthlyRX(t *testing.T) {
 	}
 	months := []TrafficMonth{{Label: monthLabel, RX: monthlyRX, TX: 1 << 30, Total: monthlyRX + (1 << 30)}}
 
-	out := svc.Compute(days, months)
+	out := svc.Compute(days, months, 0)
 	if out.ThisMonth.CurrentBytes != monthlyRX {
 		t.Errorf("ThisMonth.CurrentBytes = %d, want monthly RX %d (must match Analytics Overview)",
 			out.ThisMonth.CurrentBytes, monthlyRX)
@@ -208,6 +208,109 @@ func TestForecastMonthMatchesMonthlyRX(t *testing.T) {
 	if out.ThisMonth.PredictedBytes < out.ThisMonth.CurrentBytes {
 		t.Errorf("predicted month-end %d must be >= current %d",
 			out.ThisMonth.PredictedBytes, out.ThisMonth.CurrentBytes)
+	}
+}
+
+func TestExhaustionRisk(t *testing.T) {
+	const limit = 1000
+
+	cases := []struct {
+		name           string
+		limit          int64
+		monthPredicted int64
+		want           bool
+	}{
+		{"limit unset never flags", 0, 999999, false},
+		{"projected under limit", limit, 500, false},
+		{"projected over limit", limit, 1500, true},
+		{"projected exactly meets limit", limit, limit, false},
+		{"negative limit treated as unset", -10, 999999, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// history/dayPrediction/monthCurrent are irrelevant to exhaustion here;
+			// supply benign values so the other risk flags stay off.
+			risks := computeRisks([]int64{100, 100, 100}, 100, 0, c.monthPredicted, c.limit)
+			if risks.Exhaustion != c.want {
+				t.Errorf("Exhaustion = %v, want %v", risks.Exhaustion, c.want)
+			}
+		})
+	}
+}
+
+func TestExhaustionThroughCompute(t *testing.T) {
+	svc := NewForecastService()
+	now := time.Now().UTC()
+	monthLabel := now.Format("2006-01")
+
+	var days []TrafficDay
+	for d := 1; d <= now.Day(); d++ {
+		label := time.Date(now.Year(), now.Month(), d, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+		days = append(days, TrafficDay{Label: label, RX: 1 << 30, TX: 0, Total: 1 << 30})
+	}
+	months := []TrafficMonth{{Label: monthLabel, RX: int64(now.Day()) << 30, TX: 0, Total: int64(now.Day()) << 30}}
+
+	tiny := svc.Compute(days, months, 1<<20) // 1 MiB — guaranteed exceeded
+	if !tiny.Risks.Exhaustion {
+		t.Errorf("expected exhaustion with a tiny limit, got false (predicted=%d)", tiny.ThisMonth.PredictedBytes)
+	}
+	huge := svc.Compute(days, months, 1<<60) // 1 EiB — never exceeded
+	if huge.Risks.Exhaustion {
+		t.Errorf("did not expect exhaustion with a huge limit (predicted=%d)", huge.ThisMonth.PredictedBytes)
+	}
+	none := svc.Compute(days, months, 0) // no limit
+	if none.Risks.Exhaustion {
+		t.Error("did not expect exhaustion with no limit")
+	}
+}
+
+func TestParseLimitBytes(t *testing.T) {
+	const gib = int64(1024 * 1024 * 1024)
+	const tib = gib * 1024
+
+	cases := []struct {
+		value, unit string
+		wantBytes   int64
+		wantOK      bool
+	}{
+		{"500", "GiB", 500 * gib, true},
+		{"1", "TiB", tib, true},
+		{"0.5", "TiB", tib / 2, true},
+		{"0", "GiB", 0, false},
+		{"-5", "GiB", 0, false},
+		{"abc", "GiB", 0, false},
+		{"", "GiB", 0, false},
+		{"100", "", 100 * gib, true}, // unknown unit falls back to GiB
+	}
+	for _, c := range cases {
+		gotBytes, gotOK := parseLimitBytes(c.value, c.unit)
+		if gotOK != c.wantOK {
+			t.Errorf("parseLimitBytes(%q,%q) ok = %v, want %v", c.value, c.unit, gotOK, c.wantOK)
+			continue
+		}
+		if gotOK && gotBytes != c.wantBytes {
+			t.Errorf("parseLimitBytes(%q,%q) = %d, want %d", c.value, c.unit, gotBytes, c.wantBytes)
+		}
+	}
+}
+
+func TestLimitToValueUnit(t *testing.T) {
+	const gib = int64(1024 * 1024 * 1024)
+	const tib = gib * 1024
+	cases := []struct {
+		bytes     int64
+		wantValue string
+		wantUnit  string
+	}{
+		{500 * gib, "500", "GiB"},
+		{tib, "1", "TiB"},
+		{tib + tib/2, "1.5", "TiB"},
+	}
+	for _, c := range cases {
+		v, u := limitToValueUnit(c.bytes)
+		if v != c.wantValue || u != c.wantUnit {
+			t.Errorf("limitToValueUnit(%d) = (%q,%q), want (%q,%q)", c.bytes, v, u, c.wantValue, c.wantUnit)
+		}
 	}
 }
 
@@ -256,7 +359,11 @@ func TestRollupHelpers(t *testing.T) {
 }
 
 func TestDaysInMonth(t *testing.T) {
-	cases := []struct{ year int; month time.Month; want int }{
+	cases := []struct {
+		year  int
+		month time.Month
+		want  int
+	}{
 		{2024, time.February, 29}, // leap year
 		{2023, time.February, 28},
 		{2026, time.January, 31},

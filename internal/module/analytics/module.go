@@ -39,4 +39,5 @@ func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	mux.Handle("GET /servers/{id}/analytics", NewPageHandler(deps, serverRepo, repo))
 	mux.Handle("GET /servers/{id}/analytics/data", NewDataHandler(deps, serverRepo, repo))
 	mux.Handle("GET /servers/{id}/analytics/forecast", NewForecastHandler(deps, serverRepo, repo, forecastSvc))
+	mux.Handle("POST /servers/{id}/analytics/limit", NewLimitHandler(deps, serverRepo, repo))
 }

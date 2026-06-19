@@ -106,6 +106,16 @@ type Repository interface {
 	InsertDailyRollup(ctx context.Context, serverID int64, r DailyRollup) error
 	ListServerIDs(ctx context.Context) ([]int64, error)
 	GetLatestTrafficForServer(ctx context.Context, serverID int64) ([]TrafficDay, []TrafficMonth, error)
+	// GetTrafficLimit returns the configured monthly download (RX) limit in bytes
+	// for a server. ok is false when no limit is configured (the common case),
+	// which callers must treat as "unlimited" — never as a zero limit.
+	GetTrafficLimit(ctx context.Context, serverID int64) (limitBytes int64, ok bool, err error)
+	// SetTrafficLimit upserts a server's monthly download (RX) limit. The caller
+	// is responsible for rejecting non-positive values before calling.
+	SetTrafficLimit(ctx context.Context, serverID, limitBytes int64) error
+	// DeleteTrafficLimit clears a server's limit (back to "unlimited"). Removing a
+	// non-existent limit is a no-op, not an error.
+	DeleteTrafficLimit(ctx context.Context, serverID int64) error
 	DeleteRawBefore(ctx context.Context, before time.Time) (int64, error)
 	DeleteHourlyBefore(ctx context.Context, before time.Time) (int64, error)
 	DeleteDailyBefore(ctx context.Context, before time.Time) (int64, error)
