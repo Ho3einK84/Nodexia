@@ -33,6 +33,38 @@ func TestLoadTestEnvironmentDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadDigestDefaultsDisabled(t *testing.T) {
+	testutil.ClearNodexiaEnv(t)
+	t.Setenv("NODEXIA_ENV_FILE", filepath.Join(t.TempDir(), "missing.env"))
+	t.Setenv("NODEXIA_ENV", "test")
+
+	cfg, err := config.Load("v0.1.0")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Digest.Enabled {
+		t.Fatal("digest must be disabled by default")
+	}
+	if cfg.Digest.Interval <= 0 {
+		t.Fatalf("digest interval default = %v, want > 0", cfg.Digest.Interval)
+	}
+	if cfg.Digest.Channel != "" {
+		t.Fatalf("digest channel default = %q, want empty", cfg.Digest.Channel)
+	}
+}
+
+func TestLoadRejectsDigestEnabledWithoutInterval(t *testing.T) {
+	testutil.ClearNodexiaEnv(t)
+	t.Setenv("NODEXIA_ENV_FILE", filepath.Join(t.TempDir(), "missing.env"))
+	t.Setenv("NODEXIA_ENV", "test")
+	t.Setenv("NODEXIA_DIGEST_ENABLED", "true")
+	t.Setenv("NODEXIA_DIGEST_INTERVAL", "0s")
+
+	if _, err := config.Load("v0.1.0"); err == nil {
+		t.Fatal("expected error when the digest is enabled with a non-positive interval")
+	}
+}
+
 func TestLoadRejectsInvalidLogFormat(t *testing.T) {
 	testutil.ClearNodexiaEnv(t)
 	t.Setenv("NODEXIA_ENV", "test")

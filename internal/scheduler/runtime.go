@@ -69,10 +69,13 @@ type Runtime struct {
 	nodeRepo      nodes.Repository
 	providers     []nodes.Provider
 	evaluator     *alerts.Evaluator
+	alertsRepo    alerts.Repository
 	analyticsRepo analytics.Repository
 	forecastSvc   *analytics.ForecastService
 	rollupSvc     *analytics.RollupService
 	cleanupSvc    *analytics.CleanupService
+	notifier      notify.Notifier // shared by the evaluator and the digest; nil when no token
+	digestCfg     config.DigestConfig
 
 	mu     sync.RWMutex
 	jobs   map[string]*jobState
@@ -116,6 +119,8 @@ func New(cfg config.Config, conn *sql.DB, ssh *sshclient.Service) *Runtime {
 	}
 
 	analyticsRepo := analytics.NewSQLRepository(conn)
+	alertsRepo := alerts.NewSQLRepository(conn)
+	notifier := schedulerNotifier(cfg)
 	runtime := &Runtime{
 		cfg:           cfg.Scheduler,
 		ssh:           ssh,
@@ -124,11 +129,14 @@ func New(cfg config.Config, conn *sql.DB, ssh *sshclient.Service) *Runtime {
 		trafficRepo:   monitoring.NewSQLRepository(conn),
 		nodeRepo:      nodes.NewSQLRepository(conn),
 		providers:     nodes.DefaultProviders(),
-		evaluator:     alerts.NewEvaluator(alerts.NewSQLRepository(conn), schedulerNotifier(cfg)),
+		evaluator:     alerts.NewEvaluator(alertsRepo, notifier),
+		alertsRepo:    alertsRepo,
 		analyticsRepo: analyticsRepo,
 		forecastSvc:   analytics.NewForecastService(),
 		rollupSvc:     analytics.NewRollupService(analyticsRepo),
 		cleanupSvc:    analytics.NewCleanupService(analyticsRepo),
+		notifier:      notifier,
+		digestCfg:     cfg.Digest,
 		jobs:          map[string]*jobState{},
 		paused:        map[string]struct{}{},
 	}
@@ -209,6 +217,14 @@ func (r *Runtime) Start() {
 	go r.loop(ctx)
 	go r.analyticsLoop(ctx)
 	go r.countryLoop(ctx)
+
+	// The periodic digest is opt-in (disabled by default) and only useful when a
+	// Telegram notifier is configured. Start it on its own ticker so it never
+	// interferes with the monitoring sweep.
+	if r.digestCfg.Enabled && r.notifier != nil {
+		r.wg.Add(1)
+		go r.digestLoop(ctx)
+	}
 }
 
 // analyticsLoop runs hourly metric rollups and daily cleanup on independent

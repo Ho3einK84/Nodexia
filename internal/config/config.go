@@ -28,7 +28,7 @@ const minProductionSessionSecretLength = 16
 // exampleAdminPassword is the .env.example placeholder.
 // Neither may be used as the admin password outside development or test.
 const (
-	weakAdminPassword   = "admin"
+	weakAdminPassword    = "admin"
 	exampleAdminPassword = "change-this-password"
 )
 
@@ -44,6 +44,7 @@ type Config struct {
 	Database    DatabaseConfig
 	Install     InstallConfig
 	Notify      NotifyConfig
+	Digest      DigestConfig
 }
 
 type AppConfig struct {
@@ -86,8 +87,8 @@ type SecurityConfig struct {
 	SessionCookieSecure bool
 	SSHHostKeyPolicy    string
 	SSHKnownHostsPath   string
-	AdminUsername        string
-	AdminPassword        string
+	AdminUsername       string
+	AdminPassword       string
 }
 
 type DatabaseConfig struct {
@@ -100,9 +101,9 @@ type DatabaseConfig struct {
 }
 
 type InstallConfig struct {
-	Domain        string
-	AutoTLS       bool
-	EnvFile       string
+	Domain             string
+	AutoTLS            bool
+	EnvFile            string
 	BehindReverseProxy bool
 }
 
@@ -112,6 +113,18 @@ type InstallConfig struct {
 // sending is disabled and the UI shows a "not configured" notice.
 type NotifyConfig struct {
 	TelegramBotToken string
+}
+
+// DigestConfig controls the periodic status digest sent to Telegram. It is
+// DISABLED by default so existing deployments never start sending unexpectedly —
+// an operator must opt in with NODEXIA_DIGEST_ENABLED=true. Channel selects which
+// notification channel (by name, case-insensitive) receives the digest; an empty
+// Channel falls back to every enabled channel, mirroring how a rule with no
+// specific channel dispatches.
+type DigestConfig struct {
+	Enabled  bool
+	Interval time.Duration
+	Channel  string
 }
 
 func Load(version string) (Config, error) {
@@ -131,13 +144,13 @@ func Load(version string) (Config, error) {
 			Format: envOrDefault("NODEXIA_LOG_FORMAT", "text"),
 		},
 		HTTP: HTTPConfig{
-			Address:         envOrDefault("NODEXIA_HTTP_ADDR", ":8080"),
+			Address:     envOrDefault("NODEXIA_HTTP_ADDR", ":8080"),
 			ReadTimeout: durationFromEnv("NODEXIA_HTTP_READ_TIMEOUT", 15*time.Second),
 			// The write timeout must comfortably exceed the slowest synchronous
 			// handler (an SSH connection test bounded by the 10 s connect
 			// timeout); long-running work (command runs, bulk actions) executes
 			// in background jobs, never inside a request.
-			WriteTimeout: durationFromEnv("NODEXIA_HTTP_WRITE_TIMEOUT", 60*time.Second),
+			WriteTimeout:    durationFromEnv("NODEXIA_HTTP_WRITE_TIMEOUT", 60*time.Second),
 			IdleTimeout:     durationFromEnv("NODEXIA_HTTP_IDLE_TIMEOUT", 30*time.Second),
 			ShutdownTimeout: durationFromEnv("NODEXIA_HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
 		},
@@ -181,6 +194,11 @@ func Load(version string) (Config, error) {
 		},
 		Notify: NotifyConfig{
 			TelegramBotToken: strings.TrimSpace(os.Getenv("NODEXIA_TELEGRAM_BOT_TOKEN")),
+		},
+		Digest: DigestConfig{
+			Enabled:  boolFromEnv("NODEXIA_DIGEST_ENABLED", false),
+			Interval: durationFromEnv("NODEXIA_DIGEST_INTERVAL", 24*time.Hour),
+			Channel:  strings.TrimSpace(os.Getenv("NODEXIA_DIGEST_CHANNEL")),
 		},
 	}
 
@@ -321,6 +339,10 @@ func (c Config) Validate() error {
 		if pw := strings.TrimSpace(c.Security.AdminPassword); pw == weakAdminPassword || pw == exampleAdminPassword {
 			return errors.New("config: NODEXIA_AUTH_PASSWORD must not use a known-weak password outside development or test")
 		}
+	}
+
+	if c.Digest.Enabled && c.Digest.Interval <= 0 {
+		return errors.New("config: NODEXIA_DIGEST_INTERVAL must be greater than zero when the digest is enabled")
 	}
 
 	switch c.Database.Driver {
