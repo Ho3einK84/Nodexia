@@ -118,6 +118,7 @@ type PageData struct {
 	// Analytics & forecasting.
 	AnalyticsTarget       AnalyticsTargetView
 	AnalyticsTrafficMonth AnalyticsTrafficSummaryView
+	AnalyticsLimit        AnalyticsLimitView
 	GlobalAnalytics       GlobalAnalyticsView
 
 	// Internationalization. Lang/Dir drive the <html lang>/<html dir>
@@ -961,6 +962,20 @@ type AnalyticsTrafficSummaryView struct {
 	Download   string
 	Upload     string
 	Total      string
+}
+
+// AnalyticsLimitView powers the per-server monthly download (RX) limit form on
+// the analytics page. HasLimit reflects whether a cap is currently configured;
+// ValueInput/UnitInput pre-fill the form (the stored byte count rendered back as
+// a value + unit). LimitHuman is the human-readable current cap for display.
+type AnalyticsLimitView struct {
+	Action      string
+	HasLimit    bool
+	LimitHuman  string
+	ValueInput  string
+	UnitInput   string
+	UnitOptions []string
+	Error       string
 }
 
 type Renderer struct {

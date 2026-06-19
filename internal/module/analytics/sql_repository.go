@@ -239,6 +239,73 @@ func (r SQLRepository) GetLatestTrafficForServer(ctx context.Context, serverID i
 	return days, months, nil
 }
 
+// GetTrafficLimit reads the optional monthly download (RX) cap for a server.
+// A missing row is reported as ok=false (unlimited), not an error.
+func (r SQLRepository) GetTrafficLimit(ctx context.Context, serverID int64) (int64, bool, error) {
+	var limitBytes int64
+	err := r.conn.QueryRowContext(ctx,
+		`SELECT monthly_limit_bytes FROM server_traffic_limits WHERE server_id = ? LIMIT 1`,
+		serverID,
+	).Scan(&limitBytes)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, false, nil
+		}
+		return 0, false, fmt.Errorf("analytics: get traffic limit: %w", err)
+	}
+	return limitBytes, true, nil
+}
+
+// SetTrafficLimit upserts the limit. It is portable across SQLite/MySQL: it
+// updates the existing row and, when nothing was updated, inserts a new one —
+// avoiding dialect-specific UPSERT syntax. The two statements run in one
+// transaction so a concurrent writer can't slip between them.
+func (r SQLRepository) SetTrafficLimit(ctx context.Context, serverID, limitBytes int64) error {
+	tx, err := r.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("analytics: begin set traffic limit: %w", err)
+	}
+
+	now := time.Now().UTC()
+	result, err := tx.ExecContext(ctx,
+		`UPDATE server_traffic_limits SET monthly_limit_bytes = ?, updated_at = ? WHERE server_id = ?`,
+		limitBytes, now, serverID,
+	)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("analytics: update traffic limit: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("analytics: traffic limit rows affected: %w", err)
+	}
+	if affected == 0 {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO server_traffic_limits (server_id, monthly_limit_bytes, updated_at) VALUES (?, ?, ?)`,
+			serverID, limitBytes, now,
+		); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("analytics: insert traffic limit: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("analytics: commit set traffic limit: %w", err)
+	}
+	return nil
+}
+
+// DeleteTrafficLimit clears a server's limit. A missing row is not an error.
+func (r SQLRepository) DeleteTrafficLimit(ctx context.Context, serverID int64) error {
+	if _, err := r.conn.ExecContext(ctx,
+		`DELETE FROM server_traffic_limits WHERE server_id = ?`, serverID,
+	); err != nil {
+		return fmt.Errorf("analytics: delete traffic limit: %w", err)
+	}
+	return nil
+}
+
 func (r SQLRepository) DeleteRawBefore(ctx context.Context, before time.Time) (int64, error) {
 	result, err := r.conn.ExecContext(ctx,
 		`DELETE FROM system_snapshots WHERE created_at < ?`, before)

@@ -168,6 +168,36 @@
     <div class="chart-legend" id="legend-traffic"></div>
   </article>
 
+  <!-- Monthly download limit (optional; drives exhaustion forecasting) -->
+  {{ with .AnalyticsLimit }}
+  <article class="card analytics-limit">
+    <div class="analytics-limit__head">
+      <h3><i data-lucide="gauge"></i> {{ t "analytics.limit.title" }}</h3>
+      {{ if .HasLimit }}
+      <span class="analytics-limit__current">{{ t "analytics.limit.current" "value" .LimitHuman }}</span>
+      {{ else }}
+      <span class="analytics-limit__current analytics-limit__current--none">{{ t "analytics.limit.none" }}</span>
+      {{ end }}
+    </div>
+    <p class="analytics-limit__hint">{{ t "analytics.limit.hint" }}</p>
+    <form class="analytics-limit__form" method="post" action="{{ .Action }}">
+      <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+      <label class="sr-only" for="limit_value">{{ t "analytics.limit.value_label" }}</label>
+      <input type="number" id="limit_value" name="limit_value" step="any" min="0"
+             inputmode="decimal" value="{{ .ValueInput }}"
+             placeholder="{{ t "analytics.limit.placeholder" }}" class="analytics-limit__value">
+      <label class="sr-only" for="limit_unit">{{ t "analytics.limit.unit_label" }}</label>
+      <select id="limit_unit" name="limit_unit" class="analytics-limit__unit">
+        {{ $unit := .UnitInput }}
+        {{ range .UnitOptions }}<option value="{{ . }}"{{ if eq . $unit }} selected{{ end }}>{{ . }}</option>{{ end }}
+      </select>
+      <button type="submit" class="btn btn--primary btn--sm"><i data-lucide="save" class="icon-in-button"></i> {{ t "analytics.limit.save" }}</button>
+      <span class="analytics-limit__clearhint">{{ t "analytics.limit.clear_hint" }}</span>
+    </form>
+    {{ if .Error }}<p class="analytics-limit__error">{{ .Error }}</p>{{ end }}
+  </article>
+  {{ end }}
+
   <!-- Bandwidth Forecast (download only) -->
   <div class="forecast-header">
     <p class="eyebrow">{{ t "analytics.forecast_eyebrow" }}</p>

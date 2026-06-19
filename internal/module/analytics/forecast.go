@@ -156,8 +156,11 @@ func NewForecastService() *ForecastService {
 	}
 }
 
-// Compute builds a full forecast from traffic history.
-func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth) ForecastOutput {
+// Compute builds a full forecast from traffic history. limitBytes is the
+// optional monthly DOWNLOAD (RX) cap for the server; pass 0 (or any non-positive
+// value) when no limit is configured, in which case exhaustion is never flagged
+// and the behaviour is identical to a server without a limit.
+func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth, limitBytes int64) ForecastOutput {
 	if len(days) == 0 {
 		return ForecastOutput{
 			Algorithm:  "MovingAverage",
@@ -216,16 +219,16 @@ func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth) Fore
 	remainingMonthDays := daysInMonth - dayOfMonth
 	monthPredicted := monthCurrent + int64(todayRemaining) + int64(remainingMonthDays*float64(dayPrediction))
 
-	risks := computeRisks(history, dayPrediction, monthCurrent, monthPredicted)
+	risks := computeRisks(history, dayPrediction, monthCurrent, monthPredicted, limitBytes)
 
 	return ForecastOutput{
-		Today:     ForecastResult{CurrentBytes: todayCurrent, PredictedBytes: todayPredicted, Confidence: conf},
-		ThisWeek:  ForecastResult{CurrentBytes: weekCurrent, PredictedBytes: weekPredicted, Confidence: conf},
-		ThisMonth: ForecastResult{CurrentBytes: monthCurrent, PredictedBytes: monthPredicted, Confidence: conf},
-		Algorithm: provider.Name(),
+		Today:      ForecastResult{CurrentBytes: todayCurrent, PredictedBytes: todayPredicted, Confidence: conf},
+		ThisWeek:   ForecastResult{CurrentBytes: weekCurrent, PredictedBytes: weekPredicted, Confidence: conf},
+		ThisMonth:  ForecastResult{CurrentBytes: monthCurrent, PredictedBytes: monthPredicted, Confidence: conf},
+		Algorithm:  provider.Name(),
 		Confidence: conf,
-		Trend:     trend,
-		Risks:     risks,
+		Trend:      trend,
+		Risks:      risks,
 	}
 }
 
@@ -312,7 +315,7 @@ func computeTrend(history []int64) Trend {
 	}
 }
 
-func computeRisks(history []int64, dayPrediction, monthCurrent, monthPredicted int64) ForecastRisks {
+func computeRisks(history []int64, dayPrediction, monthCurrent, monthPredicted, limitBytes int64) ForecastRisks {
 	var avgDay int64
 	if len(history) > 0 {
 		var sum int64
@@ -323,6 +326,15 @@ func computeRisks(history []int64, dayPrediction, monthCurrent, monthPredicted i
 	}
 
 	risks := ForecastRisks{}
+
+	// Exhaustion: a monthly download (RX) limit is configured and the projected
+	// month-end RX is on track to EXCEED it. Strict greater-than means a forecast
+	// that exactly meets the limit is not flagged (the cap is met, not breached).
+	// monthPredicted is the same download-only projection shown in the "This
+	// Month" card, so the flag is consistent with what the user sees.
+	if limitBytes > 0 && monthPredicted > limitBytes {
+		risks.Exhaustion = true
+	}
 
 	// Traffic spike: today's predicted rate is 2x the historical average.
 	if avgDay > 0 && dayPrediction > avgDay*2 {

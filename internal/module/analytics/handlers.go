@@ -3,6 +3,7 @@ package analytics
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -102,11 +103,48 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		CredentialStrategy: server.CredentialStrategy,
 	}
 	page.AnalyticsTrafficMonth = h.currentMonthTraffic(r, server.ID)
+	page.AnalyticsLimit = h.limitView(r, server.ID)
+	if kind, msg := limitFlash(r, page); kind != "" {
+		page.FlashKind = kind
+		page.FlashMessage = msg
+	}
 	page.PageStyles = []string{"/static/analytics.css"}
 	page.PageScripts = []string{"/static/analytics.js"}
 
 	if err := h.deps.Renderer.Render(w, http.StatusOK, page); err != nil {
 		http.Error(w, "render analytics page", http.StatusInternalServerError)
+	}
+}
+
+// limitView builds the monthly download-limit form state for a server. On any
+// read error it renders the form as "no limit" rather than failing the page —
+// the limit is an optional convenience, never a hard dependency of analytics.
+func (h PageHandler) limitView(r *http.Request, serverID int64) view.AnalyticsLimitView {
+	v := view.AnalyticsLimitView{
+		Action:      fmt.Sprintf("/servers/%d/analytics/limit", serverID),
+		UnitInput:   defaultLimitUnit,
+		UnitOptions: limitUnitOptions,
+	}
+	limitBytes, ok, err := h.repo.GetTrafficLimit(r.Context(), serverID)
+	if err != nil || !ok {
+		return v
+	}
+	v.HasLimit = true
+	v.LimitHuman = formatBytes(limitBytes)
+	v.ValueInput, v.UnitInput = limitToValueUnit(limitBytes)
+	return v
+}
+
+// limitFlash maps the ?flash= marker set after a limit POST to a kind + message.
+// page.T resolves the key in the request's active language.
+func limitFlash(r *http.Request, page view.PageData) (kind, message string) {
+	switch r.URL.Query().Get("flash") {
+	case "limit-saved":
+		return "success", page.T("analytics.limit.flash_saved")
+	case "limit-cleared":
+		return "success", page.T("analytics.limit.flash_cleared")
+	default:
+		return "", ""
 	}
 }
 
@@ -412,7 +450,11 @@ func (h ForecastHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out := h.forecastSvc.Compute(days, months)
+	// A missing/failed limit lookup must never break the forecast — treat it as
+	// "no limit" so the response is identical to a server without a cap.
+	limitBytes, _, _ := h.repo.GetTrafficLimit(r.Context(), server.ID)
+
+	out := h.forecastSvc.Compute(days, months, limitBytes)
 	now := time.Now().UTC()
 
 	todayPctElapsed := int((float64(now.Hour()*60+now.Minute()) / float64(24*60)) * 100)
@@ -456,6 +498,162 @@ func (h ForecastHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// ── Traffic-limit form handler ──────────────────────────────────────────────
+
+// limitUnitOptions are the units the limit form accepts. GiB and TiB cover the
+// realistic range of VPS monthly download caps; defaultLimitUnit pre-selects the
+// most common one for a fresh form.
+var limitUnitOptions = []string{"GiB", "TiB"}
+
+const defaultLimitUnit = "GiB"
+
+type LimitHandler struct {
+	deps       module.Dependencies
+	serverRepo servers.Repository
+	repo       Repository
+}
+
+func NewLimitHandler(deps module.Dependencies, serverRepo servers.Repository, repo Repository) LimitHandler {
+	return LimitHandler{deps: deps, serverRepo: serverRepo, repo: repo}
+}
+
+// ServeHTTP handles POST of the monthly download-limit form. An empty value
+// clears the limit; a positive value sets it; zero, negative, or unparseable
+// input is rejected and the page is re-rendered with an inline error. CSRF is
+// enforced by the global middleware before this handler runs.
+func (h LimitHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	server, ok := loadServer(w, r, h.deps, h.serverRepo)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, r, server, "", defaultLimitUnit, "analytics.limit.error_invalid")
+		return
+	}
+
+	rawValue := strings.TrimSpace(r.FormValue("limit_value"))
+	unit := strings.TrimSpace(r.FormValue("limit_unit"))
+	if !validLimitUnit(unit) {
+		unit = defaultLimitUnit
+	}
+
+	// Empty value means "clear the limit" — a first-class action, not an error.
+	if rawValue == "" {
+		if err := h.repo.DeleteTrafficLimit(r.Context(), server.ID); err != nil {
+			h.renderError(w, r, server, rawValue, unit, "analytics.limit.error_save")
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("/servers/%d/analytics?flash=limit-cleared", server.ID), http.StatusSeeOther)
+		return
+	}
+
+	limitBytes, ok := parseLimitBytes(rawValue, unit)
+	if !ok {
+		h.renderError(w, r, server, rawValue, unit, "analytics.limit.error_positive")
+		return
+	}
+
+	if err := h.repo.SetTrafficLimit(r.Context(), server.ID, limitBytes); err != nil {
+		h.renderError(w, r, server, rawValue, unit, "analytics.limit.error_save")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/servers/%d/analytics?flash=limit-saved", server.ID), http.StatusSeeOther)
+}
+
+// renderError re-renders the analytics page with the limit form showing an
+// inline validation error and the user's rejected input preserved.
+func (h LimitHandler) renderError(w http.ResponseWriter, r *http.Request, server servers.Server, value, unit, errKey string) {
+	page := view.NewPageData(h.deps.Config, r)
+	page.CSRFToken = middleware.GetCSRFToken(r.Context())
+	page.Title = page.T("nav.analytics")
+	page.ActiveNav = "/analytics"
+	page.ContentTemplate = "content-analytics"
+	page.PageTitle = page.T("analytics.page_title", "server", server.Name)
+	page.SetServerCountry(server.CountryCode, server.CountryName)
+	page.PageDescription = page.T("analytics.page_description")
+	if h.deps.Database != nil {
+		page.MigrationCount = h.deps.Database.MigrationCount()
+	}
+	page.AnalyticsTarget = view.AnalyticsTargetView{
+		ID:                 server.ID,
+		Name:               server.Name,
+		Host:               server.Host,
+		Port:               server.Port,
+		AuthMode:           server.AuthMode,
+		Username:           server.Username,
+		Tags:               server.Tags,
+		CredentialStrategy: server.CredentialStrategy,
+	}
+
+	pageHandler := PageHandler{deps: h.deps, serverRepo: h.serverRepo, repo: h.repo}
+	page.AnalyticsTrafficMonth = pageHandler.currentMonthTraffic(r, server.ID)
+	limitView := pageHandler.limitView(r, server.ID)
+	limitView.ValueInput = value
+	limitView.UnitInput = unit
+	limitView.Error = page.T(errKey)
+	page.AnalyticsLimit = limitView
+	page.FlashKind = "error"
+	page.FlashMessage = page.T(errKey)
+	page.PageStyles = []string{"/static/analytics.css"}
+	page.PageScripts = []string{"/static/analytics.js"}
+
+	if err := h.deps.Renderer.Render(w, http.StatusUnprocessableEntity, page); err != nil {
+		http.Error(w, "render analytics page", http.StatusInternalServerError)
+	}
+}
+
+func validLimitUnit(unit string) bool {
+	for _, u := range limitUnitOptions {
+		if u == unit {
+			return true
+		}
+	}
+	return false
+}
+
+// parseLimitBytes converts a value + unit into a byte count. It returns ok=false
+// for anything that is not a strictly-positive, finite number, so zero and
+// negative limits are rejected (an unset limit is expressed by clearing, not by
+// storing zero).
+func parseLimitBytes(rawValue, unit string) (int64, bool) {
+	value, err := strconv.ParseFloat(rawValue, 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 {
+		return 0, false
+	}
+	var mult float64
+	switch unit {
+	case "TiB":
+		mult = 1024 * 1024 * 1024 * 1024
+	default: // GiB
+		mult = 1024 * 1024 * 1024
+	}
+	bytes := int64(value * mult)
+	if bytes <= 0 {
+		return 0, false
+	}
+	return bytes, true
+}
+
+// limitToValueUnit renders a stored byte count back into a form-friendly value +
+// unit, preferring TiB once the cap reaches 1 TiB so large plans read cleanly.
+func limitToValueUnit(bytes int64) (value, unit string) {
+	const tib = float64(1024 * 1024 * 1024 * 1024)
+	const gib = float64(1024 * 1024 * 1024)
+	if float64(bytes) >= tib {
+		return trimFloat(float64(bytes) / tib), "TiB"
+	}
+	return trimFloat(float64(bytes) / gib), "GiB"
+}
+
+// trimFloat formats a float with up to 2 decimals and no trailing zeros, so a
+// whole-number limit shows as "500" rather than "500.00".
+func trimFloat(v float64) string {
+	s := strconv.FormatFloat(v, 'f', 2, 64)
+	s = strings.TrimRight(s, "0")
+	s = strings.TrimRight(s, ".")
+	return s
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
