@@ -87,13 +87,6 @@ func ValidateRuleForm(input RuleFormInput) (ValidatedRule, ValidationErrors) {
 		errs.Add("metric", "Metric is not supported.")
 	}
 
-	rule.Comparator = strings.ToLower(strings.TrimSpace(input.Comparator))
-	if rule.Comparator == "" {
-		rule.Comparator = ComparatorGTE
-	} else if !IsComparator(rule.Comparator) {
-		errs.Add("comparator", "Comparator must be gt or gte.")
-	}
-
 	rule.Severity = strings.ToLower(strings.TrimSpace(input.Severity))
 	if rule.Severity == "" {
 		rule.Severity = SeverityWarning
@@ -101,7 +94,9 @@ func ValidateRuleForm(input RuleFormInput) (ValidatedRule, ValidationErrors) {
 		errs.Add("severity", "Severity must be info, warning, or critical.")
 	}
 
-	rule.Threshold = parseThreshold(strings.TrimSpace(input.Threshold), errs)
+	// Comparator + threshold are metric-aware: the predictive metrics normalise
+	// them to coherent fixed/forced values (see applyRuleCondition).
+	applyRuleCondition(&rule, input, errs)
 	rule.ConsecutiveHits = parseConsecutiveHits(strings.TrimSpace(input.ConsecutiveHits), errs)
 	rule.CooldownSeconds = parseCooldown(strings.TrimSpace(input.CooldownSeconds), errs)
 
@@ -111,6 +106,62 @@ func ValidateRuleForm(input RuleFormInput) (ValidatedRule, ValidationErrors) {
 	}
 
 	return ValidatedRule{Rule: rule, Input: RuleFormInputFromRule(rule)}, errs
+}
+
+// applyRuleCondition resolves a rule's comparator and threshold from the form,
+// honouring each metric's semantics. Observed metrics (cpu, ram, traffic…) keep
+// a "higher is worse" comparator plus a free threshold; the boolean projection
+// is forced to "≥ 1"; the days-to-limit metric is forced to "≤" with a bounded
+// day count. Forcing the predictive comparators means the operator only has to
+// pick the metric (and, for the days metric, the day count) and can never store
+// an incoherent condition such as "cpu ≤ 90" or "days ≥ 3".
+func applyRuleCondition(rule *Rule, input RuleFormInput, errs ValidationErrors) {
+	comparator := strings.ToLower(strings.TrimSpace(input.Comparator))
+	threshold := strings.TrimSpace(input.Threshold)
+
+	switch rule.Metric {
+	case MetricProjectedExceedLimit:
+		rule.Comparator = ComparatorGTE
+		rule.Threshold = 1
+	case MetricDaysToExhaustion:
+		rule.Comparator = ComparatorLTE
+		rule.Threshold = parseDaysThreshold(threshold, errs)
+	default:
+		if comparator == "" {
+			rule.Comparator = ComparatorGTE
+		} else {
+			rule.Comparator = comparator
+			if !isThresholdComparator(comparator) {
+				errs.Add("comparator", "Comparator must be gt or gte.")
+			}
+		}
+		rule.Threshold = parseThreshold(threshold, errs)
+	}
+}
+
+// parseDaysThreshold validates the days_to_exhaustion threshold: a number of days
+// in [0, maxDaysToExhaustionThreshold]. A monthly cap resets at month-end, so a
+// days-to-limit value above ~31 is meaningless; the bound rejects nonsensical
+// thresholds while staying far below DaysToExhaustionSafe.
+func parseDaysThreshold(value string, errs ValidationErrors) float64 {
+	if value == "" {
+		errs.Add("threshold", "Enter the days-remaining value that should trigger the alert.")
+		return 0
+	}
+	days, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		errs.Add("threshold", "Days threshold must be a number.")
+		return 0
+	}
+	if days < 0 {
+		errs.Add("threshold", "Days threshold must be zero or greater.")
+		return 0
+	}
+	if days > maxDaysToExhaustionThreshold {
+		errs.Add("threshold", "Days threshold must be 60 or fewer — a monthly limit resets at month-end.")
+		return 0
+	}
+	return days
 }
 
 func parseThreshold(value string, errs ValidationErrors) float64 {

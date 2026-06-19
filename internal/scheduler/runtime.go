@@ -61,16 +61,18 @@ type JobSnapshot struct {
 }
 
 type Runtime struct {
-	cfg         config.SchedulerConfig
-	ssh         *sshclient.Service
-	serverRepo  servers.Repository
-	monitorRepo monitoring.Repository
-	trafficRepo monitoring.TrafficRepository
-	nodeRepo    nodes.Repository
-	providers   []nodes.Provider
-	evaluator   *alerts.Evaluator
-	rollupSvc   *analytics.RollupService
-	cleanupSvc  *analytics.CleanupService
+	cfg           config.SchedulerConfig
+	ssh           *sshclient.Service
+	serverRepo    servers.Repository
+	monitorRepo   monitoring.Repository
+	trafficRepo   monitoring.TrafficRepository
+	nodeRepo      nodes.Repository
+	providers     []nodes.Provider
+	evaluator     *alerts.Evaluator
+	analyticsRepo analytics.Repository
+	forecastSvc   *analytics.ForecastService
+	rollupSvc     *analytics.RollupService
+	cleanupSvc    *analytics.CleanupService
 
 	mu     sync.RWMutex
 	jobs   map[string]*jobState
@@ -102,9 +104,9 @@ type eligibility struct {
 }
 
 type resolvedCredential struct {
-	Password       string
-	PrivateKeyPEM  string
-	KeyPassphrase  string
+	Password         string
+	PrivateKeyPEM    string
+	KeyPassphrase    string
 	TrafficInterface string
 }
 
@@ -115,18 +117,20 @@ func New(cfg config.Config, conn *sql.DB, ssh *sshclient.Service) *Runtime {
 
 	analyticsRepo := analytics.NewSQLRepository(conn)
 	runtime := &Runtime{
-		cfg:         cfg.Scheduler,
-		ssh:         ssh,
-		serverRepo:  servers.NewSQLRepository(conn),
-		monitorRepo: monitoring.NewSQLRepository(conn),
-		trafficRepo: monitoring.NewSQLRepository(conn),
-		nodeRepo:    nodes.NewSQLRepository(conn),
-		providers:   nodes.DefaultProviders(),
-		evaluator:   alerts.NewEvaluator(alerts.NewSQLRepository(conn), schedulerNotifier(cfg)),
-		rollupSvc:   analytics.NewRollupService(analyticsRepo),
-		cleanupSvc:  analytics.NewCleanupService(analyticsRepo),
-		jobs:        map[string]*jobState{},
-		paused:      map[string]struct{}{},
+		cfg:           cfg.Scheduler,
+		ssh:           ssh,
+		serverRepo:    servers.NewSQLRepository(conn),
+		monitorRepo:   monitoring.NewSQLRepository(conn),
+		trafficRepo:   monitoring.NewSQLRepository(conn),
+		nodeRepo:      nodes.NewSQLRepository(conn),
+		providers:     nodes.DefaultProviders(),
+		evaluator:     alerts.NewEvaluator(alerts.NewSQLRepository(conn), schedulerNotifier(cfg)),
+		analyticsRepo: analyticsRepo,
+		forecastSvc:   analytics.NewForecastService(),
+		rollupSvc:     analytics.NewRollupService(analyticsRepo),
+		cleanupSvc:    analytics.NewCleanupService(analyticsRepo),
+		jobs:          map[string]*jobState{},
+		paused:        map[string]struct{}{},
 	}
 	runtime.refresh(context.Background(), false)
 	return runtime
@@ -620,6 +624,13 @@ func (r *Runtime) evaluateAlerts(ctx context.Context, server servers.Server, sna
 		AvgMbps:          traffic.AvgMbps,
 	}
 
+	// Layer in the forecast-derived predictive metrics. These reuse the daily/
+	// monthly rows already in hand from the traffic collection above (no extra
+	// SSH) plus a single indexed limit lookup, so the only added cost for a server
+	// without a limit is that cheap SELECT — and the metrics stay unavailable.
+	metrics.ForecastAvailable, metrics.ProjectedExceedsLimit, metrics.DaysToExhaustion =
+		r.forecastMetrics(ctx, server.ID, traffic, trafficAvailable)
+
 	if err := r.evaluator.Evaluate(ctx, alerts.Target{ID: server.ID, Name: server.Name}, metrics); err != nil {
 		slog.Warn("alert evaluation failed",
 			slog.Int64("server_id", server.ID),
@@ -640,6 +651,86 @@ func currentMonthTotalGiB(traffic monitoring.TrafficSnapshot) float64 {
 		}
 	}
 	return 0
+}
+
+// forecastMetrics derives the predictive alert metrics for a server from the
+// freshly collected traffic snapshot. It returns available=false (the metrics
+// are then skipped by the evaluator) whenever the forecast cannot be trusted:
+// no forecast service, traffic unavailable this cycle, no monthly limit
+// configured, or no daily history to project from. When available, it reuses the
+// SAME analytics.ForecastService the analytics page uses, so the alert and the
+// page can never disagree on the projection.
+//
+// days is 0 when already over, the projected days-remaining when on track to
+// exhaust, and alerts.DaysToExhaustionSafe when not projected to exhaust this
+// month (so a "≤ N days" rule resolves rather than getting stuck).
+func (r *Runtime) forecastMetrics(ctx context.Context, serverID int64, traffic monitoring.TrafficSnapshot, trafficAvailable bool) (available, projectedOver bool, days float64) {
+	if r.forecastSvc == nil || r.analyticsRepo == nil || !trafficAvailable {
+		return false, false, 0
+	}
+
+	limitBytes, ok, err := r.analyticsRepo.GetTrafficLimit(ctx, serverID)
+	if err != nil || !ok || limitBytes <= 0 {
+		// No limit configured (the common case): predictive metrics are unavailable
+		// so servers without a limit never trigger them.
+		return false, false, 0
+	}
+
+	days30 := toAnalyticsDays(traffic.DailyRows)
+	if len(days30) == 0 {
+		// A limit is set but there is no history yet to forecast against.
+		return false, false, 0
+	}
+
+	out := r.forecastSvc.Compute(days30, toAnalyticsMonths(traffic.MonthlyRows), limitBytes)
+	available, projectedOver, days = forecastAlertValues(out)
+	return available, projectedOver, days
+}
+
+// forecastAlertValues maps a forecast output onto the predictive metric values.
+// It is split out as a pure function so the mapping is unit-testable without a
+// scheduler, DB, or clock.
+func forecastAlertValues(out analytics.ForecastOutput) (available, projectedOver bool, days float64) {
+	if !out.Exhaustion.HasLimit {
+		return false, false, 0
+	}
+	projectedOver = out.Risks.Exhaustion || out.Exhaustion.AlreadyOver
+	switch {
+	case out.Exhaustion.AlreadyOver:
+		days = 0
+	case out.Exhaustion.WillExhaust:
+		days = float64(out.Exhaustion.DaysRemaining)
+	default:
+		days = alerts.DaysToExhaustionSafe
+	}
+	return true, projectedOver, days
+}
+
+// toAnalyticsDays / toAnalyticsMonths convert the monitoring traffic rows into
+// the analytics forecast inputs, mirroring analytics.SQLRepository's own
+// conversion (total defaults to RX+TX when the stored total is zero).
+func toAnalyticsDays(rows []monitoring.TrafficRow) []analytics.TrafficDay {
+	out := make([]analytics.TrafficDay, 0, len(rows))
+	for _, row := range rows {
+		total := row.TotalBytes
+		if total == 0 {
+			total = row.RXBytes + row.TXBytes
+		}
+		out = append(out, analytics.TrafficDay{Label: row.Label, RX: row.RXBytes, TX: row.TXBytes, Total: total})
+	}
+	return out
+}
+
+func toAnalyticsMonths(rows []monitoring.TrafficRow) []analytics.TrafficMonth {
+	out := make([]analytics.TrafficMonth, 0, len(rows))
+	for _, row := range rows {
+		total := row.TotalBytes
+		if total == 0 {
+			total = row.RXBytes + row.TXBytes
+		}
+		out = append(out, analytics.TrafficMonth{Label: row.Label, RX: row.RXBytes, TX: row.TXBytes, Total: total})
+	}
+	return out
 }
 
 func (r *Runtime) executeNodesJob(ctx context.Context, server servers.Server, req sshclient.CommandRequest) (string, error) {
