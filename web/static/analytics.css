@@ -530,6 +530,122 @@
   height: 12px;
 }
 
+/* ── Monthly download limit form ─────────────────────────────────────────── */
+
+.analytics-limit {
+  margin-top: 24px;
+}
+
+.analytics-limit__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analytics-limit__head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.analytics-limit__current {
+  font-size: 0.85rem;
+  font-weight: var(--fw-medium);
+  color: var(--ok);
+}
+
+.analytics-limit__current--none {
+  color: var(--text-muted);
+}
+
+.analytics-limit__hint {
+  margin: 8px 0 12px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.analytics-limit__form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analytics-limit__value {
+  width: 140px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.analytics-limit__unit {
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.analytics-limit__clearhint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.analytics-limit__error {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: var(--crit);
+}
+
+/* ── Days-to-exhaustion projection ───────────────────────────────────────── */
+
+.forecast-exhaustion {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.forecast-exhaustion__icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: var(--ok);
+}
+
+.forecast-exhaustion--warn { border-color: rgba(250, 204, 21, 0.4); }
+.forecast-exhaustion--warn .forecast-exhaustion__icon { color: var(--warn); }
+.forecast-exhaustion--danger { border-color: rgba(248, 113, 113, 0.4); }
+.forecast-exhaustion--danger .forecast-exhaustion__icon { color: var(--crit); }
+
+.forecast-exhaustion__title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.forecast-exhaustion__message {
+  font-weight: var(--fw-medium);
+  color: var(--text);
+}
+
+.forecast-exhaustion__sub {
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
 /* ── Global analytics tables ─────────────────────────────────────────────── */
 
 .analytics-table-wrap {

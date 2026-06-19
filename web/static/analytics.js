@@ -378,6 +378,8 @@
       ${risksHTML}
     `;
 
+    renderExhaustion(f.exhaustion);
+
     // Show forecast algo on chart card
     const algoEl = document.getElementById('forecastAlgo');
     if (algoEl) algoEl.textContent = f.algorithm;
@@ -403,6 +405,64 @@
           <div class="forecast-progress__bar ${progressClass}" style="width:${Math.min(100, pct)}%"></div>
         </div>
         <div class="forecast-progress__label">${T('js.analytics.period_elapsed', { pct: pct })}</div>
+      </div>
+    `;
+  }
+
+  // Tn pluralizes by count (see app.js window.nxTn); falls back to nxT.
+  function Tn(key, count, params) {
+    if (window.nxTn) return window.nxTn(key, count, params);
+    return T(key, params);
+  }
+
+  // renderExhaustion draws the days-to-limit panel. It is hidden entirely for
+  // servers without a configured monthly limit, and switches copy + severity
+  // across the four states: already over, exhausts today, exhausts in N days,
+  // and comfortably under all month.
+  function renderExhaustion(ex) {
+    const panel = document.getElementById('forecastExhaustion');
+    if (!panel) return;
+    if (!ex || !ex.has_limit) {
+      panel.style.display = 'none';
+      panel.innerHTML = '';
+      return;
+    }
+
+    let level = 'ok';
+    let icon = 'shield-check';
+    let message = '';
+    let sub = '';
+
+    if (ex.already_over) {
+      level = 'danger';
+      icon = 'alert-octagon';
+      message = T('js.analytics.exhaustion_over', { limit: ex.limit_human, projected: ex.projected_month_human });
+    } else if (ex.will_exhaust && ex.days_remaining <= 0) {
+      level = 'danger';
+      icon = 'alert-octagon';
+      message = T('js.analytics.exhaustion_today', { limit: ex.limit_human });
+      sub = Tn('js.analytics.exhaustion_margin', ex.days_until_month_end, { count: ex.days_until_month_end });
+    } else if (ex.will_exhaust) {
+      level = ex.days_remaining <= 3 ? 'danger' : 'warn';
+      icon = 'alert-triangle';
+      message = Tn('js.analytics.exhaustion_in_days', ex.days_remaining, {
+        count: ex.days_remaining, limit: ex.limit_human, date: ex.exhaustion_date,
+      });
+      sub = Tn('js.analytics.exhaustion_margin', ex.days_until_month_end, { count: ex.days_until_month_end });
+    } else {
+      level = 'ok';
+      icon = 'shield-check';
+      message = T('js.analytics.exhaustion_safe', { limit: ex.limit_human, projected: ex.projected_month_human });
+    }
+
+    panel.style.display = '';
+    panel.className = 'forecast-exhaustion forecast-exhaustion--' + level;
+    panel.innerHTML = `
+      <i data-lucide="${icon}" class="forecast-exhaustion__icon"></i>
+      <div class="forecast-exhaustion__body">
+        <div class="forecast-exhaustion__title">${T('js.analytics.exhaustion_title')}</div>
+        <div class="forecast-exhaustion__message">${message}</div>
+        ${sub ? `<div class="forecast-exhaustion__sub">${sub}</div>` : ''}
       </div>
     `;
   }

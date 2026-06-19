@@ -82,6 +82,12 @@ var clientI18nKeys = []string{
 	"js.analytics.risk_spike",
 	"js.analytics.risk_growth",
 	"js.analytics.risk_exhaustion",
+	"js.analytics.exhaustion_title",
+	"js.analytics.exhaustion_over",
+	"js.analytics.exhaustion_today",
+	"js.analytics.exhaustion_in_days",
+	"js.analytics.exhaustion_safe",
+	"js.analytics.exhaustion_margin",
 
 	// File browser (files.js)
 	"js.files.request_failed",
