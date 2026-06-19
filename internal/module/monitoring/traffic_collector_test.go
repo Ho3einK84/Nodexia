@@ -52,3 +52,27 @@ func TestComputePeakMbpsEmpty(t *testing.T) {
 		t.Fatalf("computePeakMbps(nil) = %v, want 0", got)
 	}
 }
+
+// TestRetainedDailyRowsSupportsSeasonality guards the daily-history retention:
+// weekly seasonality in the analytics forecast needs several samples per weekday,
+// so a single week is not enough. tailTrafficRows must keep the configured window
+// (35 days / 5 weeks), and that window must cover at least four full weeks.
+func TestRetainedDailyRowsSupportsSeasonality(t *testing.T) {
+	if retainedDailyRows < 28 {
+		t.Fatalf("retainedDailyRows = %d, want >= 28 (4 weeks) to support weekly seasonality", retainedDailyRows)
+	}
+
+	rows := make([]TrafficRow, 60) // more than the retention window
+	for i := range rows {
+		rows[i] = TrafficRow{Label: "2026-01-01", RXBytes: int64(i)}
+	}
+	got := tailTrafficRows(rows, retainedDailyRows)
+	if len(got) != retainedDailyRows {
+		t.Fatalf("tailTrafficRows kept %d rows, want %d", len(got), retainedDailyRows)
+	}
+	// It must keep the most recent rows (tail), not the head.
+	if got[len(got)-1].RXBytes != rows[len(rows)-1].RXBytes {
+		t.Fatalf("tailTrafficRows did not keep the newest row: got %d, want %d",
+			got[len(got)-1].RXBytes, rows[len(rows)-1].RXBytes)
+	}
+}

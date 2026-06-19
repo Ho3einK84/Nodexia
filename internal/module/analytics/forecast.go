@@ -205,10 +205,11 @@ func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth, limi
 	weekPredicted := weekCurrent + int64(todayRemaining) + int64(remainingWeekDays*float64(dayPrediction))
 
 	// This month: use the authoritative current-month download (RX) from the
-	// monthly vnstat row — the SAME value the Analytics Overview shows. Summing
-	// the daily rows would undercount: the stored daily history is capped at the
-	// last 7 days, so it can't cover a full month-to-date. Fall back to the daily
-	// sum only when no monthly row exists.
+	// monthly vnstat row — the SAME value the Analytics Overview shows. The stored
+	// daily history is capped (~5 weeks) and can straddle a month boundary, so
+	// summing daily rows would mis-count the month-to-date; the monthly row is the
+	// single source of truth. Fall back to the daily sum only when no monthly row
+	// exists.
 	monthCurrent := currentMonthRX(months, now)
 	if monthCurrent == 0 {
 		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
