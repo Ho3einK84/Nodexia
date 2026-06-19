@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	rawRetention     = 30 * 24 * time.Hour       // 30 days
-	hourlyRetention  = 6 * 30 * 24 * time.Hour   // ~6 months
-	dailyRetention   = 2 * 365 * 24 * time.Hour  // ~2 years
+	rawRetention    = 30 * 24 * time.Hour      // 30 days
+	hourlyRetention = 6 * 30 * 24 * time.Hour  // ~6 months
+	dailyRetention  = 2 * 365 * 24 * time.Hour // ~2 years
 )
 
 // CleanupService purges expired metric data according to retention policies.

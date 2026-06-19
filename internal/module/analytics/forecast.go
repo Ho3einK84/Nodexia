@@ -608,10 +608,3 @@ func sumSlice(s []int64) int64 {
 func daysInMonth(year int, month time.Month) int {
 	return time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

@@ -17,17 +17,17 @@ type TrafficRow struct {
 }
 
 type TrafficSnapshot struct {
-	ID                 int64
-	ServerID           int64
-	Available          bool
-	InterfaceName      string
+	ID                  int64
+	ServerID            int64
+	Available           bool
+	InterfaceName       string
 	AvailableInterfaces []string
-	DailyRows          []TrafficRow
-	MonthlyRows        []TrafficRow
-	PeakMbps           float64
-	AvgMbps            float64
-	Message            string
-	CollectedAt        time.Time
+	DailyRows           []TrafficRow
+	MonthlyRows         []TrafficRow
+	PeakMbps            float64
+	AvgMbps             float64
+	Message             string
+	CollectedAt         time.Time
 }
 
 type TrafficRepository interface {
