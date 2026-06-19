@@ -605,6 +605,31 @@ func (r SQLRepository) ListRecentEvents(ctx context.Context, limit int) ([]Event
 	return events, rows.Err()
 }
 
+func (r SQLRepository) ListOpenEvents(ctx context.Context) ([]Event, error) {
+	rows, err := r.conn.QueryContext(
+		ctx,
+		`SELECT `+eventColumns+`
+		 FROM alert_events
+		 WHERE state = ? AND resolved_at IS NULL
+		 ORDER BY id DESC`,
+		EventStateFiring,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("alerts: list open events: %w", err)
+	}
+	defer rows.Close()
+
+	var events []Event
+	for rows.Next() {
+		event, err := scanEvent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("alerts: scan event: %w", err)
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
 func (r SQLRepository) CountEvents(ctx context.Context) (int, error) {
 	var total int
 	err := r.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM alert_events`).Scan(&total)

@@ -128,6 +128,9 @@ type Repository interface {
 	MarkEventNotified(ctx context.Context, eventID int64, at time.Time) error
 	ResolveEvent(ctx context.Context, eventID int64, at time.Time) error
 	ListRecentEvents(ctx context.Context, limit int) ([]Event, error)
+	// ListOpenEvents returns every currently-firing (unresolved) event across all
+	// servers, newest first. Used by the periodic digest to report active alerts.
+	ListOpenEvents(ctx context.Context) ([]Event, error)
 	// CountEvents returns the total number of recorded alert events; paired
 	// with ListEventsPage to paginate the overview history.
 	CountEvents(ctx context.Context) (int, error)
