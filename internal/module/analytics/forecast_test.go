@@ -375,6 +375,111 @@ func TestExhaustionThroughCompute(t *testing.T) {
 	}
 }
 
+func TestComputeExhaustion(t *testing.T) {
+	const gib = int64(1024 * 1024 * 1024)
+	flat := func(time.Time) int64 { return gib } // 1 GiB/day
+	// Mid-month so there is plenty of runway: Jan has 31 days.
+	now := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
+	const half = float64(gib) / 2 // today's remaining projected usage
+
+	t.Run("no limit omits", func(t *testing.T) {
+		ef := computeExhaustion(now, 5*gib, 9*gib, 0, half, flat)
+		if ef.HasLimit {
+			t.Errorf("expected HasLimit=false with no limit, got %+v", ef)
+		}
+	})
+
+	t.Run("already over", func(t *testing.T) {
+		ef := computeExhaustion(now, 12*gib, 30*gib, 10*gib, half, flat)
+		if !ef.HasLimit || !ef.AlreadyOver || ef.WillExhaust {
+			t.Errorf("expected already-over state, got %+v", ef)
+		}
+	})
+
+	t.Run("exactly met counts as over", func(t *testing.T) {
+		ef := computeExhaustion(now, 10*gib, 30*gib, 10*gib, half, flat)
+		if !ef.AlreadyOver {
+			t.Errorf("monthCurrent == limit should be already-over, got %+v", ef)
+		}
+	})
+
+	t.Run("exhausts today", func(t *testing.T) {
+		// 5 GiB used + 0.5 GiB remaining today crosses a 5.4 GiB limit.
+		limit := 5*gib + gib/2 - 1 // < 5.5 GiB
+		ef := computeExhaustion(now, 5*gib, 30*gib, limit, half, flat)
+		if !ef.WillExhaust || ef.DaysRemaining != 0 {
+			t.Errorf("expected exhaust today (days=0), got %+v", ef)
+		}
+		if ef.ExhaustionDate != "2026-01-10" {
+			t.Errorf("ExhaustionDate = %q, want 2026-01-10", ef.ExhaustionDate)
+		}
+	})
+
+	t.Run("exhausts in N days", func(t *testing.T) {
+		// cum = 5 + 0.5 = 5.5, +1/day; crosses 10 GiB at i=5 → 2026-01-15.
+		ef := computeExhaustion(now, 5*gib, 30*gib, 10*gib, half, flat)
+		if !ef.WillExhaust || ef.DaysRemaining != 5 {
+			t.Errorf("expected exhaust in 5 days, got %+v", ef)
+		}
+		if ef.ExhaustionDate != "2026-01-15" {
+			t.Errorf("ExhaustionDate = %q, want 2026-01-15", ef.ExhaustionDate)
+		}
+		if ef.DaysUntilMonthEnd != 21 {
+			t.Errorf("DaysUntilMonthEnd = %d, want 21", ef.DaysUntilMonthEnd)
+		}
+		if ef.ProjectedMonth != 30*gib {
+			t.Errorf("ProjectedMonth = %d, want %d", ef.ProjectedMonth, 30*gib)
+		}
+	})
+
+	t.Run("comfortably under all month", func(t *testing.T) {
+		ef := computeExhaustion(now, 5*gib, 30*gib, 1000*gib, half, flat)
+		if !ef.HasLimit || ef.AlreadyOver || ef.WillExhaust {
+			t.Errorf("expected under-limit state, got %+v", ef)
+		}
+	})
+
+	t.Run("month boundary: last day, no full days left", func(t *testing.T) {
+		eom := time.Date(2026, 1, 31, 12, 0, 0, 0, time.UTC)
+		// Not crossed by today's remainder, and there are no further days to walk.
+		ef := computeExhaustion(eom, 5*gib, 6*gib, 10*gib, half, flat)
+		if ef.WillExhaust {
+			t.Errorf("expected no exhaustion on last day when under, got %+v", ef)
+		}
+		if ef.DaysUntilMonthEnd != 0 {
+			t.Errorf("DaysUntilMonthEnd = %d, want 0 on the last day", ef.DaysUntilMonthEnd)
+		}
+		// But today's remainder alone can still cross on the last day.
+		ef2 := computeExhaustion(eom, 5*gib, 6*gib, 5*gib+gib/2-1, half, flat)
+		if !ef2.WillExhaust || ef2.DaysRemaining != 0 || ef2.ExhaustionDate != "2026-01-31" {
+			t.Errorf("expected exhaust-today on last day, got %+v", ef2)
+		}
+	})
+}
+
+func TestExhaustionPlumbedThroughCompute(t *testing.T) {
+	svc := NewForecastService()
+	now := time.Now().UTC()
+	var days []TrafficDay
+	for d := 1; d <= now.Day(); d++ {
+		label := time.Date(now.Year(), now.Month(), d, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+		days = append(days, TrafficDay{Label: label, RX: 1 << 30})
+	}
+	out := svc.Compute(days, nil, 1<<40) // 1 TiB limit
+	if !out.Exhaustion.HasLimit {
+		t.Error("expected Exhaustion.HasLimit when a limit is configured")
+	}
+	if out.Exhaustion.ProjectedMonth != out.ThisMonth.PredictedBytes {
+		t.Errorf("ProjectedMonth %d must equal ThisMonth.PredictedBytes %d (single rate)",
+			out.Exhaustion.ProjectedMonth, out.ThisMonth.PredictedBytes)
+	}
+	// No limit → omitted.
+	none := svc.Compute(days, nil, 0)
+	if none.Exhaustion.HasLimit {
+		t.Error("expected Exhaustion omitted when no limit is configured")
+	}
+}
+
 func TestParseLimitBytes(t *testing.T) {
 	const gib = int64(1024 * 1024 * 1024)
 	const tib = gib * 1024

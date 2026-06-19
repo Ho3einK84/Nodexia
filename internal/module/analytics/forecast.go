@@ -38,6 +38,28 @@ type ForecastRisks struct {
 	UnusualGrowth bool // 30-day trend shows >50% growth month-over-month
 }
 
+// ExhaustionForecast projects when a server with a configured monthly download
+// limit will reach it. Because a monthly cap RESETS at the month boundary, the
+// projection is bounded to the current month: reaching the limit is a
+// within-month event, so days-to-exhaustion is never projected past month-end.
+//
+// States (mutually exclusive):
+//   - HasLimit == false        → no limit configured; nothing to show.
+//   - AlreadyOver == true      → current month RX already met/exceeded the limit.
+//   - WillExhaust == true      → projected to reach the limit on ExhaustionDate,
+//     DaysRemaining full days from now (0 == today).
+//   - none of the above        → on track to stay under the limit all month.
+type ExhaustionForecast struct {
+	HasLimit          bool
+	LimitBytes        int64
+	AlreadyOver       bool
+	WillExhaust       bool
+	DaysRemaining     int    // full days from "now" to exhaustion (valid when WillExhaust)
+	ExhaustionDate    string // "2006-01-02" UTC (valid when WillExhaust)
+	DaysUntilMonthEnd int    // full days left in the current month, for "vs month-end" context
+	ProjectedMonth    int64  // projected month-end RX (same value as ThisMonth.PredictedBytes)
+}
+
 // ForecastOutput is the complete forecast for a server.
 type ForecastOutput struct {
 	Today      ForecastResult
@@ -47,6 +69,7 @@ type ForecastOutput struct {
 	Confidence Confidence
 	Trend      Trend
 	Risks      ForecastRisks
+	Exhaustion ExhaustionForecast
 }
 
 // ForecastProvider is the interface for a bandwidth forecasting algorithm.
@@ -328,6 +351,10 @@ func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth, limi
 
 	risks := computeRisks(history, dayPrediction, monthCurrent, monthPredicted, limitBytes)
 
+	// Days-to-exhaustion reuses the SAME per-day predictor and today's remainder
+	// that drive the month projection, so the two can never disagree on rate.
+	exhaustion := computeExhaustion(now, monthCurrent, monthPredicted, limitBytes, todayRemaining, predictDay)
+
 	return ForecastOutput{
 		Today:      ForecastResult{CurrentBytes: todayCurrent, PredictedBytes: todayPredicted, Confidence: conf},
 		ThisWeek:   ForecastResult{CurrentBytes: weekCurrent, PredictedBytes: weekPredicted, Confidence: conf},
@@ -336,7 +363,58 @@ func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth, limi
 		Confidence: conf,
 		Trend:      trend,
 		Risks:      risks,
+		Exhaustion: exhaustion,
 	}
+}
+
+// computeExhaustion walks the rest of the current month day by day, accumulating
+// projected download (RX) until it reaches limitBytes. It returns the empty
+// (HasLimit=false) value when no positive limit is set, so callers can omit the
+// projection entirely for unlimited servers. The walk is bounded to month-end
+// because a monthly cap resets there.
+func computeExhaustion(now time.Time, monthCurrent, monthPredicted, limitBytes int64, todayRemaining float64, predictDay func(time.Time) int64) ExhaustionForecast {
+	daysInM := daysInMonth(now.Year(), now.Month())
+	daysUntilEnd := daysInM - now.Day()
+
+	if limitBytes <= 0 {
+		return ExhaustionForecast{} // no limit → omit
+	}
+
+	ef := ExhaustionForecast{
+		HasLimit:          true,
+		LimitBytes:        limitBytes,
+		DaysUntilMonthEnd: daysUntilEnd,
+		ProjectedMonth:    monthPredicted,
+	}
+
+	if monthCurrent >= limitBytes {
+		ef.AlreadyOver = true
+		return ef
+	}
+
+	limit := float64(limitBytes)
+	cum := float64(monthCurrent) + todayRemaining
+	if cum >= limit {
+		// Today's remaining projected usage alone crosses the limit.
+		ef.WillExhaust = true
+		ef.DaysRemaining = 0
+		ef.ExhaustionDate = now.Format("2006-01-02")
+		return ef
+	}
+
+	for i := 1; i <= daysUntilEnd; i++ {
+		d := now.AddDate(0, 0, i)
+		cum += float64(predictDay(d))
+		if cum >= limit {
+			ef.WillExhaust = true
+			ef.DaysRemaining = i
+			ef.ExhaustionDate = d.Format("2006-01-02")
+			return ef
+		}
+	}
+
+	// Not projected to reach the limit before the month resets.
+	return ef
 }
 
 func (s *ForecastService) selectProvider(history []int64) ForecastProvider {

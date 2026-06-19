@@ -858,6 +858,18 @@
   "js.analytics.risk_spike": "Traffic spike",
   "js.analytics.risk_growth": "Unusual growth",
   "js.analytics.risk_exhaustion": "Bandwidth exhaustion risk",
+  "js.analytics.exhaustion_title": "Monthly download limit",
+  "js.analytics.exhaustion_over": "Already over your {limit} limit this month — projected month-end {projected}.",
+  "js.analytics.exhaustion_today": "On track to reach your {limit} limit today.",
+  "js.analytics.exhaustion_in_days": {
+    "one": "On track to reach your {limit} limit in {count} day — {date}.",
+    "other": "On track to reach your {limit} limit in {count} days — {date}."
+  },
+  "js.analytics.exhaustion_safe": "On track to stay under your {limit} limit — projected month-end {projected}.",
+  "js.analytics.exhaustion_margin": {
+    "one": "{count} day left in the month before it resets.",
+    "other": "{count} days left in the month before it resets."
+  },
   "js.files.request_failed": "Request failed ({status}).",
   "js.files.upload_failed": "Upload failed ({status}).",
   "js.files.upload_network_error": "Network error during upload.",

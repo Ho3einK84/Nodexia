@@ -53,14 +53,31 @@ type ForecastRisksJSON struct {
 	UnusualGrowth bool `json:"unusual_growth"`
 }
 
+// ExhaustionForecastJSON is the days-to-limit projection for the JSON response.
+// has_limit is false for servers without a configured cap, in which case the UI
+// omits the panel entirely.
+type ExhaustionForecastJSON struct {
+	HasLimit          bool   `json:"has_limit"`
+	LimitBytes        int64  `json:"limit_bytes"`
+	LimitHuman        string `json:"limit_human"`
+	AlreadyOver       bool   `json:"already_over"`
+	WillExhaust       bool   `json:"will_exhaust"`
+	DaysRemaining     int    `json:"days_remaining"`
+	ExhaustionDate    string `json:"exhaustion_date"`
+	DaysUntilMonthEnd int    `json:"days_until_month_end"`
+	ProjectedBytes    int64  `json:"projected_month_bytes"`
+	ProjectedHuman    string `json:"projected_month_human"`
+}
+
 type ForecastResponseJSON struct {
-	Today      PeriodForecastJSON `json:"today"`
-	ThisWeek   PeriodForecastJSON `json:"this_week"`
-	ThisMonth  PeriodForecastJSON `json:"this_month"`
-	Algorithm  string             `json:"algorithm"`
-	Confidence string             `json:"confidence"`
-	Trend      string             `json:"trend"`
-	Risks      ForecastRisksJSON  `json:"risks"`
+	Today      PeriodForecastJSON     `json:"today"`
+	ThisWeek   PeriodForecastJSON     `json:"this_week"`
+	ThisMonth  PeriodForecastJSON     `json:"this_month"`
+	Algorithm  string                 `json:"algorithm"`
+	Confidence string                 `json:"confidence"`
+	Trend      string                 `json:"trend"`
+	Risks      ForecastRisksJSON      `json:"risks"`
+	Exhaustion ExhaustionForecastJSON `json:"exhaustion"`
 }
 
 // ── Page handler ──────────────────────────────────────────────────────────────
@@ -494,6 +511,18 @@ func (h ForecastHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Exhaustion:    out.Risks.Exhaustion,
 			TrafficSpike:  out.Risks.TrafficSpike,
 			UnusualGrowth: out.Risks.UnusualGrowth,
+		},
+		Exhaustion: ExhaustionForecastJSON{
+			HasLimit:          out.Exhaustion.HasLimit,
+			LimitBytes:        out.Exhaustion.LimitBytes,
+			LimitHuman:        formatBytes(out.Exhaustion.LimitBytes),
+			AlreadyOver:       out.Exhaustion.AlreadyOver,
+			WillExhaust:       out.Exhaustion.WillExhaust,
+			DaysRemaining:     out.Exhaustion.DaysRemaining,
+			ExhaustionDate:    out.Exhaustion.ExhaustionDate,
+			DaysUntilMonthEnd: out.Exhaustion.DaysUntilMonthEnd,
+			ProjectedBytes:    out.Exhaustion.ProjectedMonth,
+			ProjectedHuman:    formatBytes(out.Exhaustion.ProjectedMonth),
 		},
 	}
 

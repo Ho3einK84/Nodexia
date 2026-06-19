@@ -858,6 +858,18 @@
   "js.analytics.risk_spike": "جهش ناگهانی",
   "js.analytics.risk_growth": "رشد غیرعادی",
   "js.analytics.risk_exhaustion": "خطر اشباع پهنای باند",
+  "js.analytics.exhaustion_title": "سقف دانلود ماهانه",
+  "js.analytics.exhaustion_over": "هم‌اکنون از سقف {limit} این ماه عبور کرده‌اید — برآورد پایان ماه {projected}.",
+  "js.analytics.exhaustion_today": "طبق روند فعلی، امروز به سقف {limit} می‌رسید.",
+  "js.analytics.exhaustion_in_days": {
+    "one": "طبق روند فعلی، تا {count} روز دیگر به سقف {limit} می‌رسید — {date}.",
+    "other": "طبق روند فعلی، تا {count} روز دیگر به سقف {limit} می‌رسید — {date}."
+  },
+  "js.analytics.exhaustion_safe": "طبق روند فعلی تا پایان ماه زیر سقف {limit} می‌مانید — برآورد پایان ماه {projected}.",
+  "js.analytics.exhaustion_margin": {
+    "one": "{count} روز تا بازنشانی ماه باقی مانده است.",
+    "other": "{count} روز تا بازنشانی ماه باقی مانده است."
+  },
   "js.files.request_failed": "خطای درخواست ({status}).",
   "js.files.upload_failed": "خطای آپلود ({status}).",
   "js.files.upload_network_error": "خطای شبکه در آپلود.",
