@@ -16,6 +16,16 @@ import (
 // fall back to plain-text output so older vnstat builds still work.
 const trafficCollectCommand = `sh -c 'command -v vnstat >/dev/null 2>&1 || { printf "__nodexia_vnstat_missing__\n"; exit 0; }; vnstat --json 2>/dev/null && exit 0; printf "__nodexia_vnstat_text__\n"; vnstat 2>/dev/null'`
 
+// retainedDailyRows is how many trailing daily vnstat rows are persisted per
+// snapshot. It is intentionally 35 (5 weeks) rather than a single week: the
+// analytics forecast detects day-of-week seasonality, which needs several
+// samples per weekday, and vnstat's default daily history (~30 days) comfortably
+// covers it. retainedMonthlyRows keeps half a year of monthly totals.
+const (
+	retainedDailyRows   = 35
+	retainedMonthlyRows = 6
+)
+
 func CollectTraffic(ctx context.Context, sshService *sshclient.Service, req sshclient.CommandRequest, preferredInterface string) (TrafficSnapshot, sshclient.CommandResult, error) {
 	result, err := sshService.RunCommand(ctx, sshclient.CommandRequest{
 		ConnectionRequest: req.ConnectionRequest,
@@ -83,8 +93,8 @@ func CollectTraffic(ctx context.Context, sshService *sshclient.Service, req sshc
 		Available:           true,
 		InterfaceName:       selected.Name,
 		AvailableInterfaces: ifaceNames,
-		DailyRows:           tailTrafficRows(buildDailyRows(selected.Traffic.Days), 7),
-		MonthlyRows:         tailTrafficRows(buildMonthlyRows(selected.Traffic.Months), 6),
+		DailyRows:           tailTrafficRows(buildDailyRows(selected.Traffic.Days), retainedDailyRows),
+		MonthlyRows:         tailTrafficRows(buildMonthlyRows(selected.Traffic.Months), retainedMonthlyRows),
 		PeakMbps:            computePeakMbps(selected.Traffic.Hours),
 		AvgMbps:             computeAvgMbps(selected.Traffic.Hours),
 		Message:             "vnStat data loaded successfully.",
