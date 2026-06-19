@@ -59,12 +59,15 @@ func (r *Runtime) sendDigest(ctx context.Context) {
 		return
 	}
 
+	// The rendered text is identical for every channel (the digest has no
+	// per-channel template), so render once before the send loop.
+	text, err := notify.RenderDigest("", msg)
+	if err != nil {
+		slog.Warn("digest: render failed", slog.String("error", err.Error()))
+		return
+	}
+
 	for _, channel := range channels {
-		text, err := notify.RenderDigest("", msg)
-		if err != nil {
-			slog.Warn("digest: render failed", slog.String("error", err.Error()))
-			return
-		}
 		if err := r.notifier.Send(ctx, channel.ChatID, text); err != nil {
 			slog.Warn("digest: send failed",
 				slog.Int64("channel_id", channel.ID),

@@ -15,9 +15,9 @@ import (
 func testConfig() config.Config {
 	return config.Config{
 		Security: config.SecurityConfig{
-			SessionCookieName: "nodexia_session",
-			SessionSecret:     "test-secret-key-for-unit-tests",
-			SessionTTL:        12 * time.Hour,
+			SessionCookieName:   "nodexia_session",
+			SessionSecret:       "test-secret-key-for-unit-tests",
+			SessionTTL:          12 * time.Hour,
 			SessionCookieSecure: false,
 		},
 	}

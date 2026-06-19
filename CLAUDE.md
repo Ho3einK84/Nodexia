@@ -33,11 +33,16 @@ tools** — do not expand them without being asked.
 - `internal/db/` — drivers, migrations, `DBTX`
 - `internal/http/` — router, handlers, middleware
 - `internal/module/` — feature modules + `registry`
-- `internal/scheduler/` — background jobs
+- `internal/scheduler/` — background jobs (monitoring/nodes sweeps, analytics
+  rollup/cleanup, alert evaluation, country resolution, status digest)
 - `internal/sshclient/` — shared SSH runtime
-- `internal/view/` — `Renderer`, `PageData`, nav
+- `internal/view/` — `Renderer`, `PageData`, nav, client-i18n bridge
+- `internal/i18n/` — en/fa catalogs (`locales/*.json`) + lookup; parity-tested
+- `internal/notify/` — Telegram client + alert/digest message templates
+- `internal/backup/` — encrypted logical DB backup/restore (diagnostics page)
+- `internal/geoip/`, `internal/livemetrics/` — country lookup, live SSE metrics
 - `web/templates/`, `web/static/` — SSR templates + assets
-- `schema.sql` — schema + migration bookkeeping
+- `schema.sql` — schema + migration bookkeeping (append new statements only)
 - Plus `commandstream/`, `terminalticket/`, `ratelimit/`.
 
 ## Patterns (mirror `servers` and `nodes`)
@@ -63,6 +68,11 @@ writes in `BeginTx`/`Rollback`/`Commit`. Wrap errors
   `ContentTemplate`, `Title`, `ActiveNav`, …). Reuse existing middleware.
 - SSH credentials are **runtime-only** — the DB stores only strategy + reference
   metadata. Use `sshclient.Service`; preserve trust-on-first-use host-key pinning.
+- **Bilingual (en/fa + RTL)**: user-facing strings live in `internal/i18n/locales`
+  — add keys to **both** `en.json` and `fa.json` (parity is enforced by
+  `i18n/parity_test.go`). Resolve in handlers via `page.T("key", args…)`; client
+  JS strings use the `js.*` namespace. Telegram alert/digest text is template
+  English only (the notify layer has no request locale).
 
 ## Module invariants (don't regress)
 
@@ -89,6 +99,32 @@ writes in `BeginTx`/`Rollback`/`Commit`. Wrap errors
   is a sync connection check; interactive TUIs (top/vim/mysql/`tail -f`…) are
   detected server-side and redirected to the terminal
   (`data-interactive-programs` is the shared source of truth).
+- **monitoring**: each sweep stores ONE latest vnStat snapshot per server (JSON
+  daily/monthly rows). Daily rows are tailed to **35** (`retainedDailyRows`, 5
+  weeks) so the seasonal forecast has ≥ a few samples per weekday; monthly rows to
+  6. `TotalBytes` always defaults to `RX+TX`. Forecast/analytics work on **download
+  (RX)** only.
+- **analytics/forecast**: `ForecastService.Compute(days, months, limitBytes)`
+  selects an algorithm by history length (trend < 7 ≤ MA < 14 ≤ WMA < 21 ≤
+  seasonal). "This month" uses the authoritative monthly RX row, not a daily sum
+  (daily history can straddle a month boundary). `computeExhaustion` is bounded to
+  month-end (a monthly cap resets there) and reuses the SAME per-day predictor as
+  the month projection so they can't disagree. The optional per-server monthly cap
+  lives in its own `server_traffic_limits` table (RX-only); 0/no row = unlimited.
+- **alerts**: the evaluator persists events, cooldowns, and consecutive-hit
+  streaks. A metric that is unavailable this cycle is **skipped** (neither fired
+  nor resolved) to keep streaks/cooldowns sane across gaps; recovery resolves an
+  open event even while silenced. **Predictive metrics** (`projected_exceed_limit`
+  boolean ≥ 1, `days_to_exhaustion` ≤ N) are forecast-derived, gated on
+  `ForecastAvailable` (limit configured + enough history), and reuse the analytics
+  forecast. `DaysToExhaustionSafe` (a large sentinel) is reported when safe so a
+  "≤ N days" rule can resolve instead of getting stuck. Predictive comparators/
+  thresholds are normalised in validation — don't let the operator store an
+  incoherent condition.
+- **digest** (scheduler): opt-in periodic Telegram summary
+  (`NODEXIA_DIGEST_*`), own ticker, runs only when enabled AND a notifier exists;
+  first send is one interval after startup, never immediately. Best-effort — every
+  failure is logged and swallowed, never disrupts the scheduler.
 
 ## Workflow
 
