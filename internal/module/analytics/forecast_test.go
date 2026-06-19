@@ -211,6 +211,117 @@ func TestForecastMonthMatchesMonthlyRX(t *testing.T) {
 	}
 }
 
+// weeklyPatternDays builds `weeks`*7 consecutive daily rows with a strong
+// weekend/weekday split: weekends (Sat/Sun) carry `weekend` bytes, weekdays
+// carry `weekday` bytes. Returned oldest-first with real calendar labels.
+func weeklyPatternDays(start time.Time, weeks int, weekday, weekend int64) []TrafficDay {
+	days := make([]TrafficDay, 0, weeks*7)
+	for i := 0; i < weeks*7; i++ {
+		d := start.AddDate(0, 0, i)
+		rx := weekday
+		if d.Weekday() == time.Saturday || d.Weekday() == time.Sunday {
+			rx = weekend
+		}
+		days = append(days, TrafficDay{Label: d.Format("2006-01-02"), RX: rx, TX: 0, Total: rx})
+	}
+	return days
+}
+
+func TestSeasonalProviderSelected(t *testing.T) {
+	svc := NewForecastService()
+	// 21 days (3 weeks) is the activation threshold.
+	if p := svc.selectProvider(make([]int64, 21)); p.Name() != "Seasonal" {
+		t.Errorf("with 21 days, selected %q, want Seasonal", p.Name())
+	}
+	// 20 days must still use the pre-seasonal chain.
+	if p := svc.selectProvider(make([]int64, 20)); p.Name() == "Seasonal" {
+		t.Error("with 20 days, seasonal must NOT be selected")
+	}
+}
+
+// TestSeasonalBeatsFlatOnWeeklyPattern is the core Phase 2 proof: on a synthetic
+// weekly pattern, the seasonal per-weekday prediction is closer to the true day
+// value than a flat moving average, for both a weekend and a weekday.
+func TestSeasonalBeatsFlatOnWeeklyPattern(t *testing.T) {
+	const gib = int64(1024 * 1024 * 1024)
+	const weekday = 1 * gib
+	const weekend = 10 * gib
+
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)  // Thursday
+	days := weeklyPatternDays(start, 4, weekday, weekend) // 28 days
+	samples := datedSamples(days)
+
+	// Flat baseline: simple mean of the whole window (what a flat MA converges to).
+	var sum int64
+	for _, d := range days {
+		sum += d.RX
+	}
+	flat := sum / int64(len(days))
+
+	seasonal := seasonalProvider{window: 35, minPerWeekday: 2}
+
+	// A future Saturday (weekend) and a future Tuesday (weekday).
+	saturday := time.Date(2026, 3, 7, 0, 0, 0, 0, time.UTC) // Saturday
+	if saturday.Weekday() != time.Saturday {
+		t.Fatalf("test setup: %v is not a Saturday", saturday)
+	}
+	tuesday := time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC) // Tuesday
+	if tuesday.Weekday() != time.Tuesday {
+		t.Fatalf("test setup: %v is not a Tuesday", tuesday)
+	}
+
+	satPred, ok := seasonal.PredictForDate(samples, saturday)
+	if !ok {
+		t.Fatal("expected seasonal prediction to apply for Saturday with 4 weeks of data")
+	}
+	tuePred, ok := seasonal.PredictForDate(samples, tuesday)
+	if !ok {
+		t.Fatal("expected seasonal prediction to apply for Tuesday with 4 weeks of data")
+	}
+
+	absDiff := func(a, b int64) int64 {
+		if a > b {
+			return a - b
+		}
+		return b - a
+	}
+
+	// Seasonal must be strictly closer to the true weekend/weekday level than flat.
+	if absDiff(satPred, weekend) >= absDiff(flat, weekend) {
+		t.Errorf("Saturday: seasonal err %d not better than flat err %d (pred=%d flat=%d truth=%d)",
+			absDiff(satPred, weekend), absDiff(flat, weekend), satPred, flat, weekend)
+	}
+	if absDiff(tuePred, weekday) >= absDiff(flat, weekday) {
+		t.Errorf("Tuesday: seasonal err %d not better than flat err %d (pred=%d flat=%d truth=%d)",
+			absDiff(tuePred, weekday), absDiff(flat, weekday), tuePred, flat, weekday)
+	}
+
+	// Confidence honesty: 28 days → High; 21 days → Medium (not High).
+	if _, c := seasonal.PredictDayBytes(make([]int64, 28)); c != ConfidenceHigh {
+		t.Errorf("28-day seasonal confidence = %s, want high", c)
+	}
+	if _, c := seasonal.PredictDayBytes(make([]int64, 21)); c != ConfidenceMedium {
+		t.Errorf("21-day seasonal confidence = %s, want medium (thin data must not claim high)", c)
+	}
+}
+
+// TestSeasonalFallsBackWhenWeekdaySparse verifies the overfitting guard: a
+// weekday with fewer than minPerWeekday samples is not refined.
+func TestSeasonalFallsBackWhenWeekdaySparse(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	// Only 8 days → most weekdays appear once or twice; minPerWeekday=3 forces
+	// a fallback for any weekday seen fewer than 3 times.
+	days := make([]TrafficDay, 8)
+	for i := range days {
+		d := start.AddDate(0, 0, i)
+		days[i] = TrafficDay{Label: d.Format("2006-01-02"), RX: 1000}
+	}
+	seasonal := seasonalProvider{window: 35, minPerWeekday: 3}
+	if _, ok := seasonal.PredictForDate(datedSamples(days), start.AddDate(0, 0, 30)); ok {
+		t.Error("expected seasonal fallback (ok=false) when the weekday has too few samples")
+	}
+}
+
 func TestExhaustionRisk(t *testing.T) {
 	const limit = 1000
 

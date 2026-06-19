@@ -141,10 +141,109 @@ func (p trendProvider) PredictDayBytes(history []int64) (int64, Confidence) {
 	return predicted, conf
 }
 
+// DatedSample is one day of download history with its calendar date. The base
+// ForecastProvider works on a bare []int64, but day-of-week seasonality needs
+// the weekday of each sample, which a flat slice cannot carry.
+type DatedSample struct {
+	Date  time.Time
+	Bytes int64
+}
+
+// weekdayForecaster is an OPTIONAL capability layered on top of ForecastProvider.
+// Given dated samples it predicts the bytes for a specific future date, taking
+// day-of-week seasonality into account. Providers that don't implement it fall
+// back to the flat PredictDayBytes value for every future day (the existing
+// behaviour), so this extends the model without breaking the base interface or
+// the three non-seasonal providers.
+type weekdayForecaster interface {
+	// PredictForDate returns the predicted full-day bytes for date, and whether a
+	// reliable weekday signal was actually used (false ⇒ caller should fall back).
+	PredictForDate(samples []DatedSample, date time.Time) (int64, bool)
+}
+
+// seasonalProvider predicts each day from its day-of-week profile: the average
+// of past samples that share the target weekday. PredictDayBytes still returns a
+// flat trailing-window mean (the overall "level", used for spike detection and
+// as a fallback); the per-weekday refinement lives in PredictForDate.
+//
+// Overfitting guard: a weekday is only refined when at least minPerWeekday
+// samples exist for it; otherwise that day falls back to the flat level. window
+// bounds how much trailing history feeds the profile.
+type seasonalProvider struct {
+	window        int
+	minPerWeekday int
+}
+
+func (p seasonalProvider) Name() string { return "Seasonal" }
+
+func (p seasonalProvider) PredictDayBytes(history []int64) (int64, Confidence) {
+	if len(history) == 0 {
+		return 0, ConfidenceLow
+	}
+	w := p.window
+	if w > len(history) {
+		w = len(history)
+	}
+	recent := history[len(history)-w:]
+	var sum int64
+	for _, v := range recent {
+		sum += v
+	}
+	return sum / int64(len(recent)), seasonalConfidence(len(history))
+}
+
+func (p seasonalProvider) PredictForDate(samples []DatedSample, date time.Time) (int64, bool) {
+	if len(samples) == 0 {
+		return 0, false
+	}
+	if p.window > 0 && len(samples) > p.window {
+		samples = samples[len(samples)-p.window:]
+	}
+
+	var total int64
+	var group []int64
+	for _, s := range samples {
+		total += s.Bytes
+		if s.Date.Weekday() == date.Weekday() {
+			group = append(group, s.Bytes)
+		}
+	}
+	// Without a positive overall level there is no meaningful signal to refine.
+	if total <= 0 {
+		return 0, false
+	}
+	// Too few samples for this weekday — don't overfit; let the caller fall back.
+	if len(group) < p.minPerWeekday {
+		return 0, false
+	}
+	var gsum int64
+	for _, v := range group {
+		gsum += v
+	}
+	return gsum / int64(len(group)), true
+}
+
+// seasonalConfidence keeps the seasonal model honest on thin data: it only
+// claims High once there are four full weeks (≈4 samples per weekday); the
+// 3-week activation window reports Medium.
+func seasonalConfidence(n int) Confidence {
+	if n >= 28 {
+		return ConfidenceHigh
+	}
+	return ConfidenceMedium
+}
+
 // ForecastService selects the best algorithm for a server and computes forecasts.
 type ForecastService struct {
 	providers []ForecastProvider
+	seasonal  ForecastProvider
 }
+
+// seasonalMinDays is the history length at which the day-of-week seasonal model
+// activates. Three weeks gives at least three samples for every weekday, which
+// is the minimum needed to estimate a weekday profile without overfitting a
+// single outlier day.
+const seasonalMinDays = 21
 
 func NewForecastService() *ForecastService {
 	return &ForecastService{
@@ -153,6 +252,7 @@ func NewForecastService() *ForecastService {
 			movingAverageProvider{window: 7},
 			trendProvider{},
 		},
+		seasonal: seasonalProvider{window: 35, minPerWeekday: 2},
 	}
 }
 
@@ -180,20 +280,28 @@ func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth, limi
 		history[i] = d.RX
 	}
 
-	// Select provider: use WeightedMA when we have ≥14 days, else SimpleMA.
+	// Select provider: a day-of-week seasonal model once we have enough weeks of
+	// history, otherwise the weighted/simple moving averages or linear trend.
 	provider := s.selectProvider(history)
 	dayPrediction, conf := provider.PredictDayBytes(history)
+
+	// predictDay returns the predicted full-day bytes for a specific FUTURE date.
+	// Seasonal providers refine it by weekday; every other provider returns the
+	// flat dayPrediction for all dates, so non-seasonal behaviour is unchanged.
+	predictDay := s.dayPredictor(provider, sorted, dayPrediction)
 
 	now := time.Now().UTC()
 	trend := computeTrend(history)
 
-	// Today: sum bytes already accumulated today + predict remainder.
+	// Today: sum bytes already accumulated today + predict the remainder, using
+	// today's own (weekday-aware) full-day estimate.
 	todayCurrent := currentDayBytes(sorted, now)
 	todayPctElapsed := float64(now.Hour()*60+now.Minute()) / float64(24*60)
-	todayRemaining := float64(dayPrediction) * (1 - todayPctElapsed)
+	todayRemaining := float64(predictDay(now)) * (1 - todayPctElapsed)
 	todayPredicted := todayCurrent + int64(todayRemaining)
 
-	// This week: sum Mon–Sun with today's partial, predict remaining days.
+	// This week: sum Mon–Sun with today's partial, predict each remaining day
+	// individually so weekday seasonality lands on the right days.
 	weekdayOffset := int(now.Weekday())
 	if weekdayOffset == 0 {
 		weekdayOffset = 7
@@ -201,8 +309,8 @@ func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth, limi
 	weekdayOffset-- // Monday=0
 	weekStart := now.AddDate(0, 0, -weekdayOffset)
 	weekCurrent := sumDaysSince(sorted, weekStart)
-	remainingWeekDays := float64(7 - weekdayOffset - 1) // full days left after today
-	weekPredicted := weekCurrent + int64(todayRemaining) + int64(remainingWeekDays*float64(dayPrediction))
+	remainingWeekDays := 7 - weekdayOffset - 1 // full days left after today
+	weekPredicted := weekCurrent + int64(todayRemaining) + sumFutureDays(predictDay, now, remainingWeekDays)
 
 	// This month: use the authoritative current-month download (RX) from the
 	// monthly vnstat row — the SAME value the Analytics Overview shows. The stored
@@ -215,10 +323,8 @@ func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth, limi
 		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 		monthCurrent = sumDaysSince(sorted, monthStart)
 	}
-	daysInMonth := float64(daysInMonth(now.Year(), now.Month()))
-	dayOfMonth := float64(now.Day())
-	remainingMonthDays := daysInMonth - dayOfMonth
-	monthPredicted := monthCurrent + int64(todayRemaining) + int64(remainingMonthDays*float64(dayPrediction))
+	remainingMonthDays := daysInMonth(now.Year(), now.Month()) - now.Day()
+	monthPredicted := monthCurrent + int64(todayRemaining) + sumFutureDays(predictDay, now, remainingMonthDays)
 
 	risks := computeRisks(history, dayPrediction, monthCurrent, monthPredicted, limitBytes)
 
@@ -234,6 +340,9 @@ func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth, limi
 }
 
 func (s *ForecastService) selectProvider(history []int64) ForecastProvider {
+	if len(history) >= seasonalMinDays && s.seasonal != nil {
+		return s.seasonal // day-of-week seasonal model
+	}
 	if len(history) >= 14 {
 		return s.providers[0] // WeightedMovingAverage
 	}
@@ -241,6 +350,52 @@ func (s *ForecastService) selectProvider(history []int64) ForecastProvider {
 		return s.providers[1] // MovingAverage
 	}
 	return s.providers[2] // LinearTrend (handles tiny datasets)
+}
+
+// dayPredictor returns a closure predicting full-day bytes for any future date.
+// When the selected provider supports weekday seasonality it is consulted per
+// date (falling back to flat for weekdays with too little data); otherwise every
+// date maps to the flat dayPrediction — identical to the pre-seasonal behaviour.
+func (s *ForecastService) dayPredictor(provider ForecastProvider, sorted []TrafficDay, flat int64) func(time.Time) int64 {
+	wf, ok := provider.(weekdayForecaster)
+	if !ok {
+		return func(time.Time) int64 { return flat }
+	}
+	samples := datedSamples(sorted)
+	if len(samples) == 0 {
+		return func(time.Time) int64 { return flat }
+	}
+	return func(d time.Time) int64 {
+		if v, applied := wf.PredictForDate(samples, d); applied {
+			return v
+		}
+		return flat
+	}
+}
+
+// datedSamples converts sorted daily rows into dated download samples, parsing
+// each "2006-01-02" label as a UTC date. Rows with an unparseable label are
+// skipped rather than failing the whole forecast.
+func datedSamples(sorted []TrafficDay) []DatedSample {
+	out := make([]DatedSample, 0, len(sorted))
+	for _, d := range sorted {
+		t, err := time.Parse("2006-01-02", d.Label)
+		if err != nil {
+			continue
+		}
+		out = append(out, DatedSample{Date: t.UTC(), Bytes: d.RX})
+	}
+	return out
+}
+
+// sumFutureDays sums predictDay over the n calendar days following `from`
+// (from+1 … from+n). n <= 0 contributes nothing.
+func sumFutureDays(predictDay func(time.Time) int64, from time.Time, n int) int64 {
+	var total int64
+	for i := 1; i <= n; i++ {
+		total += predictDay(from.AddDate(0, 0, i))
+	}
+	return total
 }
 
 // currentMonthRX returns the current month's download (RX) bytes from the
