@@ -16,97 +16,24 @@ forecasting, and alerting.
 
 ## ✨ Features
 
-- 📊 **Resource & traffic monitoring** — CPU, RAM, swap, disk, load average, and
-  uptime per server, plus vnStat-based network traffic (daily / monthly download
-  and upload, peak/average bandwidth).
-- 📈 **Analytics** — historical metrics backed by hourly/daily rollups, rendered
-  as lightweight SVG charts, with a global "top servers" overview.
+- 📊 **Monitoring & analytics** — CPU, RAM, swap, disk, load, and uptime per
+  server, plus vnStat traffic (daily/monthly download & upload), charted from
+  hourly/daily rollups.
 - 🔮 **Bandwidth forecasting** — projects today / this-week / this-month download
-  consumption from recent history. It adapts the algorithm to how much history
-  exists (linear trend → moving average → weighted moving average → **day-of-week
-  seasonal** model once ~3 weeks of data are available), reports a confidence
-  level and trend, and flags spike / unusual-growth risks.
-- 🚦 **Per-server monthly limits & days-to-exhaustion** — set an optional monthly
-  **download (RX)** cap per server; the forecast then projects whether you're on
-  track to exceed it and **how many days until the limit is reached** this month
-  (bounded to the month boundary, since a monthly cap resets there).
-- 🔔 **Alerting** — threshold rules over observed metrics (CPU, RAM, disk, load,
-  monthly traffic total, download bandwidth) with consecutive-hit streaks,
-  cooldowns, silences, severity, history, and Telegram delivery.
-- 🧠 **Predictive alerts** — forecast-derived alert metrics that warn *before* a
-  limit is hit: **"projected to exceed monthly limit"** (boolean) and **"days
-  until monthly limit reached"** (`≤ N days`). They reuse the same forecast the
-  analytics page shows and only apply to servers with a configured limit.
-- 📨 **Periodic status digest** — an optional recurring Telegram summary of every
-  server's month-to-date traffic, limit/forecast state, and active alert count.
-  Disabled by default.
-- 🔍 **Node discovery** — detect and manage Rebecca / Pasarguard nodes with live
-  evidence, plus a Pasarguard install wizard and a Rebecca dev-node installer.
-- ⏱️ **Scheduler** — recurring background monitoring and discovery jobs with
-  per-job pause/resume, retry backoff, and an operations overview.
-- 🌐 **Bilingual UI** — full English and Persian (فارسی) interface with
-  right-to-left layout support.
-- 💾 **Backup & restore** — export an encrypted logical backup of the panel
-  database and restore it from the diagnostics page.
-- 🧰 **Supporting tools** — bulk reboot/update/delete, in-browser SSH terminal
-  (xterm.js over WebSocket), command runner, and an SFTP file browser.
-- 📱 **Installable PWA** — add Nodexia to a phone or desktop home screen for an
-  app-like, standalone experience with a graceful offline screen.
-- 🔒 **Security** — single admin account, HMAC-signed cookie sessions with CSRF
-  protection, login rate limiting, trust-on-first-use SSH host-key pinning, and
-  runtime-only SSH credentials (the database stores only strategy + reference
-  metadata, not raw secrets at rest beyond what you explicitly save).
-
----
-
-## 📸 Screenshots
-
-> The data shown below is demo data used purely to illustrate the interface.
-
-### Dashboard — operations overview
-At-a-glance health, traffic, and background-collection status across every
-managed server.
-
-![Dashboard](docs/screenshots/01-dashboard.png)
-
-### Server registry
-Your shared Rebecca / Pasarguard hosts, with country, tags, and quick actions.
-
-![Server registry](docs/screenshots/02-servers.png)
-
-### Resource monitoring
-Live CPU / RAM / disk gauges, load average, and uptime per server.
-
-![Monitoring](docs/screenshots/03-monitoring.png)
-
-### Bandwidth forecasting & monthly limits
-Projects this-month download consumption from history. With a monthly cap set,
-it flags whether you're on track to exceed it — and how many days are left.
-
-**Projected to exceed the limit** (heavy node):
-
-![Forecast — exceeding limit](docs/screenshots/04-analytics-forecast.png)
-
-**On track to stay under the limit:**
-
-![Forecast — within limit](docs/screenshots/05-analytics-forecast-safe.png)
-
-### Node discovery
-Detected Rebecca / Pasarguard nodes per host — useful when one server is shared
-across several panels.
-
-![Nodes](docs/screenshots/06-nodes.png)
-
-### Alerting (incl. predictive alerts)
-Threshold and forecast-derived rules with severity, cooldown, and Telegram
-delivery.
-
-![Alerts](docs/screenshots/07-alerts.png)
-
-### Bilingual UI (English / فارسی, RTL)
-Full Persian interface with right-to-left layout.
-
-![Persian dashboard](docs/screenshots/08-dashboard-fa.png)
+  from history (the model adapts as more data arrives) with a confidence level.
+- 🚦 **Monthly limits & days-to-exhaustion** — set an optional per-server download
+  cap; the forecast flags if you'll exceed it and how many days are left.
+- 🔔 **Alerting** — threshold and **predictive** rules (warn *before* a limit is
+  hit) with cooldowns, silences, severity, history, and Telegram delivery — plus
+  an optional periodic status digest.
+- 🔍 **Node discovery** — detect and manage Rebecca / Pasarguard nodes, with a
+  Pasarguard install wizard and a background scheduler for monitoring/discovery.
+- 🌐 **Bilingual UI** — full English and Persian (فارسی) with RTL support;
+  installable as a PWA.
+- 🧰 **Supporting tools** — bulk reboot/update/delete, in-browser SSH terminal,
+  command runner, SFTP browser, and encrypted backup/restore.
+- 🔒 **Security** — single admin, HMAC-signed CSRF-protected sessions, login rate
+  limiting, SSH host-key pinning, and runtime-only SSH credentials.
 
 ---
 
@@ -162,6 +89,49 @@ sudo ./install.sh --domain panel.example.com   # rebuilds, preserves existing se
 
 > 🛠️ **Manual / non-Ubuntu:** `cp .env.production.example .env.production`, edit
 > it, then `docker compose -f compose.production.yml up -d --build`.
+
+---
+
+## 📸 Screenshots
+
+> Demo data, shown purely to illustrate the interface.
+
+**Dashboard** — health, traffic, and collection status across every server.
+
+![Dashboard](docs/screenshots/01-dashboard.png)
+
+**Server registry** — your shared Rebecca / Pasarguard hosts, with country,
+tags, and quick actions.
+
+![Server registry](docs/screenshots/02-servers.png)
+
+**Resource monitoring** — live CPU / RAM / disk gauges, load average, uptime.
+
+![Monitoring](docs/screenshots/03-monitoring.png)
+
+**Bandwidth forecasting & monthly limits** — projects this-month download and
+flags whether you'll exceed the cap (and how many days are left).
+
+Projected to exceed the limit:
+
+![Forecast — exceeding limit](docs/screenshots/04-analytics-forecast.png)
+
+On track to stay under the limit:
+
+![Forecast — within limit](docs/screenshots/05-analytics-forecast-safe.png)
+
+**Node discovery** — detected nodes per host (handy when one server is shared
+across several panels).
+
+![Nodes](docs/screenshots/06-nodes.png)
+
+**Alerting** — threshold and predictive rules with Telegram delivery.
+
+![Alerts](docs/screenshots/07-alerts.png)
+
+**Bilingual UI** — full Persian (فارسی) interface with RTL layout.
+
+![Persian dashboard](docs/screenshots/08-dashboard-fa.png)
 
 ---
 
