@@ -160,35 +160,87 @@ type vnstatHour struct {
 // If the preferred interface has zero accumulated bytes (e.g. docker0 with no
 // traffic), or no preference is given, it falls back to the interface with the
 // highest total byte count so that active physical NICs are chosen automatically.
+//
+// Container/virtual interfaces (docker bridges, veth pairs, libvirt bridges, …)
+// are never the NIC a VPS operator wants to bill against, so a real physical NIC
+// always wins auto-selection when it carries traffic — even if a busy bridge sits
+// alongside it, and even if a stale auto-detect previously latched onto the
+// bridge (the common "br-… got detected instead of eth0" failure).
 func selectTrafficInterface(items []vnstatInterface, preferred string) (*vnstatInterface, string) {
 	preferred = strings.TrimSpace(preferred)
+
+	// A physical NIC carrying traffic both backs auto-selection and lets us
+	// override a stale/virtual preference below.
+	bestPhysical := pickBestInterface(items, true)
+
 	if preferred != "" {
 		for index := range items {
-			if strings.EqualFold(strings.TrimSpace(items[index].Name), preferred) {
-				if interfaceTotalBytes(items[index]) > 0 {
-					return &items[index], ""
-				}
+			if !strings.EqualFold(strings.TrimSpace(items[index].Name), preferred) {
+				continue
+			}
+			if interfaceTotalBytes(items[index]) <= 0 {
 				break // preferred found but empty; fall through to auto-select
 			}
+			// Honour the preference, except when it points at a virtual
+			// interface while a real NIC is actively carrying traffic: a docker
+			// bridge picked up by a stale auto-detect must not shadow eth0.
+			if !isVirtualInterface(items[index].Name) || bestPhysical == nil {
+				return &items[index], ""
+			}
+			break
 		}
 	}
 
-	// Auto-select: highest accumulated traffic wins.
+	if bestPhysical != nil {
+		return bestPhysical, ""
+	}
+	if bestAny := pickBestInterface(items, false); bestAny != nil {
+		return bestAny, ""
+	}
+	return nil, "vnStat did not return any monitored interfaces yet."
+}
+
+// pickBestInterface returns the interface with the highest accumulated bytes.
+// When physicalOnly is set, virtual interfaces and interfaces with no traffic
+// are skipped, so a real NIC is chosen even next to a busy container bridge.
+func pickBestInterface(items []vnstatInterface, physicalOnly bool) *vnstatInterface {
 	best := -1
 	var bestBytes int64
 	for index := range items {
-		if strings.TrimSpace(items[index].Name) == "" {
+		name := strings.TrimSpace(items[index].Name)
+		if name == "" {
 			continue
 		}
-		if total := interfaceTotalBytes(items[index]); best == -1 || total > bestBytes {
+		total := interfaceTotalBytes(items[index])
+		if physicalOnly && (isVirtualInterface(name) || total <= 0) {
+			continue
+		}
+		if best == -1 || total > bestBytes {
 			bestBytes = total
 			best = index
 		}
 	}
-	if best >= 0 {
-		return &items[best], ""
+	if best == -1 {
+		return nil
 	}
-	return nil, "vnStat did not return any monitored interfaces yet."
+	return &items[best]
+}
+
+// isVirtualInterface reports whether name is a container/virtual interface that
+// should be deprioritised during auto-selection: the loopback device, docker
+// bridges/containers (docker0, br-<hash>, veth<hash>) and libvirt bridges/guests
+// (virbr*, vnet*). Physical NICs (eth0, ens3, enp1s0, wlan0, …) are not matched.
+func isVirtualInterface(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "lo" {
+		return true
+	}
+	for _, prefix := range []string{"veth", "br-", "docker", "virbr", "vnet"} {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func interfaceTotalBytes(iface vnstatInterface) int64 {
@@ -384,13 +436,21 @@ func isSeparatorLine(trimmed string) bool {
 }
 
 // extractInterfaceName recognises two patterns:
-//   - Format A: "docker0:"  (name immediately followed by colon, no spaces)
+//   - Format A: "docker0:" or "br-5ae0cfaebf1f [disabled]:" (name + colon, with
+//     an optional bracketed status that vnstat appends for unmonitored NICs)
 //   - Format B: "eth0 since 2026-05-29"
 func extractInterfaceName(trimmed string) string {
-	if strings.HasSuffix(trimmed, ":") && !strings.Contains(trimmed, " ") {
-		name := trimmed[:len(trimmed)-1]
-		if isValidInterfaceName(name) {
-			return name
+	if strings.HasSuffix(trimmed, ":") {
+		head := strings.TrimSuffix(trimmed, ":")
+		// vnstat marks interfaces it is no longer monitoring as
+		// "name [disabled]:" — drop the trailing bracketed annotation before
+		// validating so the interface is still recognised (and, crucially, its
+		// data lines are not misattributed to the previous interface).
+		if idx := strings.Index(head, " ["); idx >= 0 && strings.HasSuffix(head, "]") {
+			head = strings.TrimSpace(head[:idx])
+		}
+		if !strings.Contains(head, " ") && isValidInterfaceName(head) {
+			return head
 		}
 	}
 	parts := strings.Fields(trimmed)
