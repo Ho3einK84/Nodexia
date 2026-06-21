@@ -59,6 +59,57 @@ forecasting, and alerting.
 
 ---
 
+## 📸 Screenshots
+
+> The data shown below is demo data used purely to illustrate the interface.
+
+### Dashboard — operations overview
+At-a-glance health, traffic, and background-collection status across every
+managed server.
+
+![Dashboard](docs/screenshots/01-dashboard.png)
+
+### Server registry
+Your shared Rebecca / Pasarguard hosts, with country, tags, and quick actions.
+
+![Server registry](docs/screenshots/02-servers.png)
+
+### Resource monitoring
+Live CPU / RAM / disk gauges, load average, and uptime per server.
+
+![Monitoring](docs/screenshots/03-monitoring.png)
+
+### Bandwidth forecasting & monthly limits
+Projects this-month download consumption from history. With a monthly cap set,
+it flags whether you're on track to exceed it — and how many days are left.
+
+**Projected to exceed the limit** (heavy node):
+
+![Forecast — exceeding limit](docs/screenshots/04-analytics-forecast.png)
+
+**On track to stay under the limit:**
+
+![Forecast — within limit](docs/screenshots/05-analytics-forecast-safe.png)
+
+### Node discovery
+Detected Rebecca / Pasarguard nodes per host — useful when one server is shared
+across several panels.
+
+![Nodes](docs/screenshots/06-nodes.png)
+
+### Alerting (incl. predictive alerts)
+Threshold and forecast-derived rules with severity, cooldown, and Telegram
+delivery.
+
+![Alerts](docs/screenshots/07-alerts.png)
+
+### Bilingual UI (English / فارسی, RTL)
+Full Persian interface with right-to-left layout.
+
+![Persian dashboard](docs/screenshots/08-dashboard-fa.png)
+
+---
+
 ## 🚀 Production install
 
 Nodexia runs as a Docker Compose stack behind [Caddy](https://caddyserver.com/)
