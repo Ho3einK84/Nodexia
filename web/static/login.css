@@ -1,0 +1,511 @@
+/* Login (immersive auth scene) — loaded only on /login via PageStyles so the
+   shared style.css stays lean. Pairs with login.js (PageScripts). */
+
+.auth-body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* Clip the off-screen orbs horizontally, but let tall cards scroll on short
+     viewports instead of being cut off. */
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.auth {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(20px, 5vw, 56px) 20px;
+  isolation: isolate;
+  background:
+    radial-gradient(120% 120% at 50% -10%, #16213f 0%, transparent 55%),
+    radial-gradient(100% 100% at 100% 110%, #1a1336 0%, transparent 50%),
+    linear-gradient(180deg, #0a0f1f 0%, #070a14 100%);
+}
+
+/* ── Live background ──────────────────────────────────── */
+
+.auth__scene {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.auth__orb {
+  position: absolute;
+  width: 46vmax;
+  height: 46vmax;
+  border-radius: 50%;
+  filter: blur(72px);
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+
+.auth__orb--1 {
+  top: -16vmax;
+  inset-inline-start: -12vmax;
+  background: radial-gradient(circle at 30% 30%, #3b82f6, transparent 65%);
+  animation: auth-drift-1 22s ease-in-out infinite;
+}
+
+.auth__orb--2 {
+  bottom: -20vmax;
+  inset-inline-end: -14vmax;
+  background: radial-gradient(circle at 40% 40%, #8b5cf6, transparent 65%);
+  animation: auth-drift-2 28s ease-in-out infinite;
+}
+
+.auth__orb--3 {
+  top: 30%;
+  inset-inline-start: 45%;
+  width: 32vmax;
+  height: 32vmax;
+  background: radial-gradient(circle at 50% 50%, #22d3ee, transparent 60%);
+  opacity: 0.4;
+  animation: auth-drift-3 25s ease-in-out infinite;
+}
+
+@keyframes auth-drift-1 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(8vmax, 6vmax, 0) scale(1.12); }
+}
+
+@keyframes auth-drift-2 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05); }
+  50%      { transform: translate3d(-7vmax, -5vmax, 0) scale(0.92); }
+}
+
+@keyframes auth-drift-3 {
+  0%, 100% { transform: translate3d(-50%, 0, 0) scale(1); opacity: 0.4; }
+  50%      { transform: translate3d(-40%, -8vmax, 0) scale(1.18); opacity: 0.22; }
+}
+
+/* Slowly panning perspective grid, faded out toward the edges. */
+.auth__grid {
+  position: absolute;
+  inset: -50% -10% -10%;
+  background-image:
+    linear-gradient(rgba(96, 165, 250, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(96, 165, 250, 0.12) 1px, transparent 1px);
+  background-size: 56px 56px;
+  transform: perspective(520px) rotateX(58deg);
+  transform-origin: 50% 0;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 0%, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 0%, transparent 75%);
+  opacity: 0.5;
+  animation: auth-grid-pan 18s linear infinite;
+}
+
+@keyframes auth-grid-pan {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 56px, 56px 0; }
+}
+
+/* Rising particles. Each dot drifts up and fades; nth-child tweaks vary the
+   horizontal start, size, speed and delay so the field never looks uniform. */
+.auth__particles span {
+  position: absolute;
+  bottom: -8px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(147, 197, 253, 0.8);
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.7);
+  opacity: 0;
+  animation: auth-rise linear infinite;
+}
+
+.auth__particles span:nth-child(1)  { left: 6%;  animation-duration: 15s; animation-delay: 0s;   }
+.auth__particles span:nth-child(2)  { left: 14%; animation-duration: 19s; animation-delay: 3s;   width: 3px; height: 3px; }
+.auth__particles span:nth-child(3)  { left: 23%; animation-duration: 13s; animation-delay: 6s;   }
+.auth__particles span:nth-child(4)  { left: 31%; animation-duration: 21s; animation-delay: 1s;   width: 5px; height: 5px; }
+.auth__particles span:nth-child(5)  { left: 39%; animation-duration: 16s; animation-delay: 8s;   }
+.auth__particles span:nth-child(6)  { left: 47%; animation-duration: 24s; animation-delay: 2s;   width: 3px; height: 3px; }
+.auth__particles span:nth-child(7)  { left: 55%; animation-duration: 14s; animation-delay: 5s;   }
+.auth__particles span:nth-child(8)  { left: 62%; animation-duration: 20s; animation-delay: 9s;   width: 5px; height: 5px; }
+.auth__particles span:nth-child(9)  { left: 70%; animation-duration: 17s; animation-delay: 4s;   }
+.auth__particles span:nth-child(10) { left: 77%; animation-duration: 23s; animation-delay: 7s;   width: 3px; height: 3px; }
+.auth__particles span:nth-child(11) { left: 84%; animation-duration: 15s; animation-delay: 11s;  }
+.auth__particles span:nth-child(12) { left: 90%; animation-duration: 18s; animation-delay: 2.5s; width: 5px; height: 5px; }
+.auth__particles span:nth-child(13) { left: 96%; animation-duration: 22s; animation-delay: 6.5s; }
+.auth__particles span:nth-child(14) { left: 50%; animation-duration: 26s; animation-delay: 10s;  width: 3px; height: 3px; }
+.auth__particles span:nth-child(15) { left: 18%; animation-duration: 12s; animation-delay: 13s;  }
+
+@keyframes auth-rise {
+  0%   { transform: translateY(0) translateX(0); opacity: 0; }
+  10%  { opacity: 0.9; }
+  90%  { opacity: 0.5; }
+  100% { transform: translateY(-104vh) translateX(2vw); opacity: 0; }
+}
+
+/* Soft vignette to focus the eye on the card. */
+.auth__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 50% at 50% 45%, transparent 40%, rgba(5, 8, 16, 0.6) 100%);
+}
+
+/* ── Top bar (language switcher) ──────────────────────── */
+
+.auth__topbar {
+  position: absolute;
+  top: clamp(16px, 3vw, 28px);
+  inset-inline-end: clamp(16px, 3vw, 28px);
+  z-index: 2;
+}
+
+.auth__topbar .lang-switcher {
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+
+/* ── Auth panel ───────────────────────────────────────── */
+
+.auth__panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 440px;
+  display: grid;
+  gap: 22px;
+  animation: auth-enter 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes auth-enter {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.auth__brand {
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.auth__logo {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  margin-bottom: 6px;
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(59, 130, 246, 0.95), rgba(139, 92, 246, 0.95));
+  box-shadow:
+    0 12px 30px rgba(59, 130, 246, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  animation: auth-logo-float 6s ease-in-out infinite;
+}
+
+.auth__logo-mark {
+  width: 40px;
+  height: 40px;
+}
+
+@keyframes auth-logo-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+.auth__eyebrow {
+  margin: 0;
+  color: #60a5fa;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  font-weight: var(--fw-semibold);
+}
+
+.auth__title {
+  margin: 0;
+  font-size: clamp(1.8rem, 5vw, 2.4rem);
+  font-weight: var(--fw-extrabold);
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #f0f9ff 0%, #93c5fd 55%, #c4b5fd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.auth__tagline {
+  margin: 2px 0 0;
+  max-width: 360px;
+  color: #94a3b8;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+/* ── Glass card ───────────────────────────────────────── */
+
+.auth__card {
+  position: relative;
+  padding: 28px 28px 22px;
+  border-radius: 22px;
+  background: rgba(13, 20, 38, 0.62);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  box-shadow:
+    0 24px 60px rgba(2, 6, 23, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+/* Animated gradient sheen along the top edge of the card. */
+.auth__card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.8), rgba(196, 181, 253, 0.8), transparent);
+  background-size: 200% 100%;
+  animation: auth-sheen 6s linear infinite;
+}
+
+@keyframes auth-sheen {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+.auth__card-head {
+  margin-bottom: 18px;
+}
+
+.auth__card-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 5px;
+  font-size: 1.18rem;
+  font-weight: var(--fw-bold);
+  color: #f1f5f9;
+}
+
+.auth__card-head h2 svg {
+  width: 20px;
+  height: 20px;
+  color: var(--accent-soft);
+}
+
+.auth__card-head p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.auth__flash {
+  margin-bottom: 16px;
+}
+
+.auth__flash svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Form: floating-label fields ──────────────────────── */
+
+.auth__form {
+  display: grid;
+  gap: 16px;
+}
+
+.auth__field {
+  position: relative;
+  display: block;
+}
+
+.auth__field-icon {
+  position: absolute;
+  top: 50%;
+  inset-inline-start: 15px;
+  transform: translateY(-50%);
+  width: 19px;
+  height: 19px;
+  color: var(--text-dim);
+  pointer-events: none;
+  transition: color 0.18s ease;
+}
+
+.auth__field input {
+  width: 100%;
+  height: 60px;
+  /* Symmetric block padding keeps the typed text vertically centred so it lines
+     up with the leading icon; the floated label tucks into the top strip. */
+  padding-block: 8px;
+  padding-inline: 44px 16px;
+  border-radius: 13px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(2, 6, 23, 0.55);
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 0.95rem;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+/* Password field leaves room on the trailing side for the reveal toggle. */
+.auth__field--reveal input {
+  padding-inline-end: 46px;
+}
+
+.auth__field-label {
+  position: absolute;
+  top: 50%;
+  inset-inline-start: 44px;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  line-height: 1;
+  pointer-events: none;
+  transition: transform 0.18s ease, font-size 0.18s ease, color 0.18s ease, top 0.18s ease;
+}
+
+.auth__field input:focus {
+  outline: none;
+  border-color: rgba(96, 165, 250, 0.6);
+  background: rgba(2, 6, 23, 0.75);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
+}
+
+/* Lift the label clear of the typed text on focus or when the field is filled. */
+.auth__field input:focus + .auth__field-label,
+.auth__field input:not(:placeholder-shown) + .auth__field-label {
+  top: 9px;
+  transform: translateY(0);
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  color: var(--accent-soft);
+}
+
+.auth__field input:focus ~ .auth__field-icon,
+.auth__field:focus-within .auth__field-icon {
+  color: var(--accent-soft);
+}
+
+/* ── Password reveal toggle (injected by login.js) ────── */
+
+.auth__reveal {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 8px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.auth__reveal:hover {
+  color: var(--accent-soft);
+  background: rgba(96, 165, 250, 0.1);
+}
+
+.auth__reveal svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── Submit ───────────────────────────────────────────── */
+
+.auth__submit {
+  width: 100%;
+  height: 50px;
+  margin-top: 4px;
+  font-size: 0.95rem;
+  font-weight: var(--fw-semibold);
+  border: none;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
+  background-size: 180% 180%;
+  box-shadow: 0 10px 26px rgba(59, 130, 246, 0.32);
+  transition: background-position 0.4s ease, transform 0.12s ease, box-shadow 0.2s ease;
+}
+
+.auth__submit:hover {
+  background-position: 100% 0;
+  box-shadow: 0 14px 34px rgba(99, 102, 241, 0.45);
+  transform: translateY(-1px);
+}
+
+.auth__submit:active {
+  transform: translateY(0);
+}
+
+.auth__submit .icon-in-button {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── Card footer + meta ───────────────────────────────── */
+
+.auth__card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.auth__card-foot svg {
+  width: 14px;
+  height: 14px;
+  color: var(--ok);
+}
+
+.auth__meta {
+  margin: 0;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 480px) {
+  .auth__card {
+    padding: 22px 18px 18px;
+  }
+  .auth__logo {
+    width: 60px;
+    height: 60px;
+  }
+  .auth__logo-mark {
+    width: 34px;
+    height: 34px;
+  }
+}
+
+/* Honour reduced-motion: keep the scene, drop the animation. */
+@media (prefers-reduced-motion: reduce) {
+  .auth__orb,
+  .auth__grid,
+  .auth__particles span,
+  .auth__logo,
+  .auth__card::before,
+  .auth__panel {
+    animation: none !important;
+  }
+  .auth__particles span { opacity: 0.4; }
+}

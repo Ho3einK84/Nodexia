@@ -93,6 +93,8 @@ func (h LoginHandler) renderLogin(w http.ResponseWriter, r *http.Request, status
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = page.T("login.title", "app", h.config.App.Name)
 	page.ContentTemplate = "content-login"
+	page.PageStyles = []string{"/static/login.css"}
+	page.PageScripts = []string{"/static/login.js"}
 	page.PageTitle = page.T("login.heading")
 	page.PageDescription = page.T("login.subtitle")
 	page.FlashKind = flashKind
