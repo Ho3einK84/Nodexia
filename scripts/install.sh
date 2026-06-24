@@ -21,6 +21,9 @@ readonly CLI_DEFAULTS="/etc/default/nodexia"
 # binary exists for the target version/arch the installer bakes it into a
 # sub-second image (Dockerfile.prebuilt) instead of compiling from source.
 readonly RELEASES_BASE="https://github.com/Ho3einK84/Nodexia/releases"
+# GitHub API endpoint used to turn the "latest" alias into a concrete tag so the
+# stored config and the version baked into the binary reference a real release.
+readonly RELEASES_API="https://api.github.com/repos/Ho3einK84/Nodexia/releases/latest"
 
 DOMAIN=""
 ACME_EMAIL=""
@@ -637,6 +640,25 @@ target_arch() {
   printf "%s" "$arch"
 }
 
+# resolve_image_version turns the "latest" alias into the concrete release tag
+# (e.g. v0.2.0) via the GitHub API. Without this, a "latest" source-build fallback
+# would bake the literal string "latest" into the binary and show it as the panel
+# version. Non-"latest" values are left untouched; on lookup failure we keep
+# "latest" (the download URL still resolves) rather than abort.
+resolve_image_version() {
+  [[ "$IMAGE_VERSION" == "latest" ]] || return 0
+
+  local tag
+  tag="$(curl -fsSL --max-time 15 "$RELEASES_API" 2>/dev/null |
+    sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+  if [[ -n "$tag" ]]; then
+    info "Resolved latest release: ${tag}"
+    IMAGE_VERSION="$tag"
+  else
+    warn "Could not resolve the latest release tag; using 'latest'."
+  fi
+}
+
 # fetch_prebuilt_binary downloads the release binary for this host's
 # architecture into $INSTALL_DIR/dist/nodexia and sets USE_PREBUILT=1 on success.
 # Any failure (no release, offline, arch mismatch, bad checksum) is non-fatal:
@@ -843,6 +865,7 @@ main() {
   ensure_source_tree
 
   section "Binary"
+  resolve_image_version
   fetch_prebuilt_binary || true
   write_build_env
 
