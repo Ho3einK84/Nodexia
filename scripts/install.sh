@@ -229,12 +229,12 @@ set_defaults() {
   [[ -n "$REPO_URL" ]] || REPO_URL="$DEFAULT_REPO_URL"
   [[ -n "$GIT_REF" ]] || GIT_REF="$DEFAULT_GIT_REF"
 
-  # Version is sticky across reruns: reuse the value recorded in the existing
-  # config so `nodexia update` keeps the same release unless asked to change it.
-  if [[ -z "$IMAGE_VERSION" ]]; then
-    IMAGE_VERSION="$(read_existing_env_value NODEXIA_IMAGE_VERSION)"
-    [[ -n "$IMAGE_VERSION" ]] || IMAGE_VERSION="$DEFAULT_IMAGE_VERSION"
-  fi
+  # Default to this source tree's release version (DEFAULT_IMAGE_VERSION, bumped
+  # per release) so rerunning the installer after `git pull` actually upgrades.
+  # An explicit --image-version (e.g. "latest" or a tag) always wins. We do NOT
+  # reuse the value stored in .env.production: a stale pin there is exactly what
+  # would keep an updated install showing an old version.
+  [[ -n "$IMAGE_VERSION" ]] || IMAGE_VERSION="$DEFAULT_IMAGE_VERSION"
 
   if [[ -z "$DOMAIN" ]]; then
     DOMAIN="$(read_existing_env_value NODEXIA_DOMAIN)"
