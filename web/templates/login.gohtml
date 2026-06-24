@@ -1,33 +1,77 @@
 {{ define "content-login" }}
-<section class="hero">
-  <div class="login-container">
-    <article class="card login-card">
-      <h3><i data-lucide="log-in"></i> {{ t "login.heading" }}</h3>
-      <p class="page-description">{{ t "login.subtitle" }}</p>
+<div class="auth" dir="{{ .Dir }}">
+  {{/* Live background — pure CSS so it stays within the strict script-src CSP.
+       Drifting aurora orbs, a slowly panning grid, rising particles and a soft
+       vignette. All motion is paused under prefers-reduced-motion. */}}
+  <div class="auth__scene" aria-hidden="true">
+    <span class="auth__orb auth__orb--1"></span>
+    <span class="auth__orb auth__orb--2"></span>
+    <span class="auth__orb auth__orb--3"></span>
+    <div class="auth__grid"></div>
+    <div class="auth__particles">
+      <span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <div class="auth__vignette"></div>
+  </div>
+
+  <div class="auth__topbar">
+    {{ template "lang-switcher" . }}
+  </div>
+
+  <main class="auth__panel">
+    <div class="auth__brand">
+      <div class="auth__logo">
+        <i data-lucide="shield-check"></i>
+      </div>
+      <p class="auth__eyebrow">{{ t "shell.eyebrow" }}</p>
+      <h1 class="auth__title">{{ .AppName }}</h1>
+      <p class="auth__tagline">{{ t "login.tagline" }}</p>
+    </div>
+
+    <section class="auth__card">
+      <header class="auth__card-head">
+        <h2><i data-lucide="log-in"></i> {{ t "login.heading" }}</h2>
+        <p>{{ t "login.subtitle" }}</p>
+      </header>
 
       {{ if .FlashMessage }}
-      <div class="flash-banner flash-banner--{{ .FlashKind }}">
+      <div class="flash-banner flash-banner--{{ .FlashKind }} auth__flash" role="alert">
+        <i data-lucide="alert-triangle"></i>
         <p>{{ .FlashMessage }}</p>
       </div>
       {{ end }}
 
-      <form method="post" action="/login" class="server-form">
+      <form method="post" action="/login" class="auth__form" autocomplete="on">
         <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-        <label class="form-field">
-          <span><i data-lucide="user" class="icon-in-button"></i> {{ t "common.username" }}</span>
-          <input type="text" name="username" placeholder="admin" required autofocus>
+
+        <label class="auth__field">
+          <i data-lucide="user" class="auth__field-icon" aria-hidden="true"></i>
+          <input type="text" name="username" placeholder=" " required autofocus
+                 autocomplete="username" autocapitalize="none" spellcheck="false">
+          <span class="auth__field-label">{{ t "common.username" }}</span>
         </label>
 
-        <label class="form-field">
-          <span><i data-lucide="lock" class="icon-in-button"></i> {{ t "common.password" }}</span>
-          <input type="password" name="password" placeholder="{{ t "common.password" }}" required>
+        <label class="auth__field">
+          <i data-lucide="lock" class="auth__field-icon" aria-hidden="true"></i>
+          <input type="password" name="password" placeholder=" " required
+                 autocomplete="current-password">
+          <span class="auth__field-label">{{ t "common.password" }}</span>
         </label>
 
-        <div class="form-actions">
-          <button type="submit" class="btn btn--primary"><i data-lucide="log-in" class="icon-in-button"></i> {{ t "login.sign_in" }}</button>
-        </div>
+        <button type="submit" class="btn btn--primary auth__submit">
+          <i data-lucide="log-in" class="icon-in-button"></i> {{ t "login.sign_in" }}
+        </button>
       </form>
-    </article>
-  </div>
-</section>
+
+      <footer class="auth__card-foot">
+        <i data-lucide="shield" aria-hidden="true"></i>
+        <span>{{ t "login.secure_note" }}</span>
+      </footer>
+    </section>
+
+    <p class="auth__meta">{{ .AppName }} · {{ t "shell.meta.version" "value" .Version }}</p>
+  </main>
+</div>
 {{ end }}

@@ -238,6 +238,8 @@
   "login.sign_in": "Sign in",
   "login.invalid": "Invalid username or password.",
   "login.too_many": "Too many failed attempts. Try again in {duration}.",
+  "login.tagline": "Monitor traffic, watch resources and manage your Rebecca & PasarGuard nodes from one secure place.",
+  "login.secure_note": "Encrypted session · single administrator access",
   "diagnostics.title": "Diagnostics",
   "diagnostics.page_title": "Operational diagnostics",
   "diagnostics.page_description": "Runtime health, background jobs, and support signals without reading application logs manually.",

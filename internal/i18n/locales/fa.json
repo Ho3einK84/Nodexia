@@ -238,6 +238,8 @@
   "login.sign_in": "ورود",
   "login.invalid": "نام کاربری یا رمز عبور اشتباه است.",
   "login.too_many": "تعداد تلاش‌های ناموفق زیاد است. لطفاً {duration} صبر کنید.",
+  "login.tagline": "پایش ترافیک، نظارت بر منابع و مدیریت نودهای Rebecca و PasarGuard، همه از یک جای امن.",
+  "login.secure_note": "نشست رمزنگاری‌شده · دسترسی تک‌مدیره",
   "diagnostics.title": "عیب‌یابی",
   "diagnostics.page_title": "وضعیت عملیاتی سیستم",
   "diagnostics.page_description": "بررسی سلامت ران‌تایم، کارهای پس‌زمینه و سیگنال‌های پشتیبانی بدون نیاز به بررسی دستی لاگ‌ها.",
