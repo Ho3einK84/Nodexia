@@ -164,3 +164,63 @@ func readBody(t *testing.T, resp *http.Response) string {
 	}
 	return string(data)
 }
+
+// TestStaticAssetCaching guards the cache validators on /static: every asset
+// must carry an ETag and a Cache-Control, fonts are immutable, and a matching
+// If-None-Match returns 304 (no re-download). Without these, embed.FS's zero
+// modtime leaves assets uncacheable and every navigation re-fetches them.
+func TestStaticAssetCaching(t *testing.T) {
+	cfg := testutil.TestConfig(t)
+	logging.Setup(cfg.Log)
+
+	renderer, err := view.NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer() error = %v", err)
+	}
+	staticFiles, err := assets.Static()
+	if err != nil {
+		t.Fatalf("Static() error = %v", err)
+	}
+	handler := webhttp.NewRouter(
+		cfg, testutil.OpenTestDB(t), sshclient.New(cfg.SSH, cfg.Security),
+		commandstream.New(0), nil, nil, renderer, staticFiles, nil,
+		registry.DefaultModules(),
+	)
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	t.Run("css carries etag and revalidatable cache-control", func(t *testing.T) {
+		resp := mustGet(t, server.URL+"/static/style.css")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d", resp.StatusCode)
+		}
+		etag := resp.Header.Get("ETag")
+		if etag == "" {
+			t.Fatal("style.css missing ETag")
+		}
+		if cc := resp.Header.Get("Cache-Control"); !strings.Contains(cc, "max-age=3600") {
+			t.Fatalf("style.css Cache-Control = %q, want max-age=3600", cc)
+		}
+
+		// A conditional request with the same ETag must be answered 304.
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/static/style.css", nil)
+		req.Header.Set("If-None-Match", etag)
+		cond, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("conditional GET error = %v", err)
+		}
+		defer cond.Body.Close()
+		if cond.StatusCode != http.StatusNotModified {
+			t.Fatalf("conditional status = %d, want 304", cond.StatusCode)
+		}
+	})
+
+	t.Run("fonts are immutable", func(t *testing.T) {
+		resp := mustGet(t, server.URL+"/static/fonts/exo2-latin.woff2")
+		defer resp.Body.Close()
+		if cc := resp.Header.Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+			t.Fatalf("font Cache-Control = %q, want immutable", cc)
+		}
+	})
+}

@@ -17,7 +17,7 @@
  */
 'use strict';
 
-var CACHE_VERSION = 'v3';
+var CACHE_VERSION = 'v4';
 var STATIC_CACHE = 'nodexia-static-' + CACHE_VERSION;
 var OFFLINE_URL = '/static/offline.html';
 
@@ -28,8 +28,10 @@ var PRECACHE_URLS = [
   OFFLINE_URL,
   '/static/offline.js',
   '/static/style.css',
+  '/static/login.css',
   '/static/fonts/exo2-latin.woff2',
   '/static/app.js',
+  '/static/login.js',
   '/static/lucide.min.js',
   '/static/favicon.svg',
   '/static/icon-192.png',
