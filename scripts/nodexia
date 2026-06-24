@@ -7,9 +7,9 @@
 #   nodexia restart [svc]     Restart the stack (or a single service)
 #   nodexia logs [svc]        Follow logs (optionally for one service)
 #   nodexia status            Show container status
-#   nodexia update [args...]  Pull the latest version and redeploy (runs the
-#                             installer non-interactively; pass e.g.
-#                             --image-version latest to upgrade)
+#   nodexia update [args...]  Upgrade to the latest release and redeploy,
+#                             preserving secrets. Pin a version instead with
+#                             --image-version <tag> (e.g. v0.2.0).
 #   nodexia uninstall [opts]  Remove the service, containers and CLI. Keeps the
 #                             data volumes and install directory unless --purge.
 #                             Options: --purge (also delete data + install dir),
@@ -59,6 +59,23 @@ require_stack() {
 
 dc() {
   docker compose -f "$COMPOSE_FILE" "$@"
+}
+
+cmd_update() {
+  [ -f "$INSTALLER" ] || die "installer not found at ${INSTALLER}."
+  # `update` means "get the newest release" by default — otherwise the installer
+  # keeps the version pinned in .env.production and nothing actually upgrades.
+  # Pass --image-version <tag> to pin a specific release instead.
+  local has_version=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+    --image-version | --image-version=*) has_version=1 ;;
+    esac
+  done
+  if [ "$has_version" -eq 0 ]; then
+    set -- "$@" --image-version latest
+  fi
+  exec bash "$INSTALLER" --non-interactive --skip-dns-check --skip-port-check "$@"
 }
 
 cmd_uninstall() {
@@ -151,8 +168,7 @@ status | ps)
   dc ps "$@"
   ;;
 update)
-  [ -f "$INSTALLER" ] || die "installer not found at ${INSTALLER}."
-  exec bash "$INSTALLER" --non-interactive --skip-dns-check --skip-port-check "$@"
+  cmd_update "$@"
   ;;
 uninstall)
   cmd_uninstall "$@"

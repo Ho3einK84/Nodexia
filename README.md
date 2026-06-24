@@ -72,7 +72,8 @@ The installer adds a `nodexia` command (it uses `sudo` automatically when needed
 nodexia status                            # container status
 nodexia logs                              # follow logs (e.g. `nodexia logs app`)
 nodexia up / down / restart               # control the stack
-nodexia update [--image-version latest]   # pull latest & redeploy, keeping secrets
+nodexia update                            # upgrade to the latest release, keeping secrets
+nodexia update --image-version v0.2.0     # or pin a specific version
 nodexia uninstall [--purge] [--yes]       # remove stack + CLI; --purge also wipes data
 ```
 
