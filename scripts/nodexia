@@ -10,6 +10,10 @@
 #   nodexia update [args...]  Pull the latest version and redeploy (runs the
 #                             installer non-interactively; pass e.g.
 #                             --image-version latest to upgrade)
+#   nodexia uninstall [opts]  Remove the service, containers and CLI. Keeps the
+#                             data volumes and install directory unless --purge.
+#                             Options: --purge (also delete data + install dir),
+#                             -y/--yes (skip the confirmation prompt)
 #
 # The install directory defaults to /opt/nodexia and can be overridden with the
 # NODEXIA_DIR environment variable or /etc/default/nodexia (written by install.sh
@@ -22,6 +26,9 @@ set -euo pipefail
 NODEXIA_DIR="${NODEXIA_DIR:-/opt/nodexia}"
 COMPOSE_FILE="compose.production.yml"
 INSTALLER="${NODEXIA_DIR}/scripts/install.sh"
+SYSTEMD_UNIT="nodexia.service"
+CLI_PATH="/usr/local/bin/nodexia"
+CLI_DEFAULTS="/etc/default/nodexia"
 
 # Compose against the production stack needs root (or docker-group) access; for a
 # predictable experience re-exec under sudo when not already root.
@@ -33,8 +40,10 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   exit 1
 fi
 
+# usage prints the leading comment block (after the shebang) up to the first
+# non-comment line, so it stays in sync without hard-coded line numbers.
 usage() {
-  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+  awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
 }
 
 die() {
@@ -50,6 +59,71 @@ require_stack() {
 
 dc() {
   docker compose -f "$COMPOSE_FILE" "$@"
+}
+
+cmd_uninstall() {
+  local purge=0 assume_yes=0 arg reply
+  for arg in "$@"; do
+    case "$arg" in
+    --purge | --remove-data) purge=1 ;;
+    -y | --yes) assume_yes=1 ;;
+    *) die "uninstall: unknown option '${arg}'" ;;
+    esac
+  done
+
+  echo "This removes the Nodexia systemd service, containers and the nodexia CLI."
+  if [ "$purge" -eq 1 ]; then
+    echo "PURGE: the install directory (${NODEXIA_DIR}), the built image and the"
+    echo "       data volumes (database + TLS certificates) will be DELETED."
+  else
+    echo "The install directory and data volumes are kept (rerun the installer to"
+    echo "restore). Pass --purge to also delete data and ${NODEXIA_DIR}."
+  fi
+
+  if [ "$assume_yes" -ne 1 ]; then
+    printf "Continue? [y/N] "
+    read -r reply
+    case "$reply" in
+    y | Y | yes | YES) ;;
+    *)
+      echo "Aborted."
+      exit 0
+      ;;
+    esac
+  fi
+
+  # Stop and disable the systemd service.
+  if systemctl list-unit-files 2>/dev/null | grep -q "^${SYSTEMD_UNIT}"; then
+    systemctl disable --now "$SYSTEMD_UNIT" >/dev/null 2>&1 || true
+  fi
+
+  # Stop and remove the containers (and volumes/image when purging).
+  if [ -f "${NODEXIA_DIR}/${COMPOSE_FILE}" ]; then
+    if [ "$purge" -eq 1 ]; then
+      (cd "$NODEXIA_DIR" && dc down -v --rmi local --remove-orphans) || true
+    else
+      (cd "$NODEXIA_DIR" && dc down --remove-orphans) || true
+    fi
+  fi
+
+  # Remove the systemd unit file.
+  rm -f "/etc/systemd/system/${SYSTEMD_UNIT}"
+  systemctl daemon-reload >/dev/null 2>&1 || true
+
+  # Remove the install directory when purging.
+  if [ "$purge" -eq 1 ]; then
+    rm -rf "$NODEXIA_DIR"
+  fi
+
+  # Remove the CLI defaults and the CLI itself last (safe: the running file is
+  # unlinked but stays valid until this process exits).
+  rm -f "$CLI_DEFAULTS"
+  rm -f "$CLI_PATH"
+
+  echo "Nodexia uninstalled."
+  if [ "$purge" -eq 0 ]; then
+    echo "Kept: data volumes (nodexia_data, caddy_data) and ${NODEXIA_DIR}."
+  fi
 }
 
 cmd="${1:-help}"
@@ -79,6 +153,9 @@ status | ps)
 update)
   [ -f "$INSTALLER" ] || die "installer not found at ${INSTALLER}."
   exec bash "$INSTALLER" --non-interactive --skip-dns-check --skip-port-check "$@"
+  ;;
+uninstall)
+  cmd_uninstall "$@"
   ;;
 help | -h | --help)
   usage

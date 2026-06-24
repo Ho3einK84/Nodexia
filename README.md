@@ -105,7 +105,20 @@ nodexia up          # start the stack
 nodexia down        # stop the stack
 nodexia restart     # restart the stack (or one service)
 nodexia update      # pull the latest version and redeploy
+nodexia uninstall   # remove the service, containers and CLI
 ```
+
+**Uninstall**
+
+```bash
+nodexia uninstall            # remove service/containers/CLI; keep data + /opt/nodexia
+nodexia uninstall --purge    # also delete data volumes, the image, and /opt/nodexia
+nodexia uninstall --yes      # skip the confirmation prompt
+```
+
+By default uninstall keeps the `nodexia_data` (database) and `caddy_data` (TLS)
+volumes and the install directory, so you can reinstall later. `--purge` removes
+them permanently.
 
 **Update**
 
