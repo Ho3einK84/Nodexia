@@ -145,6 +145,10 @@ Pushing a version tag (`git tag v0.2.0 && git push origin v0.2.0`) triggers
 static `linux/amd64` + `linux/arm64` binaries, and publishes them (with
 `checksums.txt`) to a GitHub Release. The project targets the latest **Go 1.25.x**.
 
+`make release VERSION=v0.2.1` is a shortcut: it bumps every version reference,
+runs the tests, then commits and tags the release for you (push the branch and
+tag to publish).
+
 ---
 
 ## 📄 License
