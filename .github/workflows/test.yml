@@ -24,4 +24,4 @@ jobs:
         run: go test ./...
 
       - name: Build binary
-        run: go build -trimpath -ldflags="-s -w -X main.version=v0.1.0" -o nodexia ./cmd/nodexia
+        run: go build -trimpath -ldflags="-s -w -X main.version=v0.2.0" -o nodexia ./cmd/nodexia
