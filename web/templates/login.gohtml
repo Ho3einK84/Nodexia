@@ -23,7 +23,19 @@
   <main class="auth__panel">
     <div class="auth__brand">
       <div class="auth__logo">
-        <i data-lucide="shield-check"></i>
+        {{/* Brand mark — the same node-graph glyph as favicon.svg, drawn in
+             white so it reads on the gradient tile. */}}
+        <svg class="auth__logo-mark" viewBox="0 0 64 64" role="img" aria-label="{{ .AppName }}">
+          <g stroke="#fff" stroke-width="2.6" stroke-linecap="round" opacity="0.85">
+            <line x1="32" y1="32" x2="32" y2="16"/>
+            <line x1="32" y1="32" x2="18" y2="44"/>
+            <line x1="32" y1="32" x2="46" y2="44"/>
+          </g>
+          <circle cx="32" cy="16" r="5.2" fill="#fff"/>
+          <circle cx="18" cy="44" r="5.2" fill="#fff"/>
+          <circle cx="46" cy="44" r="5.2" fill="#fff"/>
+          <circle cx="32" cy="32" r="7" fill="#fff"/>
+        </svg>
       </div>
       <p class="auth__eyebrow">{{ t "shell.eyebrow" }}</p>
       <h1 class="auth__title">{{ .AppName }}</h1>
@@ -53,7 +65,7 @@
           <span class="auth__field-label">{{ t "common.username" }}</span>
         </label>
 
-        <label class="auth__field">
+        <label class="auth__field auth__field--reveal">
           <i data-lucide="lock" class="auth__field-icon" aria-hidden="true"></i>
           <input type="password" name="password" placeholder=" " required
                  autocomplete="current-password">
