@@ -12,8 +12,15 @@ readonly DEFAULT_GIT_REF="main"
 readonly DEFAULT_IMAGE_VERSION="v0.1.0"
 readonly COMPOSE_FILE="compose.production.yml"
 readonly ENV_FILE=".env.production"
+readonly BUILD_ENV_FILE=".env"
 readonly CADDYFILE_PATH="deploy/Caddyfile"
 readonly SYSTEMD_UNIT="nodexia.service"
+readonly CLI_PATH="/usr/local/bin/nodexia"
+readonly CLI_DEFAULTS="/etc/default/nodexia"
+# Prebuilt release binaries published by .github/workflows/release.yml. When a
+# binary exists for the target version/arch the installer bakes it into a
+# sub-second image (Dockerfile.prebuilt) instead of compiling from source.
+readonly RELEASES_BASE="https://github.com/Ho3einK84/Nodexia/releases"
 
 DOMAIN=""
 ACME_EMAIL=""
@@ -27,6 +34,8 @@ TELEGRAM_BOT_TOKEN=""
 NON_INTERACTIVE=0
 SKIP_DNS=0
 SKIP_PORT_CHECK=0
+FORCE_SOURCE=0
+USE_PREBUILT=0
 
 if [[ -t 1 ]]; then
   readonly RST=$'\033[0m'
@@ -88,7 +97,9 @@ Options:
   --install-dir <path>    Install directory. Default: ${DEFAULT_INSTALL_DIR}
   --repo-url <url>        Git remote for fresh installs. Default: ${DEFAULT_REPO_URL}
   --git-ref <ref>         Branch or tag to deploy. Default: ${DEFAULT_GIT_REF}
-  --image-version <tag>   Docker build version. Default: ${DEFAULT_IMAGE_VERSION}
+  --image-version <tag>   Release/build version. Use a tag (e.g. v0.2.0) or
+                          "latest" to pull a prebuilt binary. Default: ${DEFAULT_IMAGE_VERSION}
+  --build-from-source     Always compile from source; skip prebuilt binaries.
   --admin-user <name>     Admin username. Preserved on rerun unless provided.
   --admin-password <pass> Admin password. Preserved on rerun unless provided.
   --telegram-bot-token <token>
@@ -164,6 +175,10 @@ parse_args() {
       TELEGRAM_BOT_TOKEN="$(trim "$2")"
       shift 2
       ;;
+    --build-from-source)
+      FORCE_SOURCE=1
+      shift
+      ;;
     --non-interactive)
       NON_INTERACTIVE=1
       shift
@@ -213,7 +228,13 @@ set_defaults() {
   [[ -n "$INSTALL_DIR" ]] || INSTALL_DIR="$DEFAULT_INSTALL_DIR"
   [[ -n "$REPO_URL" ]] || REPO_URL="$DEFAULT_REPO_URL"
   [[ -n "$GIT_REF" ]] || GIT_REF="$DEFAULT_GIT_REF"
-  [[ -n "$IMAGE_VERSION" ]] || IMAGE_VERSION="$DEFAULT_IMAGE_VERSION"
+
+  # Version is sticky across reruns: reuse the value recorded in the existing
+  # config so `nodexia update` keeps the same release unless asked to change it.
+  if [[ -z "$IMAGE_VERSION" ]]; then
+    IMAGE_VERSION="$(read_existing_env_value NODEXIA_IMAGE_VERSION)"
+    [[ -n "$IMAGE_VERSION" ]] || IMAGE_VERSION="$DEFAULT_IMAGE_VERSION"
+  fi
 
   if [[ -z "$DOMAIN" ]]; then
     DOMAIN="$(read_existing_env_value NODEXIA_DOMAIN)"
@@ -603,10 +624,124 @@ EOF
   ok "Systemd unit installed: $SYSTEMD_UNIT"
 }
 
+target_arch() {
+  local arch
+  arch="$(dpkg --print-architecture 2>/dev/null || true)"
+  if [[ -z "$arch" ]]; then
+    case "$(uname -m)" in
+    x86_64 | amd64) arch="amd64" ;;
+    aarch64 | arm64) arch="arm64" ;;
+    *) arch="" ;;
+    esac
+  fi
+  printf "%s" "$arch"
+}
+
+# fetch_prebuilt_binary downloads the release binary for this host's
+# architecture into $INSTALL_DIR/dist/nodexia and sets USE_PREBUILT=1 on success.
+# Any failure (no release, offline, arch mismatch, bad checksum) is non-fatal:
+# the caller falls back to building from source.
+fetch_prebuilt_binary() {
+  if [[ "$FORCE_SOURCE" -eq 1 ]]; then
+    info "Building from source (--build-from-source)"
+    return 1
+  fi
+
+  local arch asset base url checksums_url tmp expected actual
+  arch="$(target_arch)"
+  if [[ "$arch" != "amd64" && "$arch" != "arm64" ]]; then
+    warn "No prebuilt binary for architecture '${arch:-unknown}'; building from source."
+    return 1
+  fi
+
+  asset="nodexia_linux_${arch}"
+  case "$IMAGE_VERSION" in
+  dev | latest | "")
+    base="${RELEASES_BASE}/latest/download" ;;
+  *)
+    base="${RELEASES_BASE}/download/${IMAGE_VERSION}" ;;
+  esac
+  url="${base}/${asset}"
+  checksums_url="${base}/checksums.txt"
+
+  tmp="$(mktemp -d)"
+  info "Fetching prebuilt binary: ${asset} (${IMAGE_VERSION})"
+  if ! curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o "${tmp}/${asset}" "$url" 2>/dev/null; then
+    warn "Prebuilt binary unavailable (${url}); building from source."
+    rm -rf "$tmp"
+    return 1
+  fi
+
+  if curl -fsSL --max-time 30 -o "${tmp}/checksums.txt" "$checksums_url" 2>/dev/null; then
+    expected="$(grep -E "  ${asset}\$" "${tmp}/checksums.txt" 2>/dev/null | awk '{print $1}' | head -n1 || true)"
+    actual="$(sha256sum "${tmp}/${asset}" | awk '{print $1}')"
+    if [[ -z "$expected" || "$expected" != "$actual" ]]; then
+      warn "Checksum verification failed for ${asset}; building from source."
+      rm -rf "$tmp"
+      return 1
+    fi
+    ok "Checksum verified"
+  else
+    warn "Checksums file unavailable; skipping verification."
+  fi
+
+  mkdir -p "${INSTALL_DIR}/dist"
+  install -m 0755 "${tmp}/${asset}" "${INSTALL_DIR}/dist/nodexia"
+  rm -rf "$tmp"
+  USE_PREBUILT=1
+  ok "Prebuilt binary ready (no source compile needed)"
+  return 0
+}
+
+# write_build_env records the docker compose build-time variables in the project
+# .env so both this run and later `docker compose build` invocations (systemd,
+# the nodexia CLI) pick the same Dockerfile and version. It is interpolation-only
+# and never injected into containers — runtime secrets stay in $ENV_FILE.
+write_build_env() {
+  local dockerfile env_file
+  if [[ "$USE_PREBUILT" -eq 1 ]]; then
+    dockerfile="Dockerfile.prebuilt"
+  else
+    dockerfile="Dockerfile"
+  fi
+  env_file="${INSTALL_DIR}/${BUILD_ENV_FILE}"
+  cat >"$env_file" <<EOF
+# Docker Compose build-time interpolation (read automatically from this
+# directory). Managed by install.sh — runtime secrets live in ${ENV_FILE}.
+NODEXIA_DOCKERFILE=${dockerfile}
+NODEXIA_IMAGE_VERSION=${IMAGE_VERSION}
+EOF
+  ok "Build settings written: ${dockerfile} @ ${IMAGE_VERSION}"
+}
+
+# install_cli installs the `nodexia` management command and, for non-default
+# install paths, records the directory so the CLI can find the stack.
+install_cli() {
+  local src="${INSTALL_DIR}/scripts/nodexia"
+  if [[ ! -f "$src" ]]; then
+    warn "CLI source not found ($src); skipping nodexia command install."
+    return 0
+  fi
+  install -m 0755 "$src" "$CLI_PATH"
+  if [[ "$INSTALL_DIR" != "$DEFAULT_INSTALL_DIR" ]]; then
+    printf 'NODEXIA_DIR=%s\n' "$INSTALL_DIR" >"$CLI_DEFAULTS"
+  else
+    rm -f "$CLI_DEFAULTS" 2>/dev/null || true
+  fi
+  ok "CLI installed: nodexia (up, down, logs, update, status)"
+}
+
 deploy_stack() {
   cd "$INSTALL_DIR"
   [[ -f "$COMPOSE_FILE" ]] || die "Missing $INSTALL_DIR/$COMPOSE_FILE"
-  info "Building containers..."
+  export NODEXIA_IMAGE_VERSION="$IMAGE_VERSION"
+  if [[ "$USE_PREBUILT" -eq 1 ]]; then
+    export NODEXIA_DOCKERFILE="Dockerfile.prebuilt"
+    info "Assembling image from prebuilt binary..."
+  else
+    export NODEXIA_DOCKERFILE="Dockerfile"
+    info "Building image from source (first build may take ~100s)..."
+  fi
   docker compose -f "$COMPOSE_FILE" build
   info "Starting stack..."
   docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
@@ -661,11 +796,16 @@ print_summary() {
   say "  Username:  ${ADMIN_USER}"
   say "  Password:  ${ADMIN_PASSWORD}"
   say ""
-  say "  Useful commands"
-  say "  ---------------"
-  say "  systemctl status ${SYSTEMD_UNIT}"
-  say "  cd ${INSTALL_DIR} && docker compose ps"
-  say "  cd ${INSTALL_DIR} && docker compose logs -f"
+  say "  Manage with the nodexia command"
+  say "  -------------------------------"
+  say "  nodexia status     Show container status"
+  say "  nodexia logs       Follow logs (add a service name to narrow)"
+  say "  nodexia up         Start the stack"
+  say "  nodexia down       Stop the stack"
+  say "  nodexia restart    Restart the stack"
+  say "  nodexia update     Pull the latest version and redeploy"
+  say ""
+  say "  (also: systemctl status ${SYSTEMD_UNIT})"
   say ""
   if [[ -z "$(trim "$TELEGRAM_BOT_TOKEN")" ]]; then
     say "  Tip: to enable Telegram alerts, set NODEXIA_TELEGRAM_BOT_TOKEN in"
@@ -702,10 +842,15 @@ main() {
   section "Source"
   ensure_source_tree
 
+  section "Binary"
+  fetch_prebuilt_binary || true
+  write_build_env
+
   section "Configuration"
   write_env_production
   write_caddyfile
   write_systemd_unit
+  install_cli
 
   section "Deploy"
   deploy_stack
