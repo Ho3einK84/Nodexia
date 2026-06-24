@@ -1,0 +1,59 @@
+name: release
+
+# Build static, CGO-free Linux binaries on every version tag and publish them to
+# a GitHub Release. install.sh downloads the matching binary so production hosts
+# skip the ~100s source compile (modernc sqlite dominates that cost) and bake a
+# sub-second prebuilt image instead. Pushing a tag like `v0.2.0` triggers this.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Matches CI and the Docker base image: float to the newest 1.25 patch.
+          go-version: "1.25.x"
+          check-latest: true
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build static binaries
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            echo "building linux/${arch}"
+            GOARCH="$arch" go build -trimpath \
+              -ldflags="-s -w -X main.version=${VERSION}" \
+              -o "dist/nodexia_linux_${arch}" ./cmd/nodexia
+          done
+          ( cd dist && sha256sum nodexia_linux_* > checksums.txt )
+          cat dist/checksums.txt
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          assets=(dist/nodexia_linux_amd64 dist/nodexia_linux_arm64 dist/checksums.txt)
+          # Idempotent: re-running the workflow on the same tag refreshes assets
+          # instead of failing because the release already exists.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${assets[@]}" --clobber
+          else
+            gh release create "$TAG" "${assets[@]}" --title "$TAG" --generate-notes
+          fi

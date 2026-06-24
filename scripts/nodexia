@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Nodexia management CLI — a thin, friendly wrapper around the production Docker
+# Compose stack. Installed to /usr/local/bin/nodexia by install.sh.
+#
+#   nodexia up                Start (or recreate) the stack in the background
+#   nodexia down              Stop and remove the stack containers
+#   nodexia restart [svc]     Restart the stack (or a single service)
+#   nodexia logs [svc]        Follow logs (optionally for one service)
+#   nodexia status            Show container status
+#   nodexia update [args...]  Pull the latest version and redeploy (runs the
+#                             installer non-interactively; pass e.g.
+#                             --image-version latest to upgrade)
+#
+# The install directory defaults to /opt/nodexia and can be overridden with the
+# NODEXIA_DIR environment variable or /etc/default/nodexia (written by install.sh
+# for non-default install paths).
+set -euo pipefail
+
+# shellcheck disable=SC1091
+[ -f /etc/default/nodexia ] && . /etc/default/nodexia
+
+NODEXIA_DIR="${NODEXIA_DIR:-/opt/nodexia}"
+COMPOSE_FILE="compose.production.yml"
+INSTALLER="${NODEXIA_DIR}/scripts/install.sh"
+
+# Compose against the production stack needs root (or docker-group) access; for a
+# predictable experience re-exec under sudo when not already root.
+if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+  if command -v sudo >/dev/null 2>&1; then
+    exec sudo -E "$0" "$@"
+  fi
+  echo "nodexia: run as root or with sudo." >&2
+  exit 1
+fi
+
+usage() {
+  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+die() {
+  echo "nodexia: $*" >&2
+  exit 1
+}
+
+require_stack() {
+  [ -f "${NODEXIA_DIR}/${COMPOSE_FILE}" ] ||
+    die "stack not found at ${NODEXIA_DIR}. Set NODEXIA_DIR or run install.sh first."
+  cd "$NODEXIA_DIR"
+}
+
+dc() {
+  docker compose -f "$COMPOSE_FILE" "$@"
+}
+
+cmd="${1:-help}"
+[ "$#" -gt 0 ] && shift || true
+
+case "$cmd" in
+up)
+  require_stack
+  dc up -d --remove-orphans "$@"
+  ;;
+down)
+  require_stack
+  dc down "$@"
+  ;;
+restart)
+  require_stack
+  dc restart "$@"
+  ;;
+logs)
+  require_stack
+  dc logs -f --tail=200 "$@"
+  ;;
+status | ps)
+  require_stack
+  dc ps "$@"
+  ;;
+update)
+  [ -f "$INSTALLER" ] || die "installer not found at ${INSTALLER}."
+  exec bash "$INSTALLER" --non-interactive --skip-dns-check --skip-port-check "$@"
+  ;;
+help | -h | --help)
+  usage
+  ;;
+*)
+  echo "nodexia: unknown command '${cmd}'" >&2
+  echo >&2
+  usage >&2
+  exit 1
+  ;;
+esac

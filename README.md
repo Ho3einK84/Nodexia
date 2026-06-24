@@ -42,7 +42,15 @@ forecasting, and alerting.
 Nodexia runs as a Docker Compose stack behind [Caddy](https://caddyserver.com/)
 (automatic HTTPS). `install.sh` handles everything on a fresh Ubuntu host:
 installs Docker, deploys to `/opt/nodexia`, generates secrets, builds the
-containers, registers a systemd service, and waits for the app to report healthy.
+containers, registers a systemd service, installs the `nodexia` management
+command, and waits for the app to report healthy.
+
+> ⚡ **Fast installs.** The installer downloads a prebuilt, statically linked
+> binary from the matching [GitHub Release](https://github.com/Ho3einK84/Nodexia/releases)
+> (verified by SHA-256) and bakes it into the image — turning a ~100 s source
+> compile into a sub-second build. It transparently falls back to building from
+> source when no release binary exists for the target version/architecture, or
+> when you pass `--build-from-source`.
 
 **Prerequisites**
 
@@ -71,21 +79,46 @@ and credentials once it's healthy. Add `--non-interactive` for an unattended run
 | `--email <addr>` | ACME / Let's Encrypt contact |
 | `--admin-user` / `--admin-password` | Admin login (preserved on rerun unless set) |
 | `--telegram-bot-token <token>` | Enable Telegram alert delivery |
+| `--image-version <tag>` | Release to deploy — a tag (e.g. `v0.2.0`) or `latest` |
+| `--build-from-source` | Always compile from source; skip prebuilt binaries |
 | `--non-interactive` | Never prompt; auto-generate missing values |
 | `--skip-dns-check` / `--skip-port-check` | Skip preflight checks |
 | `-h`, `--help` | Show all options |
 
 **What it creates:** `/opt/nodexia` (source + Compose),
 `/opt/nodexia/.env.production` (secrets, `chmod 600`), the `nodexia.service`
-systemd unit, and the `nodexia_data` (SQLite + pinned host keys) and `caddy_data`
-(TLS certs) volumes — all persist across updates.
+systemd unit, the `nodexia` CLI at `/usr/local/bin/nodexia`, and the
+`nodexia_data` (SQLite + pinned host keys) and `caddy_data` (TLS certs) volumes —
+all persist across updates.
+
+---
+
+## 🧭 Managing Nodexia
+
+The installer adds a `nodexia` command that wraps the Compose stack (it uses
+`sudo` automatically when needed):
+
+```bash
+nodexia status      # show container status
+nodexia logs        # follow logs (add a service name, e.g. `nodexia logs app`)
+nodexia up          # start the stack
+nodexia down        # stop the stack
+nodexia restart     # restart the stack (or one service)
+nodexia update      # pull the latest version and redeploy
+```
 
 **Update**
 
 ```bash
-cd Nodexia && git pull
-sudo ./install.sh --domain panel.example.com   # rebuilds, preserves existing secrets
+nodexia update                          # redeploy the configured version
+nodexia update --image-version v0.2.0   # upgrade to a specific release
+nodexia update --image-version latest   # upgrade to the newest release
 ```
+
+`nodexia update` re-runs the installer non-interactively: it refreshes the
+source, re-downloads the prebuilt binary, and redeploys while preserving your
+existing secrets. The classic path still works too — `cd /opt/nodexia && git
+pull && sudo ./install.sh`.
 
 > 🛠️ **Manual / non-Ubuntu:** `cp .env.production.example .env.production`, edit
 > it, then `docker compose -f compose.production.yml up -d --build`.
@@ -241,6 +274,13 @@ make build    # → bin/nodexia
 make test     # full test suite
 go vet ./...  # static analysis
 ```
+
+**Releases.** Pushing a version tag (e.g. `git tag v0.2.0 && git push origin
+v0.2.0`) triggers [`.github/workflows/release.yml`](.github/workflows/release.yml),
+which runs the tests, cross-compiles static `linux/amd64` and `linux/arm64`
+binaries, and publishes them (with `checksums.txt`) to a GitHub Release. The
+installer then downloads the binary matching `--image-version` instead of
+compiling on the target host.
 
 > **Go version:** the project targets the **latest Go 1.25.x** patch, not a
 > frozen one. The Docker base image (`golang:1.25`) and CI (`go-version: 1.25.x`)

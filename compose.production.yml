@@ -2,7 +2,10 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile
+      # Defaults to the source-building Dockerfile. install.sh sets
+      # NODEXIA_DOCKERFILE=Dockerfile.prebuilt (via the project .env) when it has
+      # downloaded a release binary, so `build` becomes a sub-second COPY.
+      dockerfile: ${NODEXIA_DOCKERFILE:-Dockerfile}
       args:
         VERSION: ${NODEXIA_IMAGE_VERSION:-dev}
     restart: unless-stopped
