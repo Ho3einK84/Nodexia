@@ -2,6 +2,14 @@
 <!doctype html>
 <html lang="{{ .Lang }}" dir="{{ .Dir }}">
 {{ template "head" . }}
+{{ if eq .ContentTemplate "content-login" }}
+{{/* The login page is an immersive, full-screen experience: it drops the app
+     shell (header / nav / footer) entirely and renders only its own animated
+     scene. Visitors here are not authenticated, so the dashboard chrome would
+     leak navigation they cannot use. */}}
+<body class="auth-body">
+  {{ .MainHTML }}
+{{ else }}
 <body>
   <div id="shell" class="shell">
     {{ template "shell-header" . }}
@@ -18,10 +26,9 @@
     {{ template "footer" . }}
   </div>
 
-  {{ if ne .ContentTemplate "content-login" }}
   {{ template "mobile-drawer" . }}
   {{ template "bottom-nav" . }}
-  {{ end }}
+{{ end }}
 
   {{/* Client i18n island: only the strings the JS needs, in the active locale.
        type="application/json" is data, not script, so it is exempt from the
