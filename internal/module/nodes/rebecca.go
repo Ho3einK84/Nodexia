@@ -33,10 +33,16 @@ const (
 	// the script derives its default app name.
 	rebeccaInstallName = "rebecca-node"
 
-	// rebeccaDevScriptURL is the dev/beta install script. The stable script
-	// lives on a different ref; wiring stable on later means adding its URL and
-	// flipping channelStable's Enabled flag (see InstallChannels).
-	rebeccaDevScriptURL = "https://raw.githubusercontent.com/rebeccapanel/Rebecca/dev/scripts/rebecca/rebecca-node.sh"
+	// rebeccaDevScriptURL is the dev/beta install script. We deliberately use the
+	// BINARY-flavored script (rebecca-node-binary.sh), not the docker one: the
+	// script installs the `rebecca-node` management CLI as a copy of itself, so
+	// running the docker script would leave a docker-flavored CLI on a
+	// binary-mode install — every later `rebecca-node update`/action then aborts
+	// with "installation is in binary mode, but rebecca-node is the docker
+	// script". The binary script installs a binary-flavored CLI that matches.
+	// The stable script lives on a different ref; wiring stable on later means
+	// adding its URL and flipping channelStable's Enabled flag (see InstallChannels).
+	rebeccaDevScriptURL = "https://raw.githubusercontent.com/rebeccapanel/Rebecca/dev/scripts/rebecca/rebecca-node-binary.sh"
 
 	// rebeccaInstallScriptTimeout bounds the install script remotely. The
 	// docker dev install runs `compose up -d` (detached, no log tail), so a
@@ -297,9 +303,10 @@ func (p RebeccaProvider) ActionCommand(nodeName, actionKey string) (string, time
 // We install Rebecca-node in BINARY mode (native systemd service, no Docker) —
 // that is the supported footprint and it is what discovery reads (.env,
 // .binary-release.json, .install-mode=binary, the rebecca-node systemd unit).
-// The script's default flavor is docker, and requesting binary against a
-// docker-flavored run is rejected, so we force binary with
-// REBECCA_NODE_SCRIPT_FLAVOR=binary (passed via `env` so it survives sudo).
+// We run the binary-flavored script (rebecca-node-binary.sh, see
+// rebeccaDevScriptURL) so the `rebecca-node` CLI it installs is also binary
+// flavored and later update/actions work. REBECCA_NODE_SCRIPT_FLAVOR=binary is
+// passed via `env` (surviving sudo) to make the binary mode explicit.
 //
 // How rebecca-node.sh consumes its inputs in binary mode (verified against the
 // script's read_node_certificate_bundle + configure_binary_node_env): it reads
