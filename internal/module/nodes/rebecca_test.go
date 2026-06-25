@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const rebeccaDiscoveryFixture = `=REBECCA=
+const rebeccaDiscoveryFixture = `=REBECCANODE=rebecca-node=
 =ENVSTART=
 SERVICE_PORT=62033
 XRAY_API_PORT=62034
@@ -19,7 +19,7 @@ REBECCA_DATA_DIR=/var/lib/rebecca-node
 =MODE=binary=
 =SERVICE=active=
 =CONTAINER==
-=REBECCAEND=
+=REBECCANODEEND=
 `
 
 func TestRebeccaParseDiscovery(t *testing.T) {
@@ -63,6 +63,44 @@ func TestRebeccaParseDiscovery(t *testing.T) {
 	}
 }
 
+func TestRebeccaParseDiscoveryMultipleInstances(t *testing.T) {
+	output := "=REBECCANODE=rebecca-node=\n=ENVSTART=\nSERVICE_PORT=62050\nXRAY_API_PORT=62051\n=ENVEND=\n=RELEASESTART=\n=RELEASEEND=\n=MODE=binary=\n=SERVICE=active=\n=REBECCANODEEND=\n" +
+		"=REBECCANODE=node2=\n=ENVSTART=\nSERVICE_PORT=62060\nXRAY_API_PORT=62061\n=ENVEND=\n=RELEASESTART=\n=RELEASEEND=\n=MODE=binary=\n=SERVICE=inactive=\n=REBECCANODEEND=\n"
+	snapshots := RebeccaProvider{}.ParseDiscovery(output, time.Now())
+	if len(snapshots) != 2 {
+		t.Fatalf("len(snapshots) = %d, want 2", len(snapshots))
+	}
+	if snapshots[0].ServiceName != "rebecca-node" || snapshots[1].ServiceName != "node2" {
+		t.Errorf("ServiceNames = %q, %q; want rebecca-node, node2", snapshots[0].ServiceName, snapshots[1].ServiceName)
+	}
+	if snapshots[1].ServicePort != "62060" {
+		t.Errorf("node2 ServicePort = %q, want 62060", snapshots[1].ServicePort)
+	}
+	// A blank REBECCA_DATA_DIR defaults per instance to /var/lib/<name>.
+	if snapshots[1].DataDir != "/var/lib/node2" {
+		t.Errorf("node2 DataDir = %q, want /var/lib/node2", snapshots[1].DataDir)
+	}
+	if snapshots[1].HealthStatus != "stopped" {
+		t.Errorf("node2 HealthStatus = %q, want stopped", snapshots[1].HealthStatus)
+	}
+}
+
+func TestRebeccaInstallCommandUsesNodeName(t *testing.T) {
+	cmd, err := RebeccaProvider{}.InstallCommand(RebeccaInstallConfig{
+		NodeName:    "node2",
+		Channel:     "dev",
+		ServicePort: "62050",
+		APIPort:     "62051",
+		Bundle:      "-----BEGIN CERTIFICATE-----\nx\n-----END CERTIFICATE-----\n-----BEGIN RSA PRIVATE KEY-----\ny\n-----END RSA PRIVATE KEY-----\n",
+	})
+	if err != nil {
+		t.Fatalf("InstallCommand: %v", err)
+	}
+	if !strings.Contains(cmd, "install --name node2 --binary --dev") {
+		t.Errorf("install command = %q, want it to pin --name node2", cmd)
+	}
+}
+
 func TestRebeccaParseDiscoveryNotInstalled(t *testing.T) {
 	if snapshots := (RebeccaProvider{}).ParseDiscovery("", time.Now()); len(snapshots) != 0 {
 		t.Fatalf("len(snapshots) = %d, want 0", len(snapshots))
@@ -71,7 +109,7 @@ func TestRebeccaParseDiscoveryNotInstalled(t *testing.T) {
 
 func TestRebeccaParseDiscoveryUnreadableConfig(t *testing.T) {
 	// Marker present (directory exists) but files were unreadable: defaults apply.
-	output := "=REBECCA=\n=ENVSTART=\n=ENVEND=\n=RELEASESTART=\n=RELEASEEND=\n=MODE==\n=SERVICE=inactive=\n=REBECCAEND=\n"
+	output := "=REBECCANODE=rebecca-node=\n=ENVSTART=\n=ENVEND=\n=RELEASESTART=\n=RELEASEEND=\n=MODE==\n=SERVICE=inactive=\n=REBECCANODEEND=\n"
 	snapshots := RebeccaProvider{}.ParseDiscovery(output, time.Now())
 	if len(snapshots) != 1 {
 		t.Fatalf("len(snapshots) = %d, want 1", len(snapshots))

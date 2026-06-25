@@ -752,6 +752,8 @@
   "nodes.err_bundle_pem": "The bundle must contain a certificate (-----BEGIN CERTIFICATE-----) followed by its private key.",
   "nodes.err_channel_disabled": "That Rebecca install channel is not available yet.",
   "nodes.err_rebecca_exists": "A Rebecca node is already installed on this server.",
+  "nodes.err_node_name": "Use letters, digits, dot, dash, or underscore (max 64 characters).",
+  "nodes.err_node_name_taken": "A node with this name already exists on this server — pick another name.",
   "nodes.soon": "Soon",
   "nodes.discovery_errors": "Discovery had errors",
   "nodes.discovery_complete": "Discovery complete",

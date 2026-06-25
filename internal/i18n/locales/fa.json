@@ -752,6 +752,8 @@
   "nodes.err_bundle_pem": "بسته باید شامل یک گواهی (-----BEGIN CERTIFICATE-----) و سپس کلید خصوصی آن باشد.",
   "nodes.err_channel_disabled": "این روش نصب هنوز فعال نیست.",
   "nodes.err_rebecca_exists": "نود Rebecca قبلاً نصب شده است.",
+  "nodes.err_node_name": "از حروف، ارقام، نقطه، خط تیره یا زیرخط استفاده کنید (حداکثر ۶۴ کاراکتر).",
+  "nodes.err_node_name_taken": "نودی با این نام روی این سرور وجود دارد — نام دیگری انتخاب کنید.",
   "nodes.soon": "به زودی",
   "nodes.discovery_errors": "خطا در شناسایی",
   "nodes.discovery_complete": "شناسایی تکمیل شد",

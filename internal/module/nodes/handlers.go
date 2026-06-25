@@ -503,7 +503,14 @@ func (h *Handlers) RebeccaInstallStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A blank name installs the primary instance (rebecca-node); a custom name
+	// lets several Rebecca nodes coexist under /opt/<name>, like PasarGuard.
+	nodeName := strings.TrimSpace(r.FormValue("node_name"))
+	if nodeName == "" {
+		nodeName = rebeccaInstallName
+	}
 	input := installFormInput{
+		NodeName:    nodeName,
 		ServicePort: strings.TrimSpace(r.FormValue("service_port")),
 		APIPort:     strings.TrimSpace(r.FormValue("api_port")),
 		Bundle:      r.FormValue("bundle"),
@@ -514,8 +521,10 @@ func (h *Handlers) RebeccaInstallStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	installErrors := ValidationErrors{}
-	if h.nodeNameTaken(r.Context(), server.ID, rebeccaInstallName) {
-		installErrors["bundle"] = h.t(r, "nodes.err_rebecca_exists")
+	if err := ValidateNodeName(nodeName); err != nil {
+		installErrors["node_name"] = h.t(r, "nodes.err_node_name")
+	} else if h.nodeNameTaken(r.Context(), server.ID, nodeName) {
+		installErrors["node_name"] = h.t(r, "nodes.err_node_name_taken")
 	}
 
 	plan, cfgErr := RebeccaProvider{}.BuildInstallPlan(input)
@@ -544,7 +553,7 @@ func (h *Handlers) RebeccaInstallStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	connReq := h.runtimeConnRequest(server)
-	job := h.installs.create(server.ID, rebeccaInstallName, plan)
+	job := h.installs.create(server.ID, nodeName, plan)
 	go runInstall(job, h.deps.SSH, connReq, server.Host)
 
 	http.Redirect(w, r, installJobURL(server.ID, job.id), http.StatusSeeOther)
@@ -906,9 +915,14 @@ func (h *Handlers) rebeccaInstallFormViewFromInput(server servers.Server, enable
 		channels = append(channels, view.NodeInstallChannelView{Key: c.Key, Enabled: c.Enabled})
 	}
 
+	nodeName := strings.TrimSpace(input.NodeName)
+	if nodeName == "" {
+		nodeName = rebeccaInstallName
+	}
+
 	return view.NodeRebeccaInstallFormView{
 		Action:      nodesURL(server.ID) + "/install/rebecca",
-		NodeName:    rebeccaInstallName,
+		NodeName:    nodeName,
 		ServicePort: servicePort,
 		APIPort:     apiPort,
 		Channel:     channelDev,
