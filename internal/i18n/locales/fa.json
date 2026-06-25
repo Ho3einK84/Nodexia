@@ -782,7 +782,7 @@
   "nodes.scope_title": "نحوه مدیریت نودها",
   "nodes.scope_provider": "هر خانواده نود Provider اختصاصی دارد که وظیفه شناسایی و اجرای دستورات CLI را بر عهده دارد.",
   "nodes.scope_pasarguard": "نودهای <strong>PasarGuard</strong> داکری هستند و از طریق <code>pg-node</code> مدیریت می‌شوند.",
-  "nodes.scope_rebecca": "نودهای <strong>Rebecca</strong> در <code>/opt/rebecca-node</code> قرار دارند و علاوه بر شناسایی/مدیریت، کانال dev (بتا) را می‌توان به‌صورت نود باینری از پنل نصب کرد.",
+  "nodes.scope_rebecca": "نودهای <strong>Rebecca</strong> در <code>/opt/&lt;name&gt;</code> (پیش‌فرض <code>rebecca-node</code>) قرار دارند و علاوه بر شناسایی/مدیریت، کانال dev (بتا) را می‌توان به‌صورت نود باینری از پنل نصب کرد.",
   "nodes.scope_ports": "پورت سرویس برای ارتباط پنل، پورت API برای مدیریت Xray و پورت‌های پراکسی برای ترافیک تونل.",
   "nodes.scope_actions": "عملیات طولانی در پس‌زمینه اجرا می‌شوند. کلید و گواهی پس از نصب نمایش داده شده و ذخیره نمی‌گردند.",
   "nodes.back_to_nodes": "بازگشت به نودها",
