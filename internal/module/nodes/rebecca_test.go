@@ -129,3 +129,21 @@ func TestRebeccaActionCommand(t *testing.T) {
 		t.Fatalf("Rebecca must not expose an install action")
 	}
 }
+
+func TestRebeccaReinstallActionCommand(t *testing.T) {
+	command, _, err := RebeccaProvider{}.ActionCommand("rebecca-node", "reinstall")
+	if err != nil {
+		t.Fatalf("ActionCommand reinstall: %v", err)
+	}
+	// Reinstall must repair the CLI via the binary script's script-install, not
+	// drive the (possibly broken) installed rebecca-node CLI.
+	if !strings.Contains(command, "rebecca-node-binary.sh") {
+		t.Errorf("reinstall command = %q, want it to fetch the binary script", command)
+	}
+	if !strings.Contains(command, "script-install --name rebecca-node") {
+		t.Errorf("reinstall command = %q, want script-install of the rebecca-node CLI", command)
+	}
+	if strings.Contains(command, "rebecca-node logs") || strings.Contains(command, "$SUDO rebecca-node ") {
+		t.Errorf("reinstall must not invoke the installed CLI: %q", command)
+	}
+}
