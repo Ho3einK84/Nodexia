@@ -202,6 +202,31 @@ func TestEvaluatorTrafficMetrics(t *testing.T) {
 	}
 }
 
+func TestEvaluatorServerUnreachable(t *testing.T) {
+	f := newEvalFixture(t)
+	downRule := f.mustRule(t, alerts.Rule{ServerID: &f.serverID, Metric: alerts.MetricServerUnreachable, Comparator: alerts.ComparatorGTE, Threshold: 1, ConsecutiveHits: 1, Severity: alerts.SeverityCritical, Enabled: true})
+	f.mustRule(t, alerts.Rule{ServerID: &f.serverID, Metric: alerts.MetricCPU, Comparator: alerts.ComparatorGTE, Threshold: 90, ConsecutiveHits: 1, Severity: alerts.SeverityWarning, Enabled: true})
+
+	spy := &fakeNotifier{}
+	ev := alerts.NewEvaluator(f.repo, spy)
+
+	// Server unreachable: the unreachable rule fires; the CPU rule is skipped
+	// (its value is unknown this cycle), so exactly one notification is sent.
+	mustEvaluate(t, ev, f, alerts.Metrics{Unreachable: true})
+	if spy.calls != 1 {
+		t.Fatalf("calls = %d, want 1 (server_unreachable fires, cpu skipped)", spy.calls)
+	}
+	if _, err := f.repo.GetOpenEvent(f.ctx, downRule.ID, f.serverID); err != nil {
+		t.Fatalf("expected an open server_unreachable event, got %v", err)
+	}
+
+	// Server reachable again (a snapshot was collected): the open event resolves.
+	mustEvaluate(t, ev, f, alerts.Metrics{Unreachable: false, CPU: 10})
+	if _, err := f.repo.GetOpenEvent(f.ctx, downRule.ID, f.serverID); !errors.Is(err, alerts.ErrNotFound) {
+		t.Fatalf("expected the server_unreachable event to resolve, got %v", err)
+	}
+}
+
 func TestEvaluatorRecordsEventsWithoutNotifier(t *testing.T) {
 	f := newEvalFixture(t)
 	rule := f.mustRule(t, alerts.Rule{ServerID: &f.serverID, Metric: alerts.MetricCPU, Comparator: alerts.ComparatorGTE, Threshold: 90, ConsecutiveHits: 1, Severity: alerts.SeverityWarning, Enabled: true})

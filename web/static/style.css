@@ -3247,15 +3247,48 @@ body.modal-open {
 .server-card__status {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 0.72rem;
-  font-weight: var(--fw-medium);
-  margin-top: 2px;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
 }
 
-.server-status--online  { color: var(--ok); }
-.server-status--stale   { color: var(--warn); }
-.server-status--unknown { color: var(--text-dim); }
+/* Up/Down/Unknown pill with a soft tinted background. */
+.server-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.server-status-badge--up {
+  color: var(--ok);
+  background: rgba(74, 222, 128, 0.12);
+  border-color: rgba(74, 222, 128, 0.28);
+}
+
+.server-status-badge--down {
+  color: var(--crit);
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.28);
+}
+
+.server-status-badge--unknown {
+  color: var(--text-dim);
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+/* The freshness line ("Just now" / "Last checked 4h ago"). */
+.server-card__seen {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
 
 .status-pulse {
   width: 6px;
@@ -3265,7 +3298,7 @@ body.modal-open {
   flex-shrink: 0;
 }
 
-.server-status--online .status-pulse {
+.server-status-badge--up .status-pulse {
   box-shadow: 0 0 0 0 currentColor;
   animation: pulse-status 2.4s ease-in-out infinite;
 }

@@ -214,11 +214,15 @@ type ServerSummary struct {
 	CredentialRef      string
 	CreatedAt          string
 	UpdatedAt          string
-	// IsOnline is true when a monitoring snapshot was collected within the last
-	// 10 minutes. LastSeenAt carries a human-readable age string when there is
-	// older snapshot data; both are empty when no snapshots exist.
-	IsOnline   bool
+	// Status is the reachability state derived from the latest monitoring
+	// snapshot's age relative to the monitoring interval: "up" (fresh), "down"
+	// (stale — the server is not reporting), or "unknown" (never seen).
+	// LastSeenAt carries a human-readable age ("4h ago") when older snapshot data
+	// exists; JustNow is true when the most recent check is very recent and is
+	// shown as "Just now" instead of an age.
+	Status     string
 	LastSeenAt string
+	JustNow    bool
 	// FlagEmoji is the detected country's flag (regional-indicator emoji), or ""
 	// when the country is unknown/undetected. CountryName is the human-readable
 	// name shown on hover; CountryCode is the ISO 3166-1 alpha-2 code.

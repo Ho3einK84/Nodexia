@@ -120,7 +120,9 @@ func applyRuleCondition(rule *Rule, input RuleFormInput, errs ValidationErrors) 
 	threshold := strings.TrimSpace(input.Threshold)
 
 	switch rule.Metric {
-	case MetricProjectedExceedLimit:
+	case MetricServerUnreachable, MetricProjectedExceedLimit:
+		// Boolean metrics: the only coherent condition is "≥ 1" (fires when the
+		// flag is set), so the operator just picks the metric.
 		rule.Comparator = ComparatorGTE
 		rule.Threshold = 1
 	case MetricDaysToExhaustion:

@@ -79,13 +79,18 @@
           <div class="server-card__identity">
             <h4 class="server-card__name"><i data-lucide="server" class="icon-in-button"></i> {{ .Name }}{{ if .FlagEmoji }} <span class="server-card__flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</h4>
             <span class="server-card__host">{{ .Username }}@{{ .Host }}:{{ .Port }}</span>
-            {{ if .IsOnline }}
-            <span class="server-card__status server-status--online"><span class="status-pulse"></span>{{ t "servers.status.online" }}</span>
-            {{ else if .LastSeenAt }}
-            <span class="server-card__status server-status--stale"><span class="status-pulse"></span>{{ t "servers.status.last_checked" "value" .LastSeenAt }}</span>
-            {{ else }}
-            <span class="server-card__status server-status--unknown"><span class="status-pulse"></span>{{ t "servers.status.no_data" }}</span>
-            {{ end }}
+            <span class="server-card__status">
+              {{ if eq .Status "up" }}
+              <span class="server-status-badge server-status-badge--up"><span class="status-pulse"></span>{{ t "servers.status.up" }}</span>
+              {{ else if eq .Status "down" }}
+              <span class="server-status-badge server-status-badge--down"><span class="status-pulse"></span>{{ t "servers.status.down" }}</span>
+              {{ else }}
+              <span class="server-status-badge server-status-badge--unknown"><span class="status-pulse"></span>{{ t "servers.status.unknown" }}</span>
+              {{ end }}
+              {{ if .JustNow }}<span class="server-card__seen">{{ t "servers.status.just_now" }}</span>
+              {{ else if .LastSeenAt }}<span class="server-card__seen">{{ t "servers.status.last_checked" "value" .LastSeenAt }}</span>
+              {{ end }}
+            </span>
           </div>
         </div>
         <div class="server-card__badges">
