@@ -102,10 +102,19 @@ func (RebeccaProvider) DiscoveryCommand() string {
 		`HAVE_DOCKER=0; command -v docker >/dev/null 2>&1 && HAVE_DOCKER=1; ` +
 		`for dir in /opt/*/; do ` +
 		`base="${dir%/}"; ` +
-		// A Rebecca install is identified by its marker files, which PasarGuard
-		// (docker-compose.yml) never writes — so the two providers never overlap.
-		`[ -f "$base/.binary-release.json" ] || [ -f "$base/.install-mode" ] || continue; ` +
 		`name="${base##*/}"; ` +
+		// Identify a Rebecca NODE specifically — NOT the Rebecca panel/server, which
+		// lives under /opt too and writes the SAME marker files (.install-mode,
+		// .binary-release.json), so the old marker-only check surfaced the panel as a
+		// node. A node is told apart by its image: binary nodes tag
+		// .binary-release.json image "rebecca-node (binary)"; docker nodes run the
+		// rebeccapanel/rebecca-node compose image. The panel tags "rebecca-server
+		// (binary)" / runs rebeccapanel/rebecca, so it never matches and is skipped.
+		// (PasarGuard does the same via isPasarguardNodeImage.)
+		`is_node=0; ` +
+		`if [ -f "$base/.binary-release.json" ] && $SUDO grep -Eqi "\"image\"[^,]*rebecca-node" "$base/.binary-release.json" 2>/dev/null; then is_node=1; fi; ` +
+		`if [ "$is_node" -eq 0 ]; then for cf in "$base/docker-compose.yml" "$base/docker-compose.yaml" "$base/compose.yml" "$base/compose.yaml"; do [ -f "$cf" ] && $SUDO grep -Eqi "image:[^#]*rebecca-node" "$cf" 2>/dev/null && { is_node=1; break; }; done; fi; ` +
+		`[ "$is_node" -eq 1 ] || continue; ` +
 		`printf "=REBECCANODE=%s=\n" "$name"; ` +
 		`printf "=ENVSTART=\n"; $SUDO cat "$base/.env" 2>/dev/null || true; printf "\n=ENVEND=\n"; ` +
 		`printf "=RELEASESTART=\n"; $SUDO cat "$base/.binary-release.json" 2>/dev/null || true; printf "\n=RELEASEEND=\n"; ` +
@@ -150,7 +159,9 @@ func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Sn
 			inBlock = true
 		case trimmed == "=REBECCANODEEND=":
 			if inBlock && name != "" {
-				snapshots = append(snapshots, parseRebeccaInstance(name, block, listenSockets, collectedAt))
+				if snap, ok := parseRebeccaInstance(name, block, listenSockets, collectedAt); ok {
+					snapshots = append(snapshots, snap)
+				}
 			}
 			inBlock = false
 			name = ""
@@ -166,7 +177,12 @@ func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Sn
 // parseRebeccaInstance builds one Snapshot from a single "=REBECCANODE=" block.
 // name is the /opt/<name> directory (and systemd/container name) the instance
 // lives under.
-func parseRebeccaInstance(name string, lines []string, listenSockets []listenSocket, collectedAt time.Time) Snapshot {
+//
+// It returns ok=false when the block belongs to the Rebecca PANEL/server rather
+// than a node (they share the /opt layout and marker files): the shell gate
+// already excludes the panel, and this is the matching belt-and-suspenders check
+// on the parsed metadata so a panel can never slip through as a node.
+func parseRebeccaInstance(name string, lines []string, listenSockets []listenSocket, collectedAt time.Time) (Snapshot, bool) {
 	envLines, _ := markerSection(lines, "=ENVSTART=", "=ENVEND=")
 	env := parseEnvFile(envLines)
 
@@ -188,7 +204,14 @@ func parseRebeccaInstance(name string, lines []string, listenSockets []listenSoc
 	}
 
 	releaseLines, _ := markerSection(lines, "=RELEASESTART=", "=RELEASEEND=")
-	version, installModeFromRelease := parseRebeccaRelease(strings.Join(releaseLines, "\n"))
+	version, installModeFromRelease, image := parseRebeccaRelease(strings.Join(releaseLines, "\n"))
+
+	// Drop the Rebecca panel/server: it has a .binary-release.json image, but one
+	// that names the server, not a node. An empty image (e.g. a docker-mode node
+	// without binary metadata) is left to the shell gate and kept here.
+	if image != "" && !isRebeccaNodeImage(image) {
+		return Snapshot{}, false
+	}
 
 	installMode, _ := markerValue(lines, "MODE")
 	installMode = strings.ToLower(strings.TrimSpace(installMode))
@@ -244,24 +267,36 @@ func parseRebeccaInstance(name string, lines []string, listenSockets []listenSoc
 		Confidence:   confidence,
 		Evidence:     evidence,
 		CollectedAt:  collectedAt,
-	})
+	}), true
 }
 
-// parseRebeccaRelease extracts the version tag and install mode from
-// .binary-release.json (fields "tag" and "install_mode").
-func parseRebeccaRelease(raw string) (version, installMode string) {
+// parseRebeccaRelease extracts the version tag, install mode, and image label from
+// .binary-release.json (fields "tag", "install_mode", "image"). The image label
+// distinguishes a node ("rebecca-node (binary)") from the panel/server
+// ("rebecca-server (binary)").
+func parseRebeccaRelease(raw string) (version, installMode, image string) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", ""
+		return "", "", ""
 	}
 	var release struct {
 		Tag         string `json:"tag"`
 		InstallMode string `json:"install_mode"`
+		Image       string `json:"image"`
 	}
 	if err := json.Unmarshal([]byte(raw), &release); err != nil {
-		return "", ""
+		return "", "", ""
 	}
-	return strings.TrimSpace(release.Tag), strings.ToLower(strings.TrimSpace(release.InstallMode))
+	return strings.TrimSpace(release.Tag), strings.ToLower(strings.TrimSpace(release.InstallMode)), strings.TrimSpace(release.Image)
+}
+
+// isRebeccaNodeImage reports whether a .binary-release.json / compose image label
+// belongs to a Rebecca NODE rather than the panel/server. The node tags its image
+// "rebecca-node (binary)" (docker: rebeccapanel/rebecca-node); the panel tags
+// "rebecca-server (binary)" (docker: rebeccapanel/rebecca). Mirrors PasarGuard's
+// isPasarguardNodeImage so the panel is never surfaced as a node.
+func isRebeccaNodeImage(image string) bool {
+	return strings.Contains(strings.ToLower(image), "rebecca-node")
 }
 
 func rebeccaHealth(installMode, serviceState, containerStatus string) string {

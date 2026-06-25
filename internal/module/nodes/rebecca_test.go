@@ -63,6 +63,26 @@ func TestRebeccaParseDiscovery(t *testing.T) {
 	}
 }
 
+// TestRebeccaParseDiscoverySkipsPanel guards the v0.2.5 fix: the Rebecca
+// panel/server lives under /opt with the same marker files as a node, but its
+// .binary-release.json image is "rebecca-server (binary)". It must NOT surface as
+// a node. A real node block in the same output must still be kept.
+func TestRebeccaParseDiscoverySkipsPanel(t *testing.T) {
+	output := "=REBECCANODE=rebecca=\n=ENVSTART=\nSERVICE_PORT=62050\nXRAY_API_PORT=62051\n=ENVEND=\n" +
+		"=RELEASESTART=\n{\"install_mode\":\"binary\",\"image\":\"rebecca-server (binary)\",\"tag\":\"dev-35338b1\"}\n=RELEASEEND=\n" +
+		"=MODE=binary=\n=SERVICE=active=\n=REBECCANODEEND=\n" +
+		"=REBECCANODE=rebecca-node=\n=ENVSTART=\nSERVICE_PORT=62033\nXRAY_API_PORT=62034\n=ENVEND=\n" +
+		"=RELEASESTART=\n{\"install_mode\":\"binary\",\"image\":\"rebecca-node (binary)\",\"tag\":\"v0.2.4\"}\n=RELEASEEND=\n" +
+		"=MODE=binary=\n=SERVICE=active=\n=REBECCANODEEND=\n"
+	snapshots := RebeccaProvider{}.ParseDiscovery(output, time.Now())
+	if len(snapshots) != 1 {
+		t.Fatalf("len(snapshots) = %d, want 1 (panel must be skipped)", len(snapshots))
+	}
+	if snapshots[0].ServiceName != "rebecca-node" {
+		t.Errorf("ServiceName = %q, want rebecca-node (the node, not the panel)", snapshots[0].ServiceName)
+	}
+}
+
 func TestRebeccaParseDiscoveryMultipleInstances(t *testing.T) {
 	output := "=REBECCANODE=rebecca-node=\n=ENVSTART=\nSERVICE_PORT=62050\nXRAY_API_PORT=62051\n=ENVEND=\n=RELEASESTART=\n=RELEASEEND=\n=MODE=binary=\n=SERVICE=active=\n=REBECCANODEEND=\n" +
 		"=REBECCANODE=node2=\n=ENVSTART=\nSERVICE_PORT=62060\nXRAY_API_PORT=62061\n=ENVEND=\n=RELEASESTART=\n=RELEASEEND=\n=MODE=binary=\n=SERVICE=inactive=\n=REBECCANODEEND=\n"
