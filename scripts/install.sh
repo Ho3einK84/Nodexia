@@ -9,7 +9,7 @@ set -euo pipefail
 readonly DEFAULT_INSTALL_DIR="/opt/nodexia"
 readonly DEFAULT_REPO_URL="https://github.com/Ho3einK84/Nodexia.git"
 readonly DEFAULT_GIT_REF="main"
-readonly DEFAULT_IMAGE_VERSION="v0.2.3"
+readonly DEFAULT_IMAGE_VERSION="v0.2.4"
 readonly COMPOSE_FILE="compose.production.yml"
 readonly ENV_FILE=".env.production"
 readonly BUILD_ENV_FILE=".env"
