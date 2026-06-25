@@ -309,3 +309,15 @@ CREATE TABLE IF NOT EXISTS server_traffic_limits (
   updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
 );
+
+-- ── System hardware facts ─────────────────────────────────────────────────────
+-- CPU model/cores plus total RAM and root-filesystem size, collected by the
+-- system module alongside the existing OS/kernel facts and shown on the server
+-- System tab. Appended as standalone statements so existing databases pick them
+-- up as new bootstrap migrations. cpu_cores/mem_total_kb/disk_total_kb are
+-- integers (logical CPUs, and KiB as /proc/meminfo and `df -k` report); 0 means
+-- "not collected". mem/disk are stored in KiB and humanised at render time.
+ALTER TABLE server_system_facts ADD COLUMN cpu_model TEXT NOT NULL DEFAULT '';
+ALTER TABLE server_system_facts ADD COLUMN cpu_cores INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE server_system_facts ADD COLUMN mem_total_kb INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE server_system_facts ADD COLUMN disk_total_kb INTEGER NOT NULL DEFAULT 0;

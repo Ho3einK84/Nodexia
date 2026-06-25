@@ -1153,7 +1153,10 @@
       var key = toggle.getAttribute('data-collapse-key') || '';
       var stored = null;
       if (key) { try { stored = localStorage.getItem('collapse_' + key); } catch (err) {} }
-      var isOpen = stored !== 'closed';
+      // A stored preference always wins; otherwise honour data-collapse-default
+      // ("closed" starts collapsed), defaulting to open.
+      var defaultClosed = toggle.getAttribute('data-collapse-default') === 'closed';
+      var isOpen = stored ? stored !== 'closed' : !defaultClosed;
 
       body.style.transition = 'max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease';
       body.style.overflow = 'hidden';

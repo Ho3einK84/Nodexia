@@ -33,3 +33,28 @@ func TestParseInt64(t *testing.T) {
 		t.Fatalf("parseInt64(empty) = %d, want 0", got)
 	}
 }
+
+func TestFormatKiB(t *testing.T) {
+	cases := map[int64]string{
+		0:         "-",
+		-5:        "-",
+		16461176:  "16 GiB",   // ~15.7 → rounded GiB for >=10
+		2097152:   "2.0 GiB",  // exactly 2 GiB
+		264212084: "252 GiB",  // root disk
+		1610612736: "1.5 TiB", // 1.5 TiB in KiB
+	}
+	for in, want := range cases {
+		if got := formatKiB(in); got != want {
+			t.Errorf("formatKiB(%d) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestFormatCount(t *testing.T) {
+	if got := formatCount(0); got != "-" {
+		t.Errorf("formatCount(0) = %q, want -", got)
+	}
+	if got := formatCount(4); got != "4" {
+		t.Errorf("formatCount(4) = %q, want 4", got)
+	}
+}

@@ -19,6 +19,10 @@ printf "os_name=%s\n" "${NAME:-${PRETTY_NAME:-unknown}}"
 printf "os_version=%s\n" "${VERSION_ID:-${PRETTY_NAME:-unknown}}"
 printf "kernel_version=%s\n" "$(uname -r)"
 printf "architecture=%s\n" "$(uname -m)"
+printf "cpu_model=%s\n" "$(awk -F": " "/^model name/{print \$2; exit}" /proc/cpuinfo 2>/dev/null || true)"
+printf "cpu_cores=%s\n" "$(nproc 2>/dev/null || grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 0)"
+printf "mem_total_kb=%s\n" "$(awk "/^MemTotal:/{print \$2; exit}" /proc/meminfo 2>/dev/null || echo 0)"
+printf "disk_total_kb=%s\n" "$(df -Pk / 2>/dev/null | awk "NR==2{print \$2}" || echo 0)"
 printf "uptime_seconds=%s\n" "$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)"
 last_update_unix=""
 for candidate in /var/lib/apt/periodic/update-success-stamp /var/log/apt/history.log /var/cache/apt/pkgcache.bin; do
@@ -52,6 +56,10 @@ func Collect(ctx context.Context, sshService *sshclient.Service, req sshclient.C
 		OSVersion:      values["os_version"],
 		KernelVersion:  values["kernel_version"],
 		Architecture:   values["architecture"],
+		CPUModel:       values["cpu_model"],
+		CPUCores:       parseInt64(values["cpu_cores"]),
+		MemTotalKB:     parseInt64(values["mem_total_kb"]),
+		DiskTotalKB:    parseInt64(values["disk_total_kb"]),
 		UptimeSeconds:  parseInt64(values["uptime_seconds"]),
 		LastUpdateUnix: parseInt64(values["last_update_unix"]),
 		CollectedAt:    result.CompletedAt,
@@ -91,6 +99,23 @@ func parseInt64(value string) int64 {
 		return 0
 	}
 	return parsed
+}
+
+// formatKiB renders a size given in kibibytes (1024-byte units, as /proc/meminfo
+// and `df -k` report) as a human-readable GiB/TiB string. Zero/negative → "-".
+func formatKiB(kib int64) string {
+	if kib <= 0 {
+		return "-"
+	}
+	const mib = 1024.0
+	gib := float64(kib) / mib / mib
+	if gib >= 1024 {
+		return fmt.Sprintf("%.1f TiB", gib/1024)
+	}
+	if gib >= 10 {
+		return fmt.Sprintf("%.0f GiB", gib)
+	}
+	return fmt.Sprintf("%.1f GiB", gib)
 }
 
 func formatUnixTimestamp(value int64) string {

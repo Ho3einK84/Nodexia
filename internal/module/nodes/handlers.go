@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -230,6 +231,30 @@ func (h *Handlers) collectWith(w http.ResponseWriter, r *http.Request, server se
 		flashKind:    "success",
 		flashMessage: flashMessage,
 	})
+}
+
+// discoverAfterInstall runs a node discovery sweep and stores the result once an
+// install has finished, so the new node shows up without a manual refresh. It
+// runs in the install goroutine (request context is gone), best-effort: any
+// failure is logged and swallowed.
+func (h *Handlers) discoverAfterInstall(server servers.Server, connReq sshclient.ConnectionRequest) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	snapshots, probes, err := Collect(ctx, h.deps.SSH, sshclient.CommandRequest{
+		ConnectionRequest: connReq,
+		CommandTimeout:    45 * time.Second,
+	}, h.providers)
+	if err != nil {
+		slog.Warn("auto-discovery after install failed",
+			slog.Int64("server_id", server.ID), slog.String("error", err.Error()))
+		return
+	}
+	collectedAt := latestCollectedAt(snapshots, probes)
+	if err := h.repo.ReplaceLatest(ctx, server.ID, snapshots, collectedAt); err != nil {
+		slog.Warn("auto-discovery store after install failed",
+			slog.Int64("server_id", server.ID), slog.String("error", err.Error()))
+	}
 }
 
 // ── POST /servers/{id}/nodes/actions ──────────────────────────────────────────
@@ -477,7 +502,7 @@ func (h *Handlers) InstallStart(w http.ResponseWriter, r *http.Request) {
 
 	connReq := h.runtimeConnRequest(server)
 	job := h.installs.create(server.ID, nodeName, plan)
-	go runInstall(job, h.deps.SSH, connReq, server.Host)
+	go runInstall(job, h.deps.SSH, connReq, server.Host, func() { h.discoverAfterInstall(server, connReq) })
 
 	http.Redirect(w, r, installJobURL(server.ID, job.id), http.StatusSeeOther)
 }
@@ -554,7 +579,7 @@ func (h *Handlers) RebeccaInstallStart(w http.ResponseWriter, r *http.Request) {
 
 	connReq := h.runtimeConnRequest(server)
 	job := h.installs.create(server.ID, nodeName, plan)
-	go runInstall(job, h.deps.SSH, connReq, server.Host)
+	go runInstall(job, h.deps.SSH, connReq, server.Host, func() { h.discoverAfterInstall(server, connReq) })
 
 	http.Redirect(w, r, installJobURL(server.ID, job.id), http.StatusSeeOther)
 }

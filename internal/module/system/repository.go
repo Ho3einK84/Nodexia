@@ -19,6 +19,10 @@ type FactSnapshot struct {
 	OSVersion      string
 	KernelVersion  string
 	Architecture   string
+	CPUModel       string
+	CPUCores       int64
+	MemTotalKB     int64
+	DiskTotalKB    int64
 	UptimeSeconds  int64
 	LastUpdateUnix int64
 	CollectedAt    time.Time
@@ -53,16 +57,24 @@ func (r SQLRepository) Append(ctx context.Context, snapshot FactSnapshot) (FactS
 			os_version,
 			kernel_version,
 			architecture,
+			cpu_model,
+			cpu_cores,
+			mem_total_kb,
+			disk_total_kb,
 			uptime_seconds,
 			last_update_unix,
 			collected_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		snapshot.ServerID,
 		snapshot.Hostname,
 		snapshot.OSName,
 		snapshot.OSVersion,
 		snapshot.KernelVersion,
 		snapshot.Architecture,
+		snapshot.CPUModel,
+		snapshot.CPUCores,
+		snapshot.MemTotalKB,
+		snapshot.DiskTotalKB,
 		snapshot.UptimeSeconds,
 		snapshot.LastUpdateUnix,
 		snapshot.CollectedAt,
@@ -90,7 +102,7 @@ func (r SQLRepository) HasAny(ctx context.Context, serverID int64) (bool, error)
 func (r SQLRepository) GetLatestByServer(ctx context.Context, serverID int64) (FactSnapshot, error) {
 	row := r.conn.QueryRowContext(
 		ctx,
-		`SELECT id, server_id, hostname, os_name, os_version, kernel_version, architecture, uptime_seconds, last_update_unix, collected_at
+		`SELECT id, server_id, hostname, os_name, os_version, kernel_version, architecture, cpu_model, cpu_cores, mem_total_kb, disk_total_kb, uptime_seconds, last_update_unix, collected_at
 		 FROM server_system_facts
 		 WHERE server_id = ?
 		 ORDER BY id DESC
@@ -108,6 +120,10 @@ func (r SQLRepository) GetLatestByServer(ctx context.Context, serverID int64) (F
 		&snapshot.OSVersion,
 		&snapshot.KernelVersion,
 		&snapshot.Architecture,
+		&snapshot.CPUModel,
+		&snapshot.CPUCores,
+		&snapshot.MemTotalKB,
+		&snapshot.DiskTotalKB,
 		&snapshot.UptimeSeconds,
 		&snapshot.LastUpdateUnix,
 		&collectedAtRaw,
@@ -132,6 +148,7 @@ func normalizeFactSnapshot(snapshot FactSnapshot) FactSnapshot {
 	snapshot.OSVersion = strings.TrimSpace(snapshot.OSVersion)
 	snapshot.KernelVersion = strings.TrimSpace(snapshot.KernelVersion)
 	snapshot.Architecture = strings.TrimSpace(snapshot.Architecture)
+	snapshot.CPUModel = strings.TrimSpace(snapshot.CPUModel)
 	return snapshot
 }
 

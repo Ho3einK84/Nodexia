@@ -215,7 +215,7 @@
 
       {{ if .Evidence }}
       <div class="node-evidence collapsible">
-        <button class="collapsible__toggle" data-collapse-key="evidence_{{ .NodeType }}_{{ .Name }}">
+        <button class="collapsible__toggle" data-collapse-key="evidence_{{ .NodeType }}_{{ .Name }}" data-collapse-default="closed">
           <i data-lucide="chevron-right" class="collapsible__icon"></i>
           <span>{{ t "nodes.evidence" }}</span>
           <span class="node-evidence__count">{{ len .Evidence }}</span>
@@ -639,7 +639,9 @@
     </div>
 
     <div class="sys-form__actions">
-      <a class="btn btn--primary" href="{{ .NodeInstall.NodesURL }}?refresh=1"><i data-lucide="radar" class="icon-in-button"></i> {{ t "nodes.rerun_discovery" }}</a>
+      {{/* Discovery runs automatically once an install completes, so this is a
+           plain Back link rather than a manual rerun-discovery trigger. */}}
+      <a class="btn btn--primary" href="{{ .NodeInstall.NodesURL }}"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nodes.back_to_nodes" }}</a>
     </div>
   </article>
   {{ end }}
