@@ -206,15 +206,6 @@ func containsString(values []string, target string) bool {
 	return false
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v = strings.TrimSpace(v); v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 func uniqueStrings(values []string) []string {
 	out := make([]string, 0, len(values))
 	seen := map[string]struct{}{}

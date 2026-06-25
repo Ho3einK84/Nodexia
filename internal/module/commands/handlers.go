@@ -538,10 +538,6 @@ func defaultFormInput(deps module.Dependencies) view.CommandFormView {
 	}
 }
 
-func commandsURL(serverID int64) string {
-	return "/servers/" + formatID(serverID) + "/commands"
-}
-
 func formInputFromRequest(r *http.Request, deps module.Dependencies) FormInput {
 	return FormInput{
 		Intent:         strings.TrimSpace(r.FormValue("intent")),
