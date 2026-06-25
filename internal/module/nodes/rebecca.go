@@ -19,18 +19,15 @@ import (
 type RebeccaProvider struct{}
 
 const (
-	rebeccaType    = "rebecca-node"
-	rebeccaAppDir  = "/opt/rebecca-node"
-	rebeccaDataDir = "/var/lib/rebecca-node"
+	rebeccaType = "rebecca-node"
 	// Defaults written by the official rebecca-node install script.
 	rebeccaDefaultServicePort = "62050"
 	rebeccaDefaultAPIPort     = "62051"
 	rebeccaDefaultProtocol    = "rest"
 
-	// rebeccaInstallName is the fixed instance name we install under. Rebecca
-	// discovery is keyed on /opt/rebecca-node and the rebecca-node CLI, so a
-	// host hosts a single instance — we pass --name to pin it regardless of how
-	// the script derives its default app name.
+	// rebeccaInstallName is the default instance name (used when the install form
+	// leaves the name blank). A custom --name installs under /opt/<name> so a host
+	// can run several Rebecca nodes side by side; discovery scans /opt for them.
 	rebeccaInstallName = "rebecca-node"
 
 	// rebeccaDevScriptURL is the dev/beta install script. We deliberately use the
@@ -94,31 +91,67 @@ func rebeccaChannelEnabled(channel string) bool {
 	return false
 }
 
-// DiscoveryCommand reads the Rebecca install footprint in one pass: .env,
-// .binary-release.json, the install mode marker, the systemd unit state, and
-// the docker container state (the official script supports both modes).
+// DiscoveryCommand scans /opt for every Rebecca-node install and reads each
+// instance's footprint in one pass: .env, .binary-release.json, the install
+// mode marker, the systemd unit state, and the docker container state (the
+// official script supports both modes). A host can run several instances
+// (/opt/<name>), so it emits one "=REBECCANODE=<name>=" block per install.
 func (RebeccaProvider) DiscoveryCommand() string {
 	return `sh -c '` +
 		`if [ "$(id -u)" -eq 0 ]; then SUDO=""; elif sudo -n true 2>/dev/null; then SUDO="sudo -n"; else SUDO=""; fi; ` +
-		`if [ -d ` + rebeccaAppDir + ` ] || command -v rebecca-node >/dev/null 2>&1; then ` +
-		`printf "=REBECCA=\n"; ` +
-		`printf "=ENVSTART=\n"; $SUDO cat ` + rebeccaAppDir + `/.env 2>/dev/null || true; printf "\n=ENVEND=\n"; ` +
-		`printf "=RELEASESTART=\n"; $SUDO cat ` + rebeccaAppDir + `/.binary-release.json 2>/dev/null || true; printf "\n=RELEASEEND=\n"; ` +
-		`printf "=MODE=%s=\n" "$($SUDO cat ` + rebeccaAppDir + `/.install-mode 2>/dev/null)"; ` +
-		`printf "=SERVICE=%s=\n" "$(systemctl is-active rebecca-node 2>/dev/null)"; ` +
-		`if command -v docker >/dev/null 2>&1; then ` +
-		`printf "=CONTAINER=%s=\n" "$($SUDO docker ps -a --filter name=rebecca-node --format "{{.Status}}" 2>/dev/null | head -n 1)"; ` +
+		`HAVE_DOCKER=0; command -v docker >/dev/null 2>&1 && HAVE_DOCKER=1; ` +
+		`for dir in /opt/*/; do ` +
+		`base="${dir%/}"; ` +
+		// A Rebecca install is identified by its marker files, which PasarGuard
+		// (docker-compose.yml) never writes — so the two providers never overlap.
+		`[ -f "$base/.binary-release.json" ] || [ -f "$base/.install-mode" ] || continue; ` +
+		`name="${base##*/}"; ` +
+		`printf "=REBECCANODE=%s=\n" "$name"; ` +
+		`printf "=ENVSTART=\n"; $SUDO cat "$base/.env" 2>/dev/null || true; printf "\n=ENVEND=\n"; ` +
+		`printf "=RELEASESTART=\n"; $SUDO cat "$base/.binary-release.json" 2>/dev/null || true; printf "\n=RELEASEEND=\n"; ` +
+		`printf "=MODE=%s=\n" "$($SUDO cat "$base/.install-mode" 2>/dev/null)"; ` +
+		`printf "=SERVICE=%s=\n" "$(systemctl is-active "$name" 2>/dev/null)"; ` +
+		`if [ "$HAVE_DOCKER" -eq 1 ]; then ` +
+		`printf "=CONTAINER=%s=\n" "$($SUDO docker ps -a --filter "name=^${name}$" --format "{{.Status}}" 2>/dev/null | head -n 1)"; ` +
 		`fi; ` +
-		`printf "=REBECCAEND=\n"; ` +
-		`fi; true'`
+		`printf "=REBECCANODEEND=\n"; ` +
+		`done; true'`
 }
 
 func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Snapshot {
 	lines := strings.Split(output, "\n")
-	if _, found := markerValueExists(lines, "=REBECCA="); !found {
-		return nil
+
+	var snapshots []Snapshot
+	var name string
+	var block []string
+	inBlock := false
+
+	for _, raw := range lines {
+		trimmed := strings.TrimSpace(raw)
+		switch {
+		case strings.HasPrefix(trimmed, "=REBECCANODE=") && strings.HasSuffix(trimmed, "="):
+			name = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(trimmed, "=REBECCANODE="), "="))
+			block = nil
+			inBlock = true
+		case trimmed == "=REBECCANODEEND=":
+			if inBlock && name != "" {
+				snapshots = append(snapshots, parseRebeccaInstance(name, block, collectedAt))
+			}
+			inBlock = false
+			name = ""
+			block = nil
+		case inBlock:
+			block = append(block, raw)
+		}
 	}
 
+	return snapshots
+}
+
+// parseRebeccaInstance builds one Snapshot from a single "=REBECCANODE=" block.
+// name is the /opt/<name> directory (and systemd/container name) the instance
+// lives under.
+func parseRebeccaInstance(name string, lines []string, collectedAt time.Time) Snapshot {
 	envLines, _ := markerSection(lines, "=ENVSTART=", "=ENVEND=")
 	env := parseEnvFile(envLines)
 
@@ -136,7 +169,7 @@ func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Sn
 	}
 	dataDir := cleanEnvValue(env["REBECCA_DATA_DIR"])
 	if dataDir == "" {
-		dataDir = rebeccaDataDir
+		dataDir = "/var/lib/" + name
 	}
 
 	releaseLines, _ := markerSection(lines, "=RELEASESTART=", "=RELEASEEND=")
@@ -155,18 +188,19 @@ func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Sn
 	containerStatus, _ := markerValue(lines, "CONTAINER")
 	health := rebeccaHealth(installMode, serviceState, containerStatus)
 
-	evidence := []string{"Install directory: " + rebeccaAppDir}
+	appDir := "/opt/" + name
+	evidence := []string{"Install directory: " + appDir}
 	if len(env) > 0 {
-		evidence = append(evidence, fmt.Sprintf("Config: %s/.env (service port %s, protocol %s)", rebeccaAppDir, servicePort, protocol))
+		evidence = append(evidence, fmt.Sprintf("Config: %s/.env (service port %s, protocol %s)", appDir, servicePort, protocol))
 	}
 	if version != "" {
 		evidence = append(evidence, "Version from .binary-release.json: "+version)
 	}
 	if serviceState != "" {
-		evidence = append(evidence, "systemd rebecca-node: "+serviceState)
+		evidence = append(evidence, "systemd "+name+": "+serviceState)
 	}
 	if containerStatus != "" {
-		evidence = append(evidence, "Docker container rebecca-node: "+containerStatus)
+		evidence = append(evidence, "Docker container "+name+": "+containerStatus)
 	}
 
 	confidence := "medium"
@@ -174,9 +208,9 @@ func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Sn
 		confidence = "high"
 	}
 
-	return []Snapshot{normalizeSnapshot(Snapshot{
+	return normalizeSnapshot(Snapshot{
 		NodeType:     rebeccaType,
-		ServiceName:  "rebecca-node",
+		ServiceName:  name,
 		InstallMode:  installMode,
 		Version:      version,
 		HealthStatus: health,
@@ -188,17 +222,7 @@ func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Sn
 		Confidence:   confidence,
 		Evidence:     evidence,
 		CollectedAt:  collectedAt,
-	})}
-}
-
-// markerValueExists reports whether a bare marker line (e.g. "=REBECCA=") is present.
-func markerValueExists(lines []string, marker string) (string, bool) {
-	for _, line := range lines {
-		if strings.TrimSpace(line) == marker {
-			return marker, true
-		}
-	}
-	return "", false
+	})
 }
 
 // parseRebeccaRelease extracts the version tag and install mode from
@@ -285,7 +309,7 @@ func (p RebeccaProvider) ActionCommand(nodeName, actionKey string) (string, time
 	// Reinstall repairs the management CLI rather than driving it (the broken CLI
 	// is exactly what it replaces), so it bypasses the `rebecca-node <op>` path.
 	if action.Key == "reinstall" {
-		return p.reinstallScriptCommand(), action.Timeout, nil
+		return p.reinstallScriptCommand(nodeName), action.Timeout, nil
 	}
 
 	spec := rebeccaOps[action.Key]
@@ -308,13 +332,13 @@ func (p RebeccaProvider) ActionCommand(nodeName, actionKey string) (string, time
 // the node's .env, data, and systemd service are untouched, so no bundle is
 // needed. Running the binary script directly means script_install_mode() resolves
 // to binary, matching the install, so the mode guard passes.
-func (RebeccaProvider) reinstallScriptCommand() string {
+func (RebeccaProvider) reinstallScriptCommand(nodeName string) string {
 	return `sh -c '` + sudoPreamble +
 		`SCRIPT="$(mktemp /tmp/nodexia-rebecca-node.XXXXXX)" || exit 1; ` +
 		`if command -v curl >/dev/null 2>&1; then curl -fsSL ` + rebeccaDevScriptURL + ` -o "$SCRIPT" || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + rebeccaDevScriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`else echo "curl or wget is required to reinstall" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
-		`$SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" script-install --name ` + rebeccaInstallName + ` </dev/null; ` +
+		`$SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" script-install --name ` + nodeName + ` </dev/null; ` +
 		`STATUS=$?; rm -f "$SCRIPT"; ` +
 		`if [ "$STATUS" -ne 0 ]; then echo "[rebecca-node script reinstall exited with status $STATUS]" >&2; fi; ` +
 		`exit $STATUS'`
@@ -361,6 +385,7 @@ func (RebeccaProvider) reinstallScriptCommand() string {
 // Bundle is the node install bundle from the Rebecca panel: the client
 // certificate PEM followed by its private key PEM.
 type RebeccaInstallConfig struct {
+	NodeName    string
 	Channel     string
 	ServicePort string
 	APIPort     string
@@ -374,10 +399,17 @@ type RebeccaInstallConfig struct {
 // can never reach the shell.
 func (c RebeccaInstallConfig) Normalize() (RebeccaInstallConfig, error) {
 	out := RebeccaInstallConfig{
+		NodeName:    strings.TrimSpace(c.NodeName),
 		Channel:     strings.ToLower(strings.TrimSpace(c.Channel)),
 		ServicePort: strings.TrimSpace(c.ServicePort),
 		APIPort:     strings.TrimSpace(c.APIPort),
 		Bundle:      strings.TrimSpace(c.Bundle),
+	}
+	if out.NodeName == "" {
+		out.NodeName = rebeccaInstallName
+	}
+	if err := ValidateNodeName(out.NodeName); err != nil {
+		return RebeccaInstallConfig{}, fmt.Errorf("nodes: rebecca: %w", err)
 	}
 	if out.Channel == "" {
 		out.Channel = channelDev
@@ -437,6 +469,7 @@ func (RebeccaProvider) normalizeInstallInput(in installFormInput) (RebeccaInstal
 	errs := ValidationErrors{}
 
 	cfg := RebeccaInstallConfig{
+		NodeName:    strings.TrimSpace(in.NodeName),
 		Channel:     strings.ToLower(strings.TrimSpace(in.Channel)),
 		ServicePort: strings.TrimSpace(in.ServicePort),
 		APIPort:     strings.TrimSpace(in.APIPort),
@@ -444,6 +477,12 @@ func (RebeccaProvider) normalizeInstallInput(in installFormInput) (RebeccaInstal
 	}
 	if cfg.Channel == "" {
 		cfg.Channel = channelDev
+	}
+	// A blank name defaults to the primary instance; a non-blank one must be valid.
+	if cfg.NodeName != "" {
+		if err := ValidateNodeName(cfg.NodeName); err != nil {
+			errs["node_name"] = "nodes.err_node_name"
+		}
 	}
 	servicePort := cfg.ServicePort
 	if servicePort == "" {
@@ -509,11 +548,11 @@ func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) 
 		`printf "%s" "` + bundleB64 + `" | base64 -d > "$IN" || { echo "bundle decode failed" >&2; rm -f "$SCRIPT" "$IN"; exit 1; }; ` +
 		`printf "` + normalized.ServicePort + `\n` + normalized.APIPort + `\n" >> "$IN"; ` +
 		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + rebeccaInstallScriptTimeout + `"; fi; ` +
-		// Force binary mode (the script defaults to docker and rejects a binary
-		// request on a docker-flavored run). env carries the flavor through sudo.
-		// --name pins the instance to rebecca-node (discovery keys on it); the
-		// COMMAND (install) must be parsed before --name, so order matters.
-		`$TMO $SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" install --name ` + rebeccaInstallName + ` --binary --dev <"$IN"; ` +
+		// Run the binary-flavored script in binary mode (REBECCA_NODE_SCRIPT_FLAVOR
+		// carries through sudo). --name pins the instance to /opt/<name> so several
+		// Rebecca nodes can coexist; the COMMAND (install) must be parsed before
+		// --name, so order matters. NodeName is validated in Normalize.
+		`$TMO $SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" install --name ` + normalized.NodeName + ` --binary --dev <"$IN"; ` +
 		`STATUS=$?; rm -f "$SCRIPT" "$IN"; ` +
 		`if [ "$STATUS" -ne 0 ]; then echo "[rebecca-node install script exited with status $STATUS]" >&2; fi; ` +
 		`exit $STATUS'`

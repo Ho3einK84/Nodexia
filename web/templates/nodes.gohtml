@@ -484,8 +484,15 @@
           <input type="hidden" name="channel" value="dev">
 
           <label class="form-field">
+            <span>{{ t "nodes.node_name" }}</span>
+            <input type="text" name="node_name" value="{{ .NodeRebeccaInstallForm.NodeName }}" placeholder="rebecca-node" maxlength="64" required data-modal-autofocus>
+            {{ with index .NodeRebeccaInstallForm.Errors "node_name" }}<small class="field-error">{{ . }}</small>{{ end }}
+            <small class="field-hint">{{ tsafe "nodes.node_name_hint" }}</small>
+          </label>
+
+          <label class="form-field">
             <span>{{ t "nodes.bundle" }}</span>
-            <textarea name="bundle" rows="10" class="cmd-textarea" placeholder="{{ t "nodes.bundle_placeholder" }}" spellcheck="false" autocomplete="off" required data-modal-autofocus></textarea>
+            <textarea name="bundle" rows="10" class="cmd-textarea" placeholder="{{ t "nodes.bundle_placeholder" }}" spellcheck="false" autocomplete="off" required></textarea>
             {{ with index .NodeRebeccaInstallForm.Errors "bundle" }}<small class="field-error">{{ . }}</small>{{ end }}
             <small class="field-hint">{{ tsafe "nodes.bundle_hint" }}</small>
           </label>
