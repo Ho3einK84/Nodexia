@@ -35,6 +35,16 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 	pageItems, currentPage, totalPages := paginateServers(matched, page, serversPerPage)
 
 	lastSeen := serverLastSeenMap(r.Context(), deps)
+
+	// A server is "up" while its last snapshot is within ~2 monitoring intervals
+	// (tolerates one missed sweep); older than that and it is treated as "down".
+	// "Just now" covers a freshly collected snapshot.
+	upWindow := deps.Config.Scheduler.MonitoringInterval * 2
+	if upWindow < 10*time.Minute {
+		upWindow = 10 * time.Minute
+	}
+	const justNowWindow = 2 * time.Minute
+
 	items := make([]view.ServerSummary, 0, len(pageItems))
 	for _, server := range pageItems {
 		item := view.ServerSummary{
@@ -56,11 +66,19 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 		}
 		if ts, ok := lastSeen[server.ID]; ok {
 			age := time.Since(ts)
-			if age < 10*time.Minute {
-				item.IsOnline = true
+			switch {
+			case age <= upWindow:
+				item.Status = "up"
+			default:
+				item.Status = "down"
+			}
+			if age < justNowWindow {
+				item.JustNow = true
 			} else {
 				item.LastSeenAt = formatAge(age)
 			}
+		} else {
+			item.Status = "unknown"
 		}
 		items = append(items, item)
 	}

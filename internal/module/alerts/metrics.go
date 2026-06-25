@@ -18,6 +18,14 @@ const (
 	MetricTrafficTotal = "traffic_total"
 	MetricBandwidth    = "bandwidth_mbps"
 
+	// MetricServerUnreachable fires when a monitoring sweep cannot reach the
+	// server (SSH/collection failed) — i.e. the server is down/offline. It is a
+	// boolean (0/1) value like MetricProjectedExceedLimit, normalised to "≥ 1" in
+	// validation, and is always available (so it both fires when down and resolves
+	// when the server comes back). Unlike the observed metrics it needs no
+	// snapshot, so it is evaluated even on the failure path of a sweep.
+	MetricServerUnreachable = "server_unreachable"
+
 	// Predictive (forecast-derived) metrics. Unlike the observed metrics above,
 	// these come from the bandwidth forecast and warn BEFORE a limit is reached.
 	// They are only available for servers that have a monthly RX limit configured
@@ -81,6 +89,7 @@ const (
 
 // ruleMetrics lists the metrics a rule may target, in display order.
 var ruleMetrics = []string{
+	MetricServerUnreachable,
 	MetricCPU,
 	MetricRAM,
 	MetricDisk,
@@ -94,6 +103,7 @@ var ruleMetrics = []string{
 }
 
 var metricLabels = map[string]string{
+	MetricServerUnreachable:    "Server unreachable",
 	MetricCPU:                  "CPU usage",
 	MetricRAM:                  "RAM usage",
 	MetricDisk:                 "Disk usage",

@@ -28,7 +28,7 @@ func translatedPages() map[string]func(p *PageData) {
 	return map[string]func(p *PageData){
 		"content-home": func(p *PageData) {},
 		"content-servers-list": func(p *PageData) {
-			p.Servers = []ServerSummary{{ID: 1, Name: "edge", Host: "10.0.0.1", Port: 22, AuthMode: "password", CredentialStrategy: "stored", IsOnline: true, CreatedAt: "2026-01-01"}}
+			p.Servers = []ServerSummary{{ID: 1, Name: "edge", Host: "10.0.0.1", Port: 22, AuthMode: "password", CredentialStrategy: "stored", Status: "up", JustNow: true, CreatedAt: "2026-01-01"}}
 		},
 		"content-server-form":        func(p *PageData) { p.ServerForm = ServerFormView{Errors: map[string]string{}} },
 		"content-login":              func(p *PageData) {},

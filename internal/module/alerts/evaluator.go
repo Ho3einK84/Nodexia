@@ -23,6 +23,14 @@ type Target struct {
 // vnStat snapshot was not collected, traffic_total and bandwidth_mbps rules are
 // skipped for this cycle.
 type Metrics struct {
+	// Unreachable is true when the monitoring sweep could not reach the server
+	// (SSH/collection failed). It drives MetricServerUnreachable and, because the
+	// instantaneous values below are then unknown, marks every observed metric
+	// unavailable so they are skipped — neither fired nor falsely resolved — for
+	// the cycle. The zero value (false) means "reachable", so existing callers
+	// that build Metrics from a successful snapshot keep working unchanged.
+	Unreachable bool
+
 	CPU    float64
 	RAM    float64
 	Disk   float64
@@ -50,26 +58,35 @@ type Metrics struct {
 // valueFor returns the observed value for a metric and whether it is available
 // this cycle.
 func (m Metrics) valueFor(metric string) (float64, bool) {
+	// reachable is the availability gate for every observed metric: when the
+	// server is unreachable its CPU/RAM/traffic values are unknown, so those rules
+	// are skipped (and only server_unreachable fires).
+	reachable := !m.Unreachable
 	switch metric {
+	case MetricServerUnreachable:
+		if m.Unreachable {
+			return 1, true
+		}
+		return 0, true
 	case MetricCPU:
-		return m.CPU, true
+		return m.CPU, reachable
 	case MetricRAM:
-		return m.RAM, true
+		return m.RAM, reachable
 	case MetricDisk:
-		return m.Disk, true
+		return m.Disk, reachable
 	case MetricLoad1:
-		return m.Load1, true
+		return m.Load1, reachable
 	case MetricLoad5:
-		return m.Load5, true
+		return m.Load5, reachable
 	case MetricLoad15:
-		return m.Load15, true
+		return m.Load15, reachable
 	case MetricTrafficTotal:
-		return m.TrafficTotalGiB, m.TrafficAvailable
+		return m.TrafficTotalGiB, reachable && m.TrafficAvailable
 	case MetricBandwidth:
 		// bandwidth_mbps alerts on the peak download (RX) sample for the
 		// period. Upload (TX) is excluded so the threshold lines up with the
 		// download-only port speed VPS providers advertise.
-		return m.PeakMbps, m.TrafficAvailable
+		return m.PeakMbps, reachable && m.TrafficAvailable
 	case MetricProjectedExceedLimit:
 		if !m.ForecastAvailable {
 			return 0, false

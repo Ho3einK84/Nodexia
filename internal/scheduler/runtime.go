@@ -577,6 +577,9 @@ func (r *Runtime) executeJob(ctx context.Context, server servers.Server, jobType
 func (r *Runtime) executeMonitoringJob(ctx context.Context, server servers.Server, req sshclient.CommandRequest, credentials resolvedCredential) (string, error) {
 	snapshot, _, err := monitoring.Collect(ctx, r.ssh, req)
 	if err != nil {
+		// The server is unreachable this sweep. Evaluate so a server_unreachable
+		// rule can fire (other metrics stay unavailable), then surface the failure.
+		r.evaluateUnreachable(ctx, server)
 		return "", err
 	}
 	snapshot.ServerID = server.ID
@@ -628,6 +631,7 @@ func (r *Runtime) evaluateAlerts(ctx context.Context, server servers.Server, sna
 	}
 
 	metrics := alerts.Metrics{
+		Unreachable:      false, // a snapshot was collected, so the server is reachable
 		CPU:              snapshot.CPUUsage,
 		RAM:              snapshot.RAMUsage,
 		Disk:             snapshot.DiskUsage,
@@ -649,6 +653,22 @@ func (r *Runtime) evaluateAlerts(ctx context.Context, server servers.Server, sna
 
 	if err := r.evaluator.Evaluate(ctx, alerts.Target{ID: server.ID, Name: server.Name}, metrics); err != nil {
 		slog.Warn("alert evaluation failed",
+			slog.Int64("server_id", server.ID),
+			slog.String("error", err.Error()),
+		)
+	}
+}
+
+// evaluateUnreachable evaluates alert rules for a server whose monitoring sweep
+// failed. Only MetricServerUnreachable is available (set to 1); the observed
+// metrics are unavailable and therefore skipped. Best-effort, like evaluateAlerts.
+func (r *Runtime) evaluateUnreachable(ctx context.Context, server servers.Server) {
+	if r.evaluator == nil {
+		return
+	}
+	metrics := alerts.Metrics{Unreachable: true}
+	if err := r.evaluator.Evaluate(ctx, alerts.Target{ID: server.ID, Name: server.Name}, metrics); err != nil {
+		slog.Warn("unreachable alert evaluation failed",
 			slog.Int64("server_id", server.ID),
 			slog.String("error", err.Error()),
 		)
