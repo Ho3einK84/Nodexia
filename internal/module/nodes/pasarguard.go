@@ -80,7 +80,11 @@ func (PasarGuardProvider) DiscoveryCommand() string {
 		`printf "=STATE=%s=\n" "$state"; ` +
 		`printf "=ENVSTART=\n"; cat "$dir/.env" 2>/dev/null || true; printf "\n=ENVEND=\n"; ` +
 		`printf "=PGNODEEND=\n"; ` +
-		`done; true'`
+		`done; ` +
+		// Host-wide listening ports so host-networked nodes' xray inbounds are
+		// caught even when they are not published container ports.
+		listenProbeCommand +
+		`true'`
 }
 
 // pgInstance is the parsed evidence for one PasarGuard install directory.
@@ -109,6 +113,8 @@ func (p PasarGuardProvider) ParseDiscovery(output string, collectedAt time.Time)
 	lines := strings.Split(output, "\n")
 	containers, dockerSeen := parseDockerSection(lines)
 	instances := parsePGInstances(lines)
+	listenSection, _ := markerSection(lines, "=LISTEN=", "=LISTENEND=")
+	listenPorts := parseListenPorts(listenSection)
 
 	snapshots := make([]Snapshot, 0, len(instances))
 	seen := map[string]struct{}{}
@@ -119,7 +125,7 @@ func (p PasarGuardProvider) ParseDiscovery(output string, collectedAt time.Time)
 		if cn := strings.ToLower(strings.TrimSpace(inst.ContainerName)); cn != "" {
 			seen[cn] = struct{}{}
 		}
-		snapshots = append(snapshots, p.buildSnapshot(inst, containers, dockerSeen, collectedAt))
+		snapshots = append(snapshots, p.buildSnapshot(inst, containers, dockerSeen, listenPorts, collectedAt))
 	}
 
 	// Containers running a PasarGuard NODE image without a matching /opt
@@ -135,7 +141,7 @@ func (p PasarGuardProvider) ParseDiscovery(output string, collectedAt time.Time)
 			continue
 		}
 		seen[strings.ToLower(c.Name)] = struct{}{}
-		snapshots = append(snapshots, p.buildSnapshot(pgInstance{Name: c.Name}, containers, dockerSeen, collectedAt))
+		snapshots = append(snapshots, p.buildSnapshot(pgInstance{Name: c.Name}, containers, dockerSeen, listenPorts, collectedAt))
 	}
 
 	return snapshots
@@ -212,7 +218,7 @@ func parsePGInstances(lines []string) []pgInstance {
 	return instances
 }
 
-func (PasarGuardProvider) buildSnapshot(inst pgInstance, containers map[string]dockerEntry, dockerSeen bool, collectedAt time.Time) Snapshot {
+func (PasarGuardProvider) buildSnapshot(inst pgInstance, containers map[string]dockerEntry, dockerSeen bool, listenPorts []string, collectedAt time.Time) Snapshot {
 	env := parseEnvFile(inst.EnvLines)
 	// Look the container up by its real name, not the install directory name.
 	lookup := strings.ToLower(strings.TrimSpace(inst.ContainerName))
@@ -268,7 +274,13 @@ func (PasarGuardProvider) buildSnapshot(inst pgInstance, containers map[string]d
 	}
 
 	activePorts := uniqueStrings([]string{servicePort, apiPort})
-	xrayPorts := containerXrayPorts(container.Ports, activePorts)
+	// Published container ports (bridge networking) plus host listeners
+	// (host networking / binary), minus the management ports.
+	xrayPorts := uniqueStrings(append(
+		containerXrayPorts(container.Ports, activePorts),
+		xrayPortsFromListen(listenPorts, servicePort, apiPort)...,
+	))
+	sortPortsNumeric(xrayPorts)
 
 	confidence := "medium"
 	if len(env) > 0 {
