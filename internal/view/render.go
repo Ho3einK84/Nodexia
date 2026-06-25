@@ -455,7 +455,10 @@ type SystemSnapshotView struct {
 	KernelArch           string
 	VirtualizationSystem string
 	VirtualizationRole   string
+	CPUModel             string
+	CPUCores             string
 	TotalRAM             string
+	TotalDisk            string
 }
 
 type SystemCollectionResultView struct {

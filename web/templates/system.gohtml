@@ -43,6 +43,18 @@
       </div>
     </div>
     <div class="sys-facts-secondary">
+      <div class="sys-fact-item sys-fact-item--wide">
+        <span class="sys-fact-item__label"><i data-lucide="cpu"></i> {{ t "system.cpu" }}</span>
+        <span class="sys-fact-item__value">{{ .SystemFacts.CPUModel }}{{ if ne .SystemFacts.CPUCores "-" }} <span class="sys-fact-version">· {{ t "system.cores" "count" .SystemFacts.CPUCores }}</span>{{ end }}</span>
+      </div>
+      <div class="sys-fact-item">
+        <span class="sys-fact-item__label"><i data-lucide="memory-stick"></i> {{ t "system.memory" }}</span>
+        <span class="sys-fact-item__value">{{ .SystemFacts.TotalRAM }}</span>
+      </div>
+      <div class="sys-fact-item">
+        <span class="sys-fact-item__label"><i data-lucide="hard-drive"></i> {{ t "system.disk" }}</span>
+        <span class="sys-fact-item__value">{{ .SystemFacts.TotalDisk }}</span>
+      </div>
       <div class="sys-fact-item">
         <span class="sys-fact-item__label"><i data-lucide="clock"></i> {{ t "system.uptime" }}</span>
         <span class="sys-fact-item__value">{{ .SystemFacts.UptimeHuman }}</span>

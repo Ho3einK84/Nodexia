@@ -395,8 +395,19 @@ func snapshotViewFromModel(snapshot FactSnapshot) view.SystemSnapshotView {
 		KernelArch:           arch,
 		VirtualizationSystem: "-",
 		VirtualizationRole:   "-",
-		TotalRAM:             "-",
+		CPUModel:             fallbackDisplay(snapshot.CPUModel),
+		CPUCores:             formatCount(snapshot.CPUCores),
+		TotalRAM:             formatKiB(snapshot.MemTotalKB),
+		TotalDisk:            formatKiB(snapshot.DiskTotalKB),
 	}
+}
+
+// formatCount renders a non-negative count, or "-" when it is zero/unknown.
+func formatCount(n int64) string {
+	if n <= 0 {
+		return "-"
+	}
+	return strconv.FormatInt(n, 10)
 }
 
 func pathID(r *http.Request) (int64, bool) {

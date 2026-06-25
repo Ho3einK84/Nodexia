@@ -536,6 +536,12 @@
   .node-facts {
     grid-template-columns: 1fr 1fr;
   }
+  /* On the 2-column mobile grid, drop the data-directory into the otherwise
+     empty 4th cell (next to the API port) instead of a full-width row below, so
+     the node card stays compact. */
+  .node-fact--wide {
+    grid-column: auto;
+  }
 }
 
 /* ── Node actions ────────────────────────────────────────────────────────── */

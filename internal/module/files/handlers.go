@@ -223,7 +223,7 @@ func (h ActionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Header().Set("Content-Type", contentType)
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", downloadName))
+		w.Header().Set("Content-Disposition", contentDisposition(downloadName))
 		w.Header().Set("Content-Length", strconv.FormatInt(file.Size, 10))
 		if _, err := io.Copy(w, file.Content); err != nil {
 			return
@@ -467,6 +467,37 @@ func parentPath(remotePath string) string {
 		return "/"
 	}
 	return parent
+}
+
+// contentDisposition builds an RFC 6266 attachment header with both a quoted
+// ASCII fallback (filename=) and a UTF-8 filename* parameter. The name is
+// percent-encoded for filename* with EVERY dot escaped (%2E), which crucially
+// keeps a leading dot: browsers (Chromium) strip a literal leading dot from the
+// plain filename to avoid hidden files, turning ".env" into "env" — encoding it
+// preserves dotfiles intact while still decoding to the real name.
+func contentDisposition(name string) string {
+	fallback := strings.ReplaceAll(name, `"`, "")
+	return fmt.Sprintf("attachment; filename=%q; filename*=UTF-8''%s", fallback, rfc5987Escape(name))
+}
+
+// rfc5987Escape percent-encodes a string per RFC 5987's ext-value, keeping only
+// the unreserved attr-char set literal. Notably "." is encoded (so a leading dot
+// survives browser sanitisation) and so are spaces and non-ASCII bytes.
+func rfc5987Escape(s string) string {
+	const keep = "!#$&+-^_`|~" // attr-char minus "." and "*'%(),/:;<=>?@[]\"{}"
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9':
+			b.WriteByte(c)
+		case strings.IndexByte(keep, c) >= 0:
+			b.WriteByte(c)
+		default:
+			fmt.Fprintf(&b, "%%%02X", c)
+		}
+	}
+	return b.String()
 }
 
 func sanitizeDownloadName(name string) string {

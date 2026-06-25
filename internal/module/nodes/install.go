@@ -223,7 +223,10 @@ func randomInstallJobID() string {
 // the outcome on the job. It runs in a goroutine with context.Background():
 // the work must survive the redirected HTTP request. The orchestration is fully
 // provider-agnostic; everything provider-specific lives in the InstallPlan.
-func runInstall(job *installJob, ssh *sshclient.Service, conn sshclient.ConnectionRequest, nodeHost string) {
+// runInstall executes the install plan in the background. onSuccess, when
+// non-nil, runs once the install completes cleanly — used to auto-trigger node
+// discovery so the freshly installed node appears without a manual refresh.
+func runInstall(job *installJob, ssh *sshclient.Service, conn sshclient.ConnectionRequest, nodeHost string, onSuccess func()) {
 	ctx := context.Background()
 
 	for _, step := range job.plan.Steps {
@@ -272,6 +275,9 @@ func runInstall(job *installJob, ssh *sshclient.Service, conn sshclient.Connecti
 	// (Rebecca's user-provided certificate), so a clean exit is success.
 	if job.plan.Readback.Command == "" {
 		job.complete(nil)
+		if onSuccess != nil {
+			onSuccess()
+		}
 		return
 	}
 
@@ -294,6 +300,9 @@ func runInstall(job *installJob, ssh *sshclient.Service, conn sshclient.Connecti
 	}
 	info.NodeIP = strings.TrimSpace(nodeHost)
 	job.complete(&info)
+	if onSuccess != nil {
+		onSuccess()
+	}
 }
 
 func installFailureMessage(exitCode int, stderr string) string {
