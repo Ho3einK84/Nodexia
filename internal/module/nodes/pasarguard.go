@@ -78,11 +78,15 @@ func (PasarGuardProvider) DiscoveryCommand() string {
 		`state=""; ` +
 		`[ "$HAVE_DOCKER" -eq 1 ] && state="$($SUDO docker inspect -f "{{.State.Status}}" "$cname" 2>/dev/null)"; ` +
 		`printf "=STATE=%s=\n" "$state"; ` +
+		// Host PIDs of this container's processes, used to attribute host-visible
+		// xray listeners (host networking) to this node specifically.
+		`PIDS=""; if [ "$HAVE_DOCKER" -eq 1 ]; then PIDS="$($SUDO docker top "$cname" -eo pid 2>/dev/null | tr "\n" " " || true)"; fi; ` +
+		`printf "=PIDS=%s=\n" "$PIDS"; ` +
 		`printf "=ENVSTART=\n"; cat "$dir/.env" 2>/dev/null || true; printf "\n=ENVEND=\n"; ` +
 		`printf "=PGNODEEND=\n"; ` +
 		`done; ` +
-		// Host-wide listening ports so host-networked nodes' xray inbounds are
-		// caught even when they are not published container ports.
+		// Host listening sockets with owning PIDs (once), matched per instance
+		// against its container PIDs to attribute host-networked xray inbounds.
 		listenProbeCommand +
 		`true'`
 }
@@ -98,6 +102,7 @@ type pgInstance struct {
 	ComposeLine   string
 	DataDir       string
 	State         string // `docker inspect` .State.Status (running/exited/…), or ""
+	PIDs          string // host PIDs of the container's processes (`docker top`)
 	EnvLines      []string
 }
 
@@ -113,8 +118,8 @@ func (p PasarGuardProvider) ParseDiscovery(output string, collectedAt time.Time)
 	lines := strings.Split(output, "\n")
 	containers, dockerSeen := parseDockerSection(lines)
 	instances := parsePGInstances(lines)
-	listenSection, _ := markerSection(lines, "=LISTEN=", "=LISTENEND=")
-	listenPorts := parseListenPorts(listenSection)
+	listenLines, _ := markerSection(lines, "=LISTENP=", "=LISTENPEND=")
+	listenSockets := parseListenSockets(listenLines)
 
 	snapshots := make([]Snapshot, 0, len(instances))
 	seen := map[string]struct{}{}
@@ -125,7 +130,7 @@ func (p PasarGuardProvider) ParseDiscovery(output string, collectedAt time.Time)
 		if cn := strings.ToLower(strings.TrimSpace(inst.ContainerName)); cn != "" {
 			seen[cn] = struct{}{}
 		}
-		snapshots = append(snapshots, p.buildSnapshot(inst, containers, dockerSeen, listenPorts, collectedAt))
+		snapshots = append(snapshots, p.buildSnapshot(inst, containers, dockerSeen, listenSockets, collectedAt))
 	}
 
 	// Containers running a PasarGuard NODE image without a matching /opt
@@ -141,7 +146,7 @@ func (p PasarGuardProvider) ParseDiscovery(output string, collectedAt time.Time)
 			continue
 		}
 		seen[strings.ToLower(c.Name)] = struct{}{}
-		snapshots = append(snapshots, p.buildSnapshot(pgInstance{Name: c.Name}, containers, dockerSeen, listenPorts, collectedAt))
+		snapshots = append(snapshots, p.buildSnapshot(pgInstance{Name: c.Name}, containers, dockerSeen, listenSockets, collectedAt))
 	}
 
 	return snapshots
@@ -207,6 +212,8 @@ func parsePGInstances(lines []string) []pgInstance {
 			current.DataDir = strings.TrimSuffix(strings.TrimPrefix(line, "=DATADIR="), "=")
 		case strings.HasPrefix(line, "=STATE=") && strings.HasSuffix(line, "="):
 			current.State = strings.TrimSuffix(strings.TrimPrefix(line, "=STATE="), "=")
+		case strings.HasPrefix(line, "=PIDS=") && strings.HasSuffix(line, "="):
+			current.PIDs = strings.TrimSuffix(strings.TrimPrefix(line, "=PIDS="), "=")
 		case line == "=ENVSTART=":
 			inEnv = true
 		case line == "=ENVEND=":
@@ -218,7 +225,7 @@ func parsePGInstances(lines []string) []pgInstance {
 	return instances
 }
 
-func (PasarGuardProvider) buildSnapshot(inst pgInstance, containers map[string]dockerEntry, dockerSeen bool, listenPorts []string, collectedAt time.Time) Snapshot {
+func (PasarGuardProvider) buildSnapshot(inst pgInstance, containers map[string]dockerEntry, dockerSeen bool, listenSockets []listenSocket, collectedAt time.Time) Snapshot {
 	env := parseEnvFile(inst.EnvLines)
 	// Look the container up by its real name, not the install directory name.
 	lookup := strings.ToLower(strings.TrimSpace(inst.ContainerName))
@@ -274,11 +281,11 @@ func (PasarGuardProvider) buildSnapshot(inst pgInstance, containers map[string]d
 	}
 
 	activePorts := uniqueStrings([]string{servicePort, apiPort})
-	// Published container ports (bridge networking) plus host listeners
-	// (host networking / binary), minus the management ports.
+	// Published container ports (bridge networking) plus the container's own
+	// host-visible listeners (host networking), minus the management ports.
 	xrayPorts := uniqueStrings(append(
 		containerXrayPorts(container.Ports, activePorts),
-		xrayPortsFromListen(listenPorts, servicePort, apiPort)...,
+		xrayPortsForPIDs(listenSockets, parsePIDs(inst.PIDs), servicePort, apiPort)...,
 	))
 	sortPortsNumeric(xrayPorts)
 

@@ -127,44 +127,6 @@ func TestSession_SkipsStaticPaths(t *testing.T) {
 	}
 }
 
-// --- CSRF middleware ---
-
-func buildCSRFRequest(t *testing.T, cfg config.Config, method, path string, withToken bool) *http.Request {
-	t.Helper()
-
-	// First get a real session ID via the Session middleware.
-	var sessionID, csrfToken string
-	sessionMW := middleware.Session(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sessionID = middleware.GetSessionID(r.Context())
-		csrfToken = middleware.GetCSRFToken(r.Context())
-	}))
-	sessionMW.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
-
-	// Get the session cookie value from a recorder.
-	recInit := httptest.NewRecorder()
-	sessionMW.ServeHTTP(recInit, httptest.NewRequest(http.MethodGet, "/", nil))
-	var sessionCookieVal string
-	for _, c := range recInit.Result().Cookies() {
-		if c.Name == cfg.Security.SessionCookieName {
-			sessionCookieVal = c.Value
-		}
-	}
-
-	// Build the POST request.
-	form := url.Values{}
-	if withToken {
-		form.Set("_csrf_token", csrfToken)
-	}
-	req := httptest.NewRequest(method, path, strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", "http://example.com")
-	req.Host = "example.com"
-	req.AddCookie(&http.Cookie{Name: cfg.Security.SessionCookieName, Value: sessionCookieVal})
-
-	_ = sessionID
-	return req
-}
-
 func TestCSRF_AllowsSafeMethods(t *testing.T) {
 	cfg := testConfig()
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })

@@ -111,13 +111,19 @@ func (RebeccaProvider) DiscoveryCommand() string {
 		`printf "=RELEASESTART=\n"; $SUDO cat "$base/.binary-release.json" 2>/dev/null || true; printf "\n=RELEASEEND=\n"; ` +
 		`printf "=MODE=%s=\n" "$($SUDO cat "$base/.install-mode" 2>/dev/null)"; ` +
 		`printf "=SERVICE=%s=\n" "$(systemctl is-active "$name" 2>/dev/null)"; ` +
+		// PIDs owned by this instance's systemd service (the node agent and its
+		// xray child share the unit cgroup), so xray ports can be attributed to it
+		// rather than to every listener on the host.
+		`cg="$(systemctl show -p ControlGroup --value "$name" 2>/dev/null || true)"; ` +
+		`PIDS=""; if [ -n "$cg" ] && [ -r "/sys/fs/cgroup$cg/cgroup.procs" ]; then PIDS="$($SUDO cat "/sys/fs/cgroup$cg/cgroup.procs" 2>/dev/null | tr "\n" " " || true)"; fi; ` +
+		`printf "=PIDS=%s=\n" "$PIDS"; ` +
 		`if [ "$HAVE_DOCKER" -eq 1 ]; then ` +
 		`printf "=CONTAINER=%s=\n" "$($SUDO docker ps -a --filter "name=^${name}$" --format "{{.Status}}" 2>/dev/null | head -n 1)"; ` +
 		`fi; ` +
 		`printf "=REBECCANODEEND=\n"; ` +
 		`done; ` +
-		// Host-wide listening ports (once, after the per-instance loop) so xray
-		// inbounds — which binary nodes listen on directly — can be surfaced.
+		// Host listening sockets with owning PIDs (once), matched per instance
+		// against the cgroup PIDs above to attribute xray ports precisely.
 		listenProbeCommand +
 		`true'`
 }
@@ -125,9 +131,10 @@ func (RebeccaProvider) DiscoveryCommand() string {
 func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Snapshot {
 	lines := strings.Split(output, "\n")
 
-	// Host-wide listening ports, shared by every instance on the host.
-	listenSection, _ := markerSection(lines, "=LISTEN=", "=LISTENEND=")
-	listenPorts := parseListenPorts(listenSection)
+	// Host listening sockets (with owning PIDs), shared by every instance; each
+	// instance keeps only the ports owned by its own PIDs.
+	listenLines, _ := markerSection(lines, "=LISTENP=", "=LISTENPEND=")
+	listenSockets := parseListenSockets(listenLines)
 
 	var snapshots []Snapshot
 	var name string
@@ -143,7 +150,7 @@ func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Sn
 			inBlock = true
 		case trimmed == "=REBECCANODEEND=":
 			if inBlock && name != "" {
-				snapshots = append(snapshots, parseRebeccaInstance(name, block, listenPorts, collectedAt))
+				snapshots = append(snapshots, parseRebeccaInstance(name, block, listenSockets, collectedAt))
 			}
 			inBlock = false
 			name = ""
@@ -159,7 +166,7 @@ func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Sn
 // parseRebeccaInstance builds one Snapshot from a single "=REBECCANODE=" block.
 // name is the /opt/<name> directory (and systemd/container name) the instance
 // lives under.
-func parseRebeccaInstance(name string, lines []string, listenPorts []string, collectedAt time.Time) Snapshot {
+func parseRebeccaInstance(name string, lines []string, listenSockets []listenSocket, collectedAt time.Time) Snapshot {
 	envLines, _ := markerSection(lines, "=ENVSTART=", "=ENVEND=")
 	env := parseEnvFile(envLines)
 
@@ -216,8 +223,11 @@ func parseRebeccaInstance(name string, lines []string, listenPorts []string, col
 		confidence = "high"
 	}
 
-	// Xray inbounds = public listeners minus the node's own service/api ports.
-	xrayPorts := xrayPortsFromListen(listenPorts, servicePort, apiPort)
+	// Xray inbounds = ports owned by this instance's PIDs, minus its own
+	// service/api management ports.
+	pidsRaw, _ := markerValue(lines, "PIDS")
+	nodePIDs := parsePIDs(pidsRaw)
+	xrayPorts := xrayPortsForPIDs(listenSockets, nodePIDs, servicePort, apiPort)
 
 	return normalizeSnapshot(Snapshot{
 		NodeType:     rebeccaType,

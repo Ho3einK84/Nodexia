@@ -6,81 +6,142 @@ import (
 	"strings"
 )
 
-// listenProbeCommand is appended to a provider's discovery command to capture
-// the host's listening TCP ports in one pass. Xray inbounds (binary and
-// host-networked nodes) listen here, so the parser can surface them as xray
-// ports. `ss` is preferred; netstat is the portable fallback. The output is
-// wrapped in =LISTEN=…=LISTENEND= so ParseDiscovery can isolate it.
-const listenProbeCommand = `printf "=LISTEN=\n"; ` +
-	`($SUDO ss -tlnH 2>/dev/null || $SUDO ss -tln 2>/dev/null || $SUDO netstat -tln 2>/dev/null || true); ` +
-	`printf "=LISTENEND=\n"; `
+// Xray inbound-port detection.
+//
+// A node's xray ports are the public TCP ports its OWN xray process listens on
+// — not every port open on the host. Attributing ports to a specific node
+// matters because one host can run several nodes (plus SSH, DNS, web servers…),
+// and a host-wide port list would wrongly show all of them on every node.
+//
+// We attribute by process ownership: discovery captures `ss -tlnp` (listening
+// sockets WITH their owning PIDs) once per host, and each node block carries the
+// set of PIDs that belong to it — systemd cgroup members for binary installs,
+// `docker top` for containers. A socket counts as the node's xray port only when
+// its PID is one of the node's, minus the node's own management (service/api)
+// ports. PasarGuard additionally unions the published container ports so bridge
+// networking (where the listener is docker-proxy, not the container) still works.
 
-// wellKnownNonXrayPorts are public listeners that are never xray inbounds, so
-// they are excluded from the detected xray ports (SSH and DNS).
-var wellKnownNonXrayPorts = map[string]struct{}{
-	"22": {}, // SSH
-	"53": {}, // DNS
+// listenProbeCommand captures the host's listening TCP sockets with owning
+// process info, wrapped in =LISTENP=…=LISTENPEND=. `-H` drops the header; the
+// plain form is the fallback. `-p` needs root/sudo to reveal other processes,
+// which discovery already runs with.
+const listenProbeCommand = `printf "=LISTENP=\n"; ` +
+	`($SUDO ss -tlnpH 2>/dev/null || $SUDO ss -tlnp 2>/dev/null || true); ` +
+	`printf "=LISTENPEND=\n"; `
+
+// listenSocket is one listening TCP socket: its port and the PIDs that own it.
+type listenSocket struct {
+	Port string
+	PIDs []string
 }
 
-// parseListenPorts extracts the publicly reachable TCP listening ports from
-// `ss -tln` / `netstat -tln` output. Loopback-only listeners (127.0.0.0/8, ::1)
-// are dropped since they are node-internal, as is the header row. Ports are
-// returned unique and numerically sorted.
-func parseListenPorts(lines []string) []string {
-	seen := map[string]struct{}{}
-	var ports []string
+// parseListenSockets parses `ss -tlnp` output into public listening sockets.
+// Loopback-only listeners (127.0.0.0/8, ::1) and the header row are dropped.
+func parseListenSockets(lines []string) []listenSocket {
+	var out []listenSocket
 	for _, raw := range lines {
 		fields := strings.Fields(raw)
 		if len(fields) < 4 {
 			continue
 		}
-		// `State Recv-Q Send-Q Local:Port Peer:Port …` — field[3] is the local
-		// address. ss may also prefix an interface ("%lo"); LastIndex(":") still
-		// isolates the port.
+		// `State Recv-Q Send-Q Local:Port Peer:Port users:((…))` — field[3] is the
+		// local address; a trailing "%iface"/zone is handled by LastIndex(":").
 		addr := fields[3]
 		idx := strings.LastIndex(addr, ":")
 		if idx < 0 {
 			continue
 		}
 		host, port := addr[:idx], addr[idx+1:]
-		if !isAllDigits(port) || port == "" || port == "0" {
+		if !isAllDigits(port) || port == "0" {
 			continue // header row or malformed
 		}
 		if isLoopbackHost(host) {
 			continue
 		}
-		if _, ok := seen[port]; ok {
-			continue
-		}
-		seen[port] = struct{}{}
-		ports = append(ports, port)
+		out = append(out, listenSocket{Port: port, PIDs: extractPIDs(raw)})
 	}
-	sortPortsNumeric(ports)
-	return ports
+	return out
 }
 
-// xrayPortsFromListen returns the listening ports that look like xray inbounds:
-// every public listener minus the well-known system ports and the node's own
-// management ports (service/api), which are surfaced separately.
-func xrayPortsFromListen(listen []string, exclude ...string) []string {
-	if len(listen) == 0 {
+// extractPIDs pulls every pid=N from an `ss -tlnp` process column, e.g.
+// users:(("xray",pid=1234,fd=7),("xray",pid=1234,fd=8)).
+func extractPIDs(line string) []string {
+	var pids []string
+	for {
+		i := strings.Index(line, "pid=")
+		if i < 0 {
+			break
+		}
+		line = line[i+len("pid="):]
+		j := 0
+		for j < len(line) && line[j] >= '0' && line[j] <= '9' {
+			j++
+		}
+		if j > 0 {
+			pids = append(pids, line[:j])
+		}
+		line = line[j:]
+	}
+	return pids
+}
+
+// xrayPortsForPIDs returns the ports whose owning PID is one of the node's,
+// excluding its management ports (service/api). Result is unique and numerically
+// sorted. An empty PID set yields no ports (so a node we cannot attribute simply
+// shows none rather than the whole host).
+func xrayPortsForPIDs(sockets []listenSocket, nodePIDs []string, exclude ...string) []string {
+	if len(nodePIDs) == 0 {
 		return nil
 	}
-	skip := map[string]struct{}{}
-	for k := range wellKnownNonXrayPorts {
-		skip[k] = struct{}{}
+	pidSet := make(map[string]struct{}, len(nodePIDs))
+	for _, p := range nodePIDs {
+		if p != "" {
+			pidSet[p] = struct{}{}
+		}
 	}
+	skip := map[string]struct{}{}
 	for _, e := range exclude {
 		if e = strings.TrimSpace(e); e != "" {
 			skip[e] = struct{}{}
 		}
 	}
+
+	seen := map[string]struct{}{}
 	var out []string
-	for _, p := range listen {
-		if _, ok := skip[p]; ok {
+	for _, s := range sockets {
+		if _, bad := skip[s.Port]; bad {
 			continue
 		}
-		out = append(out, p)
+		if _, dup := seen[s.Port]; dup {
+			continue
+		}
+		if !ownedBy(s.PIDs, pidSet) {
+			continue
+		}
+		seen[s.Port] = struct{}{}
+		out = append(out, s.Port)
+	}
+	sortPortsNumeric(out)
+	return out
+}
+
+func ownedBy(pids []string, set map[string]struct{}) bool {
+	for _, p := range pids {
+		if _, ok := set[p]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// parsePIDs extracts the numeric PIDs from a whitespace-separated list (cgroup
+// procs or `docker top` output), ignoring any header/non-numeric tokens.
+func parsePIDs(s string) []string {
+	var out []string
+	for _, f := range strings.Fields(s) {
+		if isAllDigits(f) {
+			out = append(out, f)
+		}
 	}
 	return out
 }
