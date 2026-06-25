@@ -115,11 +115,19 @@ func (RebeccaProvider) DiscoveryCommand() string {
 		`printf "=CONTAINER=%s=\n" "$($SUDO docker ps -a --filter "name=^${name}$" --format "{{.Status}}" 2>/dev/null | head -n 1)"; ` +
 		`fi; ` +
 		`printf "=REBECCANODEEND=\n"; ` +
-		`done; true'`
+		`done; ` +
+		// Host-wide listening ports (once, after the per-instance loop) so xray
+		// inbounds — which binary nodes listen on directly — can be surfaced.
+		listenProbeCommand +
+		`true'`
 }
 
 func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Snapshot {
 	lines := strings.Split(output, "\n")
+
+	// Host-wide listening ports, shared by every instance on the host.
+	listenSection, _ := markerSection(lines, "=LISTEN=", "=LISTENEND=")
+	listenPorts := parseListenPorts(listenSection)
 
 	var snapshots []Snapshot
 	var name string
@@ -135,7 +143,7 @@ func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Sn
 			inBlock = true
 		case trimmed == "=REBECCANODEEND=":
 			if inBlock && name != "" {
-				snapshots = append(snapshots, parseRebeccaInstance(name, block, collectedAt))
+				snapshots = append(snapshots, parseRebeccaInstance(name, block, listenPorts, collectedAt))
 			}
 			inBlock = false
 			name = ""
@@ -151,7 +159,7 @@ func (RebeccaProvider) ParseDiscovery(output string, collectedAt time.Time) []Sn
 // parseRebeccaInstance builds one Snapshot from a single "=REBECCANODE=" block.
 // name is the /opt/<name> directory (and systemd/container name) the instance
 // lives under.
-func parseRebeccaInstance(name string, lines []string, collectedAt time.Time) Snapshot {
+func parseRebeccaInstance(name string, lines []string, listenPorts []string, collectedAt time.Time) Snapshot {
 	envLines, _ := markerSection(lines, "=ENVSTART=", "=ENVEND=")
 	env := parseEnvFile(envLines)
 
@@ -208,6 +216,9 @@ func parseRebeccaInstance(name string, lines []string, collectedAt time.Time) Sn
 		confidence = "high"
 	}
 
+	// Xray inbounds = public listeners minus the node's own service/api ports.
+	xrayPorts := xrayPortsFromListen(listenPorts, servicePort, apiPort)
+
 	return normalizeSnapshot(Snapshot{
 		NodeType:     rebeccaType,
 		ServiceName:  name,
@@ -215,6 +226,7 @@ func parseRebeccaInstance(name string, lines []string, collectedAt time.Time) Sn
 		Version:      version,
 		HealthStatus: health,
 		ActivePorts:  uniqueStrings([]string{servicePort, apiPort}),
+		XrayPorts:    xrayPorts,
 		ServicePort:  servicePort,
 		APIPort:      apiPort,
 		Protocol:     protocol,
