@@ -253,6 +253,7 @@ func (RebeccaProvider) Actions() []Action {
 		{Key: "status", Label: "Status", Icon: "activity", Timeout: 2 * time.Minute},
 		{Key: "logs", Label: "Logs", Icon: "scroll-text", Timeout: 2 * time.Minute},
 		{Key: "update", Label: "Update", Icon: "arrow-up-circle", Timeout: 20 * time.Minute},
+		{Key: "reinstall", Label: "Reinstall CLI", Icon: "refresh-cw", Timeout: 5 * time.Minute},
 		{Key: "uninstall", Label: "Uninstall", Icon: "trash-2", Danger: true, Timeout: 10 * time.Minute},
 	}
 }
@@ -280,6 +281,13 @@ func (p RebeccaProvider) ActionCommand(nodeName, actionKey string) (string, time
 	if !ok {
 		return "", 0, fmt.Errorf("nodes: rebecca: unsupported action %q", actionKey)
 	}
+
+	// Reinstall repairs the management CLI rather than driving it (the broken CLI
+	// is exactly what it replaces), so it bypasses the `rebecca-node <op>` path.
+	if action.Key == "reinstall" {
+		return p.reinstallScriptCommand(), action.Timeout, nil
+	}
+
 	spec := rebeccaOps[action.Key]
 
 	invocation := `$SUDO rebecca-node ` + spec.op + ` </dev/null`
@@ -290,6 +298,26 @@ func (p RebeccaProvider) ActionCommand(nodeName, actionKey string) (string, time
 		`if ! command -v rebecca-node >/dev/null 2>&1; then echo "rebecca-node CLI not found on this server" >&2; exit 86; fi; ` +
 		invocation + `'`
 	return command, action.Timeout, nil
+}
+
+// reinstallScriptCommand repairs the rebecca-node management CLI by downloading
+// the binary install script and running its `script-install`, which rewrites
+// /usr/local/bin/rebecca-node with the binary-flavored copy. This fixes installs
+// whose CLI was left docker-flavored (so `rebecca-node update`/actions aborted
+// with the binary/docker mode mismatch). Only the CLI script is reinstalled —
+// the node's .env, data, and systemd service are untouched, so no bundle is
+// needed. Running the binary script directly means script_install_mode() resolves
+// to binary, matching the install, so the mode guard passes.
+func (RebeccaProvider) reinstallScriptCommand() string {
+	return `sh -c '` + sudoPreamble +
+		`SCRIPT="$(mktemp /tmp/nodexia-rebecca-node.XXXXXX)" || exit 1; ` +
+		`if command -v curl >/dev/null 2>&1; then curl -fsSL ` + rebeccaDevScriptURL + ` -o "$SCRIPT" || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
+		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + rebeccaDevScriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
+		`else echo "curl or wget is required to reinstall" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
+		`$SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" script-install --name ` + rebeccaInstallName + ` </dev/null; ` +
+		`STATUS=$?; rm -f "$SCRIPT"; ` +
+		`if [ "$STATUS" -ne 0 ]; then echo "[rebecca-node script reinstall exited with status $STATUS]" >&2; fi; ` +
+		`exit $STATUS'`
 }
 
 // ── Installation (dev/beta channel) ────────────────────────────────────────────
