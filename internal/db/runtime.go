@@ -45,7 +45,7 @@ func Open(ctx context.Context, cfg config.DatabaseConfig) (*Runtime, error) {
 		return nil, fmt.Errorf("db: ping connection: %w", err)
 	}
 
-	migrator, err := NewBootstrapMigrator()
+	migrator, err := NewBootstrapMigratorFor(dialect)
 	if err != nil {
 		_ = conn.Close()
 		return nil, err
