@@ -1,4 +1,4 @@
-VERSION ?= v0.2.5
+VERSION ?= v0.3.0
 
 .PHONY: test build release
 
