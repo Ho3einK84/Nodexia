@@ -89,6 +89,7 @@ type PageData struct {
 	DashboardSnapshots          []DashboardMonitoringView
 	DashboardSnapshotTotal      int
 	DashboardSnapshotPagination PaginationView
+	DashboardNodeStatus         FleetNodeStatusView
 	SchedulerOverview           SchedulerOverviewView
 	// BackupCanRun gates the diagnostics backup/restore section; it is false
 	// when the database runtime is unavailable.
@@ -576,6 +577,29 @@ type DashboardMonitoringView struct {
 	CollectedAt    string
 	CurrentMonthDL string
 	PeakBandwidth  string
+}
+
+// FleetNodeStatusView powers the home dashboard's node-status glance: one row per
+// server that has at least one discovered node. HasStopped flags whether any
+// server currently has a stopped node, so the section can lead with a warning.
+type FleetNodeStatusView struct {
+	Servers    []ServerNodeStatusView
+	HasStopped bool
+}
+
+// ServerNodeStatusView is one server's node-status summary on the dashboard.
+// State is one of "running" (all nodes up), "stopped" (≥1 stopped), or "partial"
+// (some node in an unknown/other state but none stopped).
+type ServerNodeStatusView struct {
+	ServerID    int64
+	ServerName  string
+	FlagEmoji   string
+	CountryName string
+	Total       int
+	Running     int
+	Stopped     int
+	Other       int
+	State       string
 }
 
 type NodeTargetView struct {

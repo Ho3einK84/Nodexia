@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/geoip"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
 	"github.com/Ho3einK84/Nodexia/internal/module/monitoring"
+	"github.com/Ho3einK84/Nodexia/internal/module/nodes"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 	"github.com/Ho3einK84/Nodexia/internal/scheduler"
 	"github.com/Ho3einK84/Nodexia/internal/view"
@@ -101,6 +103,14 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				page.DashboardSnapshots = append(page.DashboardSnapshots, v)
 			}
 		}
+
+		// Fleet node-status glance: one row per server with discovered nodes,
+		// highlighting any that are stopped. Best-effort — a query error simply
+		// omits the section.
+		nodeRepo := nodes.NewSQLRepository(h.database.SQL)
+		if statuses, err := nodeRepo.ListLatestNodeStatus(ctx); err == nil {
+			page.DashboardNodeStatus = fleetNodeStatusView(statuses, countries)
+		}
 	}
 
 	if err := h.renderer.Render(w, http.StatusOK, page); err != nil {
@@ -129,6 +139,58 @@ func serverCountryBadges(database *db.Runtime) map[int64]countryBadge {
 		}
 	}
 	return badges
+}
+
+// fleetNodeStatusView folds the per-server node-status summaries into the home
+// dashboard view, keeping only servers that actually have discovered nodes and
+// decorating each with its country flag. Servers with a stopped node sort first.
+func fleetNodeStatusView(statuses []nodes.ServerNodeStatus, countries map[int64]countryBadge) view.FleetNodeStatusView {
+	out := view.FleetNodeStatusView{}
+	for _, st := range statuses {
+		if st.Total == 0 {
+			continue
+		}
+		state := "running"
+		switch {
+		case st.Stopped > 0:
+			state = "stopped"
+			out.HasStopped = true
+		case st.Running < st.Total:
+			state = "partial"
+		}
+		row := view.ServerNodeStatusView{
+			ServerID:   st.ServerID,
+			ServerName: st.ServerName,
+			Total:      st.Total,
+			Running:    st.Running,
+			Stopped:    st.Stopped,
+			Other:      st.Other,
+			State:      state,
+		}
+		if badge, ok := countries[st.ServerID]; ok {
+			row.FlagEmoji = badge.Flag
+			row.CountryName = badge.Name
+		}
+		out.Servers = append(out.Servers, row)
+	}
+	// Surface servers with a stopped node first so the warning is immediately
+	// visible; otherwise preserve the name ordering from the query.
+	sort.SliceStable(out.Servers, func(i, j int) bool {
+		return nodeStateRank(out.Servers[i].State) < nodeStateRank(out.Servers[j].State)
+	})
+	return out
+}
+
+// nodeStateRank orders node states worst-first for the dashboard.
+func nodeStateRank(state string) int {
+	switch state {
+	case "stopped":
+		return 0
+	case "partial":
+		return 1
+	default:
+		return 2
+	}
 }
 
 // homeURL builds a home-page URL for snapshot pagination.

@@ -784,10 +784,47 @@ func (r *Runtime) executeNodesJob(ctx context.Context, server servers.Server, re
 	}); err != nil {
 		return "", err
 	}
+
+	// Evaluate the node-down alert against the freshly discovered nodes (no extra
+	// SSH). Best-effort, like evaluateAlerts — a failure never fails the job.
+	r.evaluateNodeStatus(ctx, server, snapshots)
+
 	if len(snapshots) == 0 {
 		return "Stored an empty discovery batch after no detector matched.", nil
 	}
 	return fmt.Sprintf("Stored %d node discovery snapshots.", len(snapshots)), nil
+}
+
+// evaluateNodeStatus runs the alert evaluator for the node_stopped metric using
+// the snapshots from the discovery sweep just stored. The metric is available
+// (so it can both fire and resolve) on every completed sweep; every other metric
+// reports unavailable here and is skipped. Errors are logged, never propagated.
+func (r *Runtime) evaluateNodeStatus(ctx context.Context, server servers.Server, snapshots []nodes.Snapshot) {
+	if r.evaluator == nil {
+		return
+	}
+	metrics := alerts.Metrics{
+		NodeStatusAvailable: true,
+		NodeStopped:         anyNodeStopped(snapshots),
+	}
+	if err := r.evaluator.Evaluate(ctx, alerts.Target{ID: server.ID, Name: server.Name}, metrics); err != nil {
+		slog.Warn("node status alert evaluation failed",
+			slog.Int64("server_id", server.ID),
+			slog.String("error", err.Error()),
+		)
+	}
+}
+
+// anyNodeStopped reports whether at least one discovered node is in the "stopped"
+// state. Only a real, stopped node counts: placeholder ("none"/"not_detected")
+// and "unknown" snapshots are an ambiguous or absent signal and never fire.
+func anyNodeStopped(snapshots []nodes.Snapshot) bool {
+	for _, s := range snapshots {
+		if strings.EqualFold(strings.TrimSpace(s.HealthStatus), "stopped") {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Runtime) intervalFor(jobType JobType) time.Duration {
