@@ -48,6 +48,7 @@ func translatedPages() map[string]func(p *PageData) {
 		"content-monitoring":         func(p *PageData) { p.MonitoringForm = MonitoringFormView{Errors: map[string]string{}} },
 		"content-analytics":          func(p *PageData) {},
 		"content-analytics-global":   func(p *PageData) { p.GlobalAnalytics = GlobalAnalyticsView{ServerCount: 0} },
+		"content-analytics-limits":   func(p *PageData) { p.TrafficLimits = TrafficLimitsView{UnitOptions: []string{"GiB", "TiB"}} },
 		"content-alerts-overview":    func(p *PageData) { p.AlertsOverview = AlertsOverviewView{} },
 		"content-alert-rule-form":    func(p *PageData) { p.AlertRuleForm = AlertRuleFormView{Errors: map[string]string{}} },
 		"content-alert-channel-form": func(p *PageData) { p.AlertChannelForm = AlertChannelFormView{Errors: map[string]string{}} },

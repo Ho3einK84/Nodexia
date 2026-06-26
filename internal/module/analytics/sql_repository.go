@@ -306,6 +306,144 @@ func (r SQLRepository) DeleteTrafficLimit(ctx context.Context, serverID int64) e
 	return nil
 }
 
+// ResolveEffectiveLimit applies the precedence server > smallest tag > global.
+// Each level is a separate, indexed lookup; the broader fallbacks are consulted
+// only when the narrower one is absent, so an explicit per-server cap is never
+// overridden by a group cap.
+func (r SQLRepository) ResolveEffectiveLimit(ctx context.Context, serverID int64, tags []string) (int64, string, bool, error) {
+	if limit, ok, err := r.GetTrafficLimit(ctx, serverID); err != nil {
+		return 0, "", false, err
+	} else if ok {
+		return limit, "server", true, nil
+	}
+
+	// Smallest tag cap among the server's tags (most restrictive wins).
+	cleaned := make([]string, 0, len(tags))
+	for _, t := range tags {
+		if t = strings.TrimSpace(t); t != "" {
+			cleaned = append(cleaned, t)
+		}
+	}
+	if len(cleaned) > 0 {
+		placeholders := strings.Repeat("?,", len(cleaned)-1) + "?"
+		args := make([]any, 0, len(cleaned)+1)
+		args = append(args, LimitScopeTag)
+		for _, t := range cleaned {
+			args = append(args, t)
+		}
+		var ref string
+		var limit int64
+		err := r.conn.QueryRowContext(ctx,
+			`SELECT ref, monthly_limit_bytes FROM traffic_limit_rules
+			 WHERE scope = ? AND ref IN (`+placeholders+`)
+			 ORDER BY monthly_limit_bytes ASC, ref ASC LIMIT 1`,
+			args...,
+		).Scan(&ref, &limit)
+		switch {
+		case err == nil:
+			return limit, "tag:" + ref, true, nil
+		case err != sql.ErrNoRows:
+			return 0, "", false, fmt.Errorf("analytics: resolve tag limit: %w", err)
+		}
+	}
+
+	// Fleet-wide default.
+	if limit, ok, err := r.GetScopedLimit(ctx, LimitScopeGlobal, ""); err != nil {
+		return 0, "", false, err
+	} else if ok {
+		return limit, "global", true, nil
+	}
+
+	return 0, "", false, nil
+}
+
+// ListScopedLimits returns every global/tag limit rule, global first then tags
+// alphabetically — the order the admin page renders them in.
+func (r SQLRepository) ListScopedLimits(ctx context.Context) ([]ScopedLimit, error) {
+	rows, err := r.conn.QueryContext(ctx,
+		`SELECT scope, ref, monthly_limit_bytes FROM traffic_limit_rules
+		 ORDER BY CASE scope WHEN 'global' THEN 0 ELSE 1 END, ref ASC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("analytics: list scoped limits: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ScopedLimit
+	for rows.Next() {
+		var s ScopedLimit
+		if err := rows.Scan(&s.Scope, &s.Ref, &s.LimitBytes); err != nil {
+			return nil, fmt.Errorf("analytics: scan scoped limit: %w", err)
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// GetScopedLimit reads one scope/ref rule. A missing row is ok=false (unlimited).
+func (r SQLRepository) GetScopedLimit(ctx context.Context, scope, ref string) (int64, bool, error) {
+	var limitBytes int64
+	err := r.conn.QueryRowContext(ctx,
+		`SELECT monthly_limit_bytes FROM traffic_limit_rules WHERE scope = ? AND ref = ? LIMIT 1`,
+		scope, ref,
+	).Scan(&limitBytes)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, false, nil
+		}
+		return 0, false, fmt.Errorf("analytics: get scoped limit: %w", err)
+	}
+	return limitBytes, true, nil
+}
+
+// SetScopedLimit upserts a global/tag rule. Like SetTrafficLimit it updates then
+// inserts in one transaction, avoiding dialect-specific UPSERT syntax.
+func (r SQLRepository) SetScopedLimit(ctx context.Context, scope, ref string, limitBytes int64) error {
+	tx, err := r.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("analytics: begin set scoped limit: %w", err)
+	}
+
+	now := time.Now().UTC()
+	result, err := tx.ExecContext(ctx,
+		`UPDATE traffic_limit_rules SET monthly_limit_bytes = ?, updated_at = ? WHERE scope = ? AND ref = ?`,
+		limitBytes, now, scope, ref,
+	)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("analytics: update scoped limit: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("analytics: scoped limit rows affected: %w", err)
+	}
+	if affected == 0 {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO traffic_limit_rules (scope, ref, monthly_limit_bytes, updated_at) VALUES (?, ?, ?, ?)`,
+			scope, ref, limitBytes, now,
+		); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("analytics: insert scoped limit: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("analytics: commit set scoped limit: %w", err)
+	}
+	return nil
+}
+
+// DeleteScopedLimit clears a global/tag rule. A missing row is not an error.
+func (r SQLRepository) DeleteScopedLimit(ctx context.Context, scope, ref string) error {
+	if _, err := r.conn.ExecContext(ctx,
+		`DELETE FROM traffic_limit_rules WHERE scope = ? AND ref = ?`, scope, ref,
+	); err != nil {
+		return fmt.Errorf("analytics: delete scoped limit: %w", err)
+	}
+	return nil
+}
+
 func (r SQLRepository) DeleteRawBefore(ctx context.Context, before time.Time) (int64, error) {
 	result, err := r.conn.ExecContext(ctx,
 		`DELETE FROM system_snapshots WHERE created_at < ?`, before)

@@ -120,7 +120,7 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		CredentialStrategy: server.CredentialStrategy,
 	}
 	page.AnalyticsTrafficMonth = h.currentMonthTraffic(r, server.ID)
-	page.AnalyticsLimit = h.limitView(r, server.ID)
+	page.AnalyticsLimit = h.limitView(r, server)
 	if kind, msg := limitFlash(r, page); kind != "" {
 		page.FlashKind = kind
 		page.FlashMessage = msg
@@ -136,20 +136,37 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // limitView builds the monthly download-limit form state for a server. On any
 // read error it renders the form as "no limit" rather than failing the page —
 // the limit is an optional convenience, never a hard dependency of analytics.
-func (h PageHandler) limitView(r *http.Request, serverID int64) view.AnalyticsLimitView {
+func (h PageHandler) limitView(r *http.Request, server servers.Server) view.AnalyticsLimitView {
 	v := view.AnalyticsLimitView{
-		Action:      fmt.Sprintf("/servers/%d/analytics/limit", serverID),
+		Action:      fmt.Sprintf("/servers/%d/analytics/limit", server.ID),
 		UnitInput:   defaultLimitUnit,
 		UnitOptions: limitUnitOptions,
 	}
-	limitBytes, ok, err := h.repo.GetTrafficLimit(r.Context(), serverID)
-	if err != nil || !ok {
+	limitBytes, ok, err := h.repo.GetTrafficLimit(r.Context(), server.ID)
+	if err == nil && ok {
+		v.HasLimit = true
+		v.LimitHuman = formatBytes(limitBytes)
+		v.ValueInput, v.UnitInput = limitToValueUnit(limitBytes)
 		return v
 	}
-	v.HasLimit = true
-	v.LimitHuman = formatBytes(limitBytes)
-	v.ValueInput, v.UnitInput = limitToValueUnit(limitBytes)
+
+	// No per-server override: surface the inherited group/global cap (if any) so
+	// the operator sees the limit the forecast actually uses.
+	if eff, source, ok, err := h.repo.ResolveEffectiveLimit(r.Context(), server.ID, server.Tags); err == nil && ok {
+		page := view.NewPageData(h.deps.Config, r)
+		v.InheritedHuman = formatBytes(eff)
+		v.InheritedSource = limitSourceLabel(page, source)
+	}
 	return v
+}
+
+// limitSourceLabel turns a repository source token ("global" / "tag:<name>")
+// into a localized, human-readable origin for the inherited-limit hint.
+func limitSourceLabel(page view.PageData, source string) string {
+	if tag, ok := strings.CutPrefix(source, "tag:"); ok {
+		return page.T("analytics.limits.source_tag", "tag", tag)
+	}
+	return page.T("analytics.limits.source_global")
 }
 
 // limitFlash maps the ?flash= marker set after a limit POST to a kind + message.
@@ -468,8 +485,10 @@ func (h ForecastHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// A missing/failed limit lookup must never break the forecast — treat it as
-	// "no limit" so the response is identical to a server without a cap.
-	limitBytes, _, _ := h.repo.GetTrafficLimit(r.Context(), server.ID)
+	// "no limit" so the response is identical to a server without a cap. The
+	// effective limit honours the per-server > tag > global precedence so a server
+	// inheriting a group/global cap forecasts against it just like an explicit one.
+	limitBytes, _, _, _ := h.repo.ResolveEffectiveLimit(r.Context(), server.ID, server.Tags)
 
 	out := h.forecastSvc.Compute(days, months, limitBytes)
 	now := time.Now().UTC()
@@ -618,7 +637,7 @@ func (h LimitHandler) renderError(w http.ResponseWriter, r *http.Request, server
 
 	pageHandler := PageHandler{deps: h.deps, serverRepo: h.serverRepo, repo: h.repo}
 	page.AnalyticsTrafficMonth = pageHandler.currentMonthTraffic(r, server.ID)
-	limitView := pageHandler.limitView(r, server.ID)
+	limitView := pageHandler.limitView(r, server)
 	limitView.ValueInput = value
 	limitView.UnitInput = unit
 	limitView.Error = page.T(errKey)

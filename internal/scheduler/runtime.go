@@ -649,7 +649,7 @@ func (r *Runtime) evaluateAlerts(ctx context.Context, server servers.Server, sna
 	// SSH) plus a single indexed limit lookup, so the only added cost for a server
 	// without a limit is that cheap SELECT — and the metrics stay unavailable.
 	metrics.ForecastAvailable, metrics.ProjectedExceedsLimit, metrics.DaysToExhaustion =
-		r.forecastMetrics(ctx, server.ID, traffic, trafficAvailable)
+		r.forecastMetrics(ctx, server, traffic, trafficAvailable)
 
 	if err := r.evaluator.Evaluate(ctx, alerts.Target{ID: server.ID, Name: server.Name}, metrics); err != nil {
 		slog.Warn("alert evaluation failed",
@@ -700,15 +700,18 @@ func currentMonthTotalGiB(traffic monitoring.TrafficSnapshot) float64 {
 // days is 0 when already over, the projected days-remaining when on track to
 // exhaust, and alerts.DaysToExhaustionSafe when not projected to exhaust this
 // month (so a "≤ N days" rule resolves rather than getting stuck).
-func (r *Runtime) forecastMetrics(ctx context.Context, serverID int64, traffic monitoring.TrafficSnapshot, trafficAvailable bool) (available, projectedOver bool, days float64) {
+func (r *Runtime) forecastMetrics(ctx context.Context, server servers.Server, traffic monitoring.TrafficSnapshot, trafficAvailable bool) (available, projectedOver bool, days float64) {
 	if r.forecastSvc == nil || r.analyticsRepo == nil || !trafficAvailable {
 		return false, false, 0
 	}
 
-	limitBytes, ok, err := r.analyticsRepo.GetTrafficLimit(ctx, serverID)
+	// Resolve the effective cap (per-server > smallest tag > global default), so a
+	// server with no per-server limit still gets predictive alerts when a group or
+	// global cap applies.
+	limitBytes, _, ok, err := r.analyticsRepo.ResolveEffectiveLimit(ctx, server.ID, server.Tags)
 	if err != nil || !ok || limitBytes <= 0 {
-		// No limit configured (the common case): predictive metrics are unavailable
-		// so servers without a limit never trigger them.
+		// No limit configured at any level (the common case): predictive metrics are
+		// unavailable so servers without a limit never trigger them.
 		return false, false, 0
 	}
 
