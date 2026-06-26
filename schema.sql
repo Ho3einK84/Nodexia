@@ -321,3 +321,22 @@ ALTER TABLE server_system_facts ADD COLUMN cpu_model TEXT NOT NULL DEFAULT '';
 ALTER TABLE server_system_facts ADD COLUMN cpu_cores INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE server_system_facts ADD COLUMN mem_total_kb INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE server_system_facts ADD COLUMN disk_total_kb INTEGER NOT NULL DEFAULT 0;
+
+-- ── Group / global traffic limits ─────────────────────────────────────────────
+-- Broader monthly DOWNLOAD (RX) caps that apply when a server has no per-server
+-- limit of its own (server_traffic_limits stays the authoritative override). Two
+-- scopes share one table: scope='global' (ref '') is a single fleet-wide default,
+-- and scope='tag' (ref = the tag name) caps every server carrying that tag. The
+-- effective limit for a server is resolved as: its own server_traffic_limits row,
+-- else the SMALLEST tag cap among its tags, else the global default — so the
+-- broader caps never override an explicit per-server value, and a missing row at
+-- every level means "unlimited" (today's behaviour for every existing server).
+-- Appended as a standalone statement so existing databases pick it up as a new
+-- bootstrap migration.
+CREATE TABLE IF NOT EXISTS traffic_limit_rules (
+  scope               TEXT     NOT NULL,
+  ref                 TEXT     NOT NULL DEFAULT '',
+  monthly_limit_bytes INTEGER  NOT NULL,
+  updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (scope, ref)
+);

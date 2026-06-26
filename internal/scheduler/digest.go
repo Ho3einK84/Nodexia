@@ -9,6 +9,7 @@ import (
 
 	"github.com/Ho3einK84/Nodexia/internal/module/alerts"
 	"github.com/Ho3einK84/Nodexia/internal/module/analytics"
+	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 	"github.com/Ho3einK84/Nodexia/internal/notify"
 )
 
@@ -133,7 +134,7 @@ func (r *Runtime) collectDigest(ctx context.Context) (notify.DigestMessage, erro
 
 	for _, server := range serversList {
 		summary := trafficByID[server.ID]
-		fc := r.serverForecast(ctx, server.ID)
+		fc := r.serverForecast(ctx, server)
 		msg.Servers = append(msg.Servers, digestServerLine(server.Name, summary, fc, alertsByID[server.ID]))
 	}
 
@@ -143,15 +144,15 @@ func (r *Runtime) collectDigest(ctx context.Context) (notify.DigestMessage, erro
 // serverForecast computes a server's forecast for the digest, reusing the same
 // service the analytics page uses. Any failure (no traffic, no limit) yields a
 // zero-value forecast whose Exhaustion.HasLimit is false, rendered as "no limit".
-func (r *Runtime) serverForecast(ctx context.Context, serverID int64) analytics.ForecastOutput {
+func (r *Runtime) serverForecast(ctx context.Context, server servers.Server) analytics.ForecastOutput {
 	if r.forecastSvc == nil {
 		return analytics.ForecastOutput{}
 	}
-	days, months, err := r.analyticsRepo.GetLatestTrafficForServer(ctx, serverID)
+	days, months, err := r.analyticsRepo.GetLatestTrafficForServer(ctx, server.ID)
 	if err != nil || len(days) == 0 {
 		return analytics.ForecastOutput{}
 	}
-	limitBytes, ok, err := r.analyticsRepo.GetTrafficLimit(ctx, serverID)
+	limitBytes, _, ok, err := r.analyticsRepo.ResolveEffectiveLimit(ctx, server.ID, server.Tags)
 	if err != nil || !ok {
 		limitBytes = 0
 	}

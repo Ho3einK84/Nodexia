@@ -120,6 +120,7 @@ type PageData struct {
 	AnalyticsTrafficMonth AnalyticsTrafficSummaryView
 	AnalyticsLimit        AnalyticsLimitView
 	GlobalAnalytics       GlobalAnalyticsView
+	TrafficLimits         TrafficLimitsView
 
 	// Internationalization. Lang/Dir drive the <html lang>/<html dir>
 	// attributes; LanguageOptions backs the header language switcher. localizer
@@ -983,6 +984,34 @@ type AnalyticsLimitView struct {
 	UnitInput   string
 	UnitOptions []string
 	Error       string
+	// Inherited describes a group/global cap that applies when this server has no
+	// per-server limit of its own. InheritedHuman is the effective cap and
+	// InheritedSource is a human-readable origin ("global default" / tag "x").
+	// Both are empty when no limit applies at any level.
+	InheritedHuman  string
+	InheritedSource string
+}
+
+// TrafficLimitsView powers the fleet-level group/global limits admin page. The
+// global default is one optional cap; Tags lists the per-tag caps. Actions point
+// at the three POST endpoints; UnitOptions/GlobalUnit mirror the per-server form.
+type TrafficLimitsView struct {
+	GlobalAction    string
+	TagAction       string
+	TagDeleteAction string
+	HasGlobal       bool
+	GlobalHuman     string
+	GlobalValue     string
+	GlobalUnit      string
+	UnitOptions     []string
+	Tags            []TrafficLimitTagView
+	Error           string
+}
+
+// TrafficLimitTagView is one per-tag cap row on the limits admin page.
+type TrafficLimitTagView struct {
+	Tag        string
+	LimitHuman string
 }
 
 type Renderer struct {
