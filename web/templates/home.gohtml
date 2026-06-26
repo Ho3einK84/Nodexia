@@ -108,52 +108,10 @@
 
     <article class="card">
       <div class="card__header">
-        <h3><i data-lucide="calendar-clock"></i> {{ t "home.card.background_jobs" }}</h3>
-        <span class="status-pill status-pill--{{ if .SchedulerOverview.Enabled }}ok{{ else }}idle{{ end }}">{{ if .SchedulerOverview.Enabled }}{{ t "home.scheduler.active" }}{{ else }}{{ t "home.scheduler.off" }}{{ end }}</span>
-      </div>
-      {{ if .SchedulerOverview.Jobs }}
-      <div class="dashboard-list dashboard-list--scrollable">
-        {{ range .SchedulerOverview.Jobs }}
-        <article class="dashboard-item">
-          <div class="server-item__header">
-            <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</h4>
-            <span class="status-pill status-pill--{{ if or (eq .Status "running") (eq .Status "scheduled") }}ok{{ else if eq .Status "retrying" }}crit{{ else if eq .Status "blocked" }}warn{{ else }}idle{{ end }}">{{ .Status }}</span>
-          </div>
-          <div class="dashboard-item__meta">
-            <span><i data-lucide="layers"></i> {{ .JobType }}</span>
-            {{ if eq .JobType "monitoring" }}
-            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "home.monitor" }}</a>
-            {{ else }}
-            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "home.nodes" }}</a>
-            {{ end }}
-          </div>
-          <div class="dashboard-item__meta">
-            <span><i data-lucide="timer"></i> {{ t "home.job.next" "value" .NextRunAt }}</span>
-            <span><i data-lucide="circle-check"></i> {{ t "home.job.last_ok" "value" .LastSuccessAt }}</span>
-            {{ if gt .ConsecutiveFailures 0 }}<span class="status-pill status-pill--crit"><i data-lucide="circle-alert" class="icon-in-button"></i> {{ tn "home.failures" .ConsecutiveFailures }}</span>{{ end }}
-          </div>
-          {{ if .LastError }}<p class="error-inline">{{ .LastError }}</p>{{ end }}
-        </article>
-        {{ end }}
-        {{ if gt .SchedulerOverview.MoreJobs 0 }}
-        <p class="dashboard-list__more"><i data-lucide="ellipsis"></i> {{ tn "home.more_jobs" .SchedulerOverview.MoreJobs }}</p>
-        {{ end }}
-      </div>
-      {{ else }}
-      <div class="empty-state-card">
-        <span class="empty-state-icon"><i data-lucide="calendar-clock"></i></span>
-        <p class="empty-state-title">{{ t "home.empty.jobs_title" }}</p>
-        <p class="empty-state-desc">{{ t "home.empty.jobs_desc" }}</p>
-      </div>
-      {{ end }}
-    </article>
-
-    {{ if .DashboardNodeStatus.Servers }}
-    <article class="card">
-      <div class="card__header">
         <h3><i data-lucide="boxes"></i> {{ t "home.card.node_status" }}</h3>
         {{ if .DashboardNodeStatus.HasStopped }}<span class="status-pill status-pill--crit"><i data-lucide="circle-alert" class="icon-in-button"></i> {{ t "home.node.attention" }}</span>{{ end }}
       </div>
+      {{ if .DashboardNodeStatus.Servers }}
       <div class="dashboard-list dashboard-list--scrollable">
         {{ range .DashboardNodeStatus.Servers }}
         <article class="dashboard-item">
@@ -170,8 +128,14 @@
         </article>
         {{ end }}
       </div>
+      {{ else }}
+      <div class="empty-state-card">
+        <span class="empty-state-icon"><i data-lucide="boxes"></i></span>
+        <p class="empty-state-title">{{ t "home.empty.nodes_title" }}</p>
+        <p class="empty-state-desc">{{ t "home.empty.nodes_desc" }}</p>
+      </div>
+      {{ end }}
     </article>
-    {{ end }}
   </div>
 
   <p class="dash-section"><i data-lucide="settings"></i> {{ t "home.section.runtime_config" }}</p>
