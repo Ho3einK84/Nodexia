@@ -21,6 +21,13 @@ type Dialect interface {
 	// and MySQL want very different sizing, so the decision lives with the
 	// dialect rather than in shared bootstrap code.
 	ConfigurePool(conn *sql.DB, cfg config.DatabaseConfig)
+	// TranslateDDL adapts a single canonical (SQLite-flavoured) schema statement
+	// to this engine's dialect. SQLite returns it unchanged; MySQL rewrites the
+	// auto-increment primary key, drops the index IF NOT EXISTS clause it does not
+	// support, and pins InnoDB/utf8mb4. Runtime DML (the repositories) is already
+	// portable (?-placeholders, LastInsertId, explicit columns), so only DDL needs
+	// translating.
+	TranslateDDL(stmt string) string
 }
 
 type sqliteDialect struct{}
@@ -85,6 +92,10 @@ func (sqliteDialect) ConfigurePool(conn *sql.DB, _ config.DatabaseConfig) {
 	conn.SetConnMaxLifetime(0)
 }
 
+// TranslateDDL is the identity for SQLite: the canonical schema is written in its
+// dialect, so every statement is already valid.
+func (sqliteDialect) TranslateDDL(stmt string) string { return stmt }
+
 func (sqliteDialect) Prepare(cfg config.DatabaseConfig) error {
 	dbPath := filepath.Clean(strings.TrimSpace(cfg.SQLitePath))
 	directory := filepath.Dir(dbPath)
@@ -109,6 +120,10 @@ func (mysqlDialect) DriverName() string {
 	return "mysql"
 }
 
+// DataSourceName returns the configured MySQL DSN. For correct time handling the
+// DSN should include parseTime=true&loc=UTC (so DATETIME columns scan into
+// time.Time in UTC); the repositories also accept the raw string form, so a DSN
+// without it still works — it just round-trips times as strings.
 func (mysqlDialect) DataSourceName(cfg config.DatabaseConfig) (string, error) {
 	dsn := strings.TrimSpace(cfg.DSN)
 	if dsn == "" {
@@ -117,6 +132,13 @@ func (mysqlDialect) DataSourceName(cfg config.DatabaseConfig) (string, error) {
 
 	return dsn, nil
 }
+
+// TranslateDDL rewrites one canonical schema statement for MySQL. It targets
+// MySQL 8.0.13+ / MariaDB 10.2+ (the versions that allow DEFAULT on TEXT columns,
+// which the schema uses widely). Key/index columns are already declared as short
+// VARCHARs in the canonical schema so every index stays within the InnoDB key
+// length on any version.
+func (mysqlDialect) TranslateDDL(stmt string) string { return translateMySQLDDL(stmt) }
 
 func (mysqlDialect) Prepare(config.DatabaseConfig) error {
 	return nil

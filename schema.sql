@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS servers (
 CREATE TABLE IF NOT EXISTS server_tags (
   id INTEGER PRIMARY KEY,
   server_id INTEGER NOT NULL,
-  tag TEXT NOT NULL,
+  tag VARCHAR(64) NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
   UNIQUE (server_id, tag)
@@ -148,7 +148,7 @@ CREATE INDEX IF NOT EXISTS idx_alert_channels_enabled
 CREATE TABLE IF NOT EXISTS alert_rules (
   id INTEGER PRIMARY KEY,
   server_id INTEGER,
-  metric TEXT NOT NULL,
+  metric VARCHAR(64) NOT NULL,
   comparator TEXT NOT NULL DEFAULT 'gte',
   threshold REAL NOT NULL,
   consecutive_hits INTEGER NOT NULL DEFAULT 1,
@@ -174,7 +174,7 @@ CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled
 CREATE TABLE IF NOT EXISTS alert_silences (
   id INTEGER PRIMARY KEY,
   server_id INTEGER NOT NULL,
-  metric TEXT NOT NULL,
+  metric VARCHAR(64) NOT NULL,
   reason TEXT NOT NULL DEFAULT '',
   expires_at DATETIME,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -192,11 +192,11 @@ CREATE TABLE IF NOT EXISTS alert_events (
   id INTEGER PRIMARY KEY,
   rule_id INTEGER,
   server_id INTEGER NOT NULL,
-  metric TEXT NOT NULL,
+  metric VARCHAR(64) NOT NULL,
   observed_value REAL NOT NULL DEFAULT 0,
   threshold REAL NOT NULL DEFAULT 0,
   severity TEXT NOT NULL DEFAULT 'warning',
-  state TEXT NOT NULL DEFAULT 'firing',
+  state VARCHAR(32) NOT NULL DEFAULT 'firing',
   fired_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   resolved_at DATETIME,
   notified_at DATETIME,
@@ -334,9 +334,9 @@ ALTER TABLE server_system_facts ADD COLUMN disk_total_kb INTEGER NOT NULL DEFAUL
 -- Appended as a standalone statement so existing databases pick it up as a new
 -- bootstrap migration.
 CREATE TABLE IF NOT EXISTS traffic_limit_rules (
-  scope               TEXT     NOT NULL,
-  ref                 TEXT     NOT NULL DEFAULT '',
-  monthly_limit_bytes INTEGER  NOT NULL,
-  updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  scope               VARCHAR(16)  NOT NULL,
+  ref                 VARCHAR(64)  NOT NULL DEFAULT '',
+  monthly_limit_bytes INTEGER      NOT NULL,
+  updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (scope, ref)
 );

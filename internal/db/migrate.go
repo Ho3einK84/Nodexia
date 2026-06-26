@@ -20,18 +20,36 @@ type BootstrapMigrator struct {
 	migrations []Migration
 }
 
+// migrationTableDDL is written in a portable subset so it applies before any
+// dialect translation runs. id is a short VARCHAR (the keys are "bootstrap-NN"),
+// keeping it within the InnoDB key length on every MySQL/MariaDB version while
+// remaining plain TEXT affinity on SQLite.
 const migrationTableDDL = `
 CREATE TABLE IF NOT EXISTS schema_migrations (
-  id TEXT PRIMARY KEY,
+  id VARCHAR(191) PRIMARY KEY,
   description TEXT NOT NULL,
   applied_at DATETIME NOT NULL
 );`
 
+// NewBootstrapMigrator builds the migrator for the SQLite dialect (the canonical
+// schema is already valid SQLite). It is kept for callers/tests that do not need
+// a specific engine.
 func NewBootstrapMigrator() (BootstrapMigrator, error) {
+	return NewBootstrapMigratorFor(sqliteDialect{})
+}
+
+// NewBootstrapMigratorFor builds the migrator for a specific dialect, translating
+// each canonical statement through dialect.TranslateDDL so the same schema.sql
+// drives SQLite and MySQL. The statement COUNT and ORDER are identical across
+// dialects (translation is 1:1), so the bootstrap-NN ids stay stable.
+func NewBootstrapMigratorFor(dialect Dialect) (BootstrapMigrator, error) {
 	statements := splitStatements(assets.Schema())
 	migrations := make([]Migration, 0, len(statements))
 
 	for index, statement := range statements {
+		if dialect != nil {
+			statement = dialect.TranslateDDL(statement)
+		}
 		migrations = append(migrations, Migration{
 			ID:          fmt.Sprintf("bootstrap-%02d", index+1),
 			Description: "initial schema statement",
