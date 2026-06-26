@@ -147,6 +147,31 @@
       </div>
       {{ end }}
     </article>
+
+    {{ if .DashboardNodeStatus.Servers }}
+    <article class="card">
+      <div class="card__header">
+        <h3><i data-lucide="boxes"></i> {{ t "home.card.node_status" }}</h3>
+        {{ if .DashboardNodeStatus.HasStopped }}<span class="status-pill status-pill--crit"><i data-lucide="circle-alert" class="icon-in-button"></i> {{ t "home.node.attention" }}</span>{{ end }}
+      </div>
+      <div class="dashboard-list dashboard-list--scrollable">
+        {{ range .DashboardNodeStatus.Servers }}
+        <article class="dashboard-item">
+          <div class="server-item__header">
+            <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</h4>
+            <span class="status-pill status-pill--{{ if eq .State "stopped" }}crit{{ else if eq .State "partial" }}warn{{ else }}ok{{ end }}">{{ if eq .State "stopped" }}{{ t "home.node.state_stopped" }}{{ else if eq .State "partial" }}{{ t "home.node.state_partial" }}{{ else }}{{ t "home.node.state_running" }}{{ end }}</span>
+          </div>
+          <div class="dashboard-item__meta">
+            <span><i data-lucide="boxes"></i> {{ t "home.node.total" "count" .Total }}</span>
+            <span><i data-lucide="play"></i> {{ t "home.node.running_count" "count" .Running }}</span>
+            {{ if gt .Stopped 0 }}<span class="status-pill status-pill--crit"><i data-lucide="square" class="icon-in-button"></i> {{ t "home.node.stopped_count" "count" .Stopped }}</span>{{ end }}
+            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "home.nodes" }}</a>
+          </div>
+        </article>
+        {{ end }}
+      </div>
+    </article>
+    {{ end }}
   </div>
 
   <p class="dash-section"><i data-lucide="settings"></i> {{ t "home.section.runtime_config" }}</p>

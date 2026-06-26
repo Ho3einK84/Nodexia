@@ -26,6 +26,16 @@ const (
 	// snapshot, so it is evaluated even on the failure path of a sweep.
 	MetricServerUnreachable = "server_unreachable"
 
+	// MetricNodeStopped fires when a node-discovery sweep finds at least one
+	// discovered node (PasarGuard/Rebecca) in the "stopped" state on the server.
+	// It is a boolean (0/1) value normalised to "≥ 1" in validation. It is gated on
+	// NodeStatusAvailable — only a sweep that actually discovered nodes reports it,
+	// so the monitoring path (which carries no node data) skips it rather than
+	// falsely resolving an open node-down event. Only "stopped" counts; "unknown"
+	// and "not_detected"/"none" never fire (a stopped node is an unambiguous down
+	// signal, an unknown one is not).
+	MetricNodeStopped = "node_stopped"
+
 	// Predictive (forecast-derived) metrics. Unlike the observed metrics above,
 	// these come from the bandwidth forecast and warn BEFORE a limit is reached.
 	// They are only available for servers that have a monthly RX limit configured
@@ -90,6 +100,7 @@ const (
 // ruleMetrics lists the metrics a rule may target, in display order.
 var ruleMetrics = []string{
 	MetricServerUnreachable,
+	MetricNodeStopped,
 	MetricCPU,
 	MetricRAM,
 	MetricDisk,
@@ -104,6 +115,7 @@ var ruleMetrics = []string{
 
 var metricLabels = map[string]string{
 	MetricServerUnreachable:    "Server unreachable",
+	MetricNodeStopped:          "Node stopped",
 	MetricCPU:                  "CPU usage",
 	MetricRAM:                  "RAM usage",
 	MetricDisk:                 "Disk usage",

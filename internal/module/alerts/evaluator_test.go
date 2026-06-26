@@ -227,6 +227,39 @@ func TestEvaluatorServerUnreachable(t *testing.T) {
 	}
 }
 
+func TestEvaluatorNodeStopped(t *testing.T) {
+	f := newEvalFixture(t)
+	nodeRule := f.mustRule(t, alerts.Rule{ServerID: &f.serverID, Metric: alerts.MetricNodeStopped, Comparator: alerts.ComparatorGTE, Threshold: 1, ConsecutiveHits: 1, Severity: alerts.SeverityCritical, Enabled: true})
+
+	spy := &fakeNotifier{}
+	ev := alerts.NewEvaluator(f.repo, spy)
+
+	// Monitoring path (no node data): the metric is unavailable, so the rule is
+	// skipped — neither fired nor resolved.
+	mustEvaluate(t, ev, f, alerts.Metrics{NodeStatusAvailable: false, NodeStopped: true})
+	if spy.calls != 0 {
+		t.Fatalf("calls = %d, want 0 when node status is unavailable", spy.calls)
+	}
+	if _, err := f.repo.GetOpenEvent(f.ctx, nodeRule.ID, f.serverID); !errors.Is(err, alerts.ErrNotFound) {
+		t.Fatalf("expected no event while node status unavailable, got %v", err)
+	}
+
+	// A node-discovery sweep finds a stopped node: the rule fires.
+	mustEvaluate(t, ev, f, alerts.Metrics{NodeStatusAvailable: true, NodeStopped: true})
+	if spy.calls != 1 {
+		t.Fatalf("calls = %d, want 1 (node_stopped fires)", spy.calls)
+	}
+	if _, err := f.repo.GetOpenEvent(f.ctx, nodeRule.ID, f.serverID); err != nil {
+		t.Fatalf("expected an open node_stopped event, got %v", err)
+	}
+
+	// A later sweep finds the node running again: the open event resolves.
+	mustEvaluate(t, ev, f, alerts.Metrics{NodeStatusAvailable: true, NodeStopped: false})
+	if _, err := f.repo.GetOpenEvent(f.ctx, nodeRule.ID, f.serverID); !errors.Is(err, alerts.ErrNotFound) {
+		t.Fatalf("expected the node_stopped event to resolve, got %v", err)
+	}
+}
+
 func TestEvaluatorRecordsEventsWithoutNotifier(t *testing.T) {
 	f := newEvalFixture(t)
 	rule := f.mustRule(t, alerts.Rule{ServerID: &f.serverID, Metric: alerts.MetricCPU, Comparator: alerts.ComparatorGTE, Threshold: 90, ConsecutiveHits: 1, Severity: alerts.SeverityWarning, Enabled: true})

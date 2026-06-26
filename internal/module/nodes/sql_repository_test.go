@@ -120,3 +120,59 @@ func TestSQLRepositoryMixedTimestampsStaySingleBatch(t *testing.T) {
 		t.Fatalf("type counts = %v, want 2 pasarguard + 1 rebecca", types)
 	}
 }
+
+// TestListLatestNodeStatus checks the fleet summary counts only real nodes from
+// each server's latest batch and folds health into running/stopped/other.
+func TestListLatestNodeStatus(t *testing.T) {
+	runtime := testutil.OpenTestDB(t)
+	ctx := context.Background()
+
+	for _, name := range []string{"alpha", "beta", "gamma"} {
+		if _, err := runtime.SQL.ExecContext(ctx,
+			`INSERT INTO servers (name, host, port, auth_mode, username) VALUES (?, ?, ?, ?, ?)`,
+			name, "192.0.2.1", 22, "password", "root",
+		); err != nil {
+			t.Fatalf("insert server %s: %v", name, err)
+		}
+	}
+
+	repo := nodes.NewSQLRepository(runtime.SQL)
+	batch := time.Date(2026, 6, 20, 4, 0, 0, 0, time.UTC)
+
+	// alpha (id 1): one running + one stopped node.
+	if err := repo.ReplaceLatest(ctx, 1, []nodes.Snapshot{
+		{NodeType: "pasarguard-node", ServiceName: "node", HealthStatus: "running"},
+		{NodeType: "pasarguard-node", ServiceName: "node2", HealthStatus: "stopped"},
+	}, batch); err != nil {
+		t.Fatalf("ReplaceLatest alpha: %v", err)
+	}
+	// beta (id 2): a single running node.
+	if err := repo.ReplaceLatest(ctx, 2, []nodes.Snapshot{
+		{NodeType: "rebecca-node", ServiceName: "rebecca-node", HealthStatus: "running"},
+	}, batch); err != nil {
+		t.Fatalf("ReplaceLatest beta: %v", err)
+	}
+	// gamma (id 3): no node detected — the placeholder must not count.
+	if err := repo.ReplaceLatest(ctx, 3, nil, batch); err != nil {
+		t.Fatalf("ReplaceLatest gamma: %v", err)
+	}
+
+	statuses, err := repo.ListLatestNodeStatus(ctx)
+	if err != nil {
+		t.Fatalf("ListLatestNodeStatus: %v", err)
+	}
+
+	got := map[int64]nodes.ServerNodeStatus{}
+	for _, s := range statuses {
+		got[s.ServerID] = s
+	}
+	if a := got[1]; a.Total != 2 || a.Running != 1 || a.Stopped != 1 {
+		t.Fatalf("alpha = %+v, want Total 2 / Running 1 / Stopped 1", a)
+	}
+	if b := got[2]; b.Total != 1 || b.Running != 1 || b.Stopped != 0 {
+		t.Fatalf("beta = %+v, want Total 1 / Running 1 / Stopped 0", b)
+	}
+	if g := got[3]; g.Total != 0 {
+		t.Fatalf("gamma Total = %d, want 0 (placeholder excluded)", g.Total)
+	}
+}

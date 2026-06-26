@@ -39,6 +39,22 @@ type Repository interface {
 	HasAny(ctx context.Context, serverID int64) (bool, error)
 	ReplaceLatest(ctx context.Context, serverID int64, snapshots []Snapshot, collectedAt time.Time) error
 	GetLatestByServer(ctx context.Context, serverID int64) ([]Snapshot, error)
+	// ListLatestNodeStatus aggregates the most recent discovery batch per server
+	// into a fleet-wide node-status summary, for the home dashboard glance.
+	ListLatestNodeStatus(ctx context.Context) ([]ServerNodeStatus, error)
+}
+
+// ServerNodeStatus summarises one server's latest node-discovery batch: how many
+// real nodes were found and how many are running/stopped/other. Placeholder
+// snapshots (node_type "none"/"not_detected") are excluded from the counts, so a
+// server with no detected node reports Total 0.
+type ServerNodeStatus struct {
+	ServerID   int64
+	ServerName string
+	Total      int
+	Running    int
+	Stopped    int
+	Other      int
 }
 
 type SQLRepository struct {
@@ -205,6 +221,69 @@ func (r SQLRepository) GetLatestByServer(ctx context.Context, serverID int64) ([
 		return nil, ErrNotFound
 	}
 	return snapshots, nil
+}
+
+// ListLatestNodeStatus returns one row per discovered node in each server's most
+// recent batch, joined to the server name, and folds them into per-server
+// summaries in Go. The latest batch is the rows sharing the newest created_at for
+// that server (one sweep = one created_at), matched with the same correlated
+// "ORDER BY id DESC LIMIT 1" rule GetLatestByServer uses. Placeholder rows
+// (node_type "none") are filtered out of the counts.
+func (r SQLRepository) ListLatestNodeStatus(ctx context.Context) ([]ServerNodeStatus, error) {
+	rows, err := r.conn.QueryContext(ctx,
+		`SELECT ns.server_id, s.name, ns.node_type, ns.health_status
+		 FROM node_snapshots ns
+		 JOIN servers s ON s.id = ns.server_id
+		 WHERE ns.created_at = (
+		   SELECT created_at FROM node_snapshots ns2
+		   WHERE ns2.server_id = ns.server_id
+		   ORDER BY id DESC LIMIT 1
+		 )
+		 ORDER BY s.name ASC, ns.id ASC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("nodes: list latest node status: %w", err)
+	}
+	defer rows.Close()
+
+	byServer := map[int64]*ServerNodeStatus{}
+	order := make([]int64, 0)
+	for rows.Next() {
+		var serverID int64
+		var name, nodeType, health string
+		if err := rows.Scan(&serverID, &name, &nodeType, &health); err != nil {
+			return nil, fmt.Errorf("nodes: scan node status: %w", err)
+		}
+		st, ok := byServer[serverID]
+		if !ok {
+			st = &ServerNodeStatus{ServerID: serverID, ServerName: name}
+			byServer[serverID] = st
+			order = append(order, serverID)
+		}
+		// Skip placeholder "no node detected" rows: they aren't real nodes.
+		switch strings.TrimSpace(nodeType) {
+		case "", "none", "not_detected":
+			continue
+		}
+		st.Total++
+		switch strings.ToLower(strings.TrimSpace(health)) {
+		case "running":
+			st.Running++
+		case "stopped":
+			st.Stopped++
+		default:
+			st.Other++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("nodes: iterate node status: %w", err)
+	}
+
+	out := make([]ServerNodeStatus, 0, len(order))
+	for _, id := range order {
+		out = append(out, *byServer[id])
+	}
+	return out, nil
 }
 
 type rowScanner interface {

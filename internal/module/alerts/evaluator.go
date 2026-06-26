@@ -43,6 +43,15 @@ type Metrics struct {
 	PeakMbps         float64
 	AvgMbps          float64
 
+	// NodeStatusAvailable gates MetricNodeStopped: it is true only on a node
+	// discovery sweep that actually inspected the server's nodes. The monitoring
+	// sweep leaves it false (it carries no node data), so node_stopped rules are
+	// skipped there — neither fired nor falsely resolved — exactly like the
+	// traffic/forecast availability gates. NodeStopped is true when at least one
+	// discovered node is in the "stopped" state.
+	NodeStatusAvailable bool
+	NodeStopped         bool
+
 	// ForecastAvailable gates the predictive (forecast-derived) metrics. It is
 	// true only when the server has a monthly RX limit configured AND there is
 	// enough traffic history to project. When false, projected_exceed_limit and
@@ -65,6 +74,14 @@ func (m Metrics) valueFor(metric string) (float64, bool) {
 	switch metric {
 	case MetricServerUnreachable:
 		if m.Unreachable {
+			return 1, true
+		}
+		return 0, true
+	case MetricNodeStopped:
+		if !m.NodeStatusAvailable {
+			return 0, false
+		}
+		if m.NodeStopped {
 			return 1, true
 		}
 		return 0, true
