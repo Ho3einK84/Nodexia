@@ -592,3 +592,26 @@ func TestDaysInMonth(t *testing.T) {
 		}
 	}
 }
+
+func TestComputeRisksUnusualGrowth(t *testing.T) {
+	// 31 samples: 30 completed days of 100 each (baseline 3000) plus today's
+	// partial. A projected month well above 1.5x the baseline flags growth.
+	history := make([]int64, 31)
+	for i := range history {
+		history[i] = 100
+	}
+	if r := computeRisks(history, 100, 0, 6000, 0); !r.UnusualGrowth {
+		t.Errorf("UnusualGrowth = false, want true when month projection > 1.5x baseline")
+	}
+	if r := computeRisks(history, 100, 0, 4000, 0); r.UnusualGrowth {
+		t.Errorf("UnusualGrowth = true, want false when month projection within 1.5x baseline")
+	}
+	// Too little history (≤30 samples): never flagged, regardless of projection.
+	short := make([]int64, 30)
+	for i := range short {
+		short[i] = 100
+	}
+	if r := computeRisks(short, 100, 0, 100000, 0); r.UnusualGrowth {
+		t.Errorf("UnusualGrowth = true with only 30 samples, want false")
+	}
+}

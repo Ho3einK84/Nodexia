@@ -575,9 +575,13 @@ func computeRisks(history []int64, dayPrediction, monthCurrent, monthPredicted, 
 		risks.TrafficSpike = true
 	}
 
-	// Unusual growth: monthly projection > 1.5x of last complete month total.
-	if len(history) >= 30 {
-		lastMonthTotal := sumSlice(history[len(history)-30 : len(history)-1])
+	// Unusual growth: the projected month is > 1.5x the previous 30 completed
+	// days. The last history element is today's still-accumulating partial day, so
+	// it is excluded; the baseline is the 30 full days before it (requiring ≥ 31
+	// samples). The previous slice took only 29 days and included today's partial,
+	// biasing the comparison toward a false flag.
+	if len(history) >= 31 {
+		lastMonthTotal := sumSlice(history[len(history)-31 : len(history)-1])
 		if lastMonthTotal > 0 && monthPredicted > lastMonthTotal*150/100 {
 			risks.UnusualGrowth = true
 		}
