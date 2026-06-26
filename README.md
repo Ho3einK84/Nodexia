@@ -19,12 +19,13 @@ through monitoring, analytics, forecasting, and alerting.
   server, plus vnStat traffic (daily/monthly download & upload), charted from rollups.
 - 🔮 **Bandwidth forecasting** — projects today / this-week / this-month download,
   with a confidence level; the model adapts as more history arrives.
-- 🚦 **Monthly limits** — optional per-server download cap with a
-  days-to-exhaustion estimate.
+- 🚦 **Monthly limits** — download caps with a days-to-exhaustion estimate, set
+  per-server, **per-tag**, or as a **fleet-wide default** (most-specific wins).
 - 🔔 **Alerting** — threshold and **predictive** rules (warn *before* a limit is
-  hit) with cooldowns, silences, history, Telegram delivery, and an optional digest.
+  hit), plus **server-down** and **node-stopped** alerts, with cooldowns,
+  silences, history, Telegram delivery, and an optional digest.
 - 🔍 **Node discovery** — detect and manage Rebecca / Pasarguard nodes, with a
-  Pasarguard install wizard.
+  Pasarguard install wizard and a fleet node-status glance on the dashboard.
 - 🌐 **Bilingual UI** — full English and Persian (فارسی) with RTL; installable as a PWA.
 - 🧰 **Supporting tools** — bulk reboot/update/delete, in-browser SSH terminal,
   command runner, SFTP browser, and encrypted backup/restore.
