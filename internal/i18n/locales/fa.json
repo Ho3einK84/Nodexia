@@ -36,7 +36,6 @@
   "home.section.live_activity": "رویدادهای زنده",
   "home.section.runtime_config": "محیط اجرا و پیکربندی",
   "home.card.resource_snapshots": "نماهای لحظه‌ای منابع",
-  "home.card.background_jobs": "کارهای پس‌زمینه",
   "home.card.runtime": "محیط اجرا",
   "home.card.collection_scheduler": "زمان‌بند جمع‌آوری",
   "home.card.route_groups": "گروه‌های مسیر",
@@ -62,21 +61,11 @@
   "home.metric.peak_download_title": "حداکثر پهنای باند دانلود (RX). آپلود لحاظ نشده تا با معیار سرعت پورت دانلود ارائه‌دهندگان VPS همخوان باشد.",
   "home.meta.load": "بار پردازشی: {value}",
   "home.meta.up": "آپتایم: {value}",
-  "home.failures": {
-    "one": "{count} خطا",
-    "other": "{count} خطا"
-  },
-  "home.job.next": "اجرای بعدی: {value}",
-  "home.job.last_ok": "آخرین موفقیت: {value}",
-  "home.more_jobs": {
-    "one": "و {count} مورد دیگر…",
-    "other": "و {count} مورد دیگر…"
-  },
   "home.empty.snapshots_title": "بدون نمای لحظه‌ای",
   "home.empty.snapshots_desc": "برای شروع جمع‌آوری داده‌های منابع، صفحه پایش یک سرور را باز کرده و بازخوانی کنید.",
   "home.empty.go_to_servers": "مدیریت سرورها",
-  "home.empty.jobs_title": "بدون کار پس‌زمینه",
-  "home.empty.jobs_desc": "این بخش پس از اولین پویش سرورها توسط زمان‌بند پر خواهد شد.",
+  "home.empty.nodes_title": "هنوز نودی کشف نشده",
+  "home.empty.nodes_desc": "زمان‌بند پس از اولین پویش کشف سرورها، نودهای Rebecca و PasarGuard را اینجا فهرست می‌کند.",
   "home.runtime.http_address": "آدرس HTTP",
   "home.runtime.environment": "محیط",
   "home.runtime.version": "نسخه",

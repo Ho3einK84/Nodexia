@@ -36,7 +36,6 @@
   "home.section.live_activity": "Live activity",
   "home.section.runtime_config": "Runtime & configuration",
   "home.card.resource_snapshots": "Resource snapshots",
-  "home.card.background_jobs": "Background jobs",
   "home.card.runtime": "Runtime",
   "home.card.collection_scheduler": "Collection scheduler",
   "home.card.route_groups": "Route groups",
@@ -62,21 +61,11 @@
   "home.metric.peak_download_title": "Peak download (RX) bandwidth. Upload is excluded so this lines up with the download-only port speed VPS providers advertise.",
   "home.meta.load": "Load {value}",
   "home.meta.up": "Up {value}",
-  "home.failures": {
-    "one": "{count} failure",
-    "other": "{count} failures"
-  },
-  "home.job.next": "Next {value}",
-  "home.job.last_ok": "Last OK {value}",
-  "home.more_jobs": {
-    "one": "And {count} more…",
-    "other": "And {count} more…"
-  },
   "home.empty.snapshots_title": "No snapshots yet",
   "home.empty.snapshots_desc": "Open a server's monitoring page and refresh it to start collecting resource snapshots.",
   "home.empty.go_to_servers": "Go to servers",
-  "home.empty.jobs_title": "No background jobs yet",
-  "home.empty.jobs_desc": "The scheduler populates this panel after its first sweep of registered servers.",
+  "home.empty.nodes_title": "No nodes discovered yet",
+  "home.empty.nodes_desc": "The scheduler lists Rebecca and PasarGuard nodes here after its first discovery sweep of registered servers.",
   "home.runtime.http_address": "HTTP address",
   "home.runtime.environment": "Environment",
   "home.runtime.version": "Version",
