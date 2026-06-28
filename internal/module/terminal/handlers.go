@@ -60,6 +60,7 @@ import (
 
 	cwebsocket "github.com/coder/websocket"
 
+	assets "github.com/Ho3einK84/Nodexia"
 	"github.com/Ho3einK84/Nodexia/internal/http/httperrors"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
 	"github.com/Ho3einK84/Nodexia/internal/module"
@@ -521,25 +522,29 @@ func renderTerminalPage(
 	}
 	page.TerminalForm = form
 	page.TerminalTicket = ticketID
+	// Each asset URL carries a content-hash query string so a corrected
+	// terminal.css/js can never be shadowed by a stale service-worker cache: when
+	// a file changes, its URL changes, so the browser/SW must fetch the new copy
+	// (no version bump required). See assets.StaticAssetVersion.
 	page.PageStyles = []string{
-		"/static/xterm.min.css",
-		"/static/terminal.css",
+		staticURL("xterm.min.css"),
+		staticURL("terminal.css"),
 	}
 	// xterm.js core, then its addons, then the theme catalog and keybinding
 	// handler, then terminal.js (which orchestrates them). All vendored locally —
 	// the panel runs under a strict `script-src 'self'` CSP, so no CDN is used.
 	page.PageScripts = []string{
-		"/static/xterm.min.js",
-		"/static/xterm-addon-fit.min.js",
-		"/static/xterm-addon-unicode11.min.js",
-		"/static/xterm-addon-web-links.min.js",
-		"/static/xterm-addon-search.min.js",
-		"/static/xterm-addon-serialize.min.js",
-		"/static/xterm-addon-webgl.min.js",
-		"/static/xterm-addon-canvas.min.js",
-		"/static/xterm-themes.js",
-		"/static/terminal-keybindings.js",
-		"/static/terminal.js",
+		staticURL("xterm.min.js"),
+		staticURL("xterm-addon-fit.min.js"),
+		staticURL("xterm-addon-unicode11.min.js"),
+		staticURL("xterm-addon-web-links.min.js"),
+		staticURL("xterm-addon-search.min.js"),
+		staticURL("xterm-addon-serialize.min.js"),
+		staticURL("xterm-addon-webgl.min.js"),
+		staticURL("xterm-addon-canvas.min.js"),
+		staticURL("xterm-themes.js"),
+		staticURL("terminal-keybindings.js"),
+		staticURL("terminal.js"),
 	}
 
 	if err := deps.Renderer.Render(w, http.StatusOK, page); err != nil {
@@ -553,6 +558,16 @@ func pathServerID(r *http.Request) (int64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// staticURL builds a /static URL for name with a content-hash cache-busting
+// query string when one is available, so updated assets are never served stale
+// from a browser or service-worker cache.
+func staticURL(name string) string {
+	if v := assets.StaticAssetVersion(name); v != "" {
+		return "/static/" + name + "?v=" + v
+	}
+	return "/static/" + name
 }
 
 func terminalURL(serverID int64) string {

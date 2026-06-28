@@ -208,6 +208,14 @@ func TestTerminalPageIncludesAddonsAndChrome(t *testing.T) {
 			t.Errorf("terminal page missing element %q", id)
 		}
 	}
+
+	// terminal.css / terminal.js must carry a content-hash cache-busting query so
+	// a corrected asset can never be shadowed by a stale service-worker cache.
+	for _, asset := range []string{"/static/terminal.css?v=", "/static/terminal.js?v="} {
+		if !strings.Contains(body, asset) {
+			t.Errorf("terminal page asset %q missing cache-busting version query", asset)
+		}
+	}
 }
 
 func TestTerminalWSRejectsCrossOrigin(t *testing.T) {
