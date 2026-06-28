@@ -155,6 +155,17 @@
   height: 16px;
 }
 
+/* The base layout rules below set `display: …`, which (as an author rule) beats
+   the UA `[hidden] { display: none }` of equal specificity — so without this
+   guard these overlays would never actually hide. Re-assert it at higher
+   specificity so the `hidden` attribute toggled from terminal.js works. */
+.terminal-theme-menu[hidden],
+.terminal-search[hidden],
+.terminal-disconnect[hidden],
+.terminal-context-menu[hidden] {
+  display: none;
+}
+
 /* ── Theme picker menu ───────────────────────────────────── */
 
 .terminal-theme-menu {
@@ -597,20 +608,36 @@ body.terminal-mobile-active .bottom-nav {
     gap: 8px;
   }
 
-  /* The header tools (search/font/theme/fullscreen) and the bottom status bar
-     would crowd a phone header; font/fullscreen/select/search all live in the
-     bottom key toolbar on mobile instead. */
-  .terminal-tools,
+  /* On a phone the bottom key toolbar already carries font/fullscreen/search, so
+     the header keeps only ONE compact tool — the theme picker — sitting right
+     next to Back. The status bar is dropped to save vertical space. */
   .terminal-statusbar {
     display: none;
   }
+  .terminal-tools .terminal-tool:not(#term-tool-theme) {
+    display: none;
+  }
+  .terminal-tools {
+    gap: 0;
+  }
+  #term-tool-theme {
+    min-width: 38px;
+    height: 36px;
+  }
 
-  /* Anchor the theme menu to the viewport edges on a phone. */
+  /* Compact dropdown anchored under the theme button (top-right), capped in
+     height with its own scroll so it never swallows half the screen. */
   .terminal-theme-menu {
     right: 8px;
-    left: 8px;
+    left: auto;
     top: 56px;
-    min-width: 0;
+    min-width: 170px;
+    max-width: calc(100vw - 16px);
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+  .terminal-theme-menu__item {
+    padding: 9px 10px;
   }
 
   #terminal-status {
