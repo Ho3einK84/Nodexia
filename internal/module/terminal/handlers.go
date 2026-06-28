@@ -12,11 +12,18 @@
 //
 //	{"type":"input","data":"<utf-8 string>"}
 //	{"type":"resize","cols":<int>,"rows":<int>}
+//	{"type":"heartbeat"}                          // ~30 s; echoed back
 //
 // Server → Client:
 //
 //	{"type":"output","data":"<utf-8 string>"}
 //	{"type":"error","message":"<string>"}
+//	{"type":"status","state":"connected"}         // sent once on accept
+//	{"type":"heartbeat"}                          // echo of a client heartbeat
+//
+// In addition to the JSON heartbeat (which lets the client display round-trip
+// latency), the server sends a protocol-level WebSocket ping every
+// wsPingInterval to detect and tear down zombie connections.
 //
 // Unknown types are silently ignored server-side.
 //
@@ -73,6 +80,12 @@ const (
 
 	// wsOutputChunkBytes is the maximum number of bytes forwarded per WS frame.
 	wsOutputChunkBytes = 32 * 1024
+
+	// wsPingInterval is how often the server sends a protocol-level WebSocket
+	// ping. A missed pong (no reply within wsWriteTimeout) means the connection
+	// is a zombie — most often a silently dropped mobile/NAT link — and the
+	// session is torn down instead of lingering with a live SSH shell behind it.
+	wsPingInterval = 30 * time.Second
 )
 
 // ── Page handler ──────────────────────────────────────────────────────────────
@@ -288,6 +301,14 @@ func (h wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Resize: resizeCh,
 	}
 
+	// Tell the client the session is live so its status chip can flip from
+	// "connecting" to "connected" even before the shell emits its first byte.
+	_ = wsOut.writeStatus("connected")
+
+	// Protocol-level ping keepalive: detects a dead peer and tears the session
+	// down by cancelling ctx (which stops the shell and the read loop).
+	go h.pingKeepalive(ctx, cancel, conn)
+
 	shellDone := make(chan error, 1)
 	go func() {
 		shellDone <- h.deps.SSH.OpenShell(ctx, ticket.Req, pio)
@@ -295,7 +316,7 @@ func (h wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// WS read loop runs until the client disconnects or the shell ends.
-	_ = h.runReadLoop(ctx, conn, stdinW, resizeCh)
+	_ = h.runReadLoop(ctx, conn, stdinW, resizeCh, wsOut)
 
 	// Stop the shell if the read loop ended first, then wait for it.
 	cancel()
@@ -315,12 +336,35 @@ func (h wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// pingKeepalive sends a protocol-level WebSocket ping every wsPingInterval and
+// waits for the pong. A failed ping (timeout or write error) means the peer is
+// gone, so it cancels the session context to tear everything down.
+func (h wsHandler) pingKeepalive(ctx context.Context, cancel context.CancelFunc, conn *cwebsocket.Conn) {
+	ticker := time.NewTicker(wsPingInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			pingCtx, pingCancel := context.WithTimeout(ctx, wsWriteTimeout)
+			err := conn.Ping(pingCtx)
+			pingCancel()
+			if err != nil {
+				cancel()
+				return
+			}
+		}
+	}
+}
+
 // runReadLoop reads JSON frames from the WebSocket and routes them.
 func (h wsHandler) runReadLoop(
 	ctx context.Context,
 	conn *cwebsocket.Conn,
 	stdinW *io.PipeWriter,
 	resizeCh chan<- sshclient.ResizeRequest,
+	wsOut *wsOutputWriter,
 ) error {
 	for {
 		_, data, err := conn.Read(ctx)
@@ -351,6 +395,10 @@ func (h wsHandler) runReadLoop(
 				default: // drop if buffer full; next resize will apply
 				}
 			}
+		case "heartbeat":
+			// Echo so the client can measure round-trip latency. Best-effort —
+			// a write failure here is surfaced by the next output write or ping.
+			_ = wsOut.writeHeartbeat()
 		}
 		// Unknown types are silently ignored.
 	}
@@ -391,7 +439,35 @@ func (w *wsOutputWriter) writeFrame(data []byte) error {
 	if err != nil {
 		return err
 	}
+	return w.writeRaw(msg)
+}
 
+// writeStatus emits a {"type":"status","state":...} control frame.
+func (w *wsOutputWriter) writeStatus(state string) error {
+	msg, err := json.Marshal(struct {
+		Type  string `json:"type"`
+		State string `json:"state"`
+	}{"status", state})
+	if err != nil {
+		return err
+	}
+	return w.writeRaw(msg)
+}
+
+// writeHeartbeat echoes a {"type":"heartbeat"} control frame.
+func (w *wsOutputWriter) writeHeartbeat() error {
+	msg, err := json.Marshal(struct {
+		Type string `json:"type"`
+	}{"heartbeat"})
+	if err != nil {
+		return err
+	}
+	return w.writeRaw(msg)
+}
+
+// writeRaw serialises all WebSocket writes through w.mu so output, status, and
+// heartbeat frames never interleave (coder/websocket forbids concurrent writes).
+func (w *wsOutputWriter) writeRaw(msg []byte) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -449,10 +525,20 @@ func renderTerminalPage(
 		"/static/xterm.min.css",
 		"/static/terminal.css",
 	}
-	// xterm.js and the fit addon must load before terminal.js.
+	// xterm.js core, then its addons, then the theme catalog and keybinding
+	// handler, then terminal.js (which orchestrates them). All vendored locally —
+	// the panel runs under a strict `script-src 'self'` CSP, so no CDN is used.
 	page.PageScripts = []string{
 		"/static/xterm.min.js",
 		"/static/xterm-addon-fit.min.js",
+		"/static/xterm-addon-unicode11.min.js",
+		"/static/xterm-addon-web-links.min.js",
+		"/static/xterm-addon-search.min.js",
+		"/static/xterm-addon-serialize.min.js",
+		"/static/xterm-addon-webgl.min.js",
+		"/static/xterm-addon-canvas.min.js",
+		"/static/xterm-themes.js",
+		"/static/terminal-keybindings.js",
 		"/static/terminal.js",
 	}
 

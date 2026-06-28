@@ -142,6 +142,17 @@ var clientI18nKeys = []string{
 	"js.terminal.aria_copy_all",
 	"js.terminal.aria_font_smaller",
 	"js.terminal.aria_font_larger",
+	"js.terminal.reconnecting",
+	"js.terminal.reconnect",
+	"js.terminal.session_ended",
+	"js.terminal.search_label",
+	"js.terminal.search_none",
+	"js.terminal.fullscreen",
+	"js.terminal.ctx_copy",
+	"js.terminal.ctx_paste",
+	"js.terminal.ctx_select_all",
+	"js.terminal.ctx_search",
+	"js.terminal.ctx_clear",
 }
 
 // clientI18nJSON serialises the client-needed translations for loc into a JSON

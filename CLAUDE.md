@@ -94,7 +94,13 @@ writes in `BeginTx`/`Rollback`/`Commit`. Wrap errors
   `data-ticket`. WS JSON frames (`input`/`resize` → `output`/`error`), 5 s write
   deadline, same-origin checked before accept. Any `ResponseWriter` wrapper must
   implement `Hijacker` + `Flusher` + `Unwrap()` or the upgrade breaks. xterm
-  v5.5.0 + addon-fit v0.10.0 are vendored in `web/static` (`script-src 'self'`).
+  v5.5.0 + the `@xterm/addon-*` suite (fit, unicode11, web-links, search,
+  serialize, webgl, canvas) are vendored in `web/static` (`script-src 'self'` —
+  no CDN). `xterm-themes.js` (theme catalog) and `terminal-keybindings.js`
+  (shortcut handler) load before `terminal.js`. Renderer is WebGL on desktop
+  (canvas fallback), canvas on mobile. Server sends a 30 s WS ping keepalive plus
+  `status`/`heartbeat` control frames; the single-use ticket model is unchanged,
+  so reconnect re-enters the credential page rather than re-dialing.
 - **commands**: `run`/`stream` start background sessions (never inline); `test`
   is a sync connection check; interactive TUIs (top/vim/mysql/`tail -f`…) are
   detected server-side and redirected to the terminal

@@ -1,33 +1,41 @@
-/* Nodexia in-browser SSH terminal.
+/* Nodexia in-browser SSH terminal (xterm.js v5 + addon suite).
  *
- * Requires xterm.min.js and xterm-addon-fit.min.js to be loaded first.
- * Uses a WebSocket + xterm.js PTY to run an interactive SSH shell session.
+ * Load order (see handlers.go PageScripts):
+ *   xterm.min.js → addon-fit → addon-unicode11 → addon-web-links → addon-search
+ *   → addon-serialize → addon-webgl → addon-canvas → xterm-themes.js
+ *   → terminal-keybindings.js → terminal.js
+ * All vendored locally — the panel runs under a strict `script-src 'self'` CSP,
+ * so no CDN/npm runtime is involved.
  *
- * WebSocket protocol (JSON, text frames):
- *   Client → server:
- *     {"type":"input","data":"<utf-8 string>"}
- *     {"type":"resize","cols":<int>,"rows":<int>}
- *   Server → client:
- *     {"type":"output","data":"<utf-8 string>"}
- *     {"type":"error","message":"<string>"}
+ * WebSocket protocol (JSON text frames):
+ *   Client → server:  {"type":"input","data":"…"}
+ *                     {"type":"resize","cols":N,"rows":N}
+ *                     {"type":"heartbeat"}                 // every 30 s
+ *   Server → client:  {"type":"output","data":"…"}
+ *                     {"type":"error","message":"…"}
+ *                     {"type":"status","state":"connected|…"}
+ *                     {"type":"heartbeat"}                 // echo, used for RTT
  *
- * Mobile enhancements (only active under the same 700px breakpoint the rest of
- * the UI uses): a scrollable key toolbar, visualViewport-driven reflow so the
- * grid never gets squished by the soft keyboard, and a persisted font size.
+ * Reconnect note: the WS ticket is single-use (a documented security invariant),
+ * so we deliberately do NOT silently re-dial a dead socket — that would require
+ * weakening the ticket model. Instead an unexpected close surfaces a Reconnect
+ * action that re-issues a ticket through the normal page flow.
  *
- * Copying terminal output on a phone is the hard part: xterm's live rows are not
- * reliably selectable by a native long-press, so the toolbar offers explicit
- * actions instead — a "Select" mode that overlays the scrollback as plain,
- * natively-selectable text, a one-tap "Copy all", and a "Copy" that grabs the
- * current selection. All copy paths fall back to a hidden-textarea execCommand
- * when the async clipboard API is unavailable (e.g. an HTTP-served panel), so
- * copy works outside secure contexts too. Desktop behaviour is unchanged.
+ * Renderer strategy: WebGL (GPU) on desktop with a canvas fallback; canvas on
+ * mobile for battery/compat. xterm's built-in DOM renderer is the last resort.
+ *
+ * Mobile is the hard part. xterm's live rows are not reliably selectable by a
+ * native long-press, so the toolbar offers an explicit "Select" mode that
+ * overlays the scrollback as plain, natively-selectable text. All clipboard
+ * paths fall back to execCommand / prompt so copy & paste keep working on
+ * HTTP-served panels outside a secure context. Desktop is unchanged by these.
  */
 (function () {
   'use strict';
 
   // Localization helper (see app.js for window.nxT). Falls back to the key.
   function T(key, params) { return window.nxT ? window.nxT(key, params) : key; }
+  function noop() {}
 
   var card = document.getElementById('terminal-card');
   if (!card) return;
@@ -37,20 +45,27 @@
   var initCmd = card.getAttribute('data-init-cmd') || '';
   if (!ticket || !wsBase) return;
 
+  // The credential page for this server (used by Reconnect): strip the /ws tail.
+  var pageURL = wsBase.replace(/\/ws$/, '');
+
   var container = document.getElementById('terminal-container');
   var statusEl  = document.getElementById('terminal-status');
+  var statusTextEl = statusEl ? statusEl.querySelector('.terminal-status__text') : null;
   var errorEl   = document.getElementById('terminal-error');
 
   var isMobile = window.matchMedia('(max-width: 700px)').matches;
   var FONT_KEY = 'nodexia.terminal.fontSize';
   var FONT_MIN = 10;
-  var FONT_MAX = 24;
+  var FONT_MAX = 28;
+
+  function defaultFontSize() { return isMobile ? 15 : 14; }
 
   /* ── Status helpers ───────────────────────────────────── */
   function setStatus(state, text) {
     if (!statusEl) return;
     statusEl.className = 'terminal-status terminal-status--' + state;
-    statusEl.textContent = text;
+    if (statusTextEl) statusTextEl.textContent = text;
+    else statusEl.textContent = text;
   }
 
   function showError(msg) {
@@ -58,17 +73,26 @@
     errorEl.textContent = msg;
     errorEl.style.display = 'block';
   }
+  function clearError() {
+    if (!errorEl) return;
+    errorEl.textContent = '';
+    errorEl.style.display = 'none';
+  }
 
   /* ── Initial font size ────────────────────────────────── */
-  // Desktop stays pinned at 14 (unchanged). Mobile defaults larger for legible
-  // taps; the user's A-/A+ choice is restored from localStorage when present.
   function initialFontSize() {
-    if (!isMobile) return 14;
     try {
       var stored = parseInt(window.localStorage.getItem(FONT_KEY), 10);
       if (stored >= FONT_MIN && stored <= FONT_MAX) return stored;
     } catch (e) { /* localStorage unavailable */ }
-    return 15;
+    return defaultFontSize();
+  }
+
+  /* ── Theme ────────────────────────────────────────────── */
+  var ThemeStore = window.NodexiaTermThemes;
+  var themeId = ThemeStore ? ThemeStore.load() : 'nodexia';
+  function currentTheme() {
+    return (ThemeStore && ThemeStore.themes[themeId]) || { background: '#0b1120', foreground: '#e2e8f0' };
   }
 
   /* ── Init xterm.js ────────────────────────────────────── */
@@ -79,30 +103,96 @@
 
   var term = new Terminal({
     cursorBlink: true,
-    fontFamily: 'ui-monospace, "Cascadia Code", "Fira Code", monospace',
+    cursorStyle: 'block',
+    fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, "SFMono-Regular", monospace',
     fontSize: initialFontSize(),
-    theme: {
-      background: '#000000',
-      foreground: '#e2e8f0',
-      cursor:     '#60a5fa',
-    },
+    theme: currentTheme(),
+    allowProposedApi: true,
+    scrollback: 100000,
+    fastScrollModifier: 'alt',
+    fastScrollSensitivity: 3,
+    smoothScrollDuration: 125,
+    macOptionIsMeta: true,
+    altClickMovesCursor: true,
+    convertEol: false,
+    // Screen-reader mode is opt-out by default; it adds a live region that hurts
+    // throughput. The PTY itself is xterm-256color (RequestPty, server side).
+    screenReaderMode: false,
   });
 
+  /* ── Addons ───────────────────────────────────────────── */
   var fitAddon = null;
-  if (typeof FitAddon !== 'undefined' && FitAddon.FitAddon) {
+  var searchAddon = null;
+  var serializeAddon = null;
+
+  function loadAddon(globalName, ctor) {
+    try {
+      var ns = window[globalName];
+      if (ns && ns[ctor]) {
+        var addon = new ns[ctor]();
+        term.loadAddon(addon);
+        return addon;
+      }
+    } catch (e) { /* a single addon failing must never break the terminal */ }
+    return null;
+  }
+
+  if (window.FitAddon && window.FitAddon.FitAddon) {
     fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
   }
 
   term.open(container);
+  container.style.background = currentTheme().background;
+
+  // Renderer: WebGL on desktop (with canvas fallback), canvas on mobile. Must be
+  // loaded after term.open(). xterm's DOM renderer is the implicit last resort.
+  function loadCanvasRenderer() {
+    loadAddon('CanvasAddon', 'CanvasAddon');
+  }
+  (function loadRenderer() {
+    if (isMobile) { loadCanvasRenderer(); return; }
+    try {
+      var ns = window.WebglAddon;
+      if (ns && ns.WebglAddon) {
+        var webgl = new ns.WebglAddon();
+        // A lost GPU context (tab backgrounded, driver reset) must not blank the
+        // terminal — drop to canvas if it happens.
+        if (webgl.onContextLoss) {
+          webgl.onContextLoss(function () {
+            try { webgl.dispose(); } catch (e) { /* ignore */ }
+            loadCanvasRenderer();
+          });
+        }
+        term.loadAddon(webgl);
+        return;
+      }
+    } catch (e) { /* WebGL unavailable → canvas */ }
+    loadCanvasRenderer();
+  })();
+
+  // Wide-char / emoji widths.
+  var uni = loadAddon('Unicode11Addon', 'Unicode11Addon');
+  if (uni) { try { term.unicode.activeVersion = '11'; } catch (e) { /* ignore */ } }
+
+  // Clickable URLs.
+  loadAddon('WebLinksAddon', 'WebLinksAddon');
+
+  // Search + serialize (scrollback export).
+  if (window.SearchAddon && window.SearchAddon.SearchAddon) {
+    searchAddon = new SearchAddon.SearchAddon();
+    term.loadAddon(searchAddon);
+  }
+  if (window.SerializeAddon && window.SerializeAddon.SerializeAddon) {
+    serializeAddon = new SerializeAddon.SerializeAddon();
+    term.loadAddon(serializeAddon);
+  }
 
   /* ── Soft-keyboard hardening ──────────────────────────── */
-  // xterm's helper <textarea> already disables autocorrect/autocapitalize/
-  // spellcheck, but not autocomplete. Mobile keyboards (notably Gboard) keep a
-  // predictive "composing" region active and will re-insert a whole suggested
-  // word as you keep typing — e.g. "rebecca-" silently becomes
-  // "rebecca-rebecca". Turning autocomplete off and forcing plain Latin input
-  // (no smart prediction) stops the duplicated keystrokes.
+  // xterm's helper <textarea> disables autocorrect/autocapitalize/spellcheck but
+  // not autocomplete. Gboard keeps a predictive "composing" region active and
+  // re-inserts whole suggested words ("rebecca-" silently becomes
+  // "rebecca-rebecca"). Forcing plain input with no prediction stops it.
   if (term.textarea) {
     term.textarea.setAttribute('autocomplete', 'off');
     term.textarea.setAttribute('autocorrect', 'off');
@@ -111,17 +201,21 @@
     term.textarea.setAttribute('inputmode', 'text');
   }
 
+  /* ── Status bar (dims + latency) ──────────────────────── */
+  var dimsEl = document.getElementById('term-dims');
+  var latencyEl = document.getElementById('term-latency');
+  function updateDims() {
+    if (dimsEl && term.cols && term.rows) dimsEl.textContent = term.cols + '×' + term.rows;
+  }
+
   /* ── Fit helper ───────────────────────────────────────── */
   function fitAndResize() {
     if (fitAddon) {
       try { fitAddon.fit(); } catch (e) { /* ignore */ }
     }
+    updateDims();
     if (ws && ws.readyState === WebSocket.OPEN && term.cols && term.rows) {
-      ws.send(JSON.stringify({
-        type: 'resize',
-        cols: term.cols,
-        rows: term.rows,
-      }));
+      ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
     }
   }
 
@@ -132,148 +226,7 @@
     }
   }
 
-  /* ── WebSocket ────────────────────────────────────────── */
-  // Build an absolute ws(s):// URL: relative URLs in the WebSocket
-  // constructor are not supported by all browsers.
-  var wsScheme = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-  var wsURL = wsScheme + window.location.host + wsBase +
-    '?ticket=' + encodeURIComponent(ticket);
-  var ws = new WebSocket(wsURL);
-
-  // Auto-run an initial command (e.g. an interactive command forwarded from the
-  // command center) exactly once. A fixed delay races the shell startup, so we
-  // wait for the first output (the prompt) and add a short settle delay; a
-  // generous fallback timer covers shells that emit nothing before the prompt.
-  var initSent = false;
-  function maybeSendInitCmd() {
-    if (initSent || !initCmd) return;
-    initSent = true;
-    setTimeout(function () {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'input', data: initCmd + '\n' }));
-      }
-    }, 150);
-  }
-
-  ws.onopen = function () {
-    setStatus('connected', T('js.terminal.connected'));
-    fitAndResize();
-    term.focus();
-    if (initCmd) setTimeout(maybeSendInitCmd, 1200);
-  };
-
-  ws.onmessage = function (event) {
-    try {
-      var msg = JSON.parse(event.data);
-      if (msg.type === 'output') {
-        term.write(msg.data);
-        maybeSendInitCmd();
-      } else if (msg.type === 'error') {
-        showError(msg.message);
-        setStatus('error', T('js.terminal.status_error'));
-      }
-    } catch (e) { /* ignore unparseable frames */ }
-  };
-
-  ws.onerror = function () {
-    setStatus('error', T('js.terminal.connection_error'));
-    showError(T('js.terminal.ws_failed'));
-  };
-
-  ws.onclose = function (event) {
-    setStatus('disconnected', T('js.terminal.disconnected'));
-    // The terminal no longer owns the screen — restore background scrolling.
-    setScrollLock(false);
-    if (!event.wasClean) {
-      showError(T('js.terminal.closed_unexpectedly', { code: event.code }));
-    }
-  };
-
-  /* ── Back button ──────────────────────────────────────── */
-  // Critical on mobile where the terminal owns the screen and browser chrome is
-  // often hidden. Close the socket cleanly, then return to the previous page
-  // (falling back to the server list when there is no history to go back to).
-  var backBtn = document.getElementById('terminal-back');
-  if (backBtn) {
-    backBtn.addEventListener('click', function () {
-      setScrollLock(false);
-      try { if (ws) ws.close(1000, 'closed by user'); } catch (e) { /* ignore */ }
-      if (window.history.length > 1) {
-        window.history.back();
-      } else {
-        window.location.href = '/servers';
-      }
-    });
-  }
-
-  // Never leave the page locked if it is bfcached and later restored.
-  window.addEventListener('pagehide', function () { setScrollLock(false); });
-
-  /* ── Ctrl-pending modifier ────────────────────────────── */
-  // Tapping the toolbar's Ctrl key arms a one-shot modifier: the next character
-  // typed on the physical/soft keyboard is folded into its control code and the
-  // modifier disarms itself. Tapping Ctrl again disarms it manually.
-  var ctrlPending = false;
-  var ctrlBtn = null;
-
-  function setCtrl(on) {
-    ctrlPending = on;
-    if (ctrlBtn) {
-      ctrlBtn.classList.toggle('is-active', on);
-      ctrlBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    }
-  }
-
-  // Map a single typed character to its Ctrl-combined control code, or null
-  // when the character has no meaningful control form.
-  function ctrlCombine(data) {
-    if (!data || data.length !== 1) return null;
-    var code = data.toLowerCase().charCodeAt(0);
-    if (code >= 97 && code <= 122) return String.fromCharCode(code - 96); // a-z → 0x01-0x1a
-    switch (data) {
-      case ' ': case '@': return '\x00';
-      case '[': return '\x1b';
-      case '\\': return '\x1c';
-      case ']': return '\x1d';
-      case '^': return '\x1e';
-      case '_': return '\x1f';
-      case '?': return '\x7f';
-    }
-    return null;
-  }
-
-  /* ── Forward keystrokes ───────────────────────────────── */
-  term.onData(function (data) {
-    if (ctrlPending) {
-      var combined = ctrlCombine(data);
-      setCtrl(false);
-      if (combined !== null) {
-        sendInput(combined);
-        return;
-      }
-      // Not combinable — fall through and send the original keystroke.
-    }
-    sendInput(data);
-  });
-
-  /* ── Font size control ────────────────────────────────── */
-  function setFontSize(px) {
-    px = Math.max(FONT_MIN, Math.min(FONT_MAX, px));
-    if (px === term.options.fontSize) return;
-    term.options.fontSize = px;
-    if (isMobile) {
-      try { window.localStorage.setItem(FONT_KEY, String(px)); } catch (e) { /* ignore */ }
-    }
-    if (selectPre) selectPre.style.fontSize = px + 'px';
-    // Defer the fit one frame so xterm has recomputed its cell dimensions for the
-    // new font size; fitting synchronously here can size the grid from stale dims.
-    requestAnimationFrame(fitAndResize);
-  }
-
   /* ── Clipboard write (with non-secure-context fallback) ── */
-  // navigator.clipboard only exists in secure contexts (HTTPS or localhost). When
-  // it is missing — or rejects — fall back to a hidden <textarea> + execCommand so
-  // copy still works on HTTP-served panels. Returns a Promise.
   function fallbackCopy(text) {
     return new Promise(function (resolve, reject) {
       var ta = document.createElement('textarea');
@@ -288,7 +241,6 @@
       ta.style.border = 'none';
       ta.style.opacity = '0';
       document.body.appendChild(ta);
-      // Preserve any existing (e.g. select-mode) selection across the copy.
       var sel = window.getSelection ? window.getSelection() : null;
       var saved = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
       ta.focus();
@@ -320,9 +272,6 @@
       promptPaste();
     }
   }
-
-  // Without the async clipboard API there is no way to read the clipboard
-  // silently, so ask the user — they can paste into the prompt on any browser.
   function promptPaste() {
     try {
       var text = window.prompt(T('js.terminal.paste_prompt'));
@@ -331,8 +280,6 @@
   }
 
   /* ── Selection sources ────────────────────────────────── */
-  // Prefer a live DOM selection (the select-mode overlay, or a desktop mouse
-  // drag over selectable text); fall back to xterm's own selection.
   function currentSelection() {
     var sel = '';
     try { sel = window.getSelection ? String(window.getSelection()) : ''; } catch (e) { /* ignore */ }
@@ -340,8 +287,6 @@
     try { return term.hasSelection() ? term.getSelection() : ''; } catch (e) { return ''; }
   }
 
-  // Extract plain text straight from xterm's buffer (scrollback + screen) rather
-  // than the DOM, so "Copy all" works regardless of what is selected or visible.
   function getBufferText(visibleOnly) {
     try {
       var buf = term.buffer.active;
@@ -375,13 +320,445 @@
   function doCopy(text, btn) {
     writeClipboard(text).then(function () {
       flashCopied(btn);
-    }).catch(function () { /* nothing selected / copy blocked */ });
+    }).catch(noop);
   }
 
+  // Returns true synchronously if a selection existed (so the keybinding handler
+  // can decide whether to suppress ^C); the actual write is async/best-effort.
+  function copySelection() {
+    var text = currentSelection();
+    if (!text) return false;
+    writeClipboard(text).catch(noop);
+    return true;
+  }
+
+  function selectAllBuffer() {
+    try { term.selectAll(); } catch (e) { /* ignore */ }
+  }
+
+  /* ── Font size control ────────────────────────────────── */
+  function setFontSize(px) {
+    px = Math.max(FONT_MIN, Math.min(FONT_MAX, px));
+    if (px === term.options.fontSize) return;
+    term.options.fontSize = px;
+    try { window.localStorage.setItem(FONT_KEY, String(px)); } catch (e) { /* ignore */ }
+    if (selectPre) selectPre.style.fontSize = px + 'px';
+    // Defer one frame so xterm has recomputed cell dims for the new size.
+    requestAnimationFrame(fitAndResize);
+  }
+
+  /* ── Theme switching ──────────────────────────────────── */
+  function applyTheme(id) {
+    if (!ThemeStore || !ThemeStore.themes[id]) return;
+    themeId = id;
+    term.options.theme = ThemeStore.themes[id];
+    container.style.background = ThemeStore.themes[id].background;
+    ThemeStore.save(id);
+    syncThemeMenu();
+  }
+
+  /* ── Theme menu ───────────────────────────────────────── */
+  var themeMenu = document.getElementById('terminal-theme-menu');
+  var themeBtn = document.getElementById('term-tool-theme');
+  function buildThemeMenu() {
+    if (!themeMenu || !ThemeStore) return;
+    themeMenu.innerHTML = '';
+    ThemeStore.order.forEach(function (id) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'terminal-theme-menu__item';
+      b.setAttribute('role', 'menuitemradio');
+      b.setAttribute('data-theme', id);
+      b.textContent = ThemeStore.names[id] || id;
+      var sw = document.createElement('span');
+      sw.className = 'terminal-theme-menu__swatch';
+      sw.style.background = ThemeStore.themes[id].background;
+      sw.style.borderColor = ThemeStore.themes[id].foreground;
+      b.insertBefore(sw, b.firstChild);
+      b.addEventListener('click', function () {
+        applyTheme(id);
+        toggleThemeMenu(false);
+        term.focus();
+      });
+      themeMenu.appendChild(b);
+    });
+    syncThemeMenu();
+  }
+  function syncThemeMenu() {
+    if (!themeMenu) return;
+    var items = themeMenu.querySelectorAll('.terminal-theme-menu__item');
+    for (var i = 0; i < items.length; i++) {
+      var active = items[i].getAttribute('data-theme') === themeId;
+      items[i].classList.toggle('is-active', active);
+      items[i].setAttribute('aria-checked', active ? 'true' : 'false');
+    }
+  }
+  function toggleThemeMenu(force) {
+    if (!themeMenu) return;
+    var show = typeof force === 'boolean' ? force : themeMenu.hidden;
+    themeMenu.hidden = !show;
+    if (themeBtn) themeBtn.setAttribute('aria-expanded', show ? 'true' : 'false');
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleThemeMenu();
+    });
+  }
+  // Dismiss the menu on any outside click / Escape.
+  document.addEventListener('click', function (e) {
+    if (themeMenu && !themeMenu.hidden && !themeMenu.contains(e.target) && e.target !== themeBtn) {
+      toggleThemeMenu(false);
+    }
+  });
+  buildThemeMenu();
+
+  /* ── Fullscreen ───────────────────────────────────────── */
+  function fsElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+  function toggleFullscreen() {
+    var el = card;
+    if (fsElement()) {
+      var exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) try { exit.call(document); } catch (e) { /* ignore */ }
+      return;
+    }
+    var req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req) {
+      try {
+        var p = req.call(el);
+        if (p && p.catch) p.catch(noop);
+      } catch (e) { /* iOS Safari only supports fullscreen on <video> */ }
+    }
+    // On mobile the card is already CSS-fullscreen (terminal-card--mobile), so a
+    // missing Fullscreen API is not a regression.
+  }
+  document.addEventListener('fullscreenchange', function () {
+    requestAnimationFrame(fitAndResize);
+  });
+  document.addEventListener('webkitfullscreenchange', function () {
+    requestAnimationFrame(fitAndResize);
+  });
+
+  /* ── Search bar ───────────────────────────────────────── */
+  var searchBar = document.getElementById('terminal-search');
+  var searchInput = document.getElementById('terminal-search-input');
+  var searchCount = document.getElementById('terminal-search-count');
+  var searchCaseBtn = document.getElementById('terminal-search-case');
+  var caseSensitive = false;
+
+  function searchOpts() {
+    return { caseSensitive: caseSensitive, regex: false, wholeWord: false };
+  }
+  function runSearch(forward) {
+    if (!searchAddon || !searchInput) return;
+    var q = searchInput.value;
+    if (!q) { if (searchAddon.clearDecorations) try { searchAddon.clearDecorations(); } catch (e) {} updateSearchCount(0, 0); return; }
+    try {
+      if (forward) searchAddon.findNext(q, searchOpts());
+      else searchAddon.findPrevious(q, searchOpts());
+    } catch (e) { /* ignore */ }
+  }
+  function updateSearchCount(index, count) {
+    if (!searchCount) return;
+    if (!count) searchCount.textContent = searchInput && searchInput.value ? T('js.terminal.search_none') : '';
+    else searchCount.textContent = (index + 1) + ' / ' + count;
+  }
+  if (searchAddon && searchAddon.onDidChangeResults) {
+    searchAddon.onDidChangeResults(function (res) {
+      if (!res) { updateSearchCount(0, 0); return; }
+      updateSearchCount(res.resultIndex < 0 ? -1 : res.resultIndex, res.resultCount || 0);
+    });
+  }
+  function openSearch() {
+    if (!searchBar) return;
+    searchBar.hidden = false;
+    if (searchInput) { searchInput.focus(); searchInput.select(); }
+    if (searchInput && searchInput.value) runSearch(true);
+  }
+  function closeSearch() {
+    if (!searchBar) return;
+    searchBar.hidden = true;
+    if (searchAddon && searchAddon.clearDecorations) try { searchAddon.clearDecorations(); } catch (e) {}
+    term.focus();
+  }
+  function toggleSearch() {
+    if (searchBar && searchBar.hidden) openSearch();
+    else closeSearch();
+  }
+  if (searchInput) {
+    searchInput.addEventListener('input', function () { runSearch(true); });
+    searchInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); runSearch(!e.shiftKey); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeSearch(); }
+    });
+  }
+  bindClick('terminal-search-next', function () { runSearch(true); });
+  bindClick('terminal-search-prev', function () { runSearch(false); });
+  bindClick('terminal-search-close', closeSearch);
+  if (searchCaseBtn) {
+    searchCaseBtn.addEventListener('click', function () {
+      caseSensitive = !caseSensitive;
+      searchCaseBtn.classList.toggle('is-active', caseSensitive);
+      searchCaseBtn.setAttribute('aria-pressed', caseSensitive ? 'true' : 'false');
+      runSearch(true);
+    });
+  }
+
+  function bindClick(id, fn) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('click', function (e) { e.preventDefault(); fn(); });
+  }
+
+  /* ── Header tool buttons ──────────────────────────────── */
+  bindClick('term-tool-search', toggleSearch);
+  bindClick('term-tool-font-dec', function () { setFontSize(term.options.fontSize - 1); term.focus(); });
+  bindClick('term-tool-font-inc', function () { setFontSize(term.options.fontSize + 1); term.focus(); });
+  bindClick('term-tool-fullscreen', toggleFullscreen);
+
+  /* ── Keybindings ──────────────────────────────────────── */
+  if (window.NodexiaTermKeybindings) {
+    window.NodexiaTermKeybindings.attach(term, {
+      copySelection: copySelection,
+      paste: doPaste,
+      selectAll: selectAllBuffer,
+      openSearch: openSearch,
+      clear: function () { try { term.clear(); } catch (e) {} },
+      fontInc: function () { setFontSize(term.options.fontSize + 1); },
+      fontDec: function () { setFontSize(term.options.fontSize - 1); },
+      fontReset: function () { setFontSize(defaultFontSize()); },
+      reconnect: reconnect,
+      scrollLines: function (n) { try { term.scrollLines(n); } catch (e) {} },
+    });
+  }
+
+  /* ── Right-click context menu (desktop) ───────────────── */
+  var ctxMenu = null;
+  function buildContextMenu() {
+    ctxMenu = document.createElement('div');
+    ctxMenu.className = 'terminal-context-menu';
+    ctxMenu.hidden = true;
+    [
+      { label: T('js.terminal.ctx_copy'),       fn: function () { doCopy(currentSelection(), null); } },
+      { label: T('js.terminal.ctx_paste'),      fn: doPaste },
+      { label: T('js.terminal.ctx_select_all'), fn: selectAllBuffer },
+      { label: T('js.terminal.ctx_search'),     fn: openSearch },
+      { label: T('js.terminal.ctx_clear'),      fn: function () { try { term.clear(); } catch (e) {} } },
+    ].forEach(function (item) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'terminal-context-menu__item';
+      b.textContent = item.label;
+      b.addEventListener('click', function () { hideContextMenu(); item.fn(); });
+      ctxMenu.appendChild(b);
+    });
+    card.appendChild(ctxMenu);
+  }
+  function showContextMenu(x, y) {
+    if (!ctxMenu) buildContextMenu();
+    ctxMenu.hidden = false;
+    var rect = card.getBoundingClientRect();
+    var mx = Math.min(x - rect.left, rect.width - 170);
+    var my = Math.min(y - rect.top, rect.height - 10);
+    ctxMenu.style.left = Math.max(0, mx) + 'px';
+    ctxMenu.style.top = Math.max(0, my) + 'px';
+  }
+  function hideContextMenu() { if (ctxMenu) ctxMenu.hidden = true; }
+  if (!isMobile) {
+    container.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      showContextMenu(e.clientX, e.clientY);
+    });
+    document.addEventListener('click', function (e) {
+      if (ctxMenu && !ctxMenu.hidden && !ctxMenu.contains(e.target)) hideContextMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { hideContextMenu(); toggleThemeMenu(false); }
+    });
+  }
+
+  /* ── Ctrl / Alt one-shot modifiers (mobile toolbar) ───── */
+  var ctrlPending = false, altPending = false;
+  var ctrlBtn = null, altBtn = null;
+  function setModBtn(btn, on) {
+    if (!btn) return;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  function setCtrl(on) { ctrlPending = on; setModBtn(ctrlBtn, on); }
+  function setAlt(on)  { altPending = on;  setModBtn(altBtn, on); }
+
+  function ctrlCombine(data) {
+    if (!data || data.length !== 1) return null;
+    var code = data.toLowerCase().charCodeAt(0);
+    if (code >= 97 && code <= 122) return String.fromCharCode(code - 96);
+    switch (data) {
+      case ' ': case '@': return '\x00';
+      case '[': return '\x1b';
+      case '\\': return '\x1c';
+      case ']': return '\x1d';
+      case '^': return '\x1e';
+      case '_': return '\x1f';
+      case '?': return '\x7f';
+    }
+    return null;
+  }
+
+  /* ── Forward keystrokes ───────────────────────────────── */
+  term.onData(function (data) {
+    if (ctrlPending || altPending) {
+      var out = data;
+      if (ctrlPending) {
+        var combined = ctrlCombine(data);
+        if (combined !== null) out = combined;
+      }
+      if (altPending) out = '\x1b' + out; // Alt+key → ESC prefix (xterm convention)
+      setCtrl(false);
+      setAlt(false);
+      sendInput(out);
+      return;
+    }
+    sendInput(data);
+  });
+
+  /* ── WebSocket ────────────────────────────────────────── */
+  var ws = null;
+  var heartbeatTimer = null;
+  var lastPingAt = 0;
+  var userClosing = false;
+
+  function startHeartbeat() {
+    stopHeartbeat();
+    heartbeatTimer = setInterval(function () {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        lastPingAt = Date.now();
+        ws.send(JSON.stringify({ type: 'heartbeat' }));
+      }
+    }, 30000);
+  }
+  function stopHeartbeat() {
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+  }
+  function onHeartbeatEcho() {
+    if (!latencyEl || !lastPingAt) return;
+    var rtt = Date.now() - lastPingAt;
+    latencyEl.textContent = rtt + ' ms';
+  }
+
+  var initSent = false;
+  function maybeSendInitCmd() {
+    if (initSent || !initCmd) return;
+    initSent = true;
+    setTimeout(function () {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'input', data: initCmd + '\n' }));
+      }
+    }, 150);
+  }
+
+  function connect() {
+    var wsScheme = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    var wsURL = wsScheme + window.location.host + wsBase + '?ticket=' + encodeURIComponent(ticket);
+    ws = new WebSocket(wsURL);
+
+    ws.onopen = function () {
+      clearError();
+      hideDisconnectOverlay();
+      setStatus('connected', T('js.terminal.connected'));
+      startHeartbeat();
+      fitAndResize();
+      term.focus();
+      if (initCmd) setTimeout(maybeSendInitCmd, 1200);
+    };
+
+    ws.onmessage = function (event) {
+      var msg;
+      try { msg = JSON.parse(event.data); } catch (e) { return; }
+      switch (msg.type) {
+        case 'output':
+          term.write(msg.data);
+          maybeSendInitCmd();
+          break;
+        case 'error':
+          showError(msg.message);
+          setStatus('error', T('js.terminal.status_error'));
+          break;
+        case 'status':
+          if (msg.state === 'connected') setStatus('connected', T('js.terminal.connected'));
+          else if (msg.state === 'reconnecting') setStatus('reconnecting', T('js.terminal.reconnecting'));
+          break;
+        case 'heartbeat':
+          onHeartbeatEcho();
+          break;
+      }
+    };
+
+    ws.onerror = function () {
+      setStatus('error', T('js.terminal.connection_error'));
+      showError(T('js.terminal.ws_failed'));
+    };
+
+    ws.onclose = function (event) {
+      stopHeartbeat();
+      setStatus('disconnected', T('js.terminal.disconnected'));
+      setScrollLock(false);
+      if (!userClosing && !event.wasClean) {
+        showDisconnectOverlay(T('js.terminal.closed_unexpectedly', { code: event.code }));
+      } else if (!userClosing) {
+        // Clean close (remote shell exited): still offer a quick way back in.
+        showDisconnectOverlay(T('js.terminal.session_ended'));
+      }
+    };
+  }
+
+  // The WS ticket is single-use, so "reconnect" re-enters the credential page
+  // (which issues a fresh ticket) rather than re-dialing the consumed socket.
+  function reconnect() {
+    userClosing = true;
+    try { if (ws) ws.close(1000, 'reconnecting'); } catch (e) { /* ignore */ }
+    setScrollLock(false);
+    window.location.href = pageURL;
+  }
+
+  /* ── Disconnect overlay (Reconnect action) ────────────── */
+  var disconnectOverlay = null;
+  function showDisconnectOverlay(message) {
+    if (!disconnectOverlay) {
+      disconnectOverlay = document.createElement('div');
+      disconnectOverlay.className = 'terminal-disconnect';
+      var msg = document.createElement('p');
+      msg.className = 'terminal-disconnect__msg';
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn--primary';
+      btn.textContent = T('js.terminal.reconnect');
+      btn.addEventListener('click', reconnect);
+      disconnectOverlay.appendChild(msg);
+      disconnectOverlay.appendChild(btn);
+      container.appendChild(disconnectOverlay);
+    }
+    disconnectOverlay.querySelector('.terminal-disconnect__msg').textContent = message;
+    disconnectOverlay.hidden = false;
+  }
+  function hideDisconnectOverlay() {
+    if (disconnectOverlay) disconnectOverlay.hidden = true;
+  }
+
+  /* ── Back button ──────────────────────────────────────── */
+  var backBtn = document.getElementById('terminal-back');
+  if (backBtn) {
+    backBtn.addEventListener('click', function () {
+      userClosing = true;
+      setScrollLock(false);
+      try { if (ws) ws.close(1000, 'closed by user'); } catch (e) { /* ignore */ }
+      if (window.history.length > 1) window.history.back();
+      else window.location.href = '/servers';
+    });
+  }
+  window.addEventListener('pagehide', function () { setScrollLock(false); });
+
   /* ── Select mode (mobile) ─────────────────────────────── */
-  // Overlay the scrollback as plain, natively-selectable text so a phone user can
-  // long-press and drag-handle a region, then Copy (or use the OS copy menu, which
-  // works even without the clipboard API). Built lazily on first use.
   var selecting = false;
   var selectOverlay = null;
   var selectPre = null;
@@ -396,17 +773,17 @@
     selectOverlay.appendChild(selectPre);
     container.appendChild(selectOverlay);
   }
-
   function setSelectMode(on) {
     if (on && !selectOverlay) buildSelectOverlay();
     if (!selectOverlay) return;
     selecting = on;
     if (on) {
       selectPre.style.fontSize = term.options.fontSize + 'px';
+      // Prefer the serialize addon's plain-text export when available; fall back
+      // to a manual buffer walk. Both are plain text (no escape sequences).
       selectPre.textContent = getBufferText(false);
       selectOverlay.hidden = false;
-      selectOverlay.scrollTop = selectOverlay.scrollHeight; // mirror the live view
-      // Drop keyboard focus so the soft keyboard hides, leaving room to select.
+      selectOverlay.scrollTop = selectOverlay.scrollHeight;
       var ta = container.querySelector('textarea');
       if (ta && ta.blur) ta.blur();
     } else {
@@ -436,43 +813,68 @@
     home:  '\x1b[H',
     end:   '\x1b[F',
     del:   '\x1b[3~',
+    pgup:  '\x1b[5~',
+    pgdn:  '\x1b[6~',
   };
 
-  // Physical keycap labels (Ctrl/Esc/Tab/Home/End/Del/A−/A+ and the arrow glyphs)
-  // are conventionally kept in Latin even in RTL/Persian technical UIs, so only
-  // their aria-labels and the action buttons (Select/Copy/Paste) are localized.
+  // Keycap glyphs (Ctrl/Alt/Esc/Tab/arrows/Home/…/A−/A+) stay Latin even in RTL
+  // technical UIs by convention; only aria-labels and the action words
+  // (Select/Copy/Paste) are localized.
+  var SEP = { kind: 'sep' };
   var BUTTONS = [
-    { label: 'Ctrl',  kind: 'ctrl' },
     { label: 'Esc',   kind: 'seq', key: 'esc' },
+    { label: 'Ctrl',  kind: 'ctrl' },
+    { label: 'Alt',   kind: 'alt' },
     { label: 'Tab',   kind: 'seq', key: 'tab' },
-    { label: '←',     kind: 'seq', key: 'left',  aria: T('js.terminal.aria_left') },
-    { label: '↑',     kind: 'seq', key: 'up',    aria: T('js.terminal.aria_up') },
-    { label: '↓',     kind: 'seq', key: 'down',  aria: T('js.terminal.aria_down') },
-    { label: '→',     kind: 'seq', key: 'right', aria: T('js.terminal.aria_right') },
-    { label: 'Home',  kind: 'seq', key: 'home' },
-    { label: 'End',   kind: 'seq', key: 'end' },
-    { label: 'Del',   kind: 'seq', key: 'del' },
-    { label: T('js.terminal.select'),   kind: 'select', aria: T('js.terminal.aria_select') },
-    { label: T('js.copy.label'),        kind: 'copy', aria: T('js.terminal.aria_copy') },
+    SEP,
+    { label: '←', kind: 'seq', key: 'left',  aria: T('js.terminal.aria_left') },
+    { label: '↑', kind: 'seq', key: 'up',    aria: T('js.terminal.aria_up') },
+    { label: '↓', kind: 'seq', key: 'down',  aria: T('js.terminal.aria_down') },
+    { label: '→', kind: 'seq', key: 'right', aria: T('js.terminal.aria_right') },
+    SEP,
+    { label: '|', kind: 'lit' },
+    { label: '>', kind: 'lit' },
+    { label: '<', kind: 'lit' },
+    { label: '/', kind: 'lit' },
+    { label: '~', kind: 'lit' },
+    { label: '$', kind: 'lit' },
+    { label: '`', kind: 'lit' },
+    { label: '!', kind: 'lit' },
+    { label: '-', kind: 'lit' },
+    SEP,
+    { label: 'Home', kind: 'seq', key: 'home' },
+    { label: 'End',  kind: 'seq', key: 'end' },
+    { label: 'PgUp', kind: 'seq', key: 'pgup' },
+    { label: 'PgDn', kind: 'seq', key: 'pgdn' },
+    { label: 'Del',  kind: 'seq', key: 'del' },
+    SEP,
+    { label: T('js.terminal.select'),   kind: 'select',  aria: T('js.terminal.aria_select') },
+    { label: '⌕',                       kind: 'search',  aria: T('js.terminal.search_label') },
+    { label: T('js.copy.label'),        kind: 'copy',    aria: T('js.terminal.aria_copy') },
     { label: T('js.terminal.copy_all'), kind: 'copyall', aria: T('js.terminal.aria_copy_all') },
     { label: T('js.terminal.paste'),    kind: 'paste' },
-    { label: 'A−',    kind: 'font', key: 'dec', aria: T('js.terminal.aria_font_smaller') },
-    { label: 'A+',    kind: 'font', key: 'inc', aria: T('js.terminal.aria_font_larger') },
+    { label: 'A−', kind: 'font', key: 'dec', aria: T('js.terminal.aria_font_smaller') },
+    { label: 'A+', kind: 'font', key: 'inc', aria: T('js.terminal.aria_font_larger') },
+    { label: '⛶',  kind: 'fullscreen', aria: T('js.terminal.fullscreen') },
   ];
 
-  // Actions that touch (or depend on) a text selection must not pull focus back
-  // to the terminal — that would clear the selection and pop the soft keyboard.
-  var NO_REFOCUS = { select: true, copy: true, copyall: true };
+  // Actions that touch a selection must not pull focus back to the terminal —
+  // that would clear the selection and pop the soft keyboard.
+  var NO_REFOCUS = { select: true, copy: true, copyall: true, search: true };
 
   function handleKey(def, btn) {
     switch (def.kind) {
-      case 'seq':     sendInput(SEQ[def.key]); break;
-      case 'ctrl':    setCtrl(!ctrlPending); break;
-      case 'select':  setSelectMode(!selecting); break;
-      case 'copy':    doCopy(currentSelection(), btn); break;
-      case 'copyall': doCopy(getBufferText(false), btn); break;
-      case 'paste':   doPaste(); break;
-      case 'font':    setFontSize(term.options.fontSize + (def.key === 'inc' ? 1 : -1)); break;
+      case 'seq':        sendInput(SEQ[def.key]); break;
+      case 'lit':        sendInput(def.label); break;
+      case 'ctrl':       setCtrl(!ctrlPending); break;
+      case 'alt':        setAlt(!altPending); break;
+      case 'select':     setSelectMode(!selecting); break;
+      case 'copy':       doCopy(currentSelection(), btn); break;
+      case 'copyall':    doCopy(getBufferText(false), btn); break;
+      case 'paste':      doPaste(); break;
+      case 'search':     openSearch(); break;
+      case 'font':       setFontSize(term.options.fontSize + (def.key === 'inc' ? 1 : -1)); break;
+      case 'fullscreen': toggleFullscreen(); break;
     }
   }
 
@@ -483,8 +885,13 @@
     bar.setAttribute('aria-label', T('js.terminal.keys_label'));
 
     BUTTONS.forEach(function (def) {
-      // Copy/Paste are always offered now: even without the async clipboard API
-      // they fall back to execCommand / prompt, so HTTP panels keep a copy path.
+      if (def.kind === 'sep') {
+        var sep = document.createElement('span');
+        sep.className = 'terminal-key-sep';
+        sep.setAttribute('aria-hidden', 'true');
+        bar.appendChild(sep);
+        return;
+      }
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'terminal-key';
@@ -493,28 +900,16 @@
       btn.setAttribute('data-label', def.label);
       btn.setAttribute('aria-label', def.aria || def.label);
 
-      if (def.kind === 'ctrl') {
-        btn.classList.add('terminal-key--ctrl');
-        btn.setAttribute('aria-pressed', 'false');
-        ctrlBtn = btn;
-      }
-      if (def.kind === 'select') {
-        btn.classList.add('terminal-key--select');
-        btn.setAttribute('aria-pressed', 'false');
-        selectBtn = btn;
-      }
+      if (def.kind === 'ctrl') { btn.classList.add('terminal-key--ctrl'); btn.setAttribute('aria-pressed', 'false'); ctrlBtn = btn; }
+      if (def.kind === 'alt')  { btn.classList.add('terminal-key--alt');  btn.setAttribute('aria-pressed', 'false'); altBtn = btn; }
+      if (def.kind === 'select') { btn.classList.add('terminal-key--select'); btn.setAttribute('aria-pressed', 'false'); selectBtn = btn; }
 
-      // Prevent the button from stealing focus from the xterm textarea, which
-      // would dismiss the soft keyboard.
       btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
       btn.addEventListener('click', function (e) {
         e.preventDefault();
         handleKey(def, btn);
-        // Selection-related actions manage focus themselves; everything else
-        // pulls focus back to the terminal to keep the keyboard up.
         if (!NO_REFOCUS[def.kind]) term.focus();
       });
-
       bar.appendChild(btn);
     });
 
@@ -522,9 +917,6 @@
   }
 
   /* ── Mobile full-screen layout + keyboard reflow ──────── */
-  // The soft keyboard does not fire `window.resize` on iOS Safari; it only
-  // changes window.visualViewport. We pin the card to the visible viewport so
-  // the grid reflows above the keyboard instead of being squished or hidden.
   var vv = window.visualViewport;
   var rafPending = false;
 
@@ -539,40 +931,24 @@
     }
     fitAndResize();
   }
-
   function scheduleViewportUpdate() {
     if (rafPending) return;
     rafPending = true;
-    requestAnimationFrame(function () {
-      rafPending = false;
-      updateMobileViewport();
-    });
+    requestAnimationFrame(function () { rafPending = false; updateMobileViewport(); });
   }
-
-  // Lock/unlock the page behind the full-screen terminal. The matching CSS
-  // pins <body> in place (iOS Safari ignores overflow:hidden alone), so the
-  // class must live on both <html> and <body>.
   function setScrollLock(on) {
     document.documentElement.classList.toggle('terminal-mobile-active', on);
     document.body.classList.toggle('terminal-mobile-active', on);
   }
-
   function enableMobile() {
     buildToolbar();
     card.classList.add('terminal-card--mobile');
     setScrollLock(true);
     updateMobileViewport();
-
     if (vv) {
       vv.addEventListener('resize', scheduleViewportUpdate);
       vv.addEventListener('scroll', scheduleViewportUpdate);
     }
-    // The app is locked to portrait (manifest orientation + app.js runtime lock),
-    // so orientationchange should no longer fire on installed/locked clients —
-    // this listener is now effectively a no-op there. It is kept as a harmless
-    // safety net for any browser that still allows a rotation (e.g. a desktop
-    // tab, or a platform that ignores the lock): if the viewport ever does flip,
-    // the grid still reflows correctly instead of being left mis-sized.
     window.addEventListener('orientationchange', function () {
       setTimeout(scheduleViewportUpdate, 250);
     });
@@ -581,25 +957,17 @@
   /* ── Resize handling ──────────────────────────────────── */
   var resizeTimer = null;
   window.addEventListener('resize', function () {
-    if (isMobile) {
-      scheduleViewportUpdate();
-      return;
-    }
+    if (isMobile) { scheduleViewportUpdate(); return; }
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(fitAndResize, 80);
   });
 
-  if (isMobile) {
-    enableMobile();
-  }
+  if (isMobile) enableMobile();
 
-  /* ── Initial fit after fonts load ────────────────────── */
-  // defer to next frame so the layout has settled
+  /* ── Connect + initial fit ────────────────────────────── */
+  connect();
   requestAnimationFrame(function () {
-    if (isMobile) {
-      updateMobileViewport();
-    } else {
-      fitAndResize();
-    }
+    if (isMobile) updateMobileViewport();
+    else fitAndResize();
   });
 })();
