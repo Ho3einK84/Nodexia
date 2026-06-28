@@ -37,6 +37,18 @@
   function T(key, params) { return window.nxT ? window.nxT(key, params) : key; }
   function noop() {}
 
+  // setShown drives an element's visibility through BOTH the `hidden` attribute
+  // (state / accessibility) AND an inline display style. An inline style beats
+  // any stylesheet rule, so a popover (theme menu, search bar, overlays) can
+  // never be left visible by a stale or buggy CSS rule — which is exactly what
+  // pinned the theme menu open before. `display` is the value to apply when
+  // shown; omit it to fall back to the stylesheet's own display.
+  function setShown(el, shown, display) {
+    if (!el) return;
+    el.hidden = !shown;
+    el.style.display = shown ? (display || '') : 'none';
+  }
+
   var card = document.getElementById('terminal-card');
   if (!card) return;
 
@@ -396,7 +408,7 @@
   function toggleThemeMenu(force) {
     if (!themeMenu) return;
     var show = typeof force === 'boolean' ? force : themeMenu.hidden;
-    themeMenu.hidden = !show;
+    setShown(themeMenu, show, 'flex');
     if (themeBtn) themeBtn.setAttribute('aria-expanded', show ? 'true' : 'false');
   }
   if (themeBtn) {
@@ -412,6 +424,8 @@
     }
   });
   buildThemeMenu();
+  // Force-hide at startup so a stale stylesheet can never leave it open.
+  setShown(themeMenu, false, 'flex');
 
   /* ── Fullscreen ───────────────────────────────────────── */
   function fsElement() {
@@ -473,13 +487,13 @@
   }
   function openSearch() {
     if (!searchBar) return;
-    searchBar.hidden = false;
+    setShown(searchBar, true, 'flex');
     if (searchInput) { searchInput.focus(); searchInput.select(); }
     if (searchInput && searchInput.value) runSearch(true);
   }
   function closeSearch() {
     if (!searchBar) return;
-    searchBar.hidden = true;
+    setShown(searchBar, false, 'flex');
     if (searchAddon && searchAddon.clearDecorations) try { searchAddon.clearDecorations(); } catch (e) {}
     term.focus();
   }
@@ -497,6 +511,8 @@
   bindClick('terminal-search-next', function () { runSearch(true); });
   bindClick('terminal-search-prev', function () { runSearch(false); });
   bindClick('terminal-search-close', closeSearch);
+  // Force-hide at startup so a stale stylesheet can never leave the bar showing.
+  setShown(searchBar, false, 'flex');
   if (searchCaseBtn) {
     searchCaseBtn.addEventListener('click', function () {
       caseSensitive = !caseSensitive;
@@ -538,7 +554,7 @@
   function buildContextMenu() {
     ctxMenu = document.createElement('div');
     ctxMenu.className = 'terminal-context-menu';
-    ctxMenu.hidden = true;
+    setShown(ctxMenu, false, 'flex');
     [
       { label: T('js.terminal.ctx_copy'),       fn: function () { doCopy(currentSelection(), null); } },
       { label: T('js.terminal.ctx_paste'),      fn: doPaste },
@@ -557,14 +573,14 @@
   }
   function showContextMenu(x, y) {
     if (!ctxMenu) buildContextMenu();
-    ctxMenu.hidden = false;
+    setShown(ctxMenu, true, 'flex');
     var rect = card.getBoundingClientRect();
     var mx = Math.min(x - rect.left, rect.width - 170);
     var my = Math.min(y - rect.top, rect.height - 10);
     ctxMenu.style.left = Math.max(0, mx) + 'px';
     ctxMenu.style.top = Math.max(0, my) + 'px';
   }
-  function hideContextMenu() { if (ctxMenu) ctxMenu.hidden = true; }
+  function hideContextMenu() { if (ctxMenu) setShown(ctxMenu, false, 'flex'); }
   if (!isMobile) {
     container.addEventListener('contextmenu', function (e) {
       e.preventDefault();
@@ -739,10 +755,10 @@
       container.appendChild(disconnectOverlay);
     }
     disconnectOverlay.querySelector('.terminal-disconnect__msg').textContent = message;
-    disconnectOverlay.hidden = false;
+    setShown(disconnectOverlay, true, 'flex');
   }
   function hideDisconnectOverlay() {
-    if (disconnectOverlay) disconnectOverlay.hidden = true;
+    if (disconnectOverlay) setShown(disconnectOverlay, false, 'flex');
   }
 
   /* ── Back button ──────────────────────────────────────── */
