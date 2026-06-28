@@ -160,6 +160,56 @@ func TestTerminalPOSTStoredCredsCreatesTicket(t *testing.T) {
 	}
 }
 
+func TestTerminalPageIncludesAddonsAndChrome(t *testing.T) {
+	deps := newTestDeps(t)
+	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
+	s := seedServer(t, serverRepo, true) // stored creds → POST issues a ticket page
+
+	mux := registerRoutes(t, deps)
+	form := url.Values{"_csrf_token": {"test"}}
+	req := sameOriginRequest(http.MethodPost,
+		"/servers/"+sid(s.ID)+"/terminal", form.Encode())
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST status = %d, want 200", w.Code)
+	}
+	body := w.Body.String()
+
+	// Every vendored xterm v5 addon plus the local theme + keybinding scripts
+	// must be wired into the page (the strict script-src CSP forbids a CDN).
+	for _, asset := range []string{
+		"/static/xterm.min.js",
+		"/static/xterm-addon-fit.min.js",
+		"/static/xterm-addon-unicode11.min.js",
+		"/static/xterm-addon-web-links.min.js",
+		"/static/xterm-addon-search.min.js",
+		"/static/xterm-addon-serialize.min.js",
+		"/static/xterm-addon-webgl.min.js",
+		"/static/xterm-addon-canvas.min.js",
+		"/static/xterm-themes.js",
+		"/static/terminal-keybindings.js",
+		"/static/terminal.js",
+	} {
+		if !strings.Contains(body, asset) {
+			t.Errorf("terminal page missing script %q", asset)
+		}
+	}
+
+	// New DOM chrome the rewritten terminal.js binds to.
+	for _, id := range []string{
+		`id="terminal-search"`,
+		`id="terminal-statusbar"`,
+		`id="terminal-theme-menu"`,
+		`id="term-tool-fullscreen"`,
+	} {
+		if !strings.Contains(body, id) {
+			t.Errorf("terminal page missing element %q", id)
+		}
+	}
+}
+
 func TestTerminalWSRejectsCrossOrigin(t *testing.T) {
 	deps := newTestDeps(t)
 	serverRepo := servers.NewSQLRepository(deps.Database.SQL)

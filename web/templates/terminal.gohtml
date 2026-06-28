@@ -86,16 +86,60 @@
         <span class="terminal-card__addr">{{ .TerminalTarget.Username }}@{{ .TerminalTarget.Host }}:{{ .TerminalTarget.Port }}</span>
       </span>
       <div class="terminal-card__actions">
-        <span id="terminal-status" class="terminal-status terminal-status--connecting">{{ t "terminal.status_connecting" }}</span>
+        <span id="terminal-status" class="terminal-status terminal-status--connecting" role="status" aria-live="polite">
+          <span class="terminal-status__dot" aria-hidden="true"></span>
+          <span class="terminal-status__text">{{ t "terminal.status_connecting" }}</span>
+        </span>
+
+        {{/* Header tool buttons — wired by terminal.js, work on desktop + mobile. */}}
+        <div class="terminal-tools" role="toolbar" aria-label="{{ t "terminal.tools_label" }}">
+          <button type="button" id="term-tool-search" class="terminal-tool" aria-label="{{ t "terminal.search_label" }}" title="{{ t "terminal.search_label" }}">
+            <i data-lucide="search"></i>
+          </button>
+          <button type="button" id="term-tool-font-dec" class="terminal-tool" aria-label="{{ t "terminal.font_smaller" }}" title="{{ t "terminal.font_smaller" }}">A−</button>
+          <button type="button" id="term-tool-font-inc" class="terminal-tool" aria-label="{{ t "terminal.font_larger" }}" title="{{ t "terminal.font_larger" }}">A+</button>
+          <button type="button" id="term-tool-theme" class="terminal-tool" aria-label="{{ t "terminal.theme_label" }}" title="{{ t "terminal.theme_label" }}" aria-haspopup="true" aria-expanded="false">
+            <i data-lucide="palette"></i>
+          </button>
+          <button type="button" id="term-tool-fullscreen" class="terminal-tool" aria-label="{{ t "terminal.fullscreen_label" }}" title="{{ t "terminal.fullscreen_label" }}">
+            <i data-lucide="maximize"></i>
+          </button>
+        </div>
+
         <button type="button" id="terminal-back" class="terminal-back" aria-label="{{ t "terminal.back_aria" }}">
           <i data-lucide="chevron-left"></i><span>{{ t "common.back" }}</span>
         </button>
       </div>
     </div>
 
+    {{/* Theme picker — populated by terminal.js from the vendored theme catalog. */}}
+    <div id="terminal-theme-menu" class="terminal-theme-menu" hidden role="menu" aria-label="{{ t "terminal.theme_label" }}"></div>
+
+    {{/* In-terminal search (addon-search) — hidden until Ctrl/Cmd+F. */}}
+    <div id="terminal-search" class="terminal-search" hidden>
+      <i data-lucide="search" class="terminal-search__icon" aria-hidden="true"></i>
+      <input type="text" id="terminal-search-input" class="terminal-search__input"
+        placeholder="{{ t "terminal.search_placeholder" }}" aria-label="{{ t "terminal.search_placeholder" }}"
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <span id="terminal-search-count" class="terminal-search__count" aria-live="polite"></span>
+      <button type="button" id="terminal-search-case" class="terminal-search__btn" aria-label="{{ t "terminal.search_case" }}" title="{{ t "terminal.search_case" }}" aria-pressed="false">Aa</button>
+      <button type="button" id="terminal-search-prev" class="terminal-search__btn" aria-label="{{ t "terminal.search_prev" }}" title="{{ t "terminal.search_prev" }}"><i data-lucide="chevron-up"></i></button>
+      <button type="button" id="terminal-search-next" class="terminal-search__btn" aria-label="{{ t "terminal.search_next" }}" title="{{ t "terminal.search_next" }}"><i data-lucide="chevron-down"></i></button>
+      <button type="button" id="terminal-search-close" class="terminal-search__btn" aria-label="{{ t "terminal.search_close" }}" title="{{ t "terminal.search_close" }}"><i data-lucide="x"></i></button>
+    </div>
+
     <div id="terminal-error" class="terminal-error" style="display:none"></div>
 
-    <div id="terminal-container" class="terminal-container"></div>
+    <div id="terminal-container" class="terminal-container" role="application" aria-label="{{ t "terminal.title" }}"></div>
+
+    {{/* Status bar — dimensions, encoding, latency. */}}
+    <div id="terminal-statusbar" class="terminal-statusbar" aria-hidden="true">
+      <span id="term-dims" class="terminal-statusbar__item">—</span>
+      <span class="terminal-statusbar__sep">·</span>
+      <span class="terminal-statusbar__item">UTF-8</span>
+      <span class="terminal-statusbar__sep">·</span>
+      <span id="term-latency" class="terminal-statusbar__item terminal-statusbar__item--latency"></span>
+    </div>
   </div>
   {{ end }}
 
