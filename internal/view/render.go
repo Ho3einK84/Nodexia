@@ -660,6 +660,12 @@ type NodeSnapshotView struct {
 	CollectedAt    string
 	Actions        []NodeActionView
 	ActionsEnabled bool
+	// UptimeKnown is true once at least one persisted status observation exists
+	// for this node; UptimePct is the 30-day running percentage and UptimeDetail
+	// the "N/M checks" breakdown shown on hover.
+	UptimeKnown  bool
+	UptimePct    int
+	UptimeDetail string
 }
 
 // NodeActionView is one management action button on a node card.

@@ -138,6 +138,11 @@
           <i data-lucide="{{ if eq .Protocol "grpc" }}layers{{ else }}globe{{ end }}"></i>{{ .Protocol }}
         </span>
         {{ end }}
+        {{ if .UptimeKnown }}
+        <span class="node-pill node-pill--uptime-{{ if ge .UptimePct 99 }}ok{{ else if ge .UptimePct 90 }}warn{{ else }}crit{{ end }}" title="{{ t "nodes.uptime_checks" "detail" .UptimeDetail }}">
+          <i data-lucide="activity"></i>{{ t "nodes.uptime_30d" }} {{ .UptimePct }}%
+        </span>
+        {{ end }}
       </div>
 
       <div class="node-facts">

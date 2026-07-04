@@ -720,8 +720,20 @@ func (h *Handlers) storedSnapshotViews(ctx context.Context, server servers.Serve
 		}
 		return nil, err
 	}
+	// 30-day uptime per node, from the persisted per-sweep observations.
+	// Best-effort: a read failure just renders the cards without the badge.
+	uptime, err := h.repo.UptimeStats(ctx, server.ID, time.Now().UTC().Add(-30*24*time.Hour))
+	if err != nil {
+		uptime = nil
+	}
 	for _, snapshot := range latest {
-		snapshots = append(snapshots, h.snapshotView(snapshot, actionsEnabled))
+		v := h.snapshotView(snapshot, actionsEnabled)
+		if stat, ok := uptime[UptimeKey(snapshot.NodeType, snapshot.ServiceName)]; ok && stat.Checks > 0 {
+			v.UptimeKnown = true
+			v.UptimePct = int(float64(stat.Running) / float64(stat.Checks) * 100)
+			v.UptimeDetail = fmt.Sprintf("%d/%d", stat.Running, stat.Checks)
+		}
+		snapshots = append(snapshots, v)
 	}
 	return snapshots, nil
 }

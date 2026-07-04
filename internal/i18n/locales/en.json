@@ -989,5 +989,7 @@
   "diagnostics.run_started": "Started",
   "diagnostics.run_duration": "Duration",
   "diagnostics.run_ok": "OK",
-  "diagnostics.run_failed": "Failed"
+  "diagnostics.run_failed": "Failed",
+  "nodes.uptime_30d": "Uptime (30d)",
+  "nodes.uptime_checks": "{detail} checks running"
 }
