@@ -120,6 +120,13 @@
         </label>
 
         <label class="form-field">
+          <span><i data-lucide="calendar-sync" class="icon-in-button"></i> {{ t "servers.form.traffic_reset_day" }}</span>
+          <input type="number" name="traffic_reset_day" min="1" max="28" value="{{ .ServerForm.TrafficResetDay }}">
+          <small class="field-hint">{{ t "servers.form.traffic_reset_day_hint" }}</small>
+          {{ with index .ServerForm.Errors "traffic_reset_day" }}<small class="field-error">{{ . }}</small>{{ end }}
+        </label>
+
+        <label class="form-field">
           <span><i data-lucide="file-text" class="icon-in-button"></i> {{ t "servers.form.notes" }}</span>
           <textarea name="note" rows="4" placeholder="{{ t "servers.form.notes_placeholder" }}">{{ .ServerForm.Note }}</textarea>
         </label>

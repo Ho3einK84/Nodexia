@@ -340,3 +340,60 @@ CREATE TABLE IF NOT EXISTS traffic_limit_rules (
   updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (scope, ref)
 );
+
+-- ── Billing-cycle anchor ──────────────────────────────────────────────────────
+-- traffic_reset_day anchors a server's traffic accounting period to the day of
+-- the month its provider resets the quota. 1 (the default) means the calendar
+-- month, preserving today's behaviour for every existing server; 2–28 anchors
+-- the period to that day (e.g. 15 → the period runs from the 15th to the 14th
+-- of the next month). Days 29–31 are rejected in validation so a period start
+-- always exists in every month. Appended as a standalone statement so existing
+-- databases pick it up as a new bootstrap migration.
+ALTER TABLE servers ADD COLUMN traffic_reset_day INTEGER NOT NULL DEFAULT 1;
+
+-- limit_kind selects which traffic series a per-server cap measures: 'rx'
+-- (download — the historical behaviour and the default), 'tx' (upload), or
+-- 'total' (rx+tx). The forecast, exhaustion projection, and predictive alert
+-- metrics all follow the configured series so the cap is always compared
+-- against the series it actually meters. Group/global caps stay RX-only.
+ALTER TABLE server_traffic_limits ADD COLUMN limit_kind VARCHAR(16) NOT NULL DEFAULT 'rx';
+
+-- ── Scheduler job run history ─────────────────────────────────────────────────
+-- One row per completed background job run (monitoring / nodes sweep), so the
+-- diagnostics page can show what actually happened recently instead of only the
+-- latest in-memory state. Retention is enforced in code (a global cap trimmed
+-- after each insert), keeping the table small without a scheduled cleanup.
+CREATE TABLE IF NOT EXISTS scheduler_job_runs (
+  id          INTEGER PRIMARY KEY,
+  server_id   INTEGER NOT NULL,
+  job_type    VARCHAR(32) NOT NULL,
+  started_at  DATETIME NOT NULL,
+  finished_at DATETIME NOT NULL,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  success     INTEGER NOT NULL DEFAULT 0,
+  message     TEXT NOT NULL DEFAULT '',
+  error       TEXT NOT NULL DEFAULT '',
+  FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_scheduler_job_runs_started
+  ON scheduler_job_runs (started_at);
+
+-- ── Node status history ───────────────────────────────────────────────────────
+-- One row per discovered node per discovery sweep (scheduler or manual refresh),
+-- recording the health status observed at that moment. Powers the 30-day uptime
+-- percentage on node cards. Placeholder snapshots (none/not_detected) are not
+-- recorded. Retention is enforced in code (observations older than ~60 days are
+-- trimmed on write).
+CREATE TABLE IF NOT EXISTS node_status_history (
+  id            INTEGER PRIMARY KEY,
+  server_id     INTEGER NOT NULL,
+  node_type     VARCHAR(64) NOT NULL,
+  service_name  VARCHAR(128) NOT NULL DEFAULT '',
+  health_status VARCHAR(32) NOT NULL DEFAULT 'unknown',
+  observed_at   DATETIME NOT NULL,
+  FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_node_status_history_server_observed
+  ON node_status_history (server_id, observed_at);

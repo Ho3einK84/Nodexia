@@ -30,8 +30,8 @@ func (r SQLRepository) Create(ctx context.Context, server Server) (Server, error
 
 	result, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO servers (name, host, port, auth_mode, username, note, credential_strategy, credential_ref, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO servers (name, host, port, auth_mode, username, note, credential_strategy, credential_ref, traffic_reset_day, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		server.Name,
 		server.Host,
 		server.Port,
@@ -40,6 +40,7 @@ func (r SQLRepository) Create(ctx context.Context, server Server) (Server, error
 		server.Note,
 		server.CredentialStrategy,
 		server.CredentialRef,
+		server.TrafficResetDay,
 		now,
 		now,
 	)
@@ -69,7 +70,7 @@ func (r SQLRepository) Create(ctx context.Context, server Server) (Server, error
 func (r SQLRepository) GetByID(ctx context.Context, id int64) (Server, error) {
 	row := r.conn.QueryRowContext(
 		ctx,
-		`SELECT id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, country_code, country_name, country_checked_at, created_at, updated_at
+		`SELECT id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, country_code, country_name, country_checked_at, traffic_reset_day, created_at, updated_at
 		 FROM servers
 		 WHERE id = ?
 		 LIMIT 1`,
@@ -97,7 +98,7 @@ func (r SQLRepository) GetByID(ctx context.Context, id int64) (Server, error) {
 func (r SQLRepository) List(ctx context.Context) ([]Server, error) {
 	rows, err := r.conn.QueryContext(
 		ctx,
-		`SELECT id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, country_code, country_name, country_checked_at, created_at, updated_at
+		`SELECT id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, country_code, country_name, country_checked_at, traffic_reset_day, created_at, updated_at
 		 FROM servers
 		 ORDER BY id DESC`,
 	)
@@ -143,7 +144,7 @@ func (r SQLRepository) Update(ctx context.Context, server Server) (Server, error
 	result, err := tx.ExecContext(
 		ctx,
 		`UPDATE servers
-		 SET name = ?, host = ?, port = ?, auth_mode = ?, username = ?, note = ?, credential_strategy = ?, credential_ref = ?, updated_at = ?
+		 SET name = ?, host = ?, port = ?, auth_mode = ?, username = ?, note = ?, credential_strategy = ?, credential_ref = ?, traffic_reset_day = ?, updated_at = ?
 		 WHERE id = ?`,
 		server.Name,
 		server.Host,
@@ -153,6 +154,7 @@ func (r SQLRepository) Update(ctx context.Context, server Server) (Server, error
 		server.Note,
 		server.CredentialStrategy,
 		server.CredentialRef,
+		server.TrafficResetDay,
 		server.UpdatedAt,
 		server.ID,
 	)
@@ -225,6 +227,8 @@ func (r SQLRepository) Delete(ctx context.Context, id int64) error {
 		`DELETE FROM server_system_facts WHERE server_id = ?`,
 		`DELETE FROM vnstat_snapshots WHERE server_id = ?`,
 		`DELETE FROM server_traffic_limits WHERE server_id = ?`,
+		`DELETE FROM scheduler_job_runs WHERE server_id = ?`,
+		`DELETE FROM node_status_history WHERE server_id = ?`,
 		`DELETE FROM alert_events WHERE server_id = ?`,
 		`DELETE FROM alert_silences WHERE server_id = ?`,
 		`DELETE FROM alert_rules WHERE server_id = ?`,
@@ -282,6 +286,7 @@ func scanServer(scanner rowScanner) (Server, error) {
 		&server.CountryCode,
 		&server.CountryName,
 		&countryCheckedAtRaw,
+		&server.TrafficResetDay,
 		&createdAtRaw,
 		&updatedAtRaw,
 	); err != nil {
@@ -325,6 +330,10 @@ func normalizeServer(server Server) Server {
 
 	if server.CredentialStrategy == "" {
 		server.CredentialStrategy = CredentialStrategyStored
+	}
+
+	if server.TrafficResetDay < 1 || server.TrafficResetDay > 28 {
+		server.TrafficResetDay = 1
 	}
 
 	return server

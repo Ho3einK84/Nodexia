@@ -970,5 +970,15 @@
   "js.terminal.ctx_select_all": "انتخاب همه",
   "js.terminal.ctx_search": "جستجو",
   "js.terminal.ctx_clear": "پاک کردن پایانه",
-  "js.back_to_top": "بازگشت به بالا"
+  "js.back_to_top": "بازگشت به بالا",
+  "servers.form.traffic_reset_day": "روز ریست ترافیک",
+  "servers.form.traffic_reset_day_hint": "روزی از ماه که ارائه‌دهنده سهمیه ترافیک را ریست می‌کند (۱ = ماه تقویمی). تحلیل‌ها، پیش‌بینی‌ها و هشدارهای سقف از همین دوره پیروی می‌کنند.",
+  "analytics.limit.kind_label": "اعمال روی",
+  "analytics.limit.kind_rx": "دانلود (RX)",
+  "analytics.limit.kind_tx": "آپلود (TX)",
+  "analytics.limit.kind_total": "مجموع (RX+TX)",
+  "analytics.limit.current_kind": "سقف: {value} · {kind}",
+  "js.analytics.upload_scope": "آپلود",
+  "js.analytics.total_scope": "مجموع",
+  "js.analytics.period_range": "دوره {start} تا {end}"
 }

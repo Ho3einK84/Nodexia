@@ -53,15 +53,24 @@ type Metrics struct {
 	NodeStopped         bool
 
 	// ForecastAvailable gates the predictive (forecast-derived) metrics. It is
-	// true only when the server has a monthly RX limit configured AND there is
+	// true only when the server has a traffic limit configured AND there is
 	// enough traffic history to project. When false, projected_exceed_limit and
 	// days_to_exhaustion rules are skipped this cycle — neither fired nor
 	// resolved — exactly like an unavailable traffic snapshot. This keeps streaks
 	// and cooldowns sane across availability gaps and guarantees servers without a
 	// limit never trigger the predictive metrics.
 	ForecastAvailable     bool
-	ProjectedExceedsLimit bool    // month-end RX projected over the limit (or already over)
+	ProjectedExceedsLimit bool    // period-end usage projected over the limit (or already over)
 	DaysToExhaustion      float64 // full days until the limit is reached; DaysToExhaustionSafe when not projected to exhaust
+
+	// AnomalyAvailable gates the forecast anomaly metrics (traffic_spike,
+	// unusual_growth). Unlike ForecastAvailable it needs NO configured limit —
+	// only traffic history this cycle — so anomaly rules work on any server
+	// vnStat covers. When false the anomaly rules are skipped, keeping streaks
+	// and cooldowns sane across gaps.
+	AnomalyAvailable bool
+	TrafficSpike     bool // today's predicted rate ≥ 2x the historical daily average
+	UnusualGrowth    bool // projected period total > 1.5x the previous 30 completed days
 }
 
 // valueFor returns the observed value for a metric and whether it is available
@@ -114,6 +123,22 @@ func (m Metrics) valueFor(metric string) (float64, bool) {
 		return 0, true
 	case MetricDaysToExhaustion:
 		return m.DaysToExhaustion, m.ForecastAvailable
+	case MetricTrafficSpike:
+		if !m.AnomalyAvailable {
+			return 0, false
+		}
+		if m.TrafficSpike {
+			return 1, true
+		}
+		return 0, true
+	case MetricUnusualGrowth:
+		if !m.AnomalyAvailable {
+			return 0, false
+		}
+		if m.UnusualGrowth {
+			return 1, true
+		}
+		return 0, true
 	default:
 		return 0, false
 	}

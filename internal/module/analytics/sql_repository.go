@@ -239,28 +239,30 @@ func (r SQLRepository) GetLatestTrafficForServer(ctx context.Context, serverID i
 	return days, months, nil
 }
 
-// GetTrafficLimit reads the optional monthly download (RX) cap for a server.
-// A missing row is reported as ok=false (unlimited), not an error.
-func (r SQLRepository) GetTrafficLimit(ctx context.Context, serverID int64) (int64, bool, error) {
-	var limitBytes int64
+// GetTrafficLimit reads the optional monthly traffic cap for a server (bytes +
+// series kind). A missing row is reported as ok=false (unlimited), not an error.
+func (r SQLRepository) GetTrafficLimit(ctx context.Context, serverID int64) (TrafficLimit, bool, error) {
+	var limit TrafficLimit
 	err := r.conn.QueryRowContext(ctx,
-		`SELECT monthly_limit_bytes FROM server_traffic_limits WHERE server_id = ? LIMIT 1`,
+		`SELECT monthly_limit_bytes, limit_kind FROM server_traffic_limits WHERE server_id = ? LIMIT 1`,
 		serverID,
-	).Scan(&limitBytes)
+	).Scan(&limit.Bytes, &limit.Kind)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return 0, false, nil
+			return TrafficLimit{}, false, nil
 		}
-		return 0, false, fmt.Errorf("analytics: get traffic limit: %w", err)
+		return TrafficLimit{}, false, fmt.Errorf("analytics: get traffic limit: %w", err)
 	}
-	return limitBytes, true, nil
+	limit.Kind = NormalizeLimitKind(limit.Kind)
+	return limit, true, nil
 }
 
 // SetTrafficLimit upserts the limit. It is portable across SQLite/MySQL: it
 // updates the existing row and, when nothing was updated, inserts a new one —
 // avoiding dialect-specific UPSERT syntax. The two statements run in one
 // transaction so a concurrent writer can't slip between them.
-func (r SQLRepository) SetTrafficLimit(ctx context.Context, serverID, limitBytes int64) error {
+func (r SQLRepository) SetTrafficLimit(ctx context.Context, serverID int64, limit TrafficLimit) error {
+	kind := NormalizeLimitKind(limit.Kind)
 	tx, err := r.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("analytics: begin set traffic limit: %w", err)
@@ -268,8 +270,8 @@ func (r SQLRepository) SetTrafficLimit(ctx context.Context, serverID, limitBytes
 
 	now := time.Now().UTC()
 	result, err := tx.ExecContext(ctx,
-		`UPDATE server_traffic_limits SET monthly_limit_bytes = ?, updated_at = ? WHERE server_id = ?`,
-		limitBytes, now, serverID,
+		`UPDATE server_traffic_limits SET monthly_limit_bytes = ?, limit_kind = ?, updated_at = ? WHERE server_id = ?`,
+		limit.Bytes, kind, now, serverID,
 	)
 	if err != nil {
 		_ = tx.Rollback()
@@ -282,8 +284,8 @@ func (r SQLRepository) SetTrafficLimit(ctx context.Context, serverID, limitBytes
 	}
 	if affected == 0 {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO server_traffic_limits (server_id, monthly_limit_bytes, updated_at) VALUES (?, ?, ?)`,
-			serverID, limitBytes, now,
+			`INSERT INTO server_traffic_limits (server_id, monthly_limit_bytes, limit_kind, updated_at) VALUES (?, ?, ?, ?)`,
+			serverID, limit.Bytes, kind, now,
 		); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("analytics: insert traffic limit: %w", err)
@@ -310,9 +312,9 @@ func (r SQLRepository) DeleteTrafficLimit(ctx context.Context, serverID int64) e
 // Each level is a separate, indexed lookup; the broader fallbacks are consulted
 // only when the narrower one is absent, so an explicit per-server cap is never
 // overridden by a group cap.
-func (r SQLRepository) ResolveEffectiveLimit(ctx context.Context, serverID int64, tags []string) (int64, string, bool, error) {
+func (r SQLRepository) ResolveEffectiveLimit(ctx context.Context, serverID int64, tags []string) (TrafficLimit, string, bool, error) {
 	if limit, ok, err := r.GetTrafficLimit(ctx, serverID); err != nil {
-		return 0, "", false, err
+		return TrafficLimit{}, "", false, err
 	} else if ok {
 		return limit, "server", true, nil
 	}
@@ -341,20 +343,20 @@ func (r SQLRepository) ResolveEffectiveLimit(ctx context.Context, serverID int64
 		).Scan(&ref, &limit)
 		switch {
 		case err == nil:
-			return limit, "tag:" + ref, true, nil
+			return TrafficLimit{Bytes: limit, Kind: LimitKindRX}, "tag:" + ref, true, nil
 		case err != sql.ErrNoRows:
-			return 0, "", false, fmt.Errorf("analytics: resolve tag limit: %w", err)
+			return TrafficLimit{}, "", false, fmt.Errorf("analytics: resolve tag limit: %w", err)
 		}
 	}
 
-	// Fleet-wide default.
+	// Fleet-wide default. Inherited caps are always RX (download).
 	if limit, ok, err := r.GetScopedLimit(ctx, LimitScopeGlobal, ""); err != nil {
-		return 0, "", false, err
+		return TrafficLimit{}, "", false, err
 	} else if ok {
-		return limit, "global", true, nil
+		return TrafficLimit{Bytes: limit, Kind: LimitKindRX}, "global", true, nil
 	}
 
-	return 0, "", false, nil
+	return TrafficLimit{}, "", false, nil
 }
 
 // ListScopedLimits returns every global/tag limit rule, global first then tags

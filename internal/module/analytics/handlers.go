@@ -70,14 +70,21 @@ type ExhaustionForecastJSON struct {
 }
 
 type ForecastResponseJSON struct {
-	Today      PeriodForecastJSON     `json:"today"`
-	ThisWeek   PeriodForecastJSON     `json:"this_week"`
-	ThisMonth  PeriodForecastJSON     `json:"this_month"`
-	Algorithm  string                 `json:"algorithm"`
-	Confidence string                 `json:"confidence"`
-	Trend      string                 `json:"trend"`
-	Risks      ForecastRisksJSON      `json:"risks"`
-	Exhaustion ExhaustionForecastJSON `json:"exhaustion"`
+	Today      PeriodForecastJSON `json:"today"`
+	ThisWeek   PeriodForecastJSON `json:"this_week"`
+	ThisMonth  PeriodForecastJSON `json:"this_month"`
+	Algorithm  string             `json:"algorithm"`
+	Confidence string             `json:"confidence"`
+	Trend      string             `json:"trend"`
+	// Series is the traffic series the forecast (and any limit) measures:
+	// "rx", "tx", or "total". PeriodStart/PeriodEnd bound the accounting
+	// period ("2006-01-02", end exclusive) — the calendar month unless the
+	// server has a billing-cycle anchor configured.
+	Series      string                 `json:"series"`
+	PeriodStart string                 `json:"period_start"`
+	PeriodEnd   string                 `json:"period_end"`
+	Risks       ForecastRisksJSON      `json:"risks"`
+	Exhaustion  ExhaustionForecastJSON `json:"exhaustion"`
 }
 
 // ── Page handler ──────────────────────────────────────────────────────────────
@@ -119,7 +126,7 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Tags:               server.Tags,
 		CredentialStrategy: server.CredentialStrategy,
 	}
-	page.AnalyticsTrafficMonth = h.currentMonthTraffic(r, server.ID)
+	page.AnalyticsTrafficMonth = h.currentPeriodTraffic(r, server)
 	page.AnalyticsLimit = h.limitView(r, server)
 	if kind, msg := limitFlash(r, page); kind != "" {
 		page.FlashKind = kind
@@ -142,22 +149,38 @@ func (h PageHandler) limitView(r *http.Request, server servers.Server) view.Anal
 		UnitInput:   defaultLimitUnit,
 		UnitOptions: limitUnitOptions,
 	}
-	limitBytes, ok, err := h.repo.GetTrafficLimit(r.Context(), server.ID)
+	page := view.NewPageData(h.deps.Config, r)
+	v.KindInput = LimitKindRX
+	limit, ok, err := h.repo.GetTrafficLimit(r.Context(), server.ID)
 	if err == nil && ok {
 		v.HasLimit = true
-		v.LimitHuman = formatBytes(limitBytes)
-		v.ValueInput, v.UnitInput = limitToValueUnit(limitBytes)
+		v.LimitHuman = formatBytes(limit.Bytes)
+		v.ValueInput, v.UnitInput = limitToValueUnit(limit.Bytes)
+		v.KindInput = limit.Kind
+		v.KindLabel = limitKindLabel(page, limit.Kind)
 		return v
 	}
 
 	// No per-server override: surface the inherited group/global cap (if any) so
 	// the operator sees the limit the forecast actually uses.
 	if eff, source, ok, err := h.repo.ResolveEffectiveLimit(r.Context(), server.ID, server.Tags); err == nil && ok {
-		page := view.NewPageData(h.deps.Config, r)
-		v.InheritedHuman = formatBytes(eff)
+		v.InheritedHuman = formatBytes(eff.Bytes)
 		v.InheritedSource = limitSourceLabel(page, source)
 	}
 	return v
+}
+
+// limitKindLabel resolves the localized label for a limit kind (which traffic
+// series the cap measures).
+func limitKindLabel(page view.PageData, kind string) string {
+	switch NormalizeLimitKind(kind) {
+	case LimitKindTX:
+		return page.T("analytics.limit.kind_tx")
+	case LimitKindTotal:
+		return page.T("analytics.limit.kind_total")
+	default:
+		return page.T("analytics.limit.kind_rx")
+	}
 }
 
 // limitSourceLabel turns a repository source token ("global" / "tag:<name>")
@@ -182,18 +205,46 @@ func limitFlash(r *http.Request, page view.PageData) (kind, message string) {
 	}
 }
 
-// currentMonthTraffic reads the server's latest vnstat snapshot and pulls out
-// the current month's download/upload/total. Returns HasData=false (rendered as
-// an empty state) on any error or when the current month is missing, so the
-// page never fails just because traffic hasn't been collected yet.
-func (h PageHandler) currentMonthTraffic(r *http.Request, serverID int64) view.AnalyticsTrafficSummaryView {
-	currentMonth := time.Now().UTC().Format("2006-01")
-	summary := view.AnalyticsTrafficSummaryView{MonthLabel: currentMonth}
+// currentPeriodTraffic reads the server's latest vnstat snapshot and pulls out
+// the current accounting period's download/upload/total. For the default
+// calendar month it uses the authoritative monthly row; for a server with a
+// billing-cycle anchor it sums the daily rows inside the anchored period (which
+// the ~5-week daily retention fully covers). Returns HasData=false on any error
+// or when no data exists yet, so the page never fails just because traffic
+// hasn't been collected.
+func (h PageHandler) currentPeriodTraffic(r *http.Request, server servers.Server) view.AnalyticsTrafficSummaryView {
+	now := time.Now().UTC()
+	summary := view.AnalyticsTrafficSummaryView{MonthLabel: now.Format("2006-01")}
 
-	_, months, err := h.repo.GetLatestTrafficForServer(r.Context(), serverID)
+	days, months, err := h.repo.GetLatestTrafficForServer(r.Context(), server.ID)
 	if err != nil {
 		return summary
 	}
+
+	if server.TrafficResetDay > 1 {
+		start := trafficPeriodStart(now, server.TrafficResetDay)
+		end := start.AddDate(0, 1, 0)
+		summary.MonthLabel = start.Format("2006-01-02") + " → " + end.AddDate(0, 0, -1).Format("2006-01-02")
+		var rx, tx, total int64
+		startLabel := start.Format("2006-01-02")
+		for _, d := range days {
+			if d.Label < startLabel {
+				continue
+			}
+			rx += d.RX
+			tx += d.TX
+			total += seriesDayValue(d, LimitKindTotal)
+		}
+		if rx > 0 || tx > 0 {
+			summary.HasData = true
+			summary.Download = formatBytes(rx)
+			summary.Upload = formatBytes(tx)
+			summary.Total = formatBytes(total)
+		}
+		return summary
+	}
+
+	currentMonth := summary.MonthLabel
 	for _, m := range months {
 		if m.Label != currentMonth {
 			continue
@@ -488,9 +539,9 @@ func (h ForecastHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// "no limit" so the response is identical to a server without a cap. The
 	// effective limit honours the per-server > tag > global precedence so a server
 	// inheriting a group/global cap forecasts against it just like an explicit one.
-	limitBytes, _, _, _ := h.repo.ResolveEffectiveLimit(r.Context(), server.ID, server.Tags)
+	limit, _, _, _ := h.repo.ResolveEffectiveLimit(r.Context(), server.ID, server.Tags)
 
-	out := h.forecastSvc.Compute(days, months, limitBytes)
+	out := h.forecastSvc.ComputeWithConfig(days, months, ForecastConfig{Limit: limit, ResetDay: server.TrafficResetDay})
 	now := time.Now().UTC()
 
 	todayPctElapsed := int((float64(now.Hour()*60+now.Minute()) / float64(24*60)) * 100)
@@ -499,7 +550,7 @@ func (h ForecastHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		weekdayOffset = 7
 	}
 	weekPctElapsed := int((float64(weekdayOffset-1)*24*60 + float64(now.Hour()*60+now.Minute())) / float64(7*24*60) * 100)
-	monthPctElapsed := int((float64(now.Day()-1)*24*60 + float64(now.Hour()*60+now.Minute())) / float64(daysInMonth(now.Year(), now.Month())*24*60) * 100)
+	monthPctElapsed := periodPctElapsed(now, out.PeriodStart, out.PeriodEnd)
 
 	resp := ForecastResponseJSON{
 		Today: PeriodForecastJSON{
@@ -523,9 +574,12 @@ func (h ForecastHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			PredictedHuman: formatBytes(out.ThisMonth.PredictedBytes),
 			PctElapsed:     monthPctElapsed,
 		},
-		Algorithm:  out.Algorithm,
-		Confidence: string(out.Confidence),
-		Trend:      string(out.Trend),
+		Algorithm:   out.Algorithm,
+		Confidence:  string(out.Confidence),
+		Trend:       string(out.Trend),
+		Series:      out.Series,
+		PeriodStart: out.PeriodStart,
+		PeriodEnd:   out.PeriodEnd,
 		Risks: ForecastRisksJSON{
 			Exhaustion:    out.Risks.Exhaustion,
 			TrafficSpike:  out.Risks.TrafficSpike,
@@ -577,7 +631,7 @@ func (h LimitHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		h.renderError(w, r, server, "", defaultLimitUnit, "analytics.limit.error_invalid")
+		h.renderError(w, r, server, "", defaultLimitUnit, LimitKindRX, "analytics.limit.error_invalid")
 		return
 	}
 
@@ -586,11 +640,12 @@ func (h LimitHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !validLimitUnit(unit) {
 		unit = defaultLimitUnit
 	}
+	kind := NormalizeLimitKind(r.FormValue("limit_kind"))
 
 	// Empty value means "clear the limit" — a first-class action, not an error.
 	if rawValue == "" {
 		if err := h.repo.DeleteTrafficLimit(r.Context(), server.ID); err != nil {
-			h.renderError(w, r, server, rawValue, unit, "analytics.limit.error_save")
+			h.renderError(w, r, server, rawValue, unit, kind, "analytics.limit.error_save")
 			return
 		}
 		http.Redirect(w, r, fmt.Sprintf("/servers/%d/analytics?flash=limit-cleared", server.ID), http.StatusSeeOther)
@@ -599,12 +654,12 @@ func (h LimitHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	limitBytes, ok := parseLimitBytes(rawValue, unit)
 	if !ok {
-		h.renderError(w, r, server, rawValue, unit, "analytics.limit.error_positive")
+		h.renderError(w, r, server, rawValue, unit, kind, "analytics.limit.error_positive")
 		return
 	}
 
-	if err := h.repo.SetTrafficLimit(r.Context(), server.ID, limitBytes); err != nil {
-		h.renderError(w, r, server, rawValue, unit, "analytics.limit.error_save")
+	if err := h.repo.SetTrafficLimit(r.Context(), server.ID, TrafficLimit{Bytes: limitBytes, Kind: kind}); err != nil {
+		h.renderError(w, r, server, rawValue, unit, kind, "analytics.limit.error_save")
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/servers/%d/analytics?flash=limit-saved", server.ID), http.StatusSeeOther)
@@ -612,7 +667,7 @@ func (h LimitHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // renderError re-renders the analytics page with the limit form showing an
 // inline validation error and the user's rejected input preserved.
-func (h LimitHandler) renderError(w http.ResponseWriter, r *http.Request, server servers.Server, value, unit, errKey string) {
+func (h LimitHandler) renderError(w http.ResponseWriter, r *http.Request, server servers.Server, value, unit, kind, errKey string) {
 	page := view.NewPageData(h.deps.Config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
 	page.Title = page.T("nav.analytics")
@@ -636,10 +691,11 @@ func (h LimitHandler) renderError(w http.ResponseWriter, r *http.Request, server
 	}
 
 	pageHandler := PageHandler{deps: h.deps, serverRepo: h.serverRepo, repo: h.repo}
-	page.AnalyticsTrafficMonth = pageHandler.currentMonthTraffic(r, server.ID)
+	page.AnalyticsTrafficMonth = pageHandler.currentPeriodTraffic(r, server)
 	limitView := pageHandler.limitView(r, server)
 	limitView.ValueInput = value
 	limitView.UnitInput = unit
+	limitView.KindInput = NormalizeLimitKind(kind)
 	limitView.Error = page.T(errKey)
 	page.AnalyticsLimit = limitView
 	page.FlashKind = "error"
@@ -650,6 +706,24 @@ func (h LimitHandler) renderError(w http.ResponseWriter, r *http.Request, server
 	if err := h.deps.Renderer.Render(w, http.StatusUnprocessableEntity, page); err != nil {
 		http.Error(w, "render analytics page", http.StatusInternalServerError)
 	}
+}
+
+// periodPctElapsed returns how far (0-100) now sits inside the accounting
+// period bounded by start/end ("2006-01-02"). Falls back to 0 on parse issues.
+func periodPctElapsed(now time.Time, start, end string) int {
+	s, err1 := time.Parse("2006-01-02", start)
+	e, err2 := time.Parse("2006-01-02", end)
+	if err1 != nil || err2 != nil || !e.After(s) {
+		return 0
+	}
+	pct := int(float64(now.Sub(s)) / float64(e.Sub(s)) * 100)
+	if pct < 0 {
+		return 0
+	}
+	if pct > 100 {
+		return 100
+	}
+	return pct
 }
 
 func validLimitUnit(unit string) bool {

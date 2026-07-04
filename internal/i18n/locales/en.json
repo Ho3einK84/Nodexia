@@ -970,5 +970,15 @@
   "js.terminal.ctx_select_all": "Select all",
   "js.terminal.ctx_search": "Search",
   "js.terminal.ctx_clear": "Clear terminal",
-  "js.back_to_top": "Back to top"
+  "js.back_to_top": "Back to top",
+  "servers.form.traffic_reset_day": "Traffic reset day",
+  "servers.form.traffic_reset_day_hint": "Day of the month your provider resets the traffic quota (1 = calendar month). Analytics, forecasts, and limit alerts follow this period.",
+  "analytics.limit.kind_label": "Applies to",
+  "analytics.limit.kind_rx": "Download (RX)",
+  "analytics.limit.kind_tx": "Upload (TX)",
+  "analytics.limit.kind_total": "Total (RX+TX)",
+  "analytics.limit.current_kind": "Cap: {value} · {kind}",
+  "js.analytics.upload_scope": "Upload",
+  "js.analytics.total_scope": "Total",
+  "js.analytics.period_range": "Period {start} → {end}"
 }
