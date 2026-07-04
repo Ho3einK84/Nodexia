@@ -60,6 +60,7 @@ func (h DiagnosticsHandler) renderPage(w http.ResponseWriter, r *http.Request, s
 		}
 		return "/ops/diagnostics?sch_page=" + strconv.Itoa(p)
 	})
+	page.SchedulerOverview.RecentRuns = schedulerRunViews(h.scheduler.RecentRuns(r.Context(), 20))
 
 	if err := h.renderer.Render(w, status, page); err != nil {
 		http.Error(w, "render diagnostics page", http.StatusInternalServerError)
@@ -83,6 +84,31 @@ func (h DiagnosticsHandler) SchedulerToggle(w http.ResponseWriter, r *http.Reque
 	}
 
 	http.Redirect(w, r, "/ops/diagnostics", http.StatusSeeOther)
+}
+
+// schedulerRunViews converts persisted job runs into display rows. A failed
+// run's detail is its error; a successful run shows its message.
+func schedulerRunViews(runs []scheduler.JobRun) []view.SchedulerRunView {
+	out := make([]view.SchedulerRunView, 0, len(runs))
+	for _, run := range runs {
+		name := run.ServerName
+		if name == "" {
+			name = "#" + strconv.FormatInt(run.ServerID, 10)
+		}
+		detail := run.Message
+		if !run.Success {
+			detail = run.Error
+		}
+		out = append(out, view.SchedulerRunView{
+			ServerName: name,
+			JobType:    string(run.JobType),
+			Success:    run.Success,
+			StartedAt:  monitoringFormatTimestamp(run.StartedAt),
+			Duration:   formatDuration(run.Duration),
+			Detail:     detail,
+		})
+	}
+	return out
 }
 
 func (h DiagnosticsHandler) buildDiagnostics(r *http.Request) view.DiagnosticsView {
