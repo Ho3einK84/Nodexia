@@ -89,6 +89,10 @@ type SecurityConfig struct {
 	SSHKnownHostsPath   string
 	AdminUsername       string
 	AdminPassword       string
+	// MetricsToken enables GET /metrics (Prometheus text format) when set:
+	// scrapers must present it as a Bearer token or ?token=. Empty (the
+	// default) keeps the endpoint disabled — it returns 404.
+	MetricsToken string
 }
 
 type DatabaseConfig struct {
@@ -177,6 +181,7 @@ func Load(version string) (Config, error) {
 			SSHKnownHostsPath:   envOrDefault("NODEXIA_SSH_KNOWN_HOSTS_PATH", filepath.Join("data", "ssh_known_hosts.json")),
 			AdminUsername:       strings.TrimSpace(os.Getenv("NODEXIA_AUTH_USERNAME")),
 			AdminPassword:       strings.TrimSpace(os.Getenv("NODEXIA_AUTH_PASSWORD")),
+			MetricsToken:        strings.TrimSpace(os.Getenv("NODEXIA_METRICS_TOKEN")),
 		},
 		Database: DatabaseConfig{
 			Driver:          strings.ToLower(envOrDefault("NODEXIA_DB_DRIVER", DriverSQLite)),

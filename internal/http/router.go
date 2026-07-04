@@ -78,6 +78,10 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 	mux.HandleFunc("GET /healthz/live", health.Live)
 	mux.HandleFunc("GET /healthz/ready", health.Ready)
 
+	// Prometheus-style metrics: token-gated in the handler and 404 when no
+	// token is configured. Bypasses cookie auth (scrapers have no session).
+	mux.Handle("GET /metrics", handlers.NewMetricsHandler(cfg, database, backgroundScheduler))
+
 	// Language switcher: persists an explicit locale choice and redirects back.
 	localeBundle := i18n.MustDefault()
 	mux.Handle("GET /lang/{code}", handlers.NewLangHandler(localeBundle, cfg.Security.SessionCookieSecure))
