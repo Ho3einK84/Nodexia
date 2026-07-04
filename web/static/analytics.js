@@ -358,10 +358,14 @@
     const confidenceHTML = renderConfidence(f.confidence);
     const risksHTML = renderRisks(f.risks);
 
+    // The forecast follows the limited series (download by default); an anchored
+    // billing period annotates the month card with its actual date range.
+    const scope = seriesScopeLabel(f.series);
+    const periodNote = anchoredPeriodNote(f.period_start, f.period_end);
     grid.innerHTML = `
-      ${renderPeriodCard(T('js.analytics.today'), f.today, f.today.pct_elapsed)}
-      ${renderPeriodCard(T('js.analytics.this_week'), f.this_week, f.this_week.pct_elapsed)}
-      ${renderPeriodCard(T('js.analytics.this_month'), f.this_month, f.this_month.pct_elapsed)}
+      ${renderPeriodCard(T('js.analytics.today'), f.today, f.today.pct_elapsed, scope, '')}
+      ${renderPeriodCard(T('js.analytics.this_week'), f.this_week, f.this_week.pct_elapsed, scope, '')}
+      ${renderPeriodCard(T('js.analytics.this_month'), f.this_month, f.this_month.pct_elapsed, scope, periodNote)}
     `;
 
     // Show metadata below grid
@@ -390,13 +394,30 @@
     if (window.lucide) lucide.createIcons();
   }
 
-  function renderPeriodCard(label, period, pct) {
+  // seriesScopeLabel maps the forecast series onto its badge label. The series
+  // follows the configured limit kind; download is the default.
+  function seriesScopeLabel(series) {
+    if (series === 'tx') return T('js.analytics.upload_scope');
+    if (series === 'total') return T('js.analytics.total_scope');
+    return T('js.analytics.download_scope');
+  }
+
+  // anchoredPeriodNote renders the billing-period date range, but only when the
+  // period is anchored off the calendar month (start day != 1) — the default
+  // calendar month needs no explanation.
+  function anchoredPeriodNote(start, end) {
+    if (!start || !end || start.slice(-2) === '01') return '';
+    const endInclusive = end; // exclusive bound; show as-is to stay unambiguous
+    return T('js.analytics.period_range', { start: start, end: endInclusive });
+  }
+
+  function renderPeriodCard(label, period, pct, scopeLabel, periodNote) {
     const progressClass = pct > 90 ? 'forecast-progress__bar--danger'
       : pct > 70 ? 'forecast-progress__bar--warn'
       : '';
     return `
       <div class="forecast-card">
-        <div class="forecast-card__label">${label} <span class="forecast-card__scope">${T('js.analytics.download_scope')}</span></div>
+        <div class="forecast-card__label">${label} <span class="forecast-card__scope">${scopeLabel}</span></div>
         <div class="forecast-card__current">${period.current_human}</div>
         <div class="forecast-card__predicted">
           ${T('js.analytics.predicted_end')} <strong>${period.predicted_human}</strong>
@@ -404,7 +425,7 @@
         <div class="forecast-progress">
           <div class="forecast-progress__bar ${progressClass}" style="width:${Math.min(100, pct)}%"></div>
         </div>
-        <div class="forecast-progress__label">${T('js.analytics.period_elapsed', { pct: pct })}</div>
+        <div class="forecast-progress__label">${T('js.analytics.period_elapsed', { pct: pct })}${periodNote ? ` · ${periodNote}` : ''}</div>
       </div>
     `;
   }

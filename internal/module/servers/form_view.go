@@ -11,6 +11,7 @@ type ServerFormViewData struct {
 	Note               string
 	CredentialStrategy string
 	CredentialRef      string
+	TrafficResetDay    string
 	Errors             map[string]string
 	Action             string
 	DeleteAction       string
@@ -27,6 +28,7 @@ func NewFormViewData(input FormInput, errors ValidationErrors) ServerFormViewDat
 		Note:               input.Note,
 		CredentialStrategy: input.CredentialStrategy,
 		CredentialRef:      input.CredentialRef,
+		TrafficResetDay:    input.TrafficResetDay,
 		Errors:             errors,
 		Action:             "/servers",
 	}
@@ -45,6 +47,7 @@ func EditFormViewData(server Server, errors ValidationErrors) ServerFormViewData
 		Note:               input.Note,
 		CredentialStrategy: input.CredentialStrategy,
 		CredentialRef:      input.CredentialRef,
+		TrafficResetDay:    input.TrafficResetDay,
 		Errors:             errors,
 		Action:             "/servers/" + formatID(server.ID) + "/edit",
 		DeleteAction:       "/servers/" + formatID(server.ID) + "/delete",

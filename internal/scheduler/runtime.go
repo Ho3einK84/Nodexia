@@ -639,17 +639,23 @@ func (r *Runtime) evaluateAlerts(ctx context.Context, server servers.Server, sna
 		Load5:            snapshot.LoadAverage5,
 		Load15:           snapshot.LoadAverage15,
 		TrafficAvailable: trafficAvailable,
-		TrafficTotalGiB:  currentMonthTotalGiB(traffic),
+		TrafficTotalGiB:  currentPeriodTotalGiB(traffic, time.Now().UTC(), server.TrafficResetDay),
 		PeakMbps:         traffic.PeakMbps,
 		AvgMbps:          traffic.AvgMbps,
 	}
 
-	// Layer in the forecast-derived predictive metrics. These reuse the daily/
-	// monthly rows already in hand from the traffic collection above (no extra
-	// SSH) plus a single indexed limit lookup, so the only added cost for a server
-	// without a limit is that cheap SELECT — and the metrics stay unavailable.
-	metrics.ForecastAvailable, metrics.ProjectedExceedsLimit, metrics.DaysToExhaustion =
-		r.forecastMetrics(ctx, server, traffic, trafficAvailable)
+	// Layer in the forecast-derived metrics. These reuse the daily/monthly rows
+	// already in hand from the traffic collection above (no extra SSH) plus a
+	// single indexed limit lookup, so the only added cost for a server without a
+	// limit is that cheap SELECT. Predictive metrics stay unavailable without a
+	// limit; the anomaly metrics need only history.
+	fm := r.forecastMetrics(ctx, server, traffic, trafficAvailable)
+	metrics.ForecastAvailable = fm.PredictiveAvailable
+	metrics.ProjectedExceedsLimit = fm.ProjectedOver
+	metrics.DaysToExhaustion = fm.DaysToExhaustion
+	metrics.AnomalyAvailable = fm.AnomalyAvailable
+	metrics.TrafficSpike = fm.TrafficSpike
+	metrics.UnusualGrowth = fm.UnusualGrowth
 
 	if err := r.evaluator.Evaluate(ctx, alerts.Target{ID: server.ID, Name: server.Name}, metrics); err != nil {
 		slog.Warn("alert evaluation failed",
@@ -677,10 +683,29 @@ func (r *Runtime) evaluateUnreachable(ctx context.Context, server servers.Server
 
 const bytesPerGiB = 1024 * 1024 * 1024
 
-// currentMonthTotalGiB returns the current calendar month's total traffic in
-// GiB from the vnStat monthly rows, or 0 when the row is absent.
-func currentMonthTotalGiB(traffic monitoring.TrafficSnapshot) float64 {
-	label := time.Now().UTC().Format("2006-01")
+// currentPeriodTotalGiB returns the current accounting period's total traffic
+// in GiB. For the default calendar month it reads the authoritative vnStat
+// monthly row; for a server with a billing-cycle anchor it sums the daily rows
+// inside the anchored period (fully covered by the ~5-week daily retention).
+// Returns 0 when no data exists yet.
+func currentPeriodTotalGiB(traffic monitoring.TrafficSnapshot, now time.Time, resetDay int) float64 {
+	if resetDay > 1 {
+		startLabel := analytics.TrafficPeriodStart(now, resetDay).Format("2006-01-02")
+		var total int64
+		for _, row := range traffic.DailyRows {
+			if row.Label < startLabel {
+				continue
+			}
+			rowTotal := row.TotalBytes
+			if rowTotal == 0 {
+				rowTotal = row.RXBytes + row.TXBytes
+			}
+			total += rowTotal
+		}
+		return float64(total) / bytesPerGiB
+	}
+
+	label := now.Format("2006-01")
 	for _, row := range traffic.MonthlyRows {
 		if row.Label == label {
 			return float64(row.TotalBytes) / bytesPerGiB
@@ -689,41 +714,62 @@ func currentMonthTotalGiB(traffic monitoring.TrafficSnapshot) float64 {
 	return 0
 }
 
-// forecastMetrics derives the predictive alert metrics for a server from the
-// freshly collected traffic snapshot. It returns available=false (the metrics
-// are then skipped by the evaluator) whenever the forecast cannot be trusted:
-// no forecast service, traffic unavailable this cycle, no monthly limit
-// configured, or no daily history to project from. When available, it reuses the
-// SAME analytics.ForecastService the analytics page uses, so the alert and the
-// page can never disagree on the projection.
-//
-// days is 0 when already over, the projected days-remaining when on track to
-// exhaust, and alerts.DaysToExhaustionSafe when not projected to exhaust this
-// month (so a "≤ N days" rule resolves rather than getting stuck).
-func (r *Runtime) forecastMetrics(ctx context.Context, server servers.Server, traffic monitoring.TrafficSnapshot, trafficAvailable bool) (available, projectedOver bool, days float64) {
-	if r.forecastSvc == nil || r.analyticsRepo == nil || !trafficAvailable {
-		return false, false, 0
-	}
+// forecastAlertMetrics carries every forecast-derived alert input for one
+// server: the predictive limit metrics (gated on a configured limit) and the
+// anomaly metrics (gated only on having traffic history this cycle).
+type forecastAlertMetrics struct {
+	PredictiveAvailable bool
+	ProjectedOver       bool
+	DaysToExhaustion    float64
+	AnomalyAvailable    bool
+	TrafficSpike        bool
+	UnusualGrowth       bool
+}
 
-	// Resolve the effective cap (per-server > smallest tag > global default), so a
-	// server with no per-server limit still gets predictive alerts when a group or
-	// global cap applies.
-	limitBytes, _, ok, err := r.analyticsRepo.ResolveEffectiveLimit(ctx, server.ID, server.Tags)
-	if err != nil || !ok || limitBytes <= 0 {
-		// No limit configured at any level (the common case): predictive metrics are
-		// unavailable so servers without a limit never trigger them.
-		return false, false, 0
+// forecastMetrics derives the forecast-based alert metrics for a server from
+// the freshly collected traffic snapshot. Everything is unavailable (and thus
+// skipped by the evaluator) when the forecast cannot be trusted: no forecast
+// service, traffic unavailable this cycle, or no daily history. The predictive
+// limit metrics additionally require an effective limit; the anomaly metrics
+// (traffic spike / unusual growth) need only the history. It reuses the SAME
+// analytics.ForecastService the analytics page uses — honouring the server's
+// billing-cycle anchor and the limit's series kind — so the alert and the page
+// can never disagree on the projection.
+//
+// DaysToExhaustion is 0 when already over, the projected days-remaining when on
+// track to exhaust, and alerts.DaysToExhaustionSafe when not projected to
+// exhaust this period (so a "≤ N days" rule resolves rather than getting stuck).
+func (r *Runtime) forecastMetrics(ctx context.Context, server servers.Server, traffic monitoring.TrafficSnapshot, trafficAvailable bool) forecastAlertMetrics {
+	if r.forecastSvc == nil || r.analyticsRepo == nil || !trafficAvailable {
+		return forecastAlertMetrics{}
 	}
 
 	days30 := toAnalyticsDays(traffic.DailyRows)
 	if len(days30) == 0 {
-		// A limit is set but there is no history yet to forecast against.
-		return false, false, 0
+		return forecastAlertMetrics{}
 	}
 
-	out := r.forecastSvc.Compute(days30, toAnalyticsMonths(traffic.MonthlyRows), limitBytes)
-	available, projectedOver, days = forecastAlertValues(out)
-	return available, projectedOver, days
+	// Resolve the effective cap (per-server > smallest tag > global default), so a
+	// server with no per-server limit still gets predictive alerts when a group or
+	// global cap applies. A missing limit only disables the predictive metrics —
+	// the anomaly metrics work without one.
+	limit, _, ok, err := r.analyticsRepo.ResolveEffectiveLimit(ctx, server.ID, server.Tags)
+	if err != nil || !ok || limit.Bytes <= 0 {
+		limit = analytics.TrafficLimit{}
+	}
+
+	out := r.forecastSvc.ComputeWithConfig(days30, toAnalyticsMonths(traffic.MonthlyRows), analytics.ForecastConfig{
+		Limit:    limit,
+		ResetDay: server.TrafficResetDay,
+	})
+
+	metrics := forecastAlertMetrics{
+		AnomalyAvailable: true,
+		TrafficSpike:     out.Risks.TrafficSpike,
+		UnusualGrowth:    out.Risks.UnusualGrowth,
+	}
+	metrics.PredictiveAvailable, metrics.ProjectedOver, metrics.DaysToExhaustion = forecastAlertValues(out)
+	return metrics
 }
 
 // forecastAlertValues maps a forecast output onto the predictive metric values.

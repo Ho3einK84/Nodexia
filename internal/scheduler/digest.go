@@ -152,11 +152,11 @@ func (r *Runtime) serverForecast(ctx context.Context, server servers.Server) ana
 	if err != nil || len(days) == 0 {
 		return analytics.ForecastOutput{}
 	}
-	limitBytes, _, ok, err := r.analyticsRepo.ResolveEffectiveLimit(ctx, server.ID, server.Tags)
+	limit, _, ok, err := r.analyticsRepo.ResolveEffectiveLimit(ctx, server.ID, server.Tags)
 	if err != nil || !ok {
-		limitBytes = 0
+		limit = analytics.TrafficLimit{}
 	}
-	return r.forecastSvc.Compute(days, months, limitBytes)
+	return r.forecastSvc.ComputeWithConfig(days, months, analytics.ForecastConfig{Limit: limit, ResetDay: server.TrafficResetDay})
 }
 
 // digestServerLine formats one server's digest row from its traffic summary,

@@ -244,6 +244,7 @@ type ServerFormView struct {
 	Note               string
 	CredentialStrategy string
 	CredentialRef      string
+	TrafficResetDay    string
 	Errors             map[string]string
 }
 
@@ -1007,7 +1008,11 @@ type AnalyticsLimitView struct {
 	ValueInput  string
 	UnitInput   string
 	UnitOptions []string
-	Error       string
+	// KindInput is the selected limit kind ("rx"/"tx"/"total"); KindLabel is its
+	// localized label shown next to the current cap.
+	KindInput string
+	KindLabel string
+	Error     string
 	// Inherited describes a group/global cap that applies when this server has no
 	// per-server limit of its own. InheritedHuman is the effective cap and
 	// InheritedSource is a human-readable origin ("global default" / tag "x").

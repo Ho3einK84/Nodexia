@@ -56,6 +56,7 @@ type FormInput struct {
 	Note               string
 	CredentialStrategy string
 	CredentialRef      string
+	TrafficResetDay    string
 }
 
 type ValidatedForm struct {
@@ -90,6 +91,8 @@ func ValidateForm(input FormInput) (ValidatedForm, ValidationErrors) {
 	port := parsePort(strings.TrimSpace(input.Port), errors)
 	server.Port = port
 
+	server.TrafficResetDay = parseTrafficResetDay(strings.TrimSpace(input.TrafficResetDay), errors)
+
 	validateName(server.Name, errors)
 	validateHost(server.Host, errors)
 	validateAuthMode(server.AuthMode, errors)
@@ -114,6 +117,7 @@ func ValidateForm(input FormInput) (ValidatedForm, ValidationErrors) {
 			Note:               server.Note,
 			CredentialStrategy: server.CredentialStrategy,
 			CredentialRef:      server.CredentialRef,
+			TrafficResetDay:    strconv.Itoa(server.TrafficResetDay),
 		},
 	}, errors
 }
@@ -123,10 +127,15 @@ func DefaultFormInput() FormInput {
 		Port:               "22",
 		AuthMode:           AuthModeHybrid,
 		CredentialStrategy: CredentialStrategyStored,
+		TrafficResetDay:    "1",
 	}
 }
 
 func FormInputFromServer(server Server) FormInput {
+	resetDay := server.TrafficResetDay
+	if resetDay < 1 || resetDay > 28 {
+		resetDay = 1
+	}
 	return FormInput{
 		Name:               server.Name,
 		Host:               server.Host,
@@ -137,6 +146,7 @@ func FormInputFromServer(server Server) FormInput {
 		Note:               server.Note,
 		CredentialStrategy: server.CredentialStrategy,
 		CredentialRef:      server.CredentialRef,
+		TrafficResetDay:    strconv.Itoa(resetDay),
 	}
 }
 
@@ -157,6 +167,23 @@ func parsePort(value string, errors ValidationErrors) int {
 	}
 
 	return port
+}
+
+// parseTrafficResetDay validates the billing-cycle anchor day. Empty means the
+// default (1 = calendar month). Days 29-31 are rejected so the period start
+// exists in every month.
+func parseTrafficResetDay(value string, errors ValidationErrors) int {
+	if value == "" {
+		return 1
+	}
+
+	day, err := strconv.Atoi(value)
+	if err != nil || day < 1 || day > 28 {
+		errors.Add("traffic_reset_day", "Traffic reset day must be a number between 1 and 28.")
+		return 1
+	}
+
+	return day
 }
 
 func validateName(value string, errors ValidationErrors) {

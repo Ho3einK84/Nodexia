@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -102,6 +103,34 @@ const (
 	LimitScopeTag    = "tag"
 )
 
+// Limit kinds select which traffic series a cap measures. RX (download) is the
+// historical behaviour and the default; group/global caps are always RX.
+const (
+	LimitKindRX    = "rx"
+	LimitKindTX    = "tx"
+	LimitKindTotal = "total"
+)
+
+// NormalizeLimitKind maps arbitrary input onto a supported limit kind,
+// defaulting to RX (download) — the safe, historical semantics.
+func NormalizeLimitKind(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case LimitKindTX:
+		return LimitKindTX
+	case LimitKindTotal:
+		return LimitKindTotal
+	default:
+		return LimitKindRX
+	}
+}
+
+// TrafficLimit is a resolved traffic cap: how many bytes per accounting period,
+// measured over which series.
+type TrafficLimit struct {
+	Bytes int64
+	Kind  string // LimitKindRX / LimitKindTX / LimitKindTotal
+}
+
 // ScopedLimit is one global/tag monthly download (RX) cap rule.
 type ScopedLimit struct {
 	Scope      string // LimitScopeGlobal or LimitScopeTag
@@ -120,23 +149,25 @@ type Repository interface {
 	InsertDailyRollup(ctx context.Context, serverID int64, r DailyRollup) error
 	ListServerIDs(ctx context.Context) ([]int64, error)
 	GetLatestTrafficForServer(ctx context.Context, serverID int64) ([]TrafficDay, []TrafficMonth, error)
-	// GetTrafficLimit returns the configured monthly download (RX) limit in bytes
-	// for a server. ok is false when no limit is configured (the common case),
-	// which callers must treat as "unlimited" — never as a zero limit.
-	GetTrafficLimit(ctx context.Context, serverID int64) (limitBytes int64, ok bool, err error)
-	// SetTrafficLimit upserts a server's monthly download (RX) limit. The caller
-	// is responsible for rejecting non-positive values before calling.
-	SetTrafficLimit(ctx context.Context, serverID, limitBytes int64) error
+	// GetTrafficLimit returns the configured monthly traffic limit for a server
+	// (bytes + the series it meters). ok is false when no limit is configured
+	// (the common case), which callers must treat as "unlimited" — never as a
+	// zero limit.
+	GetTrafficLimit(ctx context.Context, serverID int64) (limit TrafficLimit, ok bool, err error)
+	// SetTrafficLimit upserts a server's monthly traffic limit. The caller is
+	// responsible for rejecting non-positive values before calling; the kind is
+	// normalised to rx/tx/total.
+	SetTrafficLimit(ctx context.Context, serverID int64, limit TrafficLimit) error
 	// DeleteTrafficLimit clears a server's limit (back to "unlimited"). Removing a
 	// non-existent limit is a no-op, not an error.
 	DeleteTrafficLimit(ctx context.Context, serverID int64) error
-	// ResolveEffectiveLimit returns the monthly download (RX) cap that actually
-	// applies to a server, honouring precedence: the server's own per-server limit
-	// wins; otherwise the SMALLEST tag cap among the server's tags; otherwise the
-	// fleet-wide global default. ok is false (unlimited) when none is configured.
-	// source identifies where the limit came from: "server", "tag:<name>", or
-	// "global" — for display only.
-	ResolveEffectiveLimit(ctx context.Context, serverID int64, tags []string) (limitBytes int64, source string, ok bool, err error)
+	// ResolveEffectiveLimit returns the monthly traffic cap that actually applies
+	// to a server, honouring precedence: the server's own per-server limit wins;
+	// otherwise the SMALLEST tag cap among the server's tags; otherwise the
+	// fleet-wide global default. Inherited (tag/global) caps are always RX. ok is
+	// false (unlimited) when none is configured. source identifies where the
+	// limit came from: "server", "tag:<name>", or "global" — for display only.
+	ResolveEffectiveLimit(ctx context.Context, serverID int64, tags []string) (limit TrafficLimit, source string, ok bool, err error)
 	// ListScopedLimits returns every global/tag limit rule, for the admin page.
 	ListScopedLimits(ctx context.Context) ([]ScopedLimit, error)
 	// GetScopedLimit reads one scope/ref limit rule (ok=false when absent).

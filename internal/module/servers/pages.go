@@ -400,6 +400,7 @@ func renderFormPage(
 		Note:               form.Note,
 		CredentialStrategy: form.CredentialStrategy,
 		CredentialRef:      form.CredentialRef,
+		TrafficResetDay:    form.TrafficResetDay,
 		Errors:             form.Errors,
 	}
 	page.FlashKind = flashKind

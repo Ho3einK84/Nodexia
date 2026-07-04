@@ -55,6 +55,17 @@ const (
 	MetricProjectedExceedLimit = "projected_exceed_limit"
 	MetricDaysToExhaustion     = "days_to_exhaustion"
 
+	// Anomaly (forecast-derived) metrics. Boolean (0/1) flags computed by the
+	// same forecast the analytics page shows, normalised to "≥ 1" in validation.
+	// Unlike the predictive limit metrics they need NO configured limit — only
+	// traffic history this cycle — so they are gated on AnomalyAvailable.
+	//
+	// MetricTrafficSpike is 1 when today's predicted rate is at least twice the
+	// historical daily average. MetricUnusualGrowth is 1 when the projected
+	// period total exceeds the previous 30 completed days by more than 50%.
+	MetricTrafficSpike  = "traffic_spike"
+	MetricUnusualGrowth = "unusual_growth"
+
 	// MetricAll is only valid for silences: it mutes every metric for a server.
 	MetricAll = "all"
 )
@@ -111,6 +122,8 @@ var ruleMetrics = []string{
 	MetricBandwidth,
 	MetricProjectedExceedLimit,
 	MetricDaysToExhaustion,
+	MetricTrafficSpike,
+	MetricUnusualGrowth,
 }
 
 var metricLabels = map[string]string{
@@ -126,6 +139,8 @@ var metricLabels = map[string]string{
 	MetricBandwidth:            "Download bandwidth",
 	MetricProjectedExceedLimit: "Projected to exceed monthly limit",
 	MetricDaysToExhaustion:     "Days until monthly limit reached",
+	MetricTrafficSpike:         "Traffic spike (2x daily average)",
+	MetricUnusualGrowth:        "Unusual traffic growth (>50% vs last 30 days)",
 	MetricAll:                  "All metrics",
 }
 
@@ -147,6 +162,17 @@ var metricUnits = map[string]string{
 func IsPredictiveMetric(metric string) bool {
 	switch metric {
 	case MetricProjectedExceedLimit, MetricDaysToExhaustion:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsAnomalyMetric reports whether a metric is a forecast-derived anomaly flag,
+// gated only on traffic history (no configured limit required).
+func IsAnomalyMetric(metric string) bool {
+	switch metric {
+	case MetricTrafficSpike, MetricUnusualGrowth:
 		return true
 	default:
 		return false

@@ -60,7 +60,9 @@ type ExhaustionForecast struct {
 	ProjectedMonth    int64  // projected month-end RX (same value as ThisMonth.PredictedBytes)
 }
 
-// ForecastOutput is the complete forecast for a server.
+// ForecastOutput is the complete forecast for a server. ThisMonth covers the
+// current ACCOUNTING period: the calendar month by default, or the anchored
+// billing period when the server has a traffic reset day configured.
 type ForecastOutput struct {
 	Today      ForecastResult
 	ThisWeek   ForecastResult
@@ -70,6 +72,25 @@ type ForecastOutput struct {
 	Trend      Trend
 	Risks      ForecastRisks
 	Exhaustion ExhaustionForecast
+	// Series is the traffic series the forecast ran on: "rx" (default), "tx",
+	// or "total" — it follows the configured limit kind.
+	Series string
+	// PeriodStart / PeriodEnd bound the current accounting period ("2006-01-02"
+	// UTC, end exclusive). For a calendar month these are the first days of this
+	// and next month; with a reset day they are anchored to that day.
+	PeriodStart string
+	PeriodEnd   string
+}
+
+// ForecastConfig carries the per-server settings that shape a forecast.
+type ForecastConfig struct {
+	// Limit is the effective traffic cap (Bytes <= 0 means no limit) and the
+	// series it meters. History, projections, and exhaustion all follow
+	// Limit.Kind so the cap is always compared against the series it measures.
+	Limit TrafficLimit
+	// ResetDay anchors the accounting period: <= 1 is the calendar month
+	// (default), 2–28 anchors the period to that day of the month.
+	ResetDay int
 }
 
 // ForecastProvider is the interface for a bandwidth forecasting algorithm.
@@ -279,28 +300,38 @@ func NewForecastService() *ForecastService {
 	}
 }
 
-// Compute builds a full forecast from traffic history. limitBytes is the
-// optional monthly DOWNLOAD (RX) cap for the server; pass 0 (or any non-positive
-// value) when no limit is configured, in which case exhaustion is never flagged
-// and the behaviour is identical to a server without a limit.
+// Compute builds a full forecast from traffic history against the default
+// calendar-month RX series. limitBytes is the optional monthly DOWNLOAD (RX)
+// cap; pass 0 (or any non-positive value) when no limit is configured.
+// Callers with a billing-cycle anchor or a non-RX limit use ComputeWithConfig.
 func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth, limitBytes int64) ForecastOutput {
+	return s.ComputeWithConfig(days, months, ForecastConfig{Limit: TrafficLimit{Bytes: limitBytes, Kind: LimitKindRX}})
+}
+
+// ComputeWithConfig builds a full forecast from traffic history. The forecast
+// series follows cfg.Limit.Kind (download by default) and the "this month"
+// projection covers the accounting period anchored by cfg.ResetDay, so a
+// provider that resets quota mid-month is projected against the right window.
+func (s *ForecastService) ComputeWithConfig(days []TrafficDay, months []TrafficMonth, cfg ForecastConfig) ForecastOutput {
+	kind := NormalizeLimitKind(cfg.Limit.Kind)
 	if len(days) == 0 {
 		return ForecastOutput{
 			Algorithm:  "MovingAverage",
 			Confidence: ConfidenceLow,
 			Trend:      TrendStable,
+			Series:     kind,
 		}
 	}
 
-	// Sort days chronologically and extract download (RX) bytes. The forecast is
-	// based on DOWNLOAD traffic only — not the combined RX+TX total.
+	// Sort days chronologically and extract the forecast series (download by
+	// default; upload or the combined total when the limit meters those).
 	sorted := make([]TrafficDay, len(days))
 	copy(sorted, days)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Label < sorted[j].Label })
 
 	history := make([]int64, len(sorted))
 	for i, d := range sorted {
-		history[i] = d.RX
+		history[i] = seriesDayValue(d, kind)
 	}
 
 	// Select provider: a day-of-week seasonal model once we have enough weeks of
@@ -311,14 +342,14 @@ func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth, limi
 	// predictDay returns the predicted full-day bytes for a specific FUTURE date.
 	// Seasonal providers refine it by weekday; every other provider returns the
 	// flat dayPrediction for all dates, so non-seasonal behaviour is unchanged.
-	predictDay := s.dayPredictor(provider, sorted, dayPrediction)
+	predictDay := s.dayPredictor(provider, sorted, kind, dayPrediction)
 
 	now := time.Now().UTC()
 	trend := computeTrend(history)
 
 	// Today: sum bytes already accumulated today + predict the remainder, using
 	// today's own (weekday-aware) full-day estimate.
-	todayCurrent := currentDayBytes(sorted, now)
+	todayCurrent := currentDayBytes(sorted, now, kind)
 	todayPctElapsed := float64(now.Hour()*60+now.Minute()) / float64(24*60)
 	todayRemaining := float64(predictDay(now)) * (1 - todayPctElapsed)
 	todayPredicted := todayCurrent + int64(todayRemaining)
@@ -331,51 +362,123 @@ func (s *ForecastService) Compute(days []TrafficDay, months []TrafficMonth, limi
 	}
 	weekdayOffset-- // Monday=0
 	weekStart := now.AddDate(0, 0, -weekdayOffset)
-	weekCurrent := sumDaysSince(sorted, weekStart)
+	weekCurrent := sumDaysSince(sorted, weekStart, kind)
 	remainingWeekDays := 7 - weekdayOffset - 1 // full days left after today
 	weekPredicted := weekCurrent + int64(todayRemaining) + sumFutureDays(predictDay, now, remainingWeekDays)
 
-	// This month: use the authoritative current-month download (RX) from the
-	// monthly vnstat row — the SAME value the Analytics Overview shows. The stored
-	// daily history is capped (~5 weeks) and can straddle a month boundary, so
-	// summing daily rows would mis-count the month-to-date; the monthly row is the
-	// single source of truth. Fall back to the daily sum only when no monthly row
-	// exists.
-	monthCurrent := currentMonthRX(months, now)
-	if monthCurrent == 0 {
-		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-		monthCurrent = sumDaysSince(sorted, monthStart)
+	// This period: the calendar month by default, or the anchored billing period
+	// when a reset day is configured. For the calendar month + RX/TX/total the
+	// authoritative monthly vnstat row is used — the SAME value the Analytics
+	// Overview shows (the stored daily history is capped at ~5 weeks and can
+	// straddle a month boundary, so summing daily rows would mis-count). Anchored
+	// periods have no matching vnstat row, so they sum the daily series from the
+	// period start; the 5-week daily retention covers a full 28-31 day period.
+	periodStart := trafficPeriodStart(now, cfg.ResetDay)
+	periodEnd := periodStart.AddDate(0, 1, 0)
+	var periodCurrent int64
+	if cfg.ResetDay <= 1 {
+		periodCurrent = currentMonthSeries(months, now, kind)
+		if periodCurrent == 0 {
+			periodCurrent = sumDaysSince(sorted, periodStart, kind)
+		}
+	} else {
+		periodCurrent = sumDaysSince(sorted, periodStart, kind)
 	}
-	remainingMonthDays := daysInMonth(now.Year(), now.Month()) - now.Day()
-	monthPredicted := monthCurrent + int64(todayRemaining) + sumFutureDays(predictDay, now, remainingMonthDays)
+	remainingPeriodDays := fullDaysUntil(now, periodEnd)
+	periodPredicted := periodCurrent + int64(todayRemaining) + sumFutureDays(predictDay, now, remainingPeriodDays)
 
-	risks := computeRisks(history, dayPrediction, monthCurrent, monthPredicted, limitBytes)
+	limitBytes := cfg.Limit.Bytes
+	risks := computeRisks(history, dayPrediction, periodCurrent, periodPredicted, limitBytes)
 
 	// Days-to-exhaustion reuses the SAME per-day predictor and today's remainder
-	// that drive the month projection, so the two can never disagree on rate.
-	exhaustion := computeExhaustion(now, monthCurrent, monthPredicted, limitBytes, todayRemaining, predictDay)
+	// that drive the period projection, so the two can never disagree on rate.
+	exhaustion := computeExhaustion(now, periodCurrent, periodPredicted, limitBytes, todayRemaining, predictDay, remainingPeriodDays)
 
 	return ForecastOutput{
-		Today:      ForecastResult{CurrentBytes: todayCurrent, PredictedBytes: todayPredicted, Confidence: conf},
-		ThisWeek:   ForecastResult{CurrentBytes: weekCurrent, PredictedBytes: weekPredicted, Confidence: conf},
-		ThisMonth:  ForecastResult{CurrentBytes: monthCurrent, PredictedBytes: monthPredicted, Confidence: conf},
-		Algorithm:  provider.Name(),
-		Confidence: conf,
-		Trend:      trend,
-		Risks:      risks,
-		Exhaustion: exhaustion,
+		Today:       ForecastResult{CurrentBytes: todayCurrent, PredictedBytes: todayPredicted, Confidence: conf},
+		ThisWeek:    ForecastResult{CurrentBytes: weekCurrent, PredictedBytes: weekPredicted, Confidence: conf},
+		ThisMonth:   ForecastResult{CurrentBytes: periodCurrent, PredictedBytes: periodPredicted, Confidence: conf},
+		Algorithm:   provider.Name(),
+		Confidence:  conf,
+		Trend:       trend,
+		Risks:       risks,
+		Exhaustion:  exhaustion,
+		Series:      kind,
+		PeriodStart: periodStart.Format("2006-01-02"),
+		PeriodEnd:   periodEnd.Format("2006-01-02"),
 	}
 }
 
-// computeExhaustion walks the rest of the current month day by day, accumulating
-// projected download (RX) until it reaches limitBytes. It returns the empty
-// (HasLimit=false) value when no positive limit is set, so callers can omit the
-// projection entirely for unlimited servers. The walk is bounded to month-end
-// because a monthly cap resets there.
-func computeExhaustion(now time.Time, monthCurrent, monthPredicted, limitBytes int64, todayRemaining float64, predictDay func(time.Time) int64) ExhaustionForecast {
-	daysInM := daysInMonth(now.Year(), now.Month())
-	daysUntilEnd := daysInM - now.Day()
+// TrafficPeriodStart returns the start of the accounting period containing now.
+// Exported for callers (scheduler, home warnings) that need the same period
+// arithmetic the forecast uses.
+func TrafficPeriodStart(now time.Time, resetDay int) time.Time {
+	return trafficPeriodStart(now, resetDay)
+}
 
+// trafficPeriodStart returns the start of the accounting period containing now.
+// resetDay <= 1 (or out of range) means the calendar month; 2–28 anchors the
+// period to that day of the month.
+func trafficPeriodStart(now time.Time, resetDay int) time.Time {
+	if resetDay <= 1 || resetDay > 28 {
+		return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	}
+	anchored := time.Date(now.Year(), now.Month(), resetDay, 0, 0, 0, 0, time.UTC)
+	if now.Day() >= resetDay {
+		return anchored
+	}
+	return anchored.AddDate(0, -1, 0)
+}
+
+// fullDaysUntil returns the number of FULL days after today (UTC) before end
+// (exclusive). For a calendar month it equals daysInMonth - now.Day().
+func fullDaysUntil(now, end time.Time) int {
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	days := int(end.Sub(today).Hours()/24) - 1
+	if days < 0 {
+		return 0
+	}
+	return days
+}
+
+// seriesDayValue / seriesMonthValue project one traffic row onto the forecast
+// series. The total falls back to RX+TX when the stored total is zero, matching
+// the repository's own convention.
+func seriesDayValue(d TrafficDay, kind string) int64 {
+	switch kind {
+	case LimitKindTX:
+		return d.TX
+	case LimitKindTotal:
+		if d.Total != 0 {
+			return d.Total
+		}
+		return d.RX + d.TX
+	default:
+		return d.RX
+	}
+}
+
+func seriesMonthValue(m TrafficMonth, kind string) int64 {
+	switch kind {
+	case LimitKindTX:
+		return m.TX
+	case LimitKindTotal:
+		if m.Total != 0 {
+			return m.Total
+		}
+		return m.RX + m.TX
+	default:
+		return m.RX
+	}
+}
+
+// computeExhaustion walks the rest of the current accounting period day by day,
+// accumulating the projected series until it reaches limitBytes. It returns the
+// empty (HasLimit=false) value when no positive limit is set, so callers can
+// omit the projection entirely for unlimited servers. The walk is bounded to
+// daysUntilEnd (full days before the period resets) because the cap resets
+// there — for a calendar month that is month-end.
+func computeExhaustion(now time.Time, monthCurrent, monthPredicted, limitBytes int64, todayRemaining float64, predictDay func(time.Time) int64, daysUntilEnd int) ExhaustionForecast {
 	if limitBytes <= 0 {
 		return ExhaustionForecast{} // no limit → omit
 	}
@@ -434,12 +537,12 @@ func (s *ForecastService) selectProvider(history []int64) ForecastProvider {
 // When the selected provider supports weekday seasonality it is consulted per
 // date (falling back to flat for weekdays with too little data); otherwise every
 // date maps to the flat dayPrediction — identical to the pre-seasonal behaviour.
-func (s *ForecastService) dayPredictor(provider ForecastProvider, sorted []TrafficDay, flat int64) func(time.Time) int64 {
+func (s *ForecastService) dayPredictor(provider ForecastProvider, sorted []TrafficDay, kind string, flat int64) func(time.Time) int64 {
 	wf, ok := provider.(weekdayForecaster)
 	if !ok {
 		return func(time.Time) int64 { return flat }
 	}
-	samples := datedSamples(sorted)
+	samples := datedSamples(sorted, kind)
 	if len(samples) == 0 {
 		return func(time.Time) int64 { return flat }
 	}
@@ -451,17 +554,17 @@ func (s *ForecastService) dayPredictor(provider ForecastProvider, sorted []Traff
 	}
 }
 
-// datedSamples converts sorted daily rows into dated download samples, parsing
+// datedSamples converts sorted daily rows into dated series samples, parsing
 // each "2006-01-02" label as a UTC date. Rows with an unparseable label are
 // skipped rather than failing the whole forecast.
-func datedSamples(sorted []TrafficDay) []DatedSample {
+func datedSamples(sorted []TrafficDay, kind string) []DatedSample {
 	out := make([]DatedSample, 0, len(sorted))
 	for _, d := range sorted {
 		t, err := time.Parse("2006-01-02", d.Label)
 		if err != nil {
 			continue
 		}
-		out = append(out, DatedSample{Date: t.UTC(), Bytes: d.RX})
+		out = append(out, DatedSample{Date: t.UTC(), Bytes: seriesDayValue(d, kind)})
 	}
 	return out
 }
@@ -476,37 +579,37 @@ func sumFutureDays(predictDay func(time.Time) int64, from time.Time, n int) int6
 	return total
 }
 
-// currentMonthRX returns the current month's download (RX) bytes from the
-// monthly vnstat rows — the exact metric the Analytics Overview displays, so the
-// "This Month" forecast value matches the overview for the same period.
-func currentMonthRX(months []TrafficMonth, now time.Time) int64 {
+// currentMonthSeries returns the current month's bytes for the forecast series
+// from the monthly vnstat rows — the exact metric the Analytics Overview
+// displays, so the "This Month" forecast value matches the overview.
+func currentMonthSeries(months []TrafficMonth, now time.Time, kind string) int64 {
 	label := now.Format("2006-01")
 	for _, m := range months {
 		if m.Label == label {
-			return m.RX
+			return seriesMonthValue(m, kind)
 		}
 	}
 	return 0
 }
 
-// currentDayBytes and sumDaysSince both sum DOWNLOAD (RX) bytes only, to match
-// the download-only forecast history.
-func currentDayBytes(days []TrafficDay, now time.Time) int64 {
+// currentDayBytes and sumDaysSince both sum the forecast series, matching the
+// series the history was built from.
+func currentDayBytes(days []TrafficDay, now time.Time, kind string) int64 {
 	todayLabel := now.Format("2006-01-02")
 	for _, d := range days {
 		if d.Label == todayLabel {
-			return d.RX
+			return seriesDayValue(d, kind)
 		}
 	}
 	return 0
 }
 
-func sumDaysSince(days []TrafficDay, since time.Time) int64 {
+func sumDaysSince(days []TrafficDay, since time.Time, kind string) int64 {
 	sinceLabel := since.Format("2006-01-02")
 	var total int64
 	for _, d := range days {
 		if d.Label >= sinceLabel {
-			total += d.RX
+			total += seriesDayValue(d, kind)
 		}
 	}
 	return total

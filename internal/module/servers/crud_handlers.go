@@ -143,6 +143,7 @@ func (h UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		form.Note = validated.Input.Note
 		form.CredentialStrategy = validated.Input.CredentialStrategy
 		form.CredentialRef = validated.Input.CredentialRef
+		form.TrafficResetDay = validated.Input.TrafficResetDay
 		renderFormPage(
 			w, r,
 			h.deps,
@@ -254,6 +255,7 @@ func formInputFromRequest(r *http.Request) FormInput {
 		Note:               r.FormValue("note"),
 		CredentialStrategy: r.FormValue("credential_strategy"),
 		CredentialRef:      r.FormValue("credential_ref"),
+		TrafficResetDay:    r.FormValue("traffic_reset_day"),
 	}
 }
 

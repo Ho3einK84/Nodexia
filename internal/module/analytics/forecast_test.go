@@ -249,7 +249,7 @@ func TestSeasonalBeatsFlatOnWeeklyPattern(t *testing.T) {
 
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)  // Thursday
 	days := weeklyPatternDays(start, 4, weekday, weekend) // 28 days
-	samples := datedSamples(days)
+	samples := datedSamples(days, LimitKindRX)
 
 	// Flat baseline: simple mean of the whole window (what a flat MA converges to).
 	var sum int64
@@ -317,7 +317,7 @@ func TestSeasonalFallsBackWhenWeekdaySparse(t *testing.T) {
 		days[i] = TrafficDay{Label: d.Format("2006-01-02"), RX: 1000}
 	}
 	seasonal := seasonalProvider{window: 35, minPerWeekday: 3}
-	if _, ok := seasonal.PredictForDate(datedSamples(days), start.AddDate(0, 0, 30)); ok {
+	if _, ok := seasonal.PredictForDate(datedSamples(days, LimitKindRX), start.AddDate(0, 0, 30)); ok {
 		t.Error("expected seasonal fallback (ok=false) when the weekday has too few samples")
 	}
 }
@@ -383,21 +383,21 @@ func TestComputeExhaustion(t *testing.T) {
 	const half = float64(gib) / 2 // today's remaining projected usage
 
 	t.Run("no limit omits", func(t *testing.T) {
-		ef := computeExhaustion(now, 5*gib, 9*gib, 0, half, flat)
+		ef := computeExhaustion(now, 5*gib, 9*gib, 0, half, flat, daysInMonth(now.Year(), now.Month())-now.Day())
 		if ef.HasLimit {
 			t.Errorf("expected HasLimit=false with no limit, got %+v", ef)
 		}
 	})
 
 	t.Run("already over", func(t *testing.T) {
-		ef := computeExhaustion(now, 12*gib, 30*gib, 10*gib, half, flat)
+		ef := computeExhaustion(now, 12*gib, 30*gib, 10*gib, half, flat, daysInMonth(now.Year(), now.Month())-now.Day())
 		if !ef.HasLimit || !ef.AlreadyOver || ef.WillExhaust {
 			t.Errorf("expected already-over state, got %+v", ef)
 		}
 	})
 
 	t.Run("exactly met counts as over", func(t *testing.T) {
-		ef := computeExhaustion(now, 10*gib, 30*gib, 10*gib, half, flat)
+		ef := computeExhaustion(now, 10*gib, 30*gib, 10*gib, half, flat, daysInMonth(now.Year(), now.Month())-now.Day())
 		if !ef.AlreadyOver {
 			t.Errorf("monthCurrent == limit should be already-over, got %+v", ef)
 		}
@@ -406,7 +406,7 @@ func TestComputeExhaustion(t *testing.T) {
 	t.Run("exhausts today", func(t *testing.T) {
 		// 5 GiB used + 0.5 GiB remaining today crosses a 5.4 GiB limit.
 		limit := 5*gib + gib/2 - 1 // < 5.5 GiB
-		ef := computeExhaustion(now, 5*gib, 30*gib, limit, half, flat)
+		ef := computeExhaustion(now, 5*gib, 30*gib, limit, half, flat, daysInMonth(now.Year(), now.Month())-now.Day())
 		if !ef.WillExhaust || ef.DaysRemaining != 0 {
 			t.Errorf("expected exhaust today (days=0), got %+v", ef)
 		}
@@ -417,7 +417,7 @@ func TestComputeExhaustion(t *testing.T) {
 
 	t.Run("exhausts in N days", func(t *testing.T) {
 		// cum = 5 + 0.5 = 5.5, +1/day; crosses 10 GiB at i=5 → 2026-01-15.
-		ef := computeExhaustion(now, 5*gib, 30*gib, 10*gib, half, flat)
+		ef := computeExhaustion(now, 5*gib, 30*gib, 10*gib, half, flat, daysInMonth(now.Year(), now.Month())-now.Day())
 		if !ef.WillExhaust || ef.DaysRemaining != 5 {
 			t.Errorf("expected exhaust in 5 days, got %+v", ef)
 		}
@@ -433,7 +433,7 @@ func TestComputeExhaustion(t *testing.T) {
 	})
 
 	t.Run("comfortably under all month", func(t *testing.T) {
-		ef := computeExhaustion(now, 5*gib, 30*gib, 1000*gib, half, flat)
+		ef := computeExhaustion(now, 5*gib, 30*gib, 1000*gib, half, flat, daysInMonth(now.Year(), now.Month())-now.Day())
 		if !ef.HasLimit || ef.AlreadyOver || ef.WillExhaust {
 			t.Errorf("expected under-limit state, got %+v", ef)
 		}
@@ -442,7 +442,7 @@ func TestComputeExhaustion(t *testing.T) {
 	t.Run("month boundary: last day, no full days left", func(t *testing.T) {
 		eom := time.Date(2026, 1, 31, 12, 0, 0, 0, time.UTC)
 		// Not crossed by today's remainder, and there are no further days to walk.
-		ef := computeExhaustion(eom, 5*gib, 6*gib, 10*gib, half, flat)
+		ef := computeExhaustion(eom, 5*gib, 6*gib, 10*gib, half, flat, daysInMonth(eom.Year(), eom.Month())-eom.Day())
 		if ef.WillExhaust {
 			t.Errorf("expected no exhaustion on last day when under, got %+v", ef)
 		}
@@ -450,7 +450,7 @@ func TestComputeExhaustion(t *testing.T) {
 			t.Errorf("DaysUntilMonthEnd = %d, want 0 on the last day", ef.DaysUntilMonthEnd)
 		}
 		// But today's remainder alone can still cross on the last day.
-		ef2 := computeExhaustion(eom, 5*gib, 6*gib, 5*gib+gib/2-1, half, flat)
+		ef2 := computeExhaustion(eom, 5*gib, 6*gib, 5*gib+gib/2-1, half, flat, daysInMonth(eom.Year(), eom.Month())-eom.Day())
 		if !ef2.WillExhaust || ef2.DaysRemaining != 0 || ef2.ExhaustionDate != "2026-01-31" {
 			t.Errorf("expected exhaust-today on last day, got %+v", ef2)
 		}

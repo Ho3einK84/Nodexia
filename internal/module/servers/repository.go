@@ -24,8 +24,12 @@ type Server struct {
 	CountryCode      string
 	CountryName      string
 	CountryCheckedAt time.Time
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	// TrafficResetDay anchors the server's traffic accounting period to the day
+	// of the month the provider resets its quota. 1 (default) = calendar month;
+	// 2–28 = that day of the month. Values outside 1–28 are rejected on input.
+	TrafficResetDay int
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type Repository interface {

@@ -174,7 +174,7 @@
     <div class="analytics-limit__head">
       <h3><i data-lucide="gauge"></i> {{ t "analytics.limit.title" }}</h3>
       {{ if .HasLimit }}
-      <span class="analytics-limit__current">{{ t "analytics.limit.current" "value" .LimitHuman }}</span>
+      <span class="analytics-limit__current">{{ t "analytics.limit.current_kind" "value" .LimitHuman "kind" .KindLabel }}</span>
       {{ else if .InheritedHuman }}
       <span class="analytics-limit__current analytics-limit__current--inherited">{{ t "analytics.limit.inherited" "value" .InheritedHuman "source" .InheritedSource }}</span>
       {{ else }}
@@ -192,6 +192,12 @@
       <select id="limit_unit" name="limit_unit" class="analytics-limit__unit">
         {{ $unit := .UnitInput }}
         {{ range .UnitOptions }}<option value="{{ . }}"{{ if eq . $unit }} selected{{ end }}>{{ . }}</option>{{ end }}
+      </select>
+      <label class="sr-only" for="limit_kind">{{ t "analytics.limit.kind_label" }}</label>
+      <select id="limit_kind" name="limit_kind" class="analytics-limit__unit">
+        <option value="rx"{{ if eq .KindInput "rx" }} selected{{ end }}>{{ t "analytics.limit.kind_rx" }}</option>
+        <option value="tx"{{ if eq .KindInput "tx" }} selected{{ end }}>{{ t "analytics.limit.kind_tx" }}</option>
+        <option value="total"{{ if eq .KindInput "total" }} selected{{ end }}>{{ t "analytics.limit.kind_total" }}</option>
       </select>
       <button type="submit" class="btn btn--primary btn--sm"><i data-lucide="save" class="icon-in-button"></i> {{ t "analytics.limit.save" }}</button>
       <span class="analytics-limit__clearhint">{{ t "analytics.limit.clear_hint" }}</span>
