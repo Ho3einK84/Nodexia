@@ -149,6 +149,9 @@ func shouldSkipSecurityMiddleware(r *http.Request) bool {
 		return true
 	case r.URL.Path == "/healthz", strings.HasPrefix(r.URL.Path, "/healthz/"):
 		return true
+	case r.URL.Path == "/metrics":
+		// Token-gated in its own handler; scrapers carry no session cookies.
+		return true
 	default:
 		return false
 	}
