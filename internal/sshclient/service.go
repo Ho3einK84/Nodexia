@@ -608,10 +608,14 @@ func (s *Service) connect(ctx context.Context, req ConnectionRequest) (*xssh.Cli
 		port = 22
 	}
 
-	authMethods, err := authMethods(req)
+	authMethods, closeAuth, err := authMethods(req)
 	if err != nil {
 		return nil, "", err
 	}
+	// Auth resources (the SSH-agent socket) are only needed while the handshake
+	// below authenticates; connect returns once it completes, so a deferred close
+	// releases them at exactly the right time.
+	defer closeAuth()
 
 	address := net.JoinHostPort(host, strconv.Itoa(port))
 	dialCtx, cancel := context.WithTimeout(ctx, s.resolveConnectTimeout(req.ConnectTimeout))
@@ -756,29 +760,35 @@ func (s *Service) openSFTP(ctx context.Context, req ConnectionRequest) (*xssh.Cl
 	}, nil
 }
 
-func authMethods(req ConnectionRequest) ([]xssh.AuthMethod, error) {
+// authMethods resolves the auth methods for a connection request. The returned
+// cleanup func releases any resource the methods hold open (today: the SSH-agent
+// socket) and must be called only after authentication has completed — the
+// agent-backed signers keep using the socket for every signature during the
+// handshake. It is never nil.
+func authMethods(req ConnectionRequest) ([]xssh.AuthMethod, func(), error) {
 	password := strings.TrimSpace(req.Password)
 	privateKey := strings.TrimSpace(req.PrivateKeyPEM)
 	authMode := strings.TrimSpace(req.AuthMode)
+	noCleanup := func() {}
 
 	switch authMode {
 	case "password":
 		if password == "" {
-			return nil, errors.New("sshclient: password is required for password auth mode")
+			return nil, noCleanup, errors.New("sshclient: password is required for password auth mode")
 		}
-		return []xssh.AuthMethod{xssh.Password(req.Password)}, nil
+		return []xssh.AuthMethod{xssh.Password(req.Password)}, noCleanup, nil
 	case "key":
 		signer, err := signerFromRequest(req)
 		if err != nil {
-			return nil, err
+			return nil, noCleanup, err
 		}
-		return []xssh.AuthMethod{xssh.PublicKeys(signer)}, nil
+		return []xssh.AuthMethod{xssh.PublicKeys(signer)}, noCleanup, nil
 	case "hybrid":
 		methods := make([]xssh.AuthMethod, 0, 2)
 		if privateKey != "" {
 			signer, err := signerFromRequest(req)
 			if err != nil {
-				return nil, err
+				return nil, noCleanup, err
 			}
 			methods = append(methods, xssh.PublicKeys(signer))
 		}
@@ -786,45 +796,50 @@ func authMethods(req ConnectionRequest) ([]xssh.AuthMethod, error) {
 			methods = append(methods, xssh.Password(req.Password))
 		}
 		if len(methods) == 0 {
-			return nil, errors.New("sshclient: password or private key is required for hybrid auth mode")
+			return nil, noCleanup, errors.New("sshclient: password or private key is required for hybrid auth mode")
 		}
-		return methods, nil
+		return methods, noCleanup, nil
 	default:
 		if privateKey != "" {
 			signer, err := signerFromRequest(req)
 			if err != nil {
-				return nil, err
+				return nil, noCleanup, err
 			}
-			return []xssh.AuthMethod{xssh.PublicKeys(signer)}, nil
+			return []xssh.AuthMethod{xssh.PublicKeys(signer)}, noCleanup, nil
 		}
 		if password != "" {
-			return []xssh.AuthMethod{xssh.Password(req.Password)}, nil
+			return []xssh.AuthMethod{xssh.Password(req.Password)}, noCleanup, nil
 		}
 
-		agentMethods, agentErr := sshAgentAuth()
+		agentMethods, agentCleanup, agentErr := sshAgentAuth()
 		if agentErr == nil && len(agentMethods) > 0 {
-			return agentMethods, nil
+			return agentMethods, agentCleanup, nil
 		}
 
-		return nil, errors.New("sshclient: runtime credentials are required")
+		return nil, noCleanup, errors.New("sshclient: runtime credentials are required")
 	}
 }
 
-func sshAgentAuth() ([]xssh.AuthMethod, error) {
+// sshAgentAuth connects to the local SSH agent and returns an auth method whose
+// signers proxy signature requests over that connection. The socket must stay
+// open for the whole handshake (each publickey attempt round-trips through the
+// agent), so the caller closes it via the returned cleanup once authentication
+// is done — closing it up front would make every agent-backed handshake fail
+// with "use of closed network connection".
+func sshAgentAuth() ([]xssh.AuthMethod, func(), error) {
 	authSock := os.Getenv("SSH_AUTH_SOCK")
 	if authSock == "" {
-		return nil, errors.New("sshclient: SSH_AUTH_SOCK not set")
+		return nil, nil, errors.New("sshclient: SSH_AUTH_SOCK not set")
 	}
 
 	conn, err := net.Dial("unix", authSock)
 	if err != nil {
-		return nil, fmt.Errorf("sshclient: dial SSH agent: %w", err)
+		return nil, nil, fmt.Errorf("sshclient: dial SSH agent: %w", err)
 	}
 
 	agentClient := agent.NewClient(conn)
-	_ = conn.Close()
-
-	return []xssh.AuthMethod{xssh.PublicKeysCallback(agentClient.Signers)}, nil
+	cleanup := func() { _ = conn.Close() }
+	return []xssh.AuthMethod{xssh.PublicKeysCallback(agentClient.Signers)}, cleanup, nil
 }
 
 func signerFromRequest(req ConnectionRequest) (xssh.Signer, error) {
