@@ -384,6 +384,16 @@ type FileDownloadView struct {
 	Error      string
 }
 
+// SchedulerRunView is one persisted job run row on the diagnostics page.
+type SchedulerRunView struct {
+	ServerName string
+	JobType    string
+	Success    bool
+	StartedAt  string
+	Duration   string
+	Detail     string // message on success, error text on failure
+}
+
 type SchedulerOverviewView struct {
 	Enabled            bool
 	StartupDelay       string
@@ -397,6 +407,9 @@ type SchedulerOverviewView struct {
 	Jobs               []ScheduledJobView
 	MoreJobs           int
 	Pagination         PaginationView
+	// RecentRuns is the persisted history of completed job runs (newest first),
+	// populated only on the diagnostics page.
+	RecentRuns []SchedulerRunView
 }
 
 type ScheduledJobView struct {

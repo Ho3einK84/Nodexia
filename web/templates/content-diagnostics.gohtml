@@ -218,6 +218,45 @@
     {{ end }}
   </article>
 
+  {{ if .SchedulerOverview.RecentRuns }}
+  <article class="card">
+    <div class="card__header">
+      <h3><i data-lucide="history"></i> {{ t "diagnostics.recent_runs" }}</h3>
+    </div>
+    <p class="field-hint">{{ t "diagnostics.recent_runs_hint" }}</p>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>{{ t "diagnostics.run_server" }}</th>
+            <th>{{ t "diagnostics.run_job" }}</th>
+            <th>{{ t "diagnostics.run_result" }}</th>
+            <th>{{ t "diagnostics.run_started" }}</th>
+            <th class="text-right">{{ t "diagnostics.run_duration" }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ range .SchedulerOverview.RecentRuns }}
+          <tr>
+            <td>{{ .ServerName }}</td>
+            <td><code>{{ .JobType }}</code></td>
+            <td>
+              {{ if .Success }}
+              <span class="status-pill status-pill--ok">{{ t "diagnostics.run_ok" }}</span>
+              {{ else }}
+              <span class="status-pill status-pill--crit" {{ with .Detail }}title="{{ . }}"{{ end }}>{{ t "diagnostics.run_failed" }}</span>
+              {{ end }}
+            </td>
+            <td><code>{{ .StartedAt }}</code></td>
+            <td class="text-right"><code>{{ .Duration }}</code></td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+  </article>
+  {{ end }}
+
   <p class="dash-section"><i data-lucide="archive"></i> {{ t "backup.section" }}</p>
   {{ if .BackupCanRun }}
   <div class="dashboard-meta">

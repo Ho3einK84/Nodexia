@@ -76,6 +76,7 @@ type Runtime struct {
 	cleanupSvc    *analytics.CleanupService
 	notifier      notify.Notifier // shared by the evaluator and the digest; nil when no token
 	digestCfg     config.DigestConfig
+	jobRuns       *jobRunsRepository // persisted run history for the diagnostics page
 
 	mu     sync.RWMutex
 	jobs   map[string]*jobState
@@ -137,6 +138,7 @@ func New(cfg config.Config, conn *sql.DB, ssh *sshclient.Service) *Runtime {
 		cleanupSvc:    analytics.NewCleanupService(analyticsRepo),
 		notifier:      notifier,
 		digestCfg:     cfg.Digest,
+		jobRuns:       newJobRunsRepository(conn),
 		jobs:          map[string]*jobState{},
 		paused:        map[string]struct{}{},
 	}
@@ -482,6 +484,8 @@ func (r *Runtime) launchJob(parent context.Context, server servers.Server, jobTy
 		startedAt := time.Now().UTC()
 		message, err := r.executeJob(ctx, server, jobType)
 		finishedAt := time.Now().UTC()
+
+		r.recordJobRun(server, jobType, startedAt, finishedAt, message, err)
 
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -871,6 +875,55 @@ func anyNodeStopped(snapshots []nodes.Snapshot) bool {
 		}
 	}
 	return false
+}
+
+// recordJobRun persists one completed run for the diagnostics history.
+// Best-effort: a write failure is logged and never affects the job outcome.
+// It runs on a fresh short-lived context because the job's own context may
+// already be expired when the job timed out.
+func (r *Runtime) recordJobRun(server servers.Server, jobType JobType, startedAt, finishedAt time.Time, message string, jobErr error) {
+	if r.jobRuns == nil {
+		return
+	}
+
+	run := JobRun{
+		ServerID:   server.ID,
+		JobType:    jobType,
+		StartedAt:  startedAt,
+		FinishedAt: finishedAt,
+		Duration:   finishedAt.Sub(startedAt),
+		Success:    jobErr == nil,
+		Message:    strings.TrimSpace(message),
+	}
+	if jobErr != nil {
+		run.Error = jobErr.Error()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := db.RetryOnBusy(ctx, func() error {
+		return r.jobRuns.Record(ctx, run)
+	}); err != nil {
+		slog.Warn("scheduler: record job run failed",
+			slog.Int64("server_id", server.ID),
+			slog.String("job_type", string(jobType)),
+			slog.String("error", err.Error()),
+		)
+	}
+}
+
+// RecentRuns returns the newest persisted job runs for the diagnostics page.
+// A nil runtime (scheduler unavailable) returns no rows.
+func (r *Runtime) RecentRuns(ctx context.Context, limit int) []JobRun {
+	if r == nil || r.jobRuns == nil {
+		return nil
+	}
+	runs, err := r.jobRuns.ListRecent(ctx, limit)
+	if err != nil {
+		slog.Warn("scheduler: list job runs failed", slog.String("error", err.Error()))
+		return nil
+	}
+	return runs
 }
 
 func (r *Runtime) intervalFor(jobType JobType) time.Duration {

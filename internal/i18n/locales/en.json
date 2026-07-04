@@ -980,5 +980,14 @@
   "analytics.limit.current_kind": "Cap: {value} · {kind}",
   "js.analytics.upload_scope": "Upload",
   "js.analytics.total_scope": "Total",
-  "js.analytics.period_range": "Period {start} → {end}"
+  "js.analytics.period_range": "Period {start} → {end}",
+  "diagnostics.recent_runs": "Recent job runs",
+  "diagnostics.recent_runs_hint": "The latest completed monitoring and node-discovery runs, persisted across restarts. Hover a failed result for the error.",
+  "diagnostics.run_server": "Server",
+  "diagnostics.run_job": "Job",
+  "diagnostics.run_result": "Result",
+  "diagnostics.run_started": "Started",
+  "diagnostics.run_duration": "Duration",
+  "diagnostics.run_ok": "OK",
+  "diagnostics.run_failed": "Failed"
 }

@@ -980,5 +980,14 @@
   "analytics.limit.current_kind": "سقف: {value} · {kind}",
   "js.analytics.upload_scope": "آپلود",
   "js.analytics.total_scope": "مجموع",
-  "js.analytics.period_range": "دوره {start} تا {end}"
+  "js.analytics.period_range": "دوره {start} تا {end}",
+  "diagnostics.recent_runs": "اجراهای اخیر",
+  "diagnostics.recent_runs_hint": "آخرین اجراهای کامل‌شده مانیتورینگ و کشف نود، ماندگار حتی پس از ری‌استارت. برای دیدن خطا روی نتیجهٔ ناموفق نگه دارید.",
+  "diagnostics.run_server": "سرور",
+  "diagnostics.run_job": "کار",
+  "diagnostics.run_result": "نتیجه",
+  "diagnostics.run_started": "شروع",
+  "diagnostics.run_duration": "مدت",
+  "diagnostics.run_ok": "موفق",
+  "diagnostics.run_failed": "ناموفق"
 }

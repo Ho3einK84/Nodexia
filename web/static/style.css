@@ -3371,6 +3371,11 @@ body.modal-open {
 
 /* ── Alerts ─────────────────────────────────────────── */
 
+/* Logical end-alignment utility for numeric table columns (RTL-safe). */
+.text-right {
+  text-align: end;
+}
+
 .data-table-wrap {
   overflow-x: auto;
   margin-top: 12px;
