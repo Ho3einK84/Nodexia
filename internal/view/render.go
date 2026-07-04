@@ -56,6 +56,8 @@ type PageData struct {
 	TotalNodeCount              int
 	Servers                     []ServerSummary
 	ServerSearch                string
+	ServerTagFilter             string
+	ServerTagOptions            []ServerTagOption
 	ServerMatchCount            int
 	ServerShowingFrom           int
 	ServerShowingTo             int
@@ -201,6 +203,14 @@ type PaginationPageView struct {
 	URL      string
 	IsActive bool
 	IsGap    bool
+}
+
+// ServerTagOption is one chip in the servers-list tag filter row.
+type ServerTagOption struct {
+	Tag    string
+	Count  int
+	URL    string
+	Active bool
 }
 
 type ServerSummary struct {

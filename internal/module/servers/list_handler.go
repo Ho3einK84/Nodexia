@@ -48,7 +48,8 @@ func (h ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	tag := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("tag")))
 	page, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("page")))
 
-	renderListPage(w, r, h.deps, servers, query, page, flashKind(r), flashMessage(r))
+	renderListPage(w, r, h.deps, servers, query, tag, page, flashKind(r), flashMessage(r))
 }

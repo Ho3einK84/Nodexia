@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -28,10 +29,14 @@ func newServersPage(deps module.Dependencies, r *http.Request) view.PageData {
 // serversPerPage caps how many server cards render on a single list page.
 const serversPerPage = 10
 
-func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependencies, servers []Server, query string, page int, flashKind, flashMessage string) {
+func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependencies, servers []Server, query, tagFilter string, page int, flashKind, flashMessage string) {
 	totalRegistered := len(servers)
 
-	matched := filterServers(servers, query)
+	// Tag chips are built from the FULL registry (before filtering) so every
+	// tag stays reachable while one is active.
+	tagOptions := buildTagOptions(servers, query, tagFilter)
+
+	matched := filterByTag(filterServers(servers, query), tagFilter)
 	pageItems, currentPage, totalPages := paginateServers(matched, page, serversPerPage)
 
 	lastSeen := serverLastSeenMap(r.Context(), deps)
@@ -98,10 +103,12 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 	pd.TotalNodeCount = totalNodeCount(r.Context(), deps)
 	pd.Servers = items
 	pd.ServerSearch = query
+	pd.ServerTagFilter = tagFilter
+	pd.ServerTagOptions = tagOptions
 	pd.ServerMatchCount = len(matched)
 	pd.ServerShowingFrom = showingFrom
 	pd.ServerShowingTo = showingTo
-	pd.ServerPagination = buildPagination(currentPage, totalPages, query)
+	pd.ServerPagination = buildPagination(currentPage, totalPages, query, tagFilter)
 	pd.FlashKind = flashKind
 	pd.FlashMessage = flashMessage
 	pd.PageStyles = []string{"/static/bulk.css"}
@@ -110,6 +117,67 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 	if err := deps.Renderer.Render(w, http.StatusOK, pd); err != nil {
 		http.Error(w, "render servers page", http.StatusInternalServerError)
 	}
+}
+
+// filterByTag keeps only servers carrying the exact tag (tags are stored
+// lowercase). An empty tag is a no-op.
+func filterByTag(servers []Server, tag string) []Server {
+	if tag == "" {
+		return servers
+	}
+	filtered := make([]Server, 0, len(servers))
+	for _, server := range servers {
+		for _, candidate := range server.Tags {
+			if candidate == tag {
+				filtered = append(filtered, server)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
+// buildTagOptions folds every distinct tag in the registry into a chip row:
+// each chip toggles its tag filter (preserving the search query), and the
+// active chip links back to the unfiltered list. Sorted alphabetically.
+func buildTagOptions(servers []Server, query, activeTag string) []view.ServerTagOption {
+	counts := map[string]int{}
+	for _, server := range servers {
+		for _, tag := range server.Tags {
+			counts[tag]++
+		}
+	}
+	tags := make([]string, 0, len(counts))
+	for tag := range counts {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
+
+	out := make([]view.ServerTagOption, 0, len(tags))
+	for _, tag := range tags {
+		target := ""
+		if tag != activeTag {
+			target = tag
+		}
+		values := url.Values{}
+		if query != "" {
+			values.Set("q", query)
+		}
+		if target != "" {
+			values.Set("tag", target)
+		}
+		href := "/servers"
+		if encoded := values.Encode(); encoded != "" {
+			href += "?" + encoded
+		}
+		out = append(out, view.ServerTagOption{
+			Tag:    tag,
+			Count:  counts[tag],
+			URL:    href,
+			Active: tag == activeTag,
+		})
+	}
+	return out
 }
 
 // filterServers returns servers whose name, host, username, note, auth mode,
@@ -180,12 +248,15 @@ func paginateServers(servers []Server, page, perPage int) (items []Server, curre
 }
 
 // buildPagination assembles the windowed page control, preserving the active
-// search query in every link.
-func buildPagination(currentPage, totalPages int, query string) view.PaginationView {
+// search query and tag filter in every link.
+func buildPagination(currentPage, totalPages int, query, tagFilter string) view.PaginationView {
 	makeURL := func(page int) string {
 		values := url.Values{}
 		if query != "" {
 			values.Set("q", query)
+		}
+		if tagFilter != "" {
+			values.Set("tag", tagFilter)
 		}
 		if page > 1 {
 			values.Set("page", strconv.Itoa(page))

@@ -30,6 +30,18 @@
     </div>
   </div>
 
+  {{ if .ServerTagOptions }}
+  <div class="server-tag-filter" role="group" aria-label="{{ t "servers.filter.tags_aria" }}">
+    <span class="server-tag-filter__label"><i data-lucide="tags"></i> {{ t "servers.filter.tags" }}</span>
+    {{ range .ServerTagOptions }}
+    <a href="{{ .URL }}" class="tag-chip tag-chip--filter{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="true"{{ end }}>{{ .Tag }} <span class="tag-chip__count">{{ .Count }}</span></a>
+    {{ end }}
+    {{ if .ServerTagFilter }}
+    <a href="/servers{{ if .ServerSearch }}?q={{ .ServerSearch }}{{ end }}" class="server-tag-filter__clear"><i data-lucide="x"></i> {{ t "servers.filter.clear" }}</a>
+    {{ end }}
+  </div>
+  {{ end }}
+
   {{ if .Servers }}
   {{ if .ServerSearch }}
   <p class="server-result-note">
