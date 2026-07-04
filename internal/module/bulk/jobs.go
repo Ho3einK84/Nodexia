@@ -18,8 +18,12 @@ const (
 	// finishedJobTTL is how long a completed job stays readable so the result
 	// page can still be refreshed or revisited before it is pruned.
 	finishedJobTTL = 30 * time.Minute
-	// staleJobTTL caps the lifetime of jobs that never finish (defensive; a
-	// job only stays unfinished if its goroutine died with the process).
+	// staleJobTTL caps how long an unfinished job may sit with NO row activity
+	// before it is dropped (defensive; a job only stalls if its goroutine died
+	// with the process). It is measured from the last row update, not creation:
+	// a large fleet update (many servers × a 20-minute per-server timeout over 5
+	// workers) legitimately runs for hours, but touches a row at least once per
+	// action, so a live job never appears stale.
 	staleJobTTL = 2 * time.Hour
 )
 
@@ -42,6 +46,9 @@ type job struct {
 	rows       []view.BulkServerResultView
 	finished   bool
 	finishedAt time.Time
+	// touchedAt is the last time a worker updated a row; the stale prune keys
+	// off it so long-but-live runs are never dropped mid-flight.
+	touchedAt time.Time
 }
 
 func (j *job) setRow(index int, row view.BulkServerResultView) {
@@ -49,6 +56,7 @@ func (j *job) setRow(index int, row view.BulkServerResultView) {
 	defer j.mu.Unlock()
 	if index >= 0 && index < len(j.rows) {
 		j.rows[index] = row
+		j.touchedAt = time.Now()
 	}
 }
 
@@ -57,6 +65,7 @@ func (j *job) setStatus(index int, status string) {
 	defer j.mu.Unlock()
 	if index >= 0 && index < len(j.rows) {
 		j.rows[index].Status = status
+		j.touchedAt = time.Now()
 	}
 }
 
@@ -117,8 +126,12 @@ func (s *jobStore) pruneLocked() {
 	now := time.Now()
 	for id, j := range s.jobs {
 		j.mu.Lock()
+		lastActivity := j.touchedAt
+		if lastActivity.IsZero() {
+			lastActivity = j.createdAt
+		}
 		expired := (j.finished && now.Sub(j.finishedAt) > finishedJobTTL) ||
-			now.Sub(j.createdAt) > staleJobTTL
+			(!j.finished && now.Sub(lastActivity) > staleJobTTL)
 		j.mu.Unlock()
 		if expired {
 			delete(s.jobs, id)
