@@ -15,6 +15,14 @@ const (
 	StatusFailed    = "failed"
 
 	maxStreamOutputBytes = 1 << 20 // 1 MiB per stdout/stderr stream
+
+	// runningSessionMaxAge is the hard retention cap for sessions still marked
+	// running. A running command that stays quiet for longer than the normal TTL
+	// (e.g. a silent long package upgrade with a generous custom timeout) must
+	// not be pruned mid-run — Complete/Fail would then no-op and the result page
+	// would report the session as expired even though it finished. Every run
+	// path is bounded by a command timeout, so this cap is purely defensive.
+	runningSessionMaxAge = 24 * time.Hour
 )
 
 type Snapshot struct {
@@ -167,7 +175,9 @@ func (s *Store) update(id string, update func(snapshot *Snapshot)) {
 }
 
 func (s *Store) pruneExpired() {
-	cutoff := time.Now().UTC().Add(-s.ttl)
+	now := time.Now().UTC()
+	cutoff := now.Add(-s.ttl)
+	runningCutoff := now.Add(-runningSessionMaxAge)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -177,7 +187,18 @@ func (s *Store) pruneExpired() {
 		if timestamp.IsZero() {
 			timestamp = snapshot.StartedAt
 		}
-		if !timestamp.IsZero() && timestamp.Before(cutoff) {
+		if timestamp.IsZero() {
+			continue
+		}
+		// Running sessions are exempt from the normal TTL (quiet ≠ finished) and
+		// only fall to the defensive hard cap; finished ones expire on the TTL.
+		if snapshot.Status == StatusRunning {
+			if timestamp.Before(runningCutoff) {
+				delete(s.sessions, id)
+			}
+			continue
+		}
+		if timestamp.Before(cutoff) {
 			delete(s.sessions, id)
 		}
 	}
