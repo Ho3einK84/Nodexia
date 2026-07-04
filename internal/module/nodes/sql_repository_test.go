@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/module/nodes"
+	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 	"github.com/Ho3einK84/Nodexia/internal/testutil"
 )
 
@@ -174,5 +175,52 @@ func TestListLatestNodeStatus(t *testing.T) {
 	}
 	if g := got[3]; g.Total != 0 {
 		t.Fatalf("gamma Total = %d, want 0 (placeholder excluded)", g.Total)
+	}
+}
+
+// TestUptimeStatsFromReplaceLatest verifies that every ReplaceLatest sweep
+// records one observation per real node (placeholders excluded) and that
+// UptimeStats aggregates them into running/total counts.
+func TestUptimeStatsFromReplaceLatest(t *testing.T) {
+	runtime := testutil.OpenTestDB(t)
+	ctx := context.Background()
+
+	srv, err := servers.NewSQLRepository(runtime.SQL).Create(ctx, servers.Server{
+		Name: "uptime-host", Host: "203.0.113.50", Port: 22,
+		AuthMode: servers.AuthModePassword, Username: "ubuntu",
+		CredentialStrategy: servers.CredentialStrategyRuntime,
+	})
+	if err != nil {
+		t.Fatalf("Create server: %v", err)
+	}
+
+	repo := nodes.NewSQLRepository(runtime.SQL)
+	base := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+
+	// Sweep 1: node running. Sweep 2: node stopped. Sweep 3: running again.
+	statuses := []string{"running", "stopped", "running"}
+	for i, health := range statuses {
+		if err := repo.ReplaceLatest(ctx, srv.ID, []nodes.Snapshot{{
+			NodeType: "pasarguard", ServiceName: "node", HealthStatus: health,
+		}}, base.Add(time.Duration(i)*time.Minute)); err != nil {
+			t.Fatalf("ReplaceLatest sweep %d: %v", i, err)
+		}
+	}
+	// A sweep with no nodes stores a placeholder — it must NOT count as an
+	// observation of the node.
+	if err := repo.ReplaceLatest(ctx, srv.ID, nil, base.Add(10*time.Minute)); err != nil {
+		t.Fatalf("ReplaceLatest placeholder: %v", err)
+	}
+
+	stats, err := repo.UptimeStats(ctx, srv.ID, base.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("UptimeStats: %v", err)
+	}
+	stat, ok := stats[nodes.UptimeKey("pasarguard", "node")]
+	if !ok {
+		t.Fatalf("no stats recorded; got %#v", stats)
+	}
+	if stat.Checks != 3 || stat.Running != 2 {
+		t.Fatalf("stats = %+v, want Checks=3 Running=2", stat)
 	}
 }

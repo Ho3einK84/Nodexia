@@ -989,5 +989,7 @@
   "diagnostics.run_started": "شروع",
   "diagnostics.run_duration": "مدت",
   "diagnostics.run_ok": "موفق",
-  "diagnostics.run_failed": "ناموفق"
+  "diagnostics.run_failed": "ناموفق",
+  "nodes.uptime_30d": "آپ‌تایم (۳۰ روز)",
+  "nodes.uptime_checks": "{detail} بررسی در حال اجرا"
 }

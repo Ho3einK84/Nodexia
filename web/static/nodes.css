@@ -868,3 +868,18 @@
   border: 1px solid rgba(45, 212, 191, 0.32);
   vertical-align: middle;
 }
+
+/* 30-day uptime pill: green at ~always-running, amber when it dipped, red when
+   the node has been down for a meaningful share of checks. */
+.node-pill--uptime-ok {
+  background: color-mix(in srgb, var(--ok, #22c55e) 14%, transparent);
+  color: var(--ok, #22c55e);
+}
+.node-pill--uptime-warn {
+  background: color-mix(in srgb, var(--warn, #f59e0b) 16%, transparent);
+  color: var(--warn, #f59e0b);
+}
+.node-pill--uptime-crit {
+  background: color-mix(in srgb, var(--crit, #ef4444) 16%, transparent);
+  color: var(--crit, #ef4444);
+}

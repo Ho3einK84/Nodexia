@@ -42,7 +42,27 @@ type Repository interface {
 	// ListLatestNodeStatus aggregates the most recent discovery batch per server
 	// into a fleet-wide node-status summary, for the home dashboard glance.
 	ListLatestNodeStatus(ctx context.Context) ([]ServerNodeStatus, error)
+	// UptimeStats aggregates the persisted per-sweep status observations for a
+	// server since the given time, keyed by nodeType+"|"+serviceName. Callers use
+	// it to render an uptime percentage per node card.
+	UptimeStats(ctx context.Context, serverID int64, since time.Time) (map[string]NodeUptime, error)
 }
+
+// NodeUptime summarises the recorded status observations for one node.
+type NodeUptime struct {
+	Checks  int // total observations in the window
+	Running int // observations in the "running" state
+}
+
+// UptimeKey builds the map key UptimeStats uses for one node.
+func UptimeKey(nodeType, serviceName string) string {
+	return strings.TrimSpace(nodeType) + "|" + strings.TrimSpace(serviceName)
+}
+
+// nodeStatusRetention is how long per-sweep status observations are kept.
+// 60 days comfortably covers the 30-day uptime window plus slack; older rows
+// are trimmed on write so no scheduled cleanup is needed.
+const nodeStatusRetention = 60 * 24 * time.Hour
 
 // ServerNodeStatus summarises one server's latest node-discovery batch: how many
 // real nodes were found and how many are running/stopped/other. Placeholder
@@ -162,11 +182,73 @@ func (r SQLRepository) ReplaceLatest(ctx context.Context, serverID int64, snapsh
 		}
 	}
 
+	// Record one status observation per REAL node for the uptime history.
+	// Placeholder "no node detected" rows are not observations of a node.
+	for _, snapshot := range snapshots {
+		snapshot = normalizeSnapshot(snapshot)
+		switch snapshot.NodeType {
+		case "", "none", "not_detected":
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO node_status_history (server_id, node_type, service_name, health_status, observed_at)
+			 VALUES (?, ?, ?, ?, ?)`,
+			serverID,
+			snapshot.NodeType,
+			snapshot.ServiceName,
+			strings.ToLower(snapshot.HealthStatus),
+			collectedAt,
+		); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("nodes: insert status observation: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM node_status_history WHERE server_id = ? AND observed_at < ?`,
+		serverID,
+		collectedAt.Add(-nodeStatusRetention),
+	); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("nodes: trim status history: %w", err)
+	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("nodes: commit replace latest transaction: %w", err)
 	}
 
 	return nil
+}
+
+// UptimeStats aggregates the recorded observations for one server since the
+// given time, keyed by UptimeKey(nodeType, serviceName).
+func (r SQLRepository) UptimeStats(ctx context.Context, serverID int64, since time.Time) (map[string]NodeUptime, error) {
+	rows, err := r.conn.QueryContext(ctx,
+		`SELECT node_type, service_name, health_status
+		 FROM node_status_history
+		 WHERE server_id = ? AND observed_at >= ?`,
+		serverID,
+		since.UTC(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("nodes: uptime stats for server %d: %w", serverID, err)
+	}
+	defer rows.Close()
+
+	out := map[string]NodeUptime{}
+	for rows.Next() {
+		var nodeType, serviceName, health string
+		if err := rows.Scan(&nodeType, &serviceName, &health); err != nil {
+			return nil, fmt.Errorf("nodes: scan uptime row: %w", err)
+		}
+		key := UptimeKey(nodeType, serviceName)
+		stat := out[key]
+		stat.Checks++
+		if strings.EqualFold(strings.TrimSpace(health), "running") {
+			stat.Running++
+		}
+		out[key] = stat
+	}
+	return out, rows.Err()
 }
 
 func (r SQLRepository) GetLatestByServer(ctx context.Context, serverID int64) ([]Snapshot, error) {
