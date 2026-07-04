@@ -991,5 +991,8 @@
   "diagnostics.run_ok": "OK",
   "diagnostics.run_failed": "Failed",
   "nodes.uptime_30d": "Uptime (30d)",
-  "nodes.uptime_checks": "{detail} checks running"
+  "nodes.uptime_checks": "{detail} checks running",
+  "servers.filter.tags": "Filter by label",
+  "servers.filter.tags_aria": "Filter servers by label",
+  "servers.filter.clear": "Clear filter"
 }
