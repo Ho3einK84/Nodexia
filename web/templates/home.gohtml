@@ -2,6 +2,19 @@
 <section class="hero">
   {{ template "page-header" . }}
 
+  {{ if .HomeWarnings }}
+  <div class="home-warnings" data-home-warnings>
+    {{ range .HomeWarnings }}
+    <div class="home-warning home-warning--{{ .Severity }}" data-warning-id="{{ .ID }}" role="alert" hidden>
+      <i data-lucide="{{ .Icon }}" class="home-warning__icon"></i>
+      <p class="home-warning__message">{{ .Message }}</p>
+      <a class="home-warning__action" href="{{ .ActionURL }}">{{ .ActionLabel }} <i data-lucide="arrow-right"></i></a>
+      <button type="button" class="home-warning__close" data-warning-dismiss aria-label="{{ t "home.warn.dismiss" }}"><i data-lucide="x"></i></button>
+    </div>
+    {{ end }}
+  </div>
+  {{ end }}
+
   <div class="kpi-grid">
     <div class="kpi-card">
       <span class="kpi-card__icon"><i data-lucide="server"></i></span>

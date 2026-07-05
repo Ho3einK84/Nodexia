@@ -92,6 +92,9 @@ type PageData struct {
 	DashboardSnapshotTotal      int
 	DashboardSnapshotPagination PaginationView
 	DashboardNodeStatus         FleetNodeStatusView
+	// HomeWarnings are the dismissible fleet warning banners at the top of the
+	// home dashboard (exhaustion, hot resources, traffic anomalies).
+	HomeWarnings []HomeWarningView
 	SchedulerOverview           SchedulerOverviewView
 	// BackupCanRun gates the diagnostics backup/restore section; it is false
 	// when the database runtime is unavailable.
@@ -601,6 +604,20 @@ type DashboardMonitoringView struct {
 	CollectedAt    string
 	CurrentMonthDL string
 	PeakBandwidth  string
+}
+
+// HomeWarningView is one dismissible warning banner on the home dashboard.
+// ID is stable per condition (server + kind + occurrence) so a client-side
+// dismissal keeps the banner hidden until the condition changes.
+type HomeWarningView struct {
+	ID          string
+	Severity    string // "danger" or "warning"
+	Icon        string // lucide icon name
+	ServerID    int64
+	ServerName  string
+	Message     string
+	ActionURL   string
+	ActionLabel string
 }
 
 // FleetNodeStatusView powers the home dashboard's node-status glance: one row per
