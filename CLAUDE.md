@@ -107,23 +107,28 @@ writes in `BeginTx`/`Rollback`/`Commit`. Wrap errors
   (`data-interactive-programs` is the shared source of truth).
 - **monitoring**: each sweep stores ONE latest vnStat snapshot per server (JSON
   daily/monthly rows). Daily rows are tailed to **35** (`retainedDailyRows`, 5
-  weeks) so the seasonal forecast has ≥ a few samples per weekday; monthly rows to
-  6. `TotalBytes` always defaults to `RX+TX`. Forecast/analytics work on **download
-  (RX)** only.
-- **analytics/forecast**: `ForecastService.Compute(days, months, limitBytes)`
+  weeks) so the seasonal forecast has ≥ a few samples per weekday AND a full
+  anchored billing period can be summed from dailies; monthly rows to 6.
+  `TotalBytes` always defaults to `RX+TX`. Forecast/analytics default to
+  **download (RX)** but follow the limit's series kind (rx/tx/total).
+- **analytics/forecast**: `ForecastService.ComputeWithConfig(days, months, cfg)`
   selects an algorithm by history length (trend < 7 ≤ MA < 14 ≤ WMA < 21 ≤
-  seasonal). "This month" uses the authoritative monthly RX row, not a daily sum
-  (daily history can straddle a month boundary). `computeExhaustion` is bounded to
-  month-end (a monthly cap resets there) and reuses the SAME per-day predictor as
-  the month projection so they can't disagree. The optional per-server monthly cap
-  lives in its own `server_traffic_limits` table (RX-only); 0/no row = unlimited.
+  seasonal); `Compute` is the calendar-month/RX wrapper. The accounting period
+  follows `servers.traffic_reset_day` (1 = calendar month, 2–28 = billing
+  anchor): calendar periods use the authoritative monthly row, anchored periods
+  sum the daily series. `computeExhaustion` is bounded to the period end and
+  reuses the SAME per-day predictor as the period projection so they can't
+  disagree. The per-server cap lives in `server_traffic_limits`
+  (`monthly_limit_bytes` + `limit_kind` rx/tx/total); group/global caps
+  (`traffic_limit_rules`) stay RX-only; 0/no row = unlimited.
 - **alerts**: the evaluator persists events, cooldowns, and consecutive-hit
   streaks. A metric that is unavailable this cycle is **skipped** (neither fired
   nor resolved) to keep streaks/cooldowns sane across gaps; recovery resolves an
   open event even while silenced. **Predictive metrics** (`projected_exceed_limit`
   boolean ≥ 1, `days_to_exhaustion` ≤ N) are forecast-derived, gated on
   `ForecastAvailable` (limit configured + enough history), and reuse the analytics
-  forecast. `DaysToExhaustionSafe` (a large sentinel) is reported when safe so a
+  forecast. **Anomaly metrics** (`traffic_spike`, `unusual_growth`, boolean ≥ 1)
+  are gated on `AnomalyAvailable` (traffic history only — no limit needed). `DaysToExhaustionSafe` (a large sentinel) is reported when safe so a
   "≤ N days" rule can resolve instead of getting stuck. Predictive comparators/
   thresholds are normalised in validation — don't let the operator store an
   incoherent condition.
