@@ -17,15 +17,24 @@ through monitoring, analytics, forecasting, and alerting.
 
 - 📊 **Monitoring & analytics** — CPU, RAM, swap, disk, load, and uptime per
   server, plus vnStat traffic (daily/monthly download & upload), charted from rollups.
-- 🔮 **Bandwidth forecasting** — projects today / this-week / this-month download,
+- 🚨 **Fleet warnings** — the dashboard leads with dismissible banners for
+  traffic running out before the reset, resources at 90%+, and traffic anomalies.
+- 🔮 **Bandwidth forecasting** — projects today / this-week / this-period usage
   with a confidence level; the model adapts as more history arrives.
-- 🚦 **Monthly limits** — download caps with a days-to-exhaustion estimate, set
-  per-server, **per-tag**, or as a **fleet-wide default** (most-specific wins).
-- 🔔 **Alerting** — threshold and **predictive** rules (warn *before* a limit is
-  hit), plus **server-down** and **node-stopped** alerts, with cooldowns,
-  silences, history, Telegram delivery, and an optional digest.
-- 🔍 **Node discovery** — detect and manage Rebecca / Pasarguard nodes, with a
-  Pasarguard install wizard and a fleet node-status glance on the dashboard.
+- 📅 **Billing-cycle anchor** — set the day your provider resets the quota
+  (e.g. the 15th) and every projection, limit, and alert follows that period.
+- 🚦 **Traffic limits** — caps on **download, upload, or total** with a
+  days-to-exhaustion estimate, set per-server, **per-tag**, or as a
+  **fleet-wide default** (most-specific wins).
+- 🔔 **Alerting** — threshold, **predictive** (warn *before* a limit is hit),
+  and **anomaly** rules (traffic spike / unusual growth), plus **server-down**
+  and **node-stopped** alerts, with cooldowns, silences, history, Telegram
+  delivery, and an optional digest.
+- 🔍 **Node discovery** — detect and manage Rebecca / Pasarguard nodes with a
+  **30-day uptime** badge per node, a Pasarguard install wizard, and a fleet
+  node-status glance on the dashboard.
+- 📈 **Observability** — persisted scheduler run history on diagnostics and an
+  optional token-gated Prometheus `/metrics` endpoint for Grafana.
 - 🌐 **Bilingual UI** — full English and Persian (فارسی) with RTL; installable as a PWA.
 - 🧰 **Supporting tools** — bulk reboot/update/delete, in-browser SSH terminal,
   command runner, SFTP browser, and encrypted backup/restore.
@@ -85,7 +94,7 @@ nodexia uninstall [--purge] [--yes]       # remove stack + CLI; --purge also wip
 
 ## 📸 Screenshots
 
-> From **v0.2.0**, with demo data shown purely to illustrate the interface.
+> From **v0.5.0**, with demo data shown purely to illustrate the interface.
 
 | | |
 |---|---|
@@ -110,6 +119,7 @@ Environment-based — the full annotated list lives in
 | `NODEXIA_TELEGRAM_BOT_TOKEN` | — | Telegram bot token for alerts/digest; blank disables sending. |
 | `NODEXIA_DB_DRIVER` / `NODEXIA_DB_DSN` | — | `sqlite` (default) or `mysql` + DSN. |
 | `NODEXIA_SSH_HOST_KEY_POLICY` | — | `tofu` (default) or `insecure`. |
+| `NODEXIA_METRICS_TOKEN` | — | Enables `GET /metrics` (Prometheus format) for scrapers; blank keeps it disabled. |
 
 > 🔐 **Never commit or share `.env.production`** — it holds your admin password,
 > session secret, and bot token. It's gitignored.
