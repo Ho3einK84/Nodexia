@@ -591,15 +591,193 @@
   color: var(--text);
 }
 
-.analytics-limit__clearhint {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
 .analytics-limit__error {
   margin: 10px 0 0;
   font-size: 0.8rem;
   color: var(--crit);
+}
+
+/* Labeled value/unit/kind form shared by the per-server and fleet limit cards. */
+.limit-form {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.limit-form__field {
+  display: grid;
+  gap: 5px;
+}
+
+.limit-form__field > span {
+  font-size: 0.74rem;
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.limit-form__field input,
+.limit-form__field select {
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.limit-form__field input:focus,
+.limit-form__field select:focus {
+  outline: none;
+  border-color: rgba(96, 165, 250, 0.5);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.limit-form__field--value input {
+  width: 160px;
+}
+
+.limit-form__submit {
+  min-height: 40px;
+}
+
+.limit-remove {
+  margin-top: 12px;
+}
+
+/* ── Traffic-limits banner (global analytics overview) ──────────────────── */
+
+.limits-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.limits-banner__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+}
+
+.limits-banner__icon svg {
+  width: 22px;
+  height: 22px;
+  color: var(--accent-soft);
+}
+
+.limits-banner__body {
+  flex: 1;
+  min-width: 240px;
+}
+
+.limits-banner__body h3 {
+  margin: 0 0 2px;
+  font-size: 1rem;
+}
+
+.limits-banner__body p {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.limits-banner__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.limits-banner__cta {
+  flex-shrink: 0;
+}
+
+/* ── Cap precedence explainer (limits admin page) ───────────────────────── */
+
+.precedence-steps {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.precedence-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.precedence-step__rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  color: var(--accent-bright);
+  font-size: 0.78rem;
+  font-weight: var(--fw-bold);
+  font-variant-numeric: var(--num);
+}
+
+.precedence-step__body strong {
+  display: block;
+  font-size: 0.86rem;
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+}
+
+.precedence-step__body p {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+/* Compact empty state inside a card (tag caps table placeholder). */
+.empty-state-card--compact {
+  padding: 18px 16px;
+}
+
+@media (max-width: 700px) {
+  .limits-banner__cta {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .limit-form__field--value input {
+    width: 100%;
+  }
+
+  .limit-form__field {
+    flex: 1 1 140px;
+  }
+
+  .limit-form__submit {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
 }
 
 /* ── Days-to-exhaustion projection ───────────────────────────────────────── */

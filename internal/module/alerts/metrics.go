@@ -156,6 +156,51 @@ var metricUnits = map[string]string{
 	MetricDaysToExhaustion: "days",
 }
 
+// Metric kinds drive the rule form's condition UI. Threshold metrics take a
+// comparator plus a free numeric threshold; the days metric takes a bounded
+// day count with the comparator fixed to "≤"; boolean metrics need no
+// condition at all (validation normalises them to "≥ 1").
+const (
+	MetricKindThreshold = "threshold"
+	MetricKindDays      = "days"
+	MetricKindBoolean   = "boolean"
+)
+
+// MetricKind classifies a metric for the condition UI: "boolean" (event
+// flags), "days" (days-to-limit), or "threshold" (everything else).
+func MetricKind(metric string) string {
+	switch metric {
+	case MetricServerUnreachable, MetricNodeStopped, MetricProjectedExceedLimit,
+		MetricTrafficSpike, MetricUnusualGrowth:
+		return MetricKindBoolean
+	case MetricDaysToExhaustion:
+		return MetricKindDays
+	default:
+		return MetricKindThreshold
+	}
+}
+
+// metricDefaultThresholds are the starter values the rule form applies when the
+// operator switches the metric picker, so the threshold always starts sensible
+// for the selected metric instead of inheriting the previous metric's number.
+var metricDefaultThresholds = map[string]string{
+	MetricCPU:              "90",
+	MetricRAM:              "90",
+	MetricDisk:             "85",
+	MetricLoad1:            "4",
+	MetricLoad5:            "4",
+	MetricLoad15:           "4",
+	MetricTrafficTotal:     "1000",
+	MetricBandwidth:        "500",
+	MetricDaysToExhaustion: "3",
+}
+
+// MetricDefaultThreshold returns the suggested starting threshold for a metric,
+// or "" for boolean metrics (which have no threshold to configure).
+func MetricDefaultThreshold(metric string) string {
+	return metricDefaultThresholds[metric]
+}
+
 // IsPredictiveMetric reports whether a metric is forecast-derived rather than an
 // observed instantaneous value. Predictive metrics are gated on a configured
 // monthly limit plus enough history, and use normalised comparators/thresholds.

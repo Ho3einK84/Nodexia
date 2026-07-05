@@ -322,11 +322,25 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.deps.Database != nil {
 		page.MigrationCount = h.deps.Database.MigrationCount()
 	}
-	page.GlobalAnalytics = view.GlobalAnalyticsView{
+	globalView := view.GlobalAnalyticsView{
 		TopMetrics:  metricViews,
 		TopTraffic:  trafficViews,
 		ServerCount: len(topMetrics),
 	}
+	// Traffic-limit summary for the banner linking to /analytics/limits.
+	// Best-effort: a read error just renders the banner without figures.
+	if limit, ok, err := h.repo.GetScopedLimit(r.Context(), LimitScopeGlobal, ""); err == nil && ok {
+		globalView.HasGlobalLimit = true
+		globalView.GlobalLimitHuman = formatBytes(limit)
+	}
+	if rules, err := h.repo.ListScopedLimits(r.Context()); err == nil {
+		for _, rule := range rules {
+			if rule.Scope == LimitScopeTag {
+				globalView.TagLimitCount++
+			}
+		}
+	}
+	page.GlobalAnalytics = globalView
 	page.PageStyles = []string{"/static/analytics.css"}
 	page.PageScripts = []string{"/static/analytics.js"}
 
