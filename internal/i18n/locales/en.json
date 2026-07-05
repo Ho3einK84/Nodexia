@@ -994,5 +994,16 @@
   "nodes.uptime_checks": "{detail} checks running",
   "servers.filter.tags": "Filter by label",
   "servers.filter.tags_aria": "Filter servers by label",
-  "servers.filter.clear": "Clear filter"
+  "servers.filter.clear": "Clear filter",
+  "home.warn.dismiss": "Dismiss this warning",
+  "home.warn.resource": "{server}: {metric} is at {value}.",
+  "home.warn.metric_cpu": "CPU usage",
+  "home.warn.metric_ram": "RAM usage",
+  "home.warn.metric_disk": "Disk usage",
+  "home.warn.limit_over": "{server} has already exceeded its traffic limit of {limit} for this period.",
+  "home.warn.limit_exhaust": "{server} is projected to run out of traffic in {days} day(s) (on {date}) — {reset} day(s) before the period resets.",
+  "home.warn.spike": "{server} is seeing a traffic spike — today's rate is at least twice its daily average.",
+  "home.warn.growth": "{server} shows unusual traffic growth — this period is projected more than 50% above the last 30 days.",
+  "home.warn.open_monitoring": "Open monitoring",
+  "home.warn.open_analytics": "Open analytics"
 }

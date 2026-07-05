@@ -994,5 +994,16 @@
   "nodes.uptime_checks": "{detail} بررسی در حال اجرا",
   "servers.filter.tags": "فیلتر با برچسب",
   "servers.filter.tags_aria": "فیلتر سرورها بر اساس برچسب",
-  "servers.filter.clear": "حذف فیلتر"
+  "servers.filter.clear": "حذف فیلتر",
+  "home.warn.dismiss": "بستن این هشدار",
+  "home.warn.resource": "{server}: {metric} به {value} رسیده است.",
+  "home.warn.metric_cpu": "مصرف CPU",
+  "home.warn.metric_ram": "مصرف RAM",
+  "home.warn.metric_disk": "مصرف دیسک",
+  "home.warn.limit_over": "{server} سقف ترافیک {limit} این دوره را رد کرده است.",
+  "home.warn.limit_exhaust": "پیش‌بینی می‌شود ترافیک {server} تا {days} روز دیگر (در {date}) تمام شود — {reset} روز مانده به ریست دوره.",
+  "home.warn.spike": "{server} جهش ترافیک دارد — نرخ امروز دست‌کم دو برابر میانگین روزانه است.",
+  "home.warn.growth": "{server} رشد غیرعادی ترافیک دارد — این دوره بیش از ۵۰٪ بالاتر از ۳۰ روز گذشته پیش‌بینی می‌شود.",
+  "home.warn.open_monitoring": "بازکردن مانیتورینگ",
+  "home.warn.open_analytics": "بازکردن تحلیل‌ها"
 }

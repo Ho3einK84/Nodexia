@@ -66,6 +66,11 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// without any extra per-row query.
 	countries := serverCountryBadges(h.database)
 
+	// Fleet warnings lead the dashboard: exhaustion before the traffic reset,
+	// resources at/above 90%, and forecast anomalies. Dismissals are client-side
+	// (localStorage) so the server always renders the full, current set.
+	page.HomeWarnings = homeWarnings(r.Context(), h.database, &page)
+
 	page.SchedulerOverview = schedulerOverviewView(h.scheduler, 1, 8, countries, func(p int) string {
 		return homeURL(snapPage, p)
 	})

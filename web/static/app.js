@@ -877,6 +877,55 @@
     });
   }
 
+  /* ── Home fleet warnings: reveal undismissed, dismiss to localStorage ─────
+   * Banners render hidden; each carries a stable data-warning-id. A dismissed
+   * id stays hidden until the underlying condition changes (the server then
+   * emits a different id). Dismissals expire after 7 days so a long-standing
+   * problem eventually resurfaces even if its id never changes.
+   */
+  var WARNING_DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+  function readWarningDismissals() {
+    try {
+      var raw = localStorage.getItem('nodexia_warn_dismissed');
+      var map = raw ? JSON.parse(raw) : {};
+      var now = Date.now();
+      var changed = false;
+      Object.keys(map).forEach(function (id) {
+        if (typeof map[id] !== 'number' || now - map[id] > WARNING_DISMISS_TTL_MS) {
+          delete map[id];
+          changed = true;
+        }
+      });
+      if (changed) localStorage.setItem('nodexia_warn_dismissed', JSON.stringify(map));
+      return map;
+    } catch (err) { return {}; }
+  }
+
+  function initHomeWarnings() {
+    var wrap = document.querySelector('[data-home-warnings]');
+    if (!wrap) return;
+    var dismissed = readWarningDismissals();
+
+    wrap.querySelectorAll('[data-warning-id]').forEach(function (banner) {
+      var id = banner.getAttribute('data-warning-id');
+      if (!dismissed[id]) banner.hidden = false;
+
+      var close = banner.querySelector('[data-warning-dismiss]');
+      if (!close) return;
+      close.addEventListener('click', function () {
+        try {
+          var map = readWarningDismissals();
+          map[id] = Date.now();
+          localStorage.setItem('nodexia_warn_dismissed', JSON.stringify(map));
+        } catch (err) { /* private mode — dismiss for this view only */ }
+        banner.classList.add('is-dismissing');
+        setTimeout(function () { banner.remove(); }, prefersReducedMotion ? 0 : 200);
+      });
+    });
+    renderIcons();
+  }
+
   /* ── Manual "refresh now" buttons ───────────────────────── */
   function initManualRefresh() {
     document.querySelectorAll('[data-refresh-now]').forEach(function (btn) {
@@ -1267,6 +1316,7 @@
     initReveal();
     initAutoRefresh();
     initStream();
+    initHomeWarnings();
     initNodeResult();
     initBulkStream();
     initManualRefresh();
