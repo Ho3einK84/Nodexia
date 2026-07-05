@@ -223,19 +223,6 @@
   <!-- Days-to-exhaustion projection (only when a monthly limit is set) -->
   <div class="forecast-exhaustion" id="forecastExhaustion" style="display:none"></div>
 
-  <article class="chart-card chart-card--wide" id="card-forecast-chart" style="display:none">
-    <div class="chart-card__header">
-      <div class="chart-card__title">
-        <i data-lucide="trending-up" class="chart-icon"></i>
-        <span>{{ t "analytics.actual_vs_predicted" }}</span>
-        <span class="forecast-algo" id="forecastAlgo"></span>
-      </div>
-    </div>
-    <div class="chart-wrap chart-wrap--tall">
-      <div class="chart-container" id="chart-forecast-actual" data-server="{{ .AnalyticsTarget.ID }}" style="display:none"></div>
-    </div>
-  </article>
-
 </section>
 {{ end }}
 

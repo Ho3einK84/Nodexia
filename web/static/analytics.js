@@ -384,13 +384,6 @@
 
     renderExhaustion(f.exhaustion);
 
-    // Show forecast algo on chart card
-    const algoEl = document.getElementById('forecastAlgo');
-    if (algoEl) algoEl.textContent = f.algorithm;
-
-    const chartCard = document.getElementById('card-forecast-chart');
-    if (chartCard) chartCard.style.display = '';
-
     if (window.lucide) lucide.createIcons();
   }
 
