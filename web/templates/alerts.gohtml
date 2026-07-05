@@ -35,8 +35,8 @@
           {{ range .Rules }}
           <tr>
             <td>{{ if .IsGlobal }}<span class="badge badge--id">{{ t "alerts.all_servers" }}</span>{{ else }}{{ .ServerLabel }}{{ end }}</td>
-            <td>{{ .MetricLabel }}</td>
-            <td><code>{{ .ComparatorSymbol }} {{ .ThresholdDisplay }}</code></td>
+            <td>{{ t (printf "alerts.metric.%s" .Metric) }}</td>
+            <td>{{ if eq .ConditionKind "boolean" }}<span class="badge badge--id">{{ t "alerts.condition_on_detection" }}</span>{{ else }}<code>{{ .ComparatorSymbol }} {{ .ThresholdDisplay }}</code>{{ end }}</td>
             <td><span class="severity-badge severity-badge--{{ .Severity }}">{{ t (printf "alerts.severity.%s" .Severity) }}</span></td>
             <td>{{ .ConsecutiveHits }}{{ if .StreakSummary }} <span class="badge badge--warn" title="{{ t "alerts.streak_title" "count" .ConsecutiveHits }}">{{ .StreakSummary }}</span>{{ end }}</td>
             <td>{{ .Cooldown }}</td>
@@ -138,7 +138,7 @@
           <span><i data-lucide="activity" class="icon-in-button"></i> {{ t "alerts.th_metric" }}</span>
           <select name="metric">
             {{ range .SilenceForm.MetricOptions }}
-            <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}>{{ .Label }}</option>
+            <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}>{{ t (printf "alerts.metric.%s" .Value) }}</option>
             {{ end }}
           </select>
           {{ with index .SilenceForm.Errors "metric" }}<small class="field-error">{{ . }}</small>{{ end }}
@@ -172,7 +172,7 @@
           {{ range .Silences }}
           <tr>
             <td>{{ .ServerLabel }}</td>
-            <td>{{ .MetricLabel }}</td>
+            <td>{{ t (printf "alerts.metric.%s" .Metric) }}</td>
             <td>{{ if .Reason }}{{ .Reason }}{{ else }}<span class="muted">—</span>{{ end }}</td>
             <td>{{ .Expires }}</td>
             <td>{{ if .Active }}<span class="badge badge--ok">{{ t "alerts.silence_active" }}</span>{{ else }}<span class="badge badge--warn">{{ t "alerts.silence_expired" }}</span>{{ end }}</td>
@@ -209,7 +209,7 @@
           {{ range .Events }}
           <tr>
             <td>{{ .ServerLabel }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</td>
-            <td>{{ .MetricLabel }}</td>
+            <td>{{ t (printf "alerts.metric.%s" .Metric) }}</td>
             <td><code>{{ .Value }}</code></td>
             <td><code>{{ .Threshold }}</code></td>
             <td><span class="severity-badge severity-badge--{{ .Severity }}">{{ t (printf "alerts.severity.%s" .Severity) }}</span></td>
@@ -241,115 +241,233 @@
   </div>
   {{ end }}
 
-  <div class="grid">
-    <article class="card">
-      <h3><i data-lucide="{{ if .IsEditingAlertRule }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingAlertRule }}{{ t "alerts.rule_form_edit" }}{{ else }}{{ t "alerts.rule_form_new" }}{{ end }}</h3>
-      <form method="post" action="{{ .AlertRuleForm.Action }}" class="server-form">
-        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+  {{ $f := .AlertRuleForm }}
+  <article class="card rule-form-card">
+    <h3><i data-lucide="{{ if .IsEditingAlertRule }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingAlertRule }}{{ t "alerts.rule_form_edit" }}{{ else }}{{ t "alerts.rule_form_new" }}{{ end }}</h3>
+
+    <form method="post" action="{{ $f.Action }}" class="rule-form" data-rule-form
+          data-label-threshold="{{ t "alerts.threshold" }}"
+          data-label-days="{{ t "alerts.condition_days_label" }}"
+          data-unit-days="{{ t "alerts.condition_unit_days" }}"
+          {{/* NB: not data-on-*: html/template strips "data-" and treats "on*"
+               attributes as JS event handlers, JSON-quoting the value. */}}
+          data-detected-label="{{ t "alerts.condition_on_detection" }}"
+          data-first-breach="{{ t "alerts.preview_first_breach" }}"
+          data-after-hits="{{ t "alerts.preview_after_hits" }}"
+          data-no-cooldown="{{ t "alerts.preview_no_cooldown" }}"
+          data-with-cooldown="{{ t "alerts.preview_cooldown" }}">
+      <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+
+      {{/* ── 1 · Scope ──────────────────────────────────── */}}
+      <fieldset class="rule-section">
+        <legend class="rule-section__legend">
+          <span class="rule-section__step" aria-hidden="true">1</span>
+          <span class="rule-section__title">{{ t "alerts.section_scope" }}</span>
+          <span class="rule-section__hint">{{ t "alerts.section_scope_hint" }}</span>
+        </legend>
 
         <label class="form-field">
           <span><i data-lucide="server" class="icon-in-button"></i> {{ t "alerts.server_scope" }}</span>
           <select name="server_id">
-            {{ range .AlertRuleForm.ServerOptions }}
+            {{ range $f.ServerOptions }}
             <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}>{{ .Label }}</option>
             {{ end }}
           </select>
-          {{ with index .AlertRuleForm.Errors "server_id" }}<small class="field-error">{{ . }}</small>{{ end }}
+          {{ with index $f.Errors "server_id" }}<small class="field-error">{{ . }}</small>{{ end }}
+        </label>
+      </fieldset>
+
+      {{/* ── 2 · Condition ──────────────────────────────── */}}
+      <fieldset class="rule-section">
+        <legend class="rule-section__legend">
+          <span class="rule-section__step" aria-hidden="true">2</span>
+          <span class="rule-section__title">{{ t "alerts.section_condition" }}</span>
+          <span class="rule-section__hint">{{ t "alerts.section_condition_hint" }}</span>
+        </legend>
+
+        <label class="form-field">
+          <span><i data-lucide="activity" class="icon-in-button"></i> {{ t "alerts.th_metric" }}</span>
+          <select name="metric" data-metric-select>
+            {{ range $f.Metrics }}
+            <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}
+                    data-kind="{{ .Kind }}" data-unit="{{ .Unit }}" data-default="{{ .DefaultThreshold }}"
+                    {{ if .NeedsLimit }}data-needs-limit="1"{{ end }}
+                    {{ if .NeedsHistory }}data-needs-history="1"{{ end }}
+                    data-hint="{{ t (printf "alerts.metric_hint.%s" .Value) }}">{{ t (printf "alerts.metric.%s" .Value) }}</option>
+            {{ end }}
+          </select>
+          {{ with index $f.Errors "metric" }}<small class="field-error">{{ . }}</small>{{ end }}
         </label>
 
-        <div class="form-grid">
-          <label class="form-field">
-            <span><i data-lucide="activity" class="icon-in-button"></i> {{ t "alerts.th_metric" }}</span>
-            <select name="metric">
-              {{ range .AlertRuleForm.MetricOptions }}
-              <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}>{{ .Label }}</option>
-              {{ end }}
-            </select>
-            {{ with index .AlertRuleForm.Errors "metric" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
+        <p class="metric-hint" data-metric-hint aria-live="polite">{{ if $f.SelectedMetric.Value }}{{ t (printf "alerts.metric_hint.%s" $f.SelectedMetric.Value) }}{{ end }}</p>
 
-          <label class="form-field">
-            <span><i data-lucide="equal" class="icon-in-button"></i> {{ t "alerts.comparator" }}</span>
-            <select name="comparator">
-              <option value="gte" {{ if eq .AlertRuleForm.Comparator "gte" }}selected{{ end }}>{{ t "alerts.cmp_gte" }}</option>
-              <option value="gt"  {{ if eq .AlertRuleForm.Comparator "gt" }}selected{{ end }}>&gt; {{ t "alerts.cmp_gt" }}</option>
-            </select>
-            {{ with index .AlertRuleForm.Errors "comparator" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
+        <div class="metric-gate" data-gate-limit {{ if not $f.SelectedMetric.NeedsLimit }}hidden{{ end }}>
+          <i data-lucide="gauge"></i>
+          <span>{{ t "alerts.needs_limit_note" }}</span>
+        </div>
+        <div class="metric-gate" data-gate-history {{ if not $f.SelectedMetric.NeedsHistory }}hidden{{ end }}>
+          <i data-lucide="history"></i>
+          <span>{{ t "alerts.needs_history_note" }}</span>
         </div>
 
-        <div class="form-grid">
-          <label class="form-field">
-            <span><i data-lucide="gauge" class="icon-in-button"></i> {{ t "alerts.threshold" }}</span>
-            <input type="number" name="threshold" step="any" min="0" value="{{ .AlertRuleForm.Threshold }}">
-            <small class="field-hint">{{ t "alerts.threshold_hint" }}</small>
-            {{ with index .AlertRuleForm.Errors "threshold" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
+        {{/* Boolean metrics are events — there is no threshold to configure. */}}
+        <div class="condition-note" data-condition-boolean {{ if ne $f.SelectedMetric.Kind "boolean" }}hidden{{ end }}>
+          <i data-lucide="zap"></i>
+          <span>{{ t "alerts.condition_boolean_note" }}</span>
+        </div>
 
-          <label class="form-field">
-            <span><i data-lucide="shield-alert" class="icon-in-button"></i> {{ t "alerts.th_severity" }}</span>
-            <select name="severity">
-              <option value="info"     {{ if eq .AlertRuleForm.Severity "info" }}selected{{ end }}>{{ t "alerts.sev_info" }}</option>
-              <option value="warning"  {{ if eq .AlertRuleForm.Severity "warning" }}selected{{ end }}>{{ t "alerts.sev_warning" }}</option>
-              <option value="critical" {{ if eq .AlertRuleForm.Severity "critical" }}selected{{ end }}>{{ t "alerts.sev_critical" }}</option>
-            </select>
-            {{ with index .AlertRuleForm.Errors "severity" }}<small class="field-error">{{ . }}</small>{{ end }}
+        <div class="condition-row" data-condition-row {{ if eq $f.SelectedMetric.Kind "boolean" }}hidden{{ end }}>
+          <div class="form-field condition-row__comparator" data-comparator-wrap {{ if ne $f.SelectedMetric.Kind "threshold" }}hidden{{ end }}>
+            <span class="form-field__label">{{ t "alerts.threshold_trigger_label" }}</span>
+            <div class="segmented" role="radiogroup" aria-label="{{ t "alerts.comparator" }}">
+              <label class="segmented__option">
+                <input type="radio" name="comparator" value="gte" data-symbol="≥" {{ if ne $f.Comparator "gt" }}checked{{ end }}>
+                <span>{{ t "alerts.cmp_gte" }}</span>
+              </label>
+              <label class="segmented__option">
+                <input type="radio" name="comparator" value="gt" data-symbol="&gt;" {{ if eq $f.Comparator "gt" }}checked{{ end }}>
+                <span>{{ t "alerts.cmp_gt" }}</span>
+              </label>
+            </div>
+            {{ with index $f.Errors "comparator" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </div>
+
+          <label class="form-field condition-row__threshold">
+            <span data-threshold-label>{{ if eq $f.SelectedMetric.Kind "days" }}{{ t "alerts.condition_days_label" }}{{ else }}{{ t "alerts.threshold" }}{{ end }}</span>
+            <span class="input-affix">
+              <input type="number" name="threshold" step="any" min="0" inputmode="decimal" value="{{ $f.Threshold }}" data-threshold-input>
+              <span class="input-affix__unit" data-threshold-unit {{ if and (ne $f.SelectedMetric.Kind "days") (not $f.SelectedMetric.Unit) }}hidden{{ end }}>{{ if eq $f.SelectedMetric.Kind "days" }}{{ t "alerts.condition_unit_days" }}{{ else }}{{ $f.SelectedMetric.Unit }}{{ end }}</span>
+            </span>
+            <small class="field-hint" data-days-note {{ if ne $f.SelectedMetric.Kind "days" }}hidden{{ end }}>{{ t "alerts.condition_days_note" }}</small>
+            {{ with index $f.Errors "threshold" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
         </div>
+      </fieldset>
+
+      {{/* ── 3 · Timing & noise control ─────────────────── */}}
+      <fieldset class="rule-section">
+        <legend class="rule-section__legend">
+          <span class="rule-section__step" aria-hidden="true">3</span>
+          <span class="rule-section__title">{{ t "alerts.section_behavior" }}</span>
+          <span class="rule-section__hint">{{ t "alerts.section_behavior_hint" }}</span>
+        </legend>
 
         <div class="form-grid">
           <label class="form-field">
             <span><i data-lucide="repeat" class="icon-in-button"></i> {{ t "alerts.consecutive_hits" }}</span>
-            <input type="number" name="consecutive_hits" min="1" step="1" value="{{ .AlertRuleForm.ConsecutiveHits }}">
+            <input type="number" name="consecutive_hits" min="1" step="1" value="{{ $f.ConsecutiveHits }}" data-hits-input>
             <small class="field-hint">{{ t "alerts.consecutive_hits_hint" }}</small>
-            {{ with index .AlertRuleForm.Errors "consecutive_hits" }}<small class="field-error">{{ . }}</small>{{ end }}
+            {{ with index $f.Errors "consecutive_hits" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
 
           <label class="form-field">
-            <span><i data-lucide="timer" class="icon-in-button"></i> {{ t "alerts.cooldown_seconds" }}</span>
-            <input type="number" name="cooldown_seconds" min="0" step="1" value="{{ .AlertRuleForm.CooldownSeconds }}">
+            <span><i data-lucide="timer" class="icon-in-button"></i> {{ t "alerts.cooldown" }}</span>
+            <select name="cooldown_seconds" data-cooldown-select>
+              {{ if not $f.CooldownIsPreset }}<option value="{{ $f.CooldownSeconds }}" selected>{{ $f.CooldownCustomLabel }}</option>{{ end }}
+              <option value="0" {{ if eq $f.CooldownSeconds "0" }}selected{{ end }}>{{ t "alerts.cooldown_opt_none" }}</option>
+              <option value="300" {{ if eq $f.CooldownSeconds "300" }}selected{{ end }}>{{ t "alerts.cooldown_opt_5m" }}</option>
+              <option value="900" {{ if eq $f.CooldownSeconds "900" }}selected{{ end }}>{{ t "alerts.cooldown_opt_15m" }}</option>
+              <option value="1800" {{ if eq $f.CooldownSeconds "1800" }}selected{{ end }}>{{ t "alerts.cooldown_opt_30m" }}</option>
+              <option value="3600" {{ if eq $f.CooldownSeconds "3600" }}selected{{ end }}>{{ t "alerts.cooldown_opt_1h" }}</option>
+              <option value="21600" {{ if eq $f.CooldownSeconds "21600" }}selected{{ end }}>{{ t "alerts.cooldown_opt_6h" }}</option>
+              <option value="86400" {{ if eq $f.CooldownSeconds "86400" }}selected{{ end }}>{{ t "alerts.cooldown_opt_24h" }}</option>
+            </select>
             <small class="field-hint">{{ t "alerts.cooldown_hint" }}</small>
-            {{ with index .AlertRuleForm.Errors "cooldown_seconds" }}<small class="field-error">{{ . }}</small>{{ end }}
+            {{ with index $f.Errors "cooldown_seconds" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
         </div>
+      </fieldset>
 
-        <label class="form-field">
-          <span><i data-lucide="send" class="icon-in-button"></i> {{ t "alerts.th_channel" }}</span>
-          <select name="channel_id">
-            {{ range .AlertRuleForm.ChannelOptions }}
-            <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}>{{ .Label }}</option>
-            {{ end }}
-          </select>
-          {{ with index .AlertRuleForm.Errors "channel_id" }}<small class="field-error">{{ . }}</small>{{ end }}
-        </label>
+      {{/* ── 4 · Delivery ───────────────────────────────── */}}
+      <fieldset class="rule-section">
+        <legend class="rule-section__legend">
+          <span class="rule-section__step" aria-hidden="true">4</span>
+          <span class="rule-section__title">{{ t "alerts.section_delivery" }}</span>
+          <span class="rule-section__hint">{{ t "alerts.section_delivery_hint" }}</span>
+        </legend>
 
-        <label class="form-field">
-          <span><i data-lucide="file-text" class="icon-in-button"></i> {{ t "common.note" }}</span>
-          <textarea name="note" rows="2" placeholder="{{ t "alerts.note_placeholder" }}">{{ .AlertRuleForm.Note }}</textarea>
-          {{ with index .AlertRuleForm.Errors "note" }}<small class="field-error">{{ . }}</small>{{ end }}
-        </label>
-
-        <label class="checkbox-field">
-          <input type="checkbox" name="enabled" {{ if .AlertRuleForm.Enabled }}checked{{ end }}>
-          <span>{{ t "alerts.rule_enabled" }}</span>
-        </label>
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn--primary">{{ if .IsEditingAlertRule }}Save changes{{ else }}Create rule{{ end }}</button>
-          <a class="btn btn--secondary" href="/alerts"><i data-lucide="list" class="icon-in-button"></i> {{ t "alerts.back_to_alerts" }}</a>
+        <div class="form-field">
+          <span class="form-field__label"><i data-lucide="shield-alert" class="icon-in-button"></i> {{ t "alerts.th_severity" }}</span>
+          <div class="severity-picker" role="radiogroup" aria-label="{{ t "alerts.th_severity" }}">
+            <label class="severity-option severity-option--info">
+              <input type="radio" name="severity" value="info" {{ if eq $f.Severity "info" }}checked{{ end }}>
+              <span class="severity-option__body">
+                <span class="severity-option__name"><i data-lucide="info"></i> {{ t "alerts.sev_info" }}</span>
+                <span class="severity-option__desc">{{ t "alerts.sev_info_desc" }}</span>
+              </span>
+            </label>
+            <label class="severity-option severity-option--warning">
+              <input type="radio" name="severity" value="warning" {{ if eq $f.Severity "warning" }}checked{{ end }}>
+              <span class="severity-option__body">
+                <span class="severity-option__name"><i data-lucide="triangle-alert"></i> {{ t "alerts.sev_warning" }}</span>
+                <span class="severity-option__desc">{{ t "alerts.sev_warning_desc" }}</span>
+              </span>
+            </label>
+            <label class="severity-option severity-option--critical">
+              <input type="radio" name="severity" value="critical" {{ if eq $f.Severity "critical" }}checked{{ end }}>
+              <span class="severity-option__body">
+                <span class="severity-option__name"><i data-lucide="octagon-alert"></i> {{ t "alerts.sev_critical" }}</span>
+                <span class="severity-option__desc">{{ t "alerts.sev_critical_desc" }}</span>
+              </span>
+            </label>
+          </div>
+          {{ with index $f.Errors "severity" }}<small class="field-error">{{ . }}</small>{{ end }}
         </div>
-      </form>
 
-      {{ if .IsEditingAlertRule }}
-      <div class="danger-zone">
-        <form method="post" action="{{ .AlertRuleForm.DeleteAction }}" class="inline-form">
-          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-          <button type="submit" class="btn btn--danger" data-confirm="{{ t "alerts.delete_rule_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "alerts.delete_rule_btn" }}</button>
-        </form>
+        <div class="form-grid">
+          <label class="form-field">
+            <span><i data-lucide="send" class="icon-in-button"></i> {{ t "alerts.th_channel" }}</span>
+            <select name="channel_id">
+              {{ range $f.ChannelOptions }}
+              <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}>{{ .Label }}</option>
+              {{ end }}
+            </select>
+            {{ with index $f.Errors "channel_id" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+
+          <label class="form-field">
+            <span><i data-lucide="file-text" class="icon-in-button"></i> {{ t "common.note" }} <span class="badge badge--warn">{{ t "common.optional" }}</span></span>
+            <textarea name="note" rows="2" placeholder="{{ t "alerts.note_placeholder" }}">{{ $f.Note }}</textarea>
+            {{ with index $f.Errors "note" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+        </div>
+      </fieldset>
+
+      {{/* Live summary — populated by alerts.js; hidden without JS. */}}
+      <div class="rule-preview" data-rule-preview hidden>
+        <span class="rule-preview__title"><i data-lucide="eye"></i> {{ t "alerts.preview_title" }}</span>
+        <div class="rule-preview__chips">
+          <span class="rule-preview__chip rule-preview__chip--condition" data-preview-condition></span>
+          <span class="rule-preview__chip" data-preview-cadence></span>
+          <span class="rule-preview__chip" data-preview-cooldown></span>
+          <span class="rule-preview__chip" data-preview-severity></span>
+        </div>
       </div>
-      {{ end }}
-    </article>
-  </div>
+
+      <label class="switch-field">
+        <input type="checkbox" name="enabled" role="switch" {{ if $f.Enabled }}checked{{ end }}>
+        <span class="switch-field__track" aria-hidden="true"></span>
+        <span class="switch-field__text">
+          {{ t "alerts.rule_enabled" }}
+          <small>{{ t "alerts.rule_enabled_hint" }}</small>
+        </span>
+      </label>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary"><i data-lucide="check" class="icon-in-button"></i> {{ if .IsEditingAlertRule }}{{ t "common.save_changes" }}{{ else }}{{ t "alerts.create_rule_btn" }}{{ end }}</button>
+        <a class="btn btn--secondary" href="/alerts"><i data-lucide="list" class="icon-in-button"></i> {{ t "alerts.back_to_alerts" }}</a>
+      </div>
+    </form>
+
+    {{ if .IsEditingAlertRule }}
+    <div class="danger-zone">
+      <form method="post" action="{{ $f.DeleteAction }}" class="inline-form">
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+        <button type="submit" class="btn btn--danger" data-confirm="{{ t "alerts.delete_rule_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "alerts.delete_rule_btn" }}</button>
+      </form>
+    </div>
+    {{ end }}
+  </article>
 </section>
 {{ end }}
 
@@ -396,7 +514,7 @@
         </label>
 
         <div class="form-actions">
-          <button type="submit" class="btn btn--primary">{{ if .IsEditingAlertChannel }}Save changes{{ else }}Create channel{{ end }}</button>
+          <button type="submit" class="btn btn--primary"><i data-lucide="check" class="icon-in-button"></i> {{ if .IsEditingAlertChannel }}{{ t "common.save_changes" }}{{ else }}{{ t "alerts.create_channel_btn" }}{{ end }}</button>
           <a class="btn btn--secondary" href="/alerts"><i data-lucide="list" class="icon-in-button"></i> {{ t "alerts.back_to_alerts" }}</a>
         </div>
       </form>

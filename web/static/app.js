@@ -1099,9 +1099,62 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') close();
     });
+    // Trap Tab inside the open drawer (mirrors the modal focus trap) so
+    // keyboard users can't wander into the inert page behind it.
+    drawer.addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab' || !drawer.classList.contains('is-open')) return;
+      var focusables = drawer.querySelectorAll(
+        'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (!focusables.length) return;
+      var first = focusables[0];
+      var last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
     // If the viewport grows past the mobile breakpoint, ensure it's closed.
     window.addEventListener('resize', function () {
       if (window.innerWidth > 700) close();
+    });
+
+    // Swipe-to-close: dragging the panel toward its off-canvas edge follows
+    // the finger and releases past a threshold. The closing direction flips
+    // with text direction (the drawer parks on the inline-end side).
+    var rtl = (document.documentElement.getAttribute('dir') === 'rtl');
+    var touchStartX = 0, touchStartY = 0, dragging = false, closingDx = 0;
+
+    drawer.addEventListener('touchstart', function (e) {
+      if (!drawer.classList.contains('is-open') || e.touches.length !== 1) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      dragging = true;
+      closingDx = 0;
+    }, { passive: true });
+
+    drawer.addEventListener('touchmove', function (e) {
+      if (!dragging) return;
+      var dx = e.touches[0].clientX - touchStartX;
+      var dy = e.touches[0].clientY - touchStartY;
+      // Vertical intent = the user is scrolling the drawer, not dismissing it.
+      if (Math.abs(dy) > Math.abs(dx) && closingDx === 0) { dragging = false; return; }
+      closingDx = rtl ? -dx : dx;
+      if (closingDx > 0) {
+        drawer.style.transition = 'none';
+        drawer.style.transform = 'translateX(' + (rtl ? -closingDx : closingDx) + 'px)';
+      }
+    }, { passive: true });
+
+    drawer.addEventListener('touchend', function () {
+      if (!dragging) return;
+      dragging = false;
+      drawer.style.transition = '';
+      drawer.style.transform = '';
+      if (closingDx > 72) close();
+      closingDx = 0;
     });
   }
 

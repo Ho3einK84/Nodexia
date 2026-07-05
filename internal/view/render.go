@@ -799,6 +799,24 @@ type AlertOptionView struct {
 	Selected bool
 }
 
+// AlertMetricOptionView is one metric choice on the rule form. Kind/Unit drive
+// the metric-aware condition controls (comparator + numeric threshold for
+// "threshold" metrics, a bounded day count for "days", nothing for "boolean");
+// NeedsLimit/NeedsHistory surface the forecast availability gates next to the
+// picker. The visible label is resolved in the template from the i18n catalog
+// (alerts.metric.<value>) so the form is fully bilingual.
+type AlertMetricOptionView struct {
+	Value        string
+	Kind         string
+	Unit         string
+	// DefaultThreshold seeds the threshold input when the operator switches to
+	// this metric ("" for boolean metrics, which take no threshold).
+	DefaultThreshold string
+	NeedsLimit       bool
+	NeedsHistory     bool
+	Selected         bool
+}
+
 // AlertRuleView renders one row in the rules section of the alerts overview.
 type AlertRuleView struct {
 	ID               int64
@@ -806,6 +824,9 @@ type AlertRuleView struct {
 	IsGlobal         bool
 	Metric           string
 	MetricLabel      string
+	// ConditionKind mirrors alerts.MetricKind: "boolean" rules render an
+	// "on detection" badge instead of the meaningless internal "≥ 1".
+	ConditionKind    string
 	ComparatorSymbol string
 	ThresholdDisplay string
 	ConsecutiveHits  int
@@ -854,6 +875,7 @@ type AlertEventView struct {
 	// CountryName is shown on hover. Mirrors the servers-list badge.
 	FlagEmoji   string
 	CountryName string
+	Metric      string
 	MetricLabel string
 	Value       string
 	Threshold   string
@@ -906,8 +928,18 @@ type AlertRuleFormView struct {
 	DeleteAction    string
 	ServerOptions   []AlertOptionView
 	ChannelOptions  []AlertOptionView
-	MetricOptions   []AlertOptionView
-	Errors          map[string]string
+	// Metrics lists the selectable metrics with the metadata the condition UI
+	// needs; SelectedMetric echoes the currently chosen entry so the server
+	// renders the right condition controls even without JavaScript.
+	Metrics        []AlertMetricOptionView
+	SelectedMetric AlertMetricOptionView
+	// CooldownIsPreset is true when CooldownSeconds matches one of the form's
+	// preset cooldown options; otherwise the template injects the stored custom
+	// value as an extra option (labelled CooldownCustomLabel) so editing an
+	// older rule never silently rewrites its cooldown.
+	CooldownIsPreset    bool
+	CooldownCustomLabel string
+	Errors              map[string]string
 }
 
 // AlertChannelFormView powers the channel create/edit form.
@@ -1030,6 +1062,11 @@ type GlobalAnalyticsView struct {
 	ServerCount int
 	TopMetrics  []TopServerMetricView
 	TopTraffic  []TopServerTrafficView
+	// Traffic-limit summary for the banner that links to /analytics/limits:
+	// the current global default cap (if any) and how many per-tag caps exist.
+	HasGlobalLimit   bool
+	GlobalLimitHuman string
+	TagLimitCount    int
 }
 
 // AnalyticsTrafficSummaryView is the current-month download/upload/total strip

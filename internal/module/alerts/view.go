@@ -94,6 +94,7 @@ func buildEventRows(events []Event, serverNames, serverCountries map[int64]strin
 			ServerLabel: serverLabel(serverNames, &serverID),
 			FlagEmoji:   geoip.FlagEmoji(code),
 			CountryName: geoip.CountryName(code),
+			Metric:      event.Metric,
 			MetricLabel: MetricLabel(event.Metric),
 			Value:       FormatThresholdWithUnit(event.Metric, event.ObservedValue),
 			Threshold:   FormatThresholdWithUnit(event.Metric, event.Threshold),
@@ -159,6 +160,7 @@ func buildRuleRows(rules []Rule, serverNames, channelNames map[int64]string, str
 			IsGlobal:         rule.IsGlobal(),
 			Metric:           rule.Metric,
 			MetricLabel:      MetricLabel(rule.Metric),
+			ConditionKind:    MetricKind(rule.Metric),
 			ComparatorSymbol: ComparatorSymbol(rule.Comparator),
 			ThresholdDisplay: FormatThresholdWithUnit(rule.Metric, rule.Threshold),
 			ConsecutiveHits:  rule.ConsecutiveHits,
@@ -226,23 +228,78 @@ func buildRuleFormView(
 	servers []serverRef,
 	channels []Channel,
 ) view.AlertRuleFormView {
+	metrics, selected := ruleMetricOptions(input.Metric)
 	return view.AlertRuleFormView{
-		ID:              id,
-		Metric:          input.Metric,
-		Comparator:      input.Comparator,
-		Threshold:       input.Threshold,
-		ConsecutiveHits: input.ConsecutiveHits,
-		CooldownSeconds: input.CooldownSeconds,
-		Severity:        input.Severity,
-		Enabled:         input.Enabled,
-		Note:            input.Note,
-		Action:          action,
-		DeleteAction:    deleteAction,
-		ServerOptions:   serverSelectOptions(servers, input.ServerID, true, "All servers (global rule)"),
-		ChannelOptions:  channelSelectOptions(channels, input.ChannelID),
-		MetricOptions:   metricSelectOptions(RuleMetrics(), input.Metric),
-		Errors:          errs,
+		ID:                  id,
+		Metric:              input.Metric,
+		Comparator:          input.Comparator,
+		Threshold:           input.Threshold,
+		ConsecutiveHits:     input.ConsecutiveHits,
+		CooldownSeconds:     input.CooldownSeconds,
+		Severity:            input.Severity,
+		Enabled:             input.Enabled,
+		Note:                input.Note,
+		Action:              action,
+		DeleteAction:        deleteAction,
+		ServerOptions:       serverSelectOptions(servers, input.ServerID, true, "All servers (global rule)"),
+		ChannelOptions:      channelSelectOptions(channels, input.ChannelID),
+		Metrics:             metrics,
+		SelectedMetric:      selected,
+		CooldownIsPreset:    isCooldownPreset(input.CooldownSeconds),
+		CooldownCustomLabel: cooldownCustomLabel(input.CooldownSeconds),
+		Errors:              errs,
 	}
+}
+
+// cooldownPresets are the cooldown choices the rule form offers, in seconds.
+// Keep in sync with the <select> options in content-alert-rule-form.
+var cooldownPresets = []string{"0", "300", "900", "1800", "3600", "21600", "86400"}
+
+func isCooldownPreset(value string) bool {
+	for _, preset := range cooldownPresets {
+		if value == preset {
+			return true
+		}
+	}
+	return false
+}
+
+// cooldownCustomLabel humanizes a non-preset cooldown so an edited rule shows
+// its stored value (e.g. "1h 30m") instead of a bare seconds count.
+func cooldownCustomLabel(value string) string {
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds < 0 {
+		return value
+	}
+	return humanizeDurationSeconds(seconds)
+}
+
+// ruleMetricOptions assembles the metric picker entries plus the currently
+// selected one (falling back to the first metric) so the template can render
+// the matching condition controls server-side.
+func ruleMetricOptions(selected string) ([]view.AlertMetricOptionView, view.AlertMetricOptionView) {
+	options := make([]view.AlertMetricOptionView, 0, len(ruleMetrics))
+	var current view.AlertMetricOptionView
+	for _, metric := range ruleMetrics {
+		option := view.AlertMetricOptionView{
+			Value:            metric,
+			Kind:             MetricKind(metric),
+			Unit:             MetricUnit(metric),
+			DefaultThreshold: MetricDefaultThreshold(metric),
+			NeedsLimit:       IsPredictiveMetric(metric),
+			NeedsHistory:     IsAnomalyMetric(metric),
+			Selected:         metric == selected,
+		}
+		if option.Selected {
+			current = option
+		}
+		options = append(options, option)
+	}
+	if current.Value == "" && len(options) > 0 {
+		options[0].Selected = true
+		current = options[0]
+	}
+	return options, current
 }
 
 func buildChannelFormView(id int64, input ChannelFormInput, errs ValidationErrors, action, deleteAction string) view.AlertChannelFormView {

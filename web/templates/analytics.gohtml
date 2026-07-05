@@ -182,26 +182,40 @@
       {{ end }}
     </div>
     <p class="analytics-limit__hint">{{ t "analytics.limit.hint" }}</p>
-    <form class="analytics-limit__form" method="post" action="{{ .Action }}">
+    <form class="limit-form" method="post" action="{{ .Action }}">
       <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-      <label class="sr-only" for="limit_value">{{ t "analytics.limit.value_label" }}</label>
-      <input type="number" id="limit_value" name="limit_value" step="any" min="0"
-             inputmode="decimal" value="{{ .ValueInput }}"
-             placeholder="{{ t "analytics.limit.placeholder" }}" class="analytics-limit__value">
-      <label class="sr-only" for="limit_unit">{{ t "analytics.limit.unit_label" }}</label>
-      <select id="limit_unit" name="limit_unit" class="analytics-limit__unit">
-        {{ $unit := .UnitInput }}
-        {{ range .UnitOptions }}<option value="{{ . }}"{{ if eq . $unit }} selected{{ end }}>{{ . }}</option>{{ end }}
-      </select>
-      <label class="sr-only" for="limit_kind">{{ t "analytics.limit.kind_label" }}</label>
-      <select id="limit_kind" name="limit_kind" class="analytics-limit__unit">
-        <option value="rx"{{ if eq .KindInput "rx" }} selected{{ end }}>{{ t "analytics.limit.kind_rx" }}</option>
-        <option value="tx"{{ if eq .KindInput "tx" }} selected{{ end }}>{{ t "analytics.limit.kind_tx" }}</option>
-        <option value="total"{{ if eq .KindInput "total" }} selected{{ end }}>{{ t "analytics.limit.kind_total" }}</option>
-      </select>
-      <button type="submit" class="btn btn--primary btn--sm"><i data-lucide="save" class="icon-in-button"></i> {{ t "analytics.limit.save" }}</button>
-      <span class="analytics-limit__clearhint">{{ t "analytics.limit.clear_hint" }}</span>
+      <label class="limit-form__field limit-form__field--value">
+        <span>{{ t "analytics.limit.value_label" }}</span>
+        <input type="number" name="limit_value" step="any" min="0"
+               inputmode="decimal" value="{{ .ValueInput }}"
+               placeholder="{{ t "analytics.limit.placeholder" }}">
+      </label>
+      <label class="limit-form__field">
+        <span>{{ t "analytics.limit.unit_label" }}</span>
+        <select name="limit_unit">
+          {{ $unit := .UnitInput }}
+          {{ range .UnitOptions }}<option value="{{ . }}"{{ if eq . $unit }} selected{{ end }}>{{ . }}</option>{{ end }}
+        </select>
+      </label>
+      <label class="limit-form__field">
+        <span>{{ t "analytics.limit.kind_label" }}</span>
+        <select name="limit_kind">
+          <option value="rx"{{ if eq .KindInput "rx" }} selected{{ end }}>{{ t "analytics.limit.kind_rx" }}</option>
+          <option value="tx"{{ if eq .KindInput "tx" }} selected{{ end }}>{{ t "analytics.limit.kind_tx" }}</option>
+          <option value="total"{{ if eq .KindInput "total" }} selected{{ end }}>{{ t "analytics.limit.kind_total" }}</option>
+        </select>
+      </label>
+      <button type="submit" class="btn btn--primary btn--sm limit-form__submit"><i data-lucide="save" class="icon-in-button"></i> {{ t "analytics.limit.save" }}</button>
     </form>
+    {{ if .HasLimit }}
+    {{/* Removing posts the same endpoint with an empty value — a first-class
+         clear action, no longer a "leave it blank and save" easter egg. */}}
+    <form method="post" action="{{ .Action }}" class="inline-form limit-remove">
+      <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+      <input type="hidden" name="limit_value" value="">
+      <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" data-confirm="{{ t "analytics.limits.remove_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "analytics.limit.remove" }}</button>
+    </form>
+    {{ end }}
     {{ if .Error }}<p class="analytics-limit__error">{{ .Error }}</p>{{ end }}
   </article>
   {{ end }}
@@ -231,9 +245,24 @@
 
   {{ template "page-header" . }}
 
-  <div class="analytics-actions">
-    <a class="btn btn--ghost btn--sm" href="/analytics/limits"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "analytics.limits.manage_link" }}</a>
-  </div>
+  {{/* Traffic limits at a glance — replaces the easy-to-miss ghost button
+       with a summary of the fleet caps and a clear entry point. */}}
+  <article class="card limits-banner">
+    <div class="limits-banner__icon" aria-hidden="true"><i data-lucide="gauge"></i></div>
+    <div class="limits-banner__body">
+      <h3>{{ t "analytics.limits.banner_title" }}</h3>
+      <p>{{ t "analytics.limits.banner_desc" }}</p>
+      <div class="limits-banner__stats">
+        {{ if .GlobalAnalytics.HasGlobalLimit }}
+        <span class="badge badge--ok">{{ t "analytics.limits.banner_global" "value" .GlobalAnalytics.GlobalLimitHuman }}</span>
+        {{ else }}
+        <span class="badge badge--warn">{{ t "analytics.limits.banner_none" }}</span>
+        {{ end }}
+        <span class="badge badge--id">{{ t "analytics.limits.banner_tags" "count" .GlobalAnalytics.TagLimitCount }}</span>
+      </div>
+    </div>
+    <a class="btn btn--primary btn--sm limits-banner__cta" href="/analytics/limits"><i data-lucide="sliders-horizontal" class="icon-in-button"></i> {{ t "analytics.limits.manage" }}</a>
+  </article>
 
   {{ if eq .GlobalAnalytics.ServerCount 0 }}
   <article class="card card--empty">
@@ -333,11 +362,45 @@
 
   {{ template "page-header" . }}
 
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
   <div class="analytics-actions">
     <a class="btn btn--ghost btn--sm" href="/analytics"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "analytics.limits.back" }}</a>
   </div>
 
   {{ with .TrafficLimits }}
+  <!-- Precedence explainer: how the effective cap is resolved per server -->
+  <article class="card limits-precedence">
+    <h3><i data-lucide="list-ordered"></i> {{ t "analytics.limits.precedence_title" }}</h3>
+    <ol class="precedence-steps">
+      <li class="precedence-step">
+        <span class="precedence-step__rank" aria-hidden="true">1</span>
+        <div class="precedence-step__body">
+          <strong>{{ t "analytics.limits.precedence_server" }}</strong>
+          <p>{{ t "analytics.limits.precedence_server_desc" }}</p>
+        </div>
+      </li>
+      <li class="precedence-step">
+        <span class="precedence-step__rank" aria-hidden="true">2</span>
+        <div class="precedence-step__body">
+          <strong>{{ t "analytics.limits.precedence_tag" }}</strong>
+          <p>{{ t "analytics.limits.precedence_tag_desc" }}</p>
+        </div>
+      </li>
+      <li class="precedence-step">
+        <span class="precedence-step__rank" aria-hidden="true">3</span>
+        <div class="precedence-step__body">
+          <strong>{{ t "analytics.limits.precedence_global" }}</strong>
+          <p>{{ t "analytics.limits.precedence_global_desc" }}</p>
+        </div>
+      </li>
+    </ol>
+  </article>
+
   <!-- Global default cap -->
   <article class="card analytics-limit">
     <div class="analytics-limit__head">
@@ -349,20 +412,30 @@
       {{ end }}
     </div>
     <p class="analytics-limit__hint">{{ t "analytics.limits.global_hint" }}</p>
-    <form class="analytics-limit__form" method="post" action="{{ .GlobalAction }}">
+    <form class="limit-form" method="post" action="{{ .GlobalAction }}">
       <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-      <label class="sr-only" for="global_value">{{ t "analytics.limit.value_label" }}</label>
-      <input type="number" id="global_value" name="limit_value" step="any" min="0"
-             inputmode="decimal" value="{{ .GlobalValue }}"
-             placeholder="{{ t "analytics.limit.placeholder" }}" class="analytics-limit__value">
-      <label class="sr-only" for="global_unit">{{ t "analytics.limit.unit_label" }}</label>
-      <select id="global_unit" name="limit_unit" class="analytics-limit__unit">
-        {{ $gunit := .GlobalUnit }}
-        {{ range .UnitOptions }}<option value="{{ . }}"{{ if eq . $gunit }} selected{{ end }}>{{ . }}</option>{{ end }}
-      </select>
-      <button type="submit" class="btn btn--primary btn--sm"><i data-lucide="save" class="icon-in-button"></i> {{ t "analytics.limit.save" }}</button>
-      <span class="analytics-limit__clearhint">{{ t "analytics.limit.clear_hint" }}</span>
+      <label class="limit-form__field limit-form__field--value">
+        <span>{{ t "analytics.limit.value_label" }}</span>
+        <input type="number" name="limit_value" step="any" min="0"
+               inputmode="decimal" value="{{ .GlobalValue }}"
+               placeholder="{{ t "analytics.limit.placeholder" }}">
+      </label>
+      <label class="limit-form__field">
+        <span>{{ t "analytics.limit.unit_label" }}</span>
+        <select name="limit_unit">
+          {{ $gunit := .GlobalUnit }}
+          {{ range .UnitOptions }}<option value="{{ . }}"{{ if eq . $gunit }} selected{{ end }}>{{ . }}</option>{{ end }}
+        </select>
+      </label>
+      <button type="submit" class="btn btn--primary btn--sm limit-form__submit"><i data-lucide="save" class="icon-in-button"></i> {{ t "analytics.limit.save" }}</button>
     </form>
+    {{ if .HasGlobal }}
+    <form method="post" action="{{ .GlobalAction }}" class="inline-form limit-remove">
+      <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+      <input type="hidden" name="limit_value" value="">
+      <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" data-confirm="{{ t "analytics.limits.remove_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "analytics.limit.remove" }}</button>
+    </form>
+    {{ end }}
   </article>
 
   <!-- Per-tag caps -->
@@ -391,7 +464,7 @@
               <form method="post" action="{{ $.TrafficLimits.TagDeleteAction }}" class="inline-form">
                 <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
                 <input type="hidden" name="tag" value="{{ .Tag }}">
-                <button type="submit" class="btn btn--ghost btn--xs btn--danger"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "analytics.limits.remove" }}</button>
+                <button type="submit" class="btn btn--ghost btn--xs btn--danger" data-confirm="{{ t "analytics.limits.remove_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "analytics.limits.remove" }}</button>
               </form>
             </td>
           </tr>
@@ -400,22 +473,31 @@
       </table>
     </div>
     {{ else }}
-    <p class="analytics-limit__hint">{{ t "analytics.limits.no_tags" }}</p>
+    <div class="empty-state-card empty-state-card--compact">
+      <span class="empty-state-icon"><i data-lucide="tags"></i></span>
+      <p class="empty-state-desc">{{ t "analytics.limits.no_tags" }}</p>
+    </div>
     {{ end }}
 
-    <form class="analytics-limit__form" method="post" action="{{ .TagAction }}">
+    <form class="limit-form" method="post" action="{{ .TagAction }}">
       <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-      <label class="sr-only" for="tag_name">{{ t "analytics.limits.tag_label" }}</label>
-      <input type="text" id="tag_name" name="tag" maxlength="64"
-             placeholder="{{ t "analytics.limits.tag_placeholder" }}" class="analytics-limit__value">
-      <label class="sr-only" for="tag_value">{{ t "analytics.limit.value_label" }}</label>
-      <input type="number" id="tag_value" name="limit_value" step="any" min="0"
-             inputmode="decimal" placeholder="{{ t "analytics.limit.placeholder" }}" class="analytics-limit__value">
-      <label class="sr-only" for="tag_unit">{{ t "analytics.limit.unit_label" }}</label>
-      <select id="tag_unit" name="limit_unit" class="analytics-limit__unit">
-        {{ range .UnitOptions }}<option value="{{ . }}">{{ . }}</option>{{ end }}
-      </select>
-      <button type="submit" class="btn btn--primary btn--sm"><i data-lucide="plus" class="icon-in-button"></i> {{ t "analytics.limits.add_tag" }}</button>
+      <label class="limit-form__field limit-form__field--value">
+        <span>{{ t "analytics.limits.tag_label" }}</span>
+        <input type="text" name="tag" maxlength="64"
+               placeholder="{{ t "analytics.limits.tag_placeholder" }}">
+      </label>
+      <label class="limit-form__field limit-form__field--value">
+        <span>{{ t "analytics.limit.value_label" }}</span>
+        <input type="number" name="limit_value" step="any" min="0"
+               inputmode="decimal" placeholder="{{ t "analytics.limit.placeholder" }}">
+      </label>
+      <label class="limit-form__field">
+        <span>{{ t "analytics.limit.unit_label" }}</span>
+        <select name="limit_unit">
+          {{ range .UnitOptions }}<option value="{{ . }}">{{ . }}</option>{{ end }}
+        </select>
+      </label>
+      <button type="submit" class="btn btn--primary btn--sm limit-form__submit"><i data-lucide="plus" class="icon-in-button"></i> {{ t "analytics.limits.add_tag" }}</button>
     </form>
   </article>
   {{ end }}

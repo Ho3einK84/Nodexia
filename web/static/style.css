@@ -2487,22 +2487,72 @@ code.secret-value {
   inset-inline-end: 0;
   bottom: 0;
   z-index: 1300;
-  width: min(84vw, 330px);
+  width: min(86vw, 340px);
   display: none; /* revealed at the mobile breakpoint to avoid desktop overflow */
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   padding: 18px 18px calc(20px + env(safe-area-inset-bottom));
   background: linear-gradient(185deg, #111c33 0%, #0b1120 100%);
   border-inline-start: 1px solid var(--border-strong);
+  border-start-start-radius: 20px;
+  border-end-start-radius: 20px;
   box-shadow: -18px 0 48px rgba(0, 0, 0, 0.45);
   transform: translateX(105%);
   transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* Horizontal swipes are handled by app.js (swipe-to-close); keep vertical
+     panning native so the drawer body still scrolls. */
+  touch-action: pan-y;
+}
+
+/* The off-canvas transform mirrors for RTL, where inset-inline-end is the
+   left edge and the drawer must park off the LEFT side of the viewport. */
+[dir="rtl"] .drawer {
+  transform: translateX(-105%);
 }
 
 .drawer.is-open {
   transform: translateX(0);
+}
+
+/* Staggered entrance for the nav links — a subtle premium touch that makes
+   the drawer feel composed rather than dumped. Disabled for reduced motion. */
+.drawer.is-open .drawer__link {
+  animation: drawer-link-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.drawer.is-open .drawer__link:nth-child(1) { animation-delay: 0.05s; }
+.drawer.is-open .drawer__link:nth-child(2) { animation-delay: 0.09s; }
+.drawer.is-open .drawer__link:nth-child(3) { animation-delay: 0.13s; }
+.drawer.is-open .drawer__link:nth-child(4) { animation-delay: 0.17s; }
+.drawer.is-open .drawer__link:nth-child(5) { animation-delay: 0.21s; }
+.drawer.is-open .drawer__link:nth-child(n + 6) { animation-delay: 0.25s; }
+
+@keyframes drawer-link-in {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+[dir="rtl"] .drawer.is-open .drawer__link {
+  animation-name: drawer-link-in-rtl;
+}
+
+@keyframes drawer-link-in-rtl {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .drawer__header {
@@ -2563,9 +2613,9 @@ code.secret-value {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 48px;
-  padding: 0 14px;
-  border-radius: 11px;
+  min-height: 50px;
+  padding: 0 12px;
+  border-radius: 12px;
   color: var(--text-muted);
   text-decoration: none;
   font-size: 0.98rem;
@@ -2578,14 +2628,64 @@ code.secret-value {
   color: var(--text);
 }
 
-.drawer__link.is-active {
-  background: rgba(59, 130, 246, 0.14);
-  color: var(--accent-soft);
+.drawer__link:active {
+  background: rgba(148, 163, 184, 0.12);
 }
 
-.drawer__link svg {
-  width: 20px;
-  height: 20px;
+.drawer__link-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid var(--border);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.drawer__link-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.drawer__link-chevron {
+  margin-inline-start: auto;
+  width: 16px;
+  height: 16px;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+[dir="rtl"] .drawer__link-chevron {
+  transform: scaleX(-1);
+}
+
+.drawer__link:hover .drawer__link-chevron,
+.drawer__link.is-active .drawer__link-chevron {
+  opacity: 1;
+}
+
+.drawer__link.is-active {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--accent-bright);
+  font-weight: var(--fw-semibold);
+  box-shadow: inset 3px 0 0 0 var(--accent-soft);
+}
+
+[dir="rtl"] .drawer__link.is-active {
+  box-shadow: inset -3px 0 0 0 var(--accent-soft);
+}
+
+.drawer__link.is-active .drawer__link-icon {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(96, 165, 250, 0.4);
+}
+
+.drawer__link.is-active .drawer__link-chevron {
+  color: var(--accent-soft);
 }
 
 .drawer__action {
@@ -2662,29 +2762,38 @@ code.secret-value {
   inset-inline-end: 0;
   bottom: 0;
   z-index: 1100;
-  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
-  background: rgba(11, 17, 32, 0.92);
-  backdrop-filter: blur(12px);
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  background: rgba(11, 17, 32, 0.9);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-top: 1px solid var(--border-strong);
 }
 
 .bottom-nav__item {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  min-height: 52px;
-  padding: 6px 4px;
-  border-radius: 12px;
+  min-height: 54px;
+  padding: 7px 4px;
+  border-radius: 14px;
   color: var(--text-dim);
   text-decoration: none;
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: var(--fw-semibold);
   letter-spacing: 0.01em;
+  -webkit-tap-highlight-color: transparent;
   transition: color 0.15s ease, background 0.15s ease;
-  position: relative;
+}
+
+.bottom-nav__item span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bottom-nav__item svg {
@@ -2697,19 +2806,15 @@ code.secret-value {
   transform: scale(0.88);
 }
 
+/* Active destination reads as a soft pill — a clearer, larger signal than the
+   old hairline indicator, and a bigger perceived touch target. */
 .bottom-nav__item.is-active {
-  color: var(--accent-soft);
+  color: var(--accent-bright);
+  background: rgba(59, 130, 246, 0.14);
 }
 
-.bottom-nav__item.is-active::before {
-  content: '';
-  position: absolute;
-  top: 2px;
-  width: 26px;
-  height: 3px;
-  border-radius: 0 0 3px 3px;
-  background: var(--accent-soft);
-  box-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
+.bottom-nav__item.is-active svg {
+  filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.55));
 }
 
 /* ── Mobile reveal + layout adjustments ──────────────────── */
@@ -2754,6 +2859,14 @@ body.drawer-open {
   }
 
   .drawer-backdrop {
+    transition: none;
+  }
+
+  .drawer.is-open .drawer__link {
+    animation: none;
+  }
+
+  .bottom-nav__item svg {
     transition: none;
   }
 }

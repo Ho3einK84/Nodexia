@@ -71,6 +71,10 @@ func renderRuleForm(
 	page.AlertRuleForm = form
 	page.FlashKind = flashKind
 	page.FlashMessage = page.T(flashMessage)
+	// The rule form ships its own stylesheet plus a small progressive-enhancement
+	// script that adapts the condition controls to the selected metric.
+	page.PageStyles = []string{"/static/alerts.css"}
+	page.PageScripts = []string{"/static/alerts.js"}
 
 	if err := deps.Renderer.Render(w, statusCode, page); err != nil {
 		http.Error(w, "render alert rule form", http.StatusInternalServerError)

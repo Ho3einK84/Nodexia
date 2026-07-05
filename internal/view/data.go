@@ -8,12 +8,13 @@ import (
 )
 
 type NavItem struct {
-	// Label is the English name; it doubles as the stable identifier the
-	// templates switch on to pick an icon, so it stays English regardless of
-	// locale. Key is the translation key used to render the visible text.
+	// Label is the stable English identifier of the destination; Key is the
+	// translation key used to render the visible text; Icon is the Lucide icon
+	// name shared by every navigation surface (top nav, drawer, bottom bar).
 	Label  string
 	Key    string
 	Href   string
+	Icon   string
 	Active bool
 }
 
@@ -75,11 +76,11 @@ func DatabaseTarget(cfg config.Config) string {
 
 func defaultNavigation(activeHref string) []NavItem {
 	items := []NavItem{
-		{Label: "Overview", Key: "nav.overview", Href: "/"},
-		{Label: "Servers", Key: "nav.servers", Href: "/servers"},
-		{Label: "Analytics", Key: "nav.analytics", Href: "/analytics"},
-		{Label: "Alerts", Key: "nav.alerts", Href: "/alerts"},
-		{Label: "Diagnostics", Key: "nav.diagnostics", Href: "/ops/diagnostics"},
+		{Label: "Overview", Key: "nav.overview", Href: "/", Icon: "layout-dashboard"},
+		{Label: "Servers", Key: "nav.servers", Href: "/servers", Icon: "server"},
+		{Label: "Analytics", Key: "nav.analytics", Href: "/analytics", Icon: "bar-chart-2"},
+		{Label: "Alerts", Key: "nav.alerts", Href: "/alerts", Icon: "bell-ring"},
+		{Label: "Diagnostics", Key: "nav.diagnostics", Href: "/ops/diagnostics", Icon: "stethoscope"},
 	}
 
 	for index := range items {
