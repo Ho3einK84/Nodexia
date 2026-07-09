@@ -545,6 +545,7 @@ func renderTerminalPage(
 		staticURL("xterm-themes.js"),
 		staticURL("terminal-keybindings.js"),
 		staticURL("terminal.js"),
+		staticURL("terminal-tab-adapter.js"),
 	}
 
 	if err := deps.Renderer.Render(w, http.StatusOK, page); err != nil {

@@ -109,6 +109,33 @@
       }
     }, 220);
   }
+
+  /* ── v0.6.3: tab-aware navigation + cleanup helpers ────
+   * tabNavigate / tabReload replace bare window.location.href / .reload()
+   * calls so auto-refresh, manual refresh, node-result dismiss, and install
+   * reload-all stay scoped to the active tab pane instead of blowing away the
+   * entire multi-tab shell.  registerCleanup lets init functions attach
+   * teardown callbacks (EventSource.close, clearInterval, …) to a pane
+   * element; tab-manager.js calls them before replacing or closing the pane. */
+  function tabNavigate(url) {
+    if (window.NodexiaTabs && typeof window.NodexiaTabs.navigate === 'function') {
+      window.NodexiaTabs.navigate(url);
+    } else {
+      window.location.href = url;
+    }
+  }
+  function tabReload() {
+    if (window.NodexiaTabs && typeof window.NodexiaTabs.reloadActive === 'function') {
+      window.NodexiaTabs.reloadActive();
+    } else {
+      window.location.reload();
+    }
+  }
+  function registerCleanup(root, fn) {
+    if (!root || typeof fn !== 'function') return;
+    if (!root.__nxCleanups) root.__nxCleanups = [];
+    root.__nxCleanups.push(fn);
+  }
   window.addEventListener('pageshow', finishTopBar);
 
   /* ── Button busy state ──────────────────────────────────
@@ -311,8 +338,9 @@
   /* ── On-demand PasarGuard node credentials (API key + certificate) ────────
      Fetches the secrets live over SSH and renders masked, copyable blocks that
      reuse initSecrets (masking) and initCopyTargets (copy). Nothing is stored. */
-  function initNodeCredentials() {
-    document.querySelectorAll('[data-node-credentials]').forEach(function (btn) {
+  function initNodeCredentials(root) {
+    root = root || document;
+    root.querySelectorAll('[data-node-credentials]').forEach(function (btn) {
       if (btn.dataset.credReady === '1') return;
       btn.dataset.credReady = '1';
       var out = btn.parentNode.querySelector('.node-credentials__out');
@@ -438,8 +466,9 @@
   }
 
   /* ── Animated progress bar / mini-bar fills ─────────────── */
-  function initProgressBars() {
-    var fills = document.querySelectorAll('.mini-metric__fill');
+  function initProgressBars(root) {
+    root = root || document;
+    var fills = root.querySelectorAll('.mini-metric__fill');
     fills.forEach(function (fill) {
       var target = fill.style.width || '0%';
       if (prefersReducedMotion) { fill.style.width = target; return; }
@@ -453,10 +482,17 @@
   }
 
   /* ── Scroll-reveal entrance for cards ───────────────────── */
-  function initReveal() {
-    var targets = document.querySelectorAll(
+  function initReveal(root) {
+    root = root || document;
+    var targets = root.querySelectorAll(
       '.card, .server-card, .stat-card, .dashboard-item, .node-card, .empty-state-card');
     if (!targets.length) return;
+    // Tab panes load with content already in place; skip the scroll-reveal
+    // observer (which doesn't fire in hidden panes) and just reveal immediately.
+    if (root !== document && root.classList && root.classList.contains('tab-pane')) {
+      targets.forEach(function (el) { el.classList.add('reveal-in'); });
+      return;
+    }
     if (prefersReducedMotion || !('IntersectionObserver' in window)) {
       targets.forEach(function (el) { el.classList.add('reveal-in'); });
       return;
@@ -477,8 +513,9 @@
   }
 
   /* ── Auto-refresh with live countdown ───────────────────── */
-  function initAutoRefresh() {
-    var select = document.getElementById('auto-refresh-select');
+  function initAutoRefresh(root) {
+    root = root || document;
+    var select = root.querySelector('#auto-refresh-select');
     if (!select) return;
     var url = select.getAttribute('data-refresh-url');
     if (!url) return;
@@ -506,7 +543,7 @@
         if (Date.now() >= deadline) {
           stop();
           startTopBar();
-          window.location.href = refreshURL;
+          tabNavigate(refreshURL);
           return;
         }
         updatePill();
@@ -534,6 +571,7 @@
     if (saved) { select.value = saved; }
     select.addEventListener('change', apply);
     apply();
+    registerCleanup(root, stop);
   }
 
   /* ── Live output stream (Server-Sent Events) ────────────────
@@ -574,6 +612,10 @@
     var finished = false;
     card.classList.add('is-connecting');
     var es = new EventSource(url);
+    registerCleanup(root, function () {
+      finished = true;
+      try { es.close(); } catch (err) { /* best-effort */ }
+    });
 
     es.addEventListener('open', function () {
       card.classList.remove('is-connecting', 'is-reconnecting');
@@ -704,8 +746,9 @@
    */
   var NODE_RESULT_COUNTDOWN_SECS = 5;
 
-  function initNodeResult() {
-    var card = document.querySelector('[data-node-result]');
+  function initNodeResult(root) {
+    root = root || document;
+    var card = root.querySelector('[data-node-result]');
     if (!card) return;
     // A still-running card finishes through the SSE path, which schedules its own
     // dismiss; skip it here so we don't act before the action completes.
@@ -766,15 +809,16 @@
       }
       paint();
     }, 1000);
+    registerCleanup(card.closest('.tab-pane') || document, function () { clearInterval(timer); });
   }
 
   // dismissNodeCard slides the card out (honoring reduced-motion) then navigates
   // to the clean nodes URL.
   function dismissNodeCard(card, cleanURL) {
     startTopBar();
-    if (prefersReducedMotion) { window.location.href = cleanURL; return; }
+    if (prefersReducedMotion) { tabNavigate(cleanURL); return; }
     var navigated = false;
-    function go() { if (navigated) return; navigated = true; window.location.href = cleanURL; }
+    function go() { if (navigated) return; navigated = true; tabNavigate(cleanURL); }
     card.classList.add('is-dismissing');
     card.addEventListener('transitionend', go, { once: true });
     setTimeout(go, 600); // fallback when transitionend does not fire
@@ -794,6 +838,10 @@
 
     var finished = false;
     var es = new EventSource(url);
+    registerCleanup(root, function () {
+      finished = true;
+      try { es.close(); } catch (err) { /* best-effort */ }
+    });
 
     es.addEventListener('row', function (e) {
       var row = parseJSON(e.data);
@@ -874,7 +922,7 @@
 
   function reloadForResult() {
     startTopBar();
-    window.location.reload();
+    tabReload();
   }
 
   function escapeHTML(value) {
@@ -933,22 +981,28 @@
   }
 
   /* ── Manual "refresh now" buttons ───────────────────────── */
-  function initManualRefresh() {
-    document.querySelectorAll('[data-refresh-now]').forEach(function (btn) {
+  function initManualRefresh(root) {
+    root = root || document;
+    root.querySelectorAll('[data-refresh-now]').forEach(function (btn) {
+      if (btn.dataset.refreshReady === '1') return;
+      btn.dataset.refreshReady = '1';
       btn.addEventListener('click', function (e) {
         var url = btn.getAttribute('data-refresh-now');
         if (!url) return;
         e.preventDefault();
         startTopBar();
         markButtonBusy(btn);
-        window.location.href = url;
+        tabNavigate(url);
       });
     });
   }
 
   /* ── Server card overflow action menu ──────────────────── */
-  function initActionMenus() {
-    var menus = document.querySelectorAll('[data-action-menu]');
+  var actionMenuDocWired = false;
+  var allActionMenus = [];
+  function initActionMenus(root) {
+    root = root || document;
+    var menus = root.querySelectorAll('[data-action-menu]');
     if (!menus.length) return;
 
     function setOpen(menu, open) {
@@ -959,12 +1013,15 @@
       if (card) card.style.zIndex = open ? '30' : '';
     }
     function closeAll(except) {
-      menus.forEach(function (menu) {
+      allActionMenus.forEach(function (menu) {
         if (menu !== except && menu.classList.contains('is-open')) setOpen(menu, false);
       });
     }
 
     menus.forEach(function (menu) {
+      if (menu.dataset.actionMenuReady === '1') return;
+      menu.dataset.actionMenuReady = '1';
+      allActionMenus.push(menu);
       var toggle = menu.querySelector('.action-menu__toggle');
       if (!toggle) return;
       toggle.addEventListener('click', function (e) {
@@ -976,6 +1033,8 @@
       });
     });
 
+    if (actionMenuDocWired) return;
+    actionMenuDocWired = true;
     document.addEventListener('click', function (e) {
       if (e.target.closest && e.target.closest('[data-action-menu]')) return;
       closeAll(null);
@@ -1197,9 +1256,9 @@
       if (pendingG) {
         pendingG = false;
         clearTimeout(gTimer);
-        if (e.key === 'o') { window.location.href = '/'; return; }
-        if (e.key === 's') { window.location.href = '/servers'; return; }
-        if (e.key === 'd') { window.location.href = '/ops/diagnostics'; return; }
+        if (e.key === 'o') { tabNavigate('/'); return; }
+        if (e.key === 's') { tabNavigate('/servers'); return; }
+        if (e.key === 'd') { tabNavigate('/ops/diagnostics'); return; }
         return;
       }
 
@@ -1220,8 +1279,8 @@
         if (refresh) {
           e.preventDefault();
           startTopBar();
-          window.location.href = refresh.getAttribute('data-refresh-now') ||
-            refresh.getAttribute('href');
+          tabNavigate(refresh.getAttribute('data-refresh-now') ||
+            refresh.getAttribute('href'));
         }
       }
     });
@@ -1306,8 +1365,11 @@
   }
 
   /* ── Advanced panel toggle ──────────────────────────────── */
-  function initAdvancedToggle() {
-    document.querySelectorAll('.advanced-toggle[data-target]').forEach(function (btn) {
+  function initAdvancedToggle(root) {
+    root = root || document;
+    root.querySelectorAll('.advanced-toggle[data-target]').forEach(function (btn) {
+      if (btn.dataset.advancedReady === '1') return;
+      btn.dataset.advancedReady = '1';
       btn.addEventListener('click', function () {
         var target = document.getElementById(btn.getAttribute('data-target'));
         if (!target) return;
@@ -1416,6 +1478,14 @@
       initCollapsibles(root);
       initStream(root);
       initBulkStream(root);
+      initNodeCredentials(root);
+      initActionMenus(root);
+      initManualRefresh(root);
+      initAutoRefresh(root);
+      initNodeResult(root);
+      initAdvancedToggle(root);
+      initProgressBars(root);
+      initReveal(root);
       renderIcons();
     },
     finishNavigation: function () {

@@ -55,6 +55,16 @@
     document.currentScript.closest('.tab-pane')) || document;
   function byId(id) { return scopeRoot.querySelector('#' + id); }
 
+  // v0.6.3: tab-aware navigation so reconnect/back stay scoped to this tab
+  // pane instead of blowing away the entire multi-tab shell.
+  function tabNavigate(url) {
+    if (window.NodexiaTabs && typeof window.NodexiaTabs.navigate === 'function') {
+      window.NodexiaTabs.navigate(url);
+    } else {
+      window.location.href = url;
+    }
+  }
+
   var card = byId('terminal-card');
   if (!card) return;
 
@@ -747,7 +757,7 @@
     userClosing = true;
     try { if (ws) ws.close(1000, 'reconnecting'); } catch (e) { /* ignore */ }
     setScrollLock(false);
-    window.location.href = pageURL;
+    tabNavigate(pageURL);
   }
 
   /* ── Disconnect overlay (Reconnect action) ────────────── */
@@ -782,7 +792,7 @@
       setScrollLock(false);
       try { if (ws) ws.close(1000, 'closed by user'); } catch (e) { /* ignore */ }
       if (window.history.length > 1) window.history.back();
-      else window.location.href = '/servers';
+      else tabNavigate('/servers');
     });
   }
   window.addEventListener('pagehide', function () { setScrollLock(false); });

@@ -7,6 +7,64 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.6.3 — Multi-tab bug fixes (failed tabs, resource leaks, slowness)
+
+### Fixed
+
+- **Non-2xx responses with valid HTML no longer show "Failed to load this tab".**
+  `loadPane` rejected *any* non-OK HTTP status (502, 422, 404, 500) with a
+  generic error, discarding the server's rendered error page. Now it checks
+  whether the response body contains the `#tab-content` wrapper; if it does,
+  the error page is injected into the pane so the user sees the real error
+  (SSH failure detail, validation errors, not-found page) instead of a
+  meaningless "Failed to load" message. Only responses without `#tab-content`
+  (true network errors, bare 403s) fall back to the error placeholder, which
+  now shows a **specific message** based on the status code (server error,
+  not found, access denied, or `HTTP {status}`).
+- **"Run Discovery" tab no longer fails when SSH discovery errors.** The nodes
+  handler returns 502 when the SSH collection fails; the old `loadPane`
+  rejected this as a load failure. The 502 body now renders normally,
+  showing the discovery error output inside the tab.
+- **`terminal-tab-adapter.js` is now loaded on the terminal page.** The file
+  existed since v0.6.0 but was never added to the terminal page's
+  `PageScripts` list, so terminal tabs never received `pause`/`resume`/
+  `dispose` lifecycle calls — closing a terminal tab leaked the WebSocket
+  and xterm instance, and backgrounded terminals kept running at full speed.
+- **Full-page `window.location.href` / `window.location.reload()` calls
+  replaced with tab-aware navigation.** Seven call sites in `app.js`
+  (`initAutoRefresh`, `initManualRefresh`, `dismissNodeCard`,
+  `reloadForResult`, `initShortcuts`) and two in `terminal.js` (reconnect,
+  back button) navigated the *entire* browser page, blowing away the
+  multi-tab shell and cancelling in-flight tab fetches (which then showed
+  "Failed to load this tab"). All now route through `NodexiaTabs.navigate()`
+  / `NodexiaTabs.reloadActive()`, falling back to `window.location` only
+  when the tab system is not active.
+- **SSE EventSource connections are closed on tab close.** `initStream` and
+  `initBulkStream` created `EventSource` instances that were never cleaned
+  up when a tab was closed or replaced. A new `registerCleanup` mechanism
+  attaches teardown callbacks to the pane element; `tab-manager.js` runs
+  them before replacing or closing the pane. The auto-refresh countdown
+  interval and node-result dismiss interval are also registered for cleanup.
+- **`FormData` now includes the submitter button's name/value.**
+  `initFormInterception` used `new FormData(form)` (without the submitter),
+  so forms whose handler depends on the clicked button's `name` — notably
+  node action buttons (`name="action"`) — silently lost the action key.
+  Now uses `new FormData(form, submitter)`.
+- **Missing init functions added to `rescan()`.** Tab panes loaded via
+  `fetch + DOMParser` never ran through `boot()`, so the following features
+  were dead inside tabs: manual refresh buttons (`data-refresh-now`),
+  auto-refresh dropdown, node-result auto-dismiss, node credentials show/
+  hide, server/node action menus, and advanced-panel toggles. All are now
+  called in `rescan()` with pane-scoped roots and idempotency guards.
+
+### Improved
+
+- **UI stays smooth with multiple tabs open.** The combination of leaked
+  SSE connections, un-disposed terminal WebSockets, and full-page
+  navigations from background tabs caused accumulating reflow/repaint
+  overhead. With cleanups and tab-aware navigation in place, 4–5
+  simultaneous tabs no longer degrade responsiveness.
+
 ## v0.6.2 — Comprehensive tab system review, bug fixes, and polish
 
 > **Release status:** this entry describes the change set as implemented and

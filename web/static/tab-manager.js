@@ -1,4 +1,4 @@
-// Nodexia v0.6.2: core multi-tab workspace manager (window.NodexiaTabs).
+// Nodexia v0.6.3: core multi-tab workspace manager (window.NodexiaTabs).
 /* Client-side tab system: a global tab bar plus one .tab-pane per open tab,
  * built entirely from the same full-page HTML a direct URL visit would
  * receive (fetch() + DOMParser extraction of #tab-content, per docs/tab-system.md).
@@ -400,12 +400,19 @@
     wrap.textContent = T('js.tabs.loading');
     pane.appendChild(wrap);
   }
-  function showPaneError(pane, tab, url) {
+  function showPaneError(pane, tab, url, status) {
     pane.innerHTML = '';
     var wrap = document.createElement('div');
     wrap.className = 'tab-pane__error';
     var msg = document.createElement('p');
-    msg.textContent = T('js.tabs.load_failed');
+    var key = 'js.tabs.load_failed';
+    if (status >= 500) key = 'js.tabs.load_failed_server';
+    else if (status === 404) key = 'js.tabs.load_failed_not_found';
+    else if (status === 403) key = 'js.tabs.load_failed_forbidden';
+    else if (status > 0) key = 'js.tabs.load_failed_status';
+    msg.textContent = key === 'js.tabs.load_failed_status'
+      ? T(key, { status: status })
+      : T(key);
     wrap.appendChild(msg);
     var retry = document.createElement('button');
     retry.type = 'button';
@@ -414,6 +421,17 @@
     retry.addEventListener('click', function () { loadPane(tab, url, {}); });
     wrap.appendChild(retry);
     pane.appendChild(wrap);
+  }
+
+  // hasTabContent checks whether a fetched HTML document contains the
+  // #tab-content wrapper the SSR layout always emits — even for error pages
+  // (404, 422, 502, 500).  If it does, the response is renderable in a pane
+  // regardless of its HTTP status code.
+  function hasTabContent(htmlText) {
+    try {
+      var doc = new DOMParser().parseFromString(htmlText, 'text/html');
+      return !!doc.getElementById('tab-content');
+    } catch (err) { return false; }
   }
 
   // Extracts #tab-content's children plus PER_PANE_SCRIPTS (§1.2.1) from a
@@ -446,7 +464,7 @@
     // Clone every <script src> that follows /static/app.js in the fetched
     // document (that page's own PageScripts chain), appended INSIDE this
     // pane so document.currentScript.closest('.tab-pane') resolves for
-    // pane-aware scripts (terminal.js + terminal-tab-adapter.js today).
+    // pane-aware scripts (terminal.js, terminal-tab-adapter.js, etc.).
     var scripts = Array.prototype.slice.call(doc.querySelectorAll('script[src]'));
     var appIdx = -1;
     for (var i = 0; i < scripts.length; i++) {
@@ -480,13 +498,19 @@
     return fetch(url, fetchOpts).then(function (resp) {
       return resp.text().then(function (text) { return { resp: resp, text: text }; });
     }).then(function (result) {
-      if (!result.resp.ok) throw new Error('http ' + result.resp.status);
       var finalURL = result.resp.url || url;
       // The session may have expired mid-tab-system-use; a fetch redirected
       // to /login means the whole app session is gone, not just this pane.
       if (/^\/login(\/|$)/.test(pathnameOf(finalURL))) {
         window.location.href = finalURL;
         return;
+      }
+      // Non-2xx responses that still carry the SSR layout (#tab-content) are
+      // renderable error pages (502 SSH failure, 422 validation, 404 not
+      // found, etc.) — inject them rather than masking the real error behind
+      // a generic "Failed to load" message.
+      if (!result.resp.ok && !hasTabContent(result.text)) {
+        throw new Error('http ' + result.resp.status);
       }
       var title = extractAndInject(pane, result.text);
       tab.loading = false;
@@ -504,8 +528,22 @@
     }).catch(function (err) {
       if (err && err.name === 'AbortError') return;
       tab.loading = false;
-      showPaneError(pane, tab, url);
+      var status = 0;
+      var m = /^http (\d+)$/.exec(err && err.message || '');
+      if (m) status = parseInt(m[1], 10);
+      showPaneError(pane, tab, url, status);
     });
+  }
+
+  // runPaneCleanups executes any cleanup callbacks registered on the pane
+  // element by app.js init functions (EventSource.close, clearInterval, etc.).
+  // Each callback is wrapped in try/catch so one failing cleanup never blocks
+  // the teardown.
+  function runPaneCleanups(pane) {
+    if (!pane || !pane.__nxCleanups) return;
+    var cleanups = pane.__nxCleanups;
+    pane.__nxCleanups = [];
+    cleanups.forEach(function (fn) { try { fn(); } catch (err) { /* best-effort */ } });
   }
 
   // Signals a pane's content is about to be torn down/replaced in place
@@ -513,6 +551,7 @@
   // `tab-closing` event a real close fires, so terminal-tab-adapter.js's one
   // dispose() hook also runs here; a cancelled event aborts the replace.
   function teardownPaneContent(tab) {
+    runPaneCleanups(tab.pane);
     return fire('tab-closing', paneDetail(tab), true);
   }
 
@@ -940,16 +979,16 @@
 
       e.preventDefault();
       var method = (form.getAttribute('method') || 'GET').toUpperCase();
-      var fetchOpts = { method: method, __submitter: e.submitter };
+      var submitter = e.submitter;
+      var fetchOpts = { method: method, __submitter: submitter };
       if (method === 'GET') {
         try {
-          var qs = new URLSearchParams(new FormData(form));
+          var qs = new URLSearchParams(new FormData(form, submitter));
           action.search = qs.toString() ? '?' + qs.toString() : '';
         } catch (err) { /* leave action.search as-is */ }
       } else {
-        fetchOpts.body = new FormData(form);
+        fetchOpts.body = new FormData(form, submitter);
       }
-      var submitter = e.submitter;
       navigateInPane(tab, action.pathname + action.search, fetchOpts, tab.id === activeTabId)
         .then(function () { restoreFormUI(submitter); })
         .catch(function () { restoreFormUI(submitter); });
@@ -1348,6 +1387,23 @@
     }
   }
 
+  // navigateActive replaces the active tab's content by fetching url, mirroring
+  // a normal in-tab navigation.  Falls back to window.location.href when the
+  // tab system is not ready so callers can use it unconditionally.
+  function navigateActive(url) {
+    if (!ready) { window.location.href = url; return; }
+    var tab = tabsById[activeTabId];
+    if (!tab) { window.location.href = url; return; }
+    navigateInPane(tab, pathAndSearch(url), {}, true);
+  }
+
+  // reloadActive reloads the active tab's content.  Falls back to
+  // window.location.reload() when the tab system is not ready.
+  function reloadActive() {
+    if (!ready || !tabsById[activeTabId]) { window.location.reload(); return; }
+    reload(activeTabId);
+  }
+
   window.NodexiaTabs = {
     init: init,
     open: open,
@@ -1360,6 +1416,8 @@
     duplicate: duplicate,
     reload: reload,
     reopenClosed: reopenClosed,
+    navigate: navigateActive,
+    reloadActive: reloadActive,
     getActive: getActive,
     getAll: getAll,
     MOBILE_TAB_LIMIT: 5,
