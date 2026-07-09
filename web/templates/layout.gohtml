@@ -14,9 +14,13 @@
   <div id="shell" class="shell">
     {{ template "shell-header" . }}
     {{ template "shell-nav" . }}
+    {{ template "tab-bar" . }}
 
     <main id="shell-main" class="shell-main">
-      {{ .MainHTML }}
+      <div id="tab-content" class="tab-content" data-tab-content>
+        {{ .MainHTML }}
+      </div>
+      <div id="tab-split-root" class="tab-split-root" data-tab-split-root hidden></div>
       <div id="loading-overlay" class="loading-overlay" style="display:none" role="status" aria-live="polite">
         <div class="loading-spinner"></div>
         <p class="loading-overlay__label">{{ t "shell.loading" }}</p>
@@ -28,6 +32,8 @@
 
   {{ template "mobile-drawer" . }}
   {{ template "bottom-nav" . }}
+  {{ template "tab-switcher" . }}
+  {{ template "tab-fab" . }}
 {{ end }}
 
   {{/* Client i18n island: only the strings the JS needs, in the active locale.
@@ -35,6 +41,7 @@
        strict script-src CSP; app.js parses it and exposes window.nxT/nxTn. */}}
   <script type="application/json" id="nodexia-i18n">{{ clientI18nJSON }}</script>
   <script src="/static/app.js"></script>
+  <script src="/static/tab-manager.js"></script>
   {{ range .PageScripts }}<script src="{{ . }}"></script>
   {{ end }}
 </body>

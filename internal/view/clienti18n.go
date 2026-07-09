@@ -156,6 +156,32 @@ var clientI18nKeys = []string{
 	"js.terminal.ctx_select_all",
 	"js.terminal.ctx_search",
 	"js.terminal.ctx_clear",
+
+	// Multi-tab workspace (tab-manager.js, terminal-tab-adapter.js)
+	"js.tabs.new_tab",
+	"js.tabs.close_tab",
+	"js.tabs.close_others",
+	"js.tabs.close_all",
+	"js.tabs.duplicate",
+	"js.tabs.reload",
+	"js.tabs.pin",
+	"js.tabs.unpin",
+	"js.tabs.reopen_closed",
+	"js.tabs.bar_label",
+	"js.tabs.mobile_limit",
+	"js.tabs.switcher_title",
+	"js.tabs.switcher_close_all",
+	"js.tabs.switcher_dismiss",
+	"js.tabs.fab_label",
+	"js.tabs.load_failed",
+	"js.tabs.retry",
+	"js.tabs.loading",
+	"js.tabs.untitled",
+	"js.tabs.status_connected",
+	"js.tabs.status_connecting",
+	"js.tabs.status_disconnected",
+	"js.tabs.open_in_new_tab",
+	"js.tabs.shortcut_hint",
 }
 
 // clientI18nJSON serialises the client-needed translations for loc into a JSON

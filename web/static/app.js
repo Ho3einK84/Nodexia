@@ -185,8 +185,9 @@
   }
 
   /* ── Flash banners: dismissible + auto-dismiss ──────────── */
-  function initFlash() {
-    document.querySelectorAll('.flash-banner').forEach(function (banner) {
+  function initFlash(root) {
+    root = root || document;
+    root.querySelectorAll('.flash-banner').forEach(function (banner) {
       if (banner.querySelector('.flash-banner__close')) return;
       var close = document.createElement('button');
       close.type = 'button';
@@ -209,8 +210,9 @@
   }
 
   /* ── Masked secrets with reveal toggle ──────────────────── */
-  function initSecrets() {
-    document.querySelectorAll('[data-secret]').forEach(function (el) {
+  function initSecrets(root) {
+    root = root || document;
+    root.querySelectorAll('[data-secret]').forEach(function (el) {
       if (el.dataset.secretReady === '1') return;
       var real = el.textContent;
       if (!real.trim()) return;
@@ -240,8 +242,9 @@
   }
 
   /* ── Copy-to-clipboard for output blocks ────────────────── */
-  function initCopyButtons() {
-    document.querySelectorAll('pre.output-block').forEach(function (pre) {
+  function initCopyButtons(root) {
+    root = root || document;
+    root.querySelectorAll('pre.output-block').forEach(function (pre) {
       if (pre.parentElement && pre.parentElement.classList.contains('output-wrap')) return;
       // Blocks with their own explicit Copy control opt out of the auto button.
       if (pre.hasAttribute('data-no-auto-copy')) return;
@@ -278,8 +281,9 @@
      Copies the FULL value of the referenced element, including the real value
      when that element is masked by initSecrets (data-secret). Shows an inline
      "Copied!" confirmation that reverts after a moment. */
-  function initCopyTargets() {
-    document.querySelectorAll('[data-copy-target]').forEach(function (btn) {
+  function initCopyTargets(root) {
+    root = root || document;
+    root.querySelectorAll('[data-copy-target]').forEach(function (btn) {
       if (btn.dataset.copyReady === '1') return;
       btn.dataset.copyReady = '1';
       var label = btn.innerHTML;
@@ -540,8 +544,9 @@
    * offset 0 on every connect, we reset the output on each (re)open so a
    * reconnect never duplicates lines.
    */
-  function initStream() {
-    var card = document.querySelector('[data-stream-sse-url]');
+  function initStream(root) {
+    root = root || document;
+    var card = root.querySelector('[data-stream-sse-url]');
     if (!card) return;
     var url = card.getAttribute('data-stream-sse-url');
     if (!url) return;
@@ -780,8 +785,9 @@
    * server row is pushed as a `row` event as it transitions
    * pending → running → ok/failed, swapping an inline spinner for a check / x.
    */
-  function initBulkStream() {
-    var card = document.querySelector('[data-bulk-sse-url]');
+  function initBulkStream(root) {
+    root = root || document;
+    var card = root.querySelector('[data-bulk-sse-url]');
     if (!card) return;
     var url = card.getAttribute('data-bulk-sse-url');
     if (!url || typeof EventSource === 'undefined') return;
@@ -981,9 +987,10 @@
   }
 
   /* ── Modal dialogs (frosted backdrop) ───────────────────── */
-  function initModals() {
-    var openers = document.querySelectorAll('[data-modal-open]');
-    var modals = document.querySelectorAll('[data-modal]');
+  function initModals(root) {
+    root = root || document;
+    var openers = root.querySelectorAll('[data-modal-open]');
+    var modals = root.querySelectorAll('[data-modal]');
     if (!modals.length) return;
     var lastFocus = null;
 
@@ -1050,7 +1057,7 @@
     });
 
     // Re-open a modal the server asked to surface (e.g. install form had errors).
-    var initial = document.querySelector('[data-modal][data-modal-open-initial]');
+    var initial = root.querySelector('[data-modal][data-modal-open-initial]');
     if (initial) openModal(initial);
   }
 
@@ -1246,8 +1253,9 @@
       body.style.opacity = '1';
     });
   }
-  function initCollapsibles() {
-    document.querySelectorAll('.collapsible').forEach(function (el) {
+  function initCollapsibles(root) {
+    root = root || document;
+    root.querySelectorAll('.collapsible').forEach(function (el) {
       var toggle = el.querySelector('.collapsible__toggle');
       var body = el.querySelector('.collapsible__content');
       if (!toggle || !body) return;
@@ -1384,6 +1392,33 @@
     initOrientationLock();
     renderIcons(); // pick up icons injected by the steps above
   }
+
+  /* ── v0.6.0: tab-pane rescan bridge ──────────────────────
+   * tab-manager.js populates a .tab-pane by DOMParser-extracting another
+   * page's rendered markup rather than a real navigation, so none of the
+   * init*() calls above ever ran against that subtree — it never passed
+   * through boot(). rescan() re-invokes the idempotent-safe subset of them,
+   * scoped to the given root, so a freshly-injected pane gets the same
+   * flash-banner dismiss buttons, secret-reveal toggles, copy buttons, modal
+   * wiring, collapsible sections and SSE stream hookups a full page load
+   * would have given it. Icons are re-rendered too, since DOMParser-parsed
+   * markup never passed through lucide in its original document.
+   */
+  window.NodexiaApp = {
+    rescan: function (root) {
+      root = root || document;
+      renderIcons();
+      initFlash(root);
+      initSecrets(root);
+      initCopyButtons(root);
+      initCopyTargets(root);
+      initModals(root);
+      initCollapsibles(root);
+      initStream(root);
+      initBulkStream(root);
+      renderIcons();
+    }
+  };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);

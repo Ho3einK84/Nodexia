@@ -36,6 +36,9 @@ through monitoring, analytics, forecasting, and alerting.
 - 📈 **Observability** — persisted scheduler run history on diagnostics and an
   optional token-gated Prometheus `/metrics` endpoint for Grafana.
 - 🌐 **Bilingual UI** — full English and Persian (فارسی) with RTL; installable as a PWA.
+- 🗂️ **Multi-tab workspace** *(v0.6.0)* — open several pages at once in a
+  browser-tab-style bar (mobile: a bottom-sheet switcher + FAB), each kept
+  alive and switchable instantly; see [`docs/tab-system.md`](docs/tab-system.md).
 - 🧰 **Supporting tools** — bulk reboot/update/delete, in-browser SSH terminal,
   command runner, SFTP browser, and encrypted backup/restore.
 - 🔒 **Security** — single admin, HMAC CSRF-protected sessions, login rate

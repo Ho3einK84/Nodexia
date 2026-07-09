@@ -26,6 +26,7 @@
   {{ if eq .Lang "fa" }}{{/* Persian locale: preload Vazirmatn alongside the stylesheet. */}}
   <link rel="preload" href="/static/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
   {{ end }}<link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/tabs.css">
   {{ range .PageStyles }}<link rel="stylesheet" href="{{ . }}">
   {{ end }}<script src="/static/lucide.min.js" defer></script>
 </head>
@@ -43,7 +44,7 @@
     <span>{{ t "shell.meta.version" "value" .Version }}</span>
     <span>{{ t "shell.meta.db" "value" .DatabaseDriver }}</span>
     {{ template "lang-switcher" . }}
-    <a href="/logout" class="logout-link">{{ t "nav.logout" }}</a>
+    <a href="/logout" class="logout-link" data-tab-bypass>{{ t "nav.logout" }}</a>
   </div>
   {{ if ne .ContentTemplate "content-login" }}
   <button type="button" class="nav-toggle" data-drawer-open aria-label="{{ t "shell.menu.open" }}" aria-expanded="false" aria-controls="mobile-drawer">
@@ -60,7 +61,7 @@
 <div class="lang-switcher" role="group" aria-label="{{ t "lang.switcher.label" }}">
   <i data-lucide="languages" class="lang-switcher__icon" aria-hidden="true"></i>
   {{ range .LanguageOptions }}
-  <a href="{{ .SwitchURL }}" hreflang="{{ .Code }}" class="lang-switcher__option{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="true"{{ end }}>{{ .Label }}</a>
+  <a href="{{ .SwitchURL }}" hreflang="{{ .Code }}" class="lang-switcher__option{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="true"{{ end }} data-tab-bypass>{{ .Label }}</a>
   {{ end }}
 </div>
 {{ end }}
@@ -103,7 +104,7 @@
     {{ template "lang-switcher" . }}
   </div>
 
-  <a href="/logout" class="btn btn--secondary drawer__logout"><i data-lucide="log-out" class="icon-in-button"></i> {{ t "nav.logout" }}</a>
+  <a href="/logout" class="btn btn--secondary drawer__logout" data-tab-bypass><i data-lucide="log-out" class="icon-in-button"></i> {{ t "nav.logout" }}</a>
 </aside>
 {{ end }}
 
@@ -145,4 +146,47 @@
 <footer class="shell-footer">
   <p>{{ .FooterNote }}</p>
 </footer>
+{{ end }}
+
+{{/* v0.6.0 multi-tab workspace: global tab bar chrome, rendered hidden until
+     tab-manager.js finishes booting (progressive enhancement — a JS-disabled
+     session never sees it and behaves exactly like v0.5.0). Pinned tabs render
+     inside [data-tab-pinned]; the rest inside the scrollable [data-tab-list]. */}}
+{{ define "tab-bar" }}
+<div id="nodexia-tabbar" class="tab-bar" data-tab-bar hidden>
+  <div class="tab-bar__pinned" data-tab-pinned></div>
+  <div class="tab-bar__scroll" data-tab-scroll>
+    <div class="tab-bar__list" role="tablist" data-tab-list aria-label="{{ t "js.tabs.bar_label" }}"></div>
+  </div>
+  <button type="button" class="tab-bar__new" data-tab-new aria-label="{{ t "js.tabs.new_tab" }}" title="{{ t "js.tabs.new_tab" }}">
+    <i data-lucide="plus"></i>
+  </button>
+</div>
+{{ end }}
+
+{{/* v0.6.0 multi-tab workspace: mobile bottom-sheet tab switcher, opened via
+     the FAB below. Cards inside [data-tab-switcher-grid] are built entirely by
+     tab-manager.js. */}}
+{{ define "tab-switcher" }}
+<div id="tab-switcher" class="tab-switcher" data-tab-switcher hidden>
+  <div class="tab-switcher__backdrop" data-tab-switcher-backdrop></div>
+  <div class="tab-switcher__sheet" role="dialog" aria-modal="true" aria-label="{{ t "js.tabs.switcher_title" }}">
+    <div class="tab-switcher__header">
+      <button type="button" class="tab-switcher__new" data-tab-switcher-new><i data-lucide="plus"></i> {{ t "js.tabs.new_tab" }}</button>
+      <span class="tab-switcher__count" data-tab-switcher-count></span>
+      <button type="button" class="tab-switcher__close-all" data-tab-switcher-close-all>{{ t "js.tabs.switcher_close_all" }}</button>
+      <button type="button" class="tab-switcher__dismiss" data-tab-switcher-dismiss aria-label="{{ t "js.tabs.switcher_dismiss" }}"><i data-lucide="x"></i></button>
+    </div>
+    <div class="tab-switcher__grid" data-tab-switcher-grid></div>
+  </div>
+</div>
+{{ end }}
+
+{{/* v0.6.0 multi-tab workspace: mobile-only FAB (< 768px, see tabs.css). Always
+     opens the tab switcher above — no speed-dial submenu. */}}
+{{ define "tab-fab" }}
+<button type="button" id="tab-fab" class="tab-fab" data-tab-fab aria-label="{{ t "js.tabs.fab_label" }}">
+  <i data-lucide="layers"></i>
+  <span class="tab-fab__badge" data-tab-fab-badge></span>
+</button>
 {{ end }}

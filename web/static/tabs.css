@@ -1,0 +1,693 @@
+/* Introduced in v0.6.0: multi-tab workspace (bar, panes, mobile switcher/FAB, split-view stub). */
+
+/* ════════════════════════════════════════════════════════
+   Multi-tab workspace
+   Loaded unconditionally, right after style.css (partials.gohtml "head").
+   Contents, in order: tab bar chrome → individual tab → content/pane area →
+   split-view stub (reserved, unused) → mobile tab switcher sheet → mobile
+   FAB → shared breakpoints → RTL notes.
+   Reuses style.css's existing design tokens (--surface, --border, --accent*,
+   --ok/--warn/--crit, --radius-*, --fw-*) rather than a parallel palette, and
+   its existing logical-property convention for RTL — see the note near the
+   bottom of this file.
+   ════════════════════════════════════════════════════════ */
+
+/* ── Tab bar (global chrome, sits between .shell-nav and <main>) ────── */
+
+.tab-bar {
+  /* Per-breakpoint sizing table (§9): redefined under the media queries
+     near the end of this file. Desktop values are the fallback/default. */
+  --tab-bar-height: 40px;
+  --tab-hit-height: 36px;
+  --tab-pinned-size: 32px;
+  --tab-title-max-width: 170px;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tab-bar-height);
+  margin-bottom: 20px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* Rendered `hidden` server-side; tab-manager.js removes the attribute once
+   boot succeeds. If JS never runs, the bar never appears (see .tab-bar's own
+   template comment) — this override is required because the plain .tab-bar
+   rule above (an author style) would otherwise beat the browser's UA-level
+   `[hidden] { display: none }` default, exactly like .modal[hidden] in
+   style.css. */
+.tab-bar[hidden] {
+  display: none;
+}
+
+.tab-bar__pinned {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+/* No pinned tabs yet: don't reserve a flex gap for an empty segment. */
+.tab-bar__pinned:empty {
+  display: none;
+}
+
+.tab-bar__scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: visible; /* desktop default: the list wraps instead of scrolling */
+}
+
+.tab-bar__list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap; /* desktop: "full row, wraps if needed" (§9 table) */
+  gap: 4px;
+}
+
+.tab-bar__new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--tab-pinned-size);
+  height: var(--tab-pinned-size);
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: rgba(2, 6, 23, 0.4);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.tab-bar__new:hover {
+  color: var(--accent-soft);
+  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.tab-bar__new:active {
+  transform: scale(0.94);
+}
+
+.tab-bar__new svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Individual tab (built entirely by tab-manager.js) ───────────────── */
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: var(--tab-hit-height);
+  padding-inline: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  scroll-snap-align: start; /* no-op except under the shared tablet/mobile
+    scroll-strip media query below, where .tab-bar__scroll actually scrolls */
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  /* A brand-new tab plays this once on insertion — CSS animations restart
+     automatically whenever an element newly enters the render tree, so this
+     needs no JS-side class toggle. Disabled under reduced motion below. */
+  animation: tab-in 0.16s ease;
+}
+
+@keyframes tab-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.tab[draggable="true"] {
+  cursor: grab;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.tab.is-active {
+  color: var(--accent-bright);
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(96, 165, 250, 0.3);
+  font-weight: var(--fw-semibold);
+}
+
+.tab__icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.tab__title {
+  overflow: hidden;
+  max-width: var(--tab-title-max-width);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.tab__close:hover {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
+.tab__close svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Status dot: terminal-kind tabs only. Reused, unmodified, inside a
+   .tab-switcher__card (see below). */
+.tab__status-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
+.tab__status-dot--connecting,
+.tab__status-dot--reconnecting {
+  background: var(--warn);
+  box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.5);
+  animation: tab-status-pulse 1.6s ease-out infinite;
+}
+
+.tab__status-dot--connected {
+  background: var(--ok);
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5);
+  animation: tab-status-pulse-ok 1.6s ease-out infinite;
+}
+
+.tab__status-dot--disconnected {
+  background: var(--text-dim);
+}
+
+.tab__status-dot--error {
+  background: var(--crit);
+}
+
+@keyframes tab-status-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.5); }
+  70% { box-shadow: 0 0 0 5px rgba(250, 204, 21, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); }
+}
+
+@keyframes tab-status-pulse-ok {
+  0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5); }
+  70% { box-shadow: 0 0 0 5px rgba(74, 222, 128, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+}
+
+/* Pinned tab: icon-only fixed square, rendered inside [data-tab-pinned]. */
+.tab.is-pinned {
+  width: var(--tab-pinned-size);
+  height: var(--tab-pinned-size);
+  min-height: 0;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+  position: relative;
+}
+
+.tab.is-pinned .tab__title {
+  display: none;
+}
+
+.tab.is-pinned .tab__status-dot {
+  position: absolute;
+  inset-inline-end: 2px;
+  bottom: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab {
+    animation: none;
+  }
+
+  .tab__status-dot--connecting,
+  .tab__status-dot--reconnecting,
+  .tab__status-dot--connected {
+    animation: none;
+  }
+
+  .tab-bar__new:active {
+    transform: none;
+  }
+}
+
+/* ── Content / pane area ─────────────────────────────────────────────── */
+
+.tab-content {
+  /* tab-manager.js attaches touchstart/touchmove/touchend here to detect a
+     horizontal swipe-to-switch gesture; pan-y keeps vertical scrolling
+     native while horizontal drag is left for JS to interpret, exactly like
+     the drawer's own touch-action: pan-y (style.css, initDrawer). */
+  touch-action: pan-y;
+}
+
+/* Without JS, #tab-content holds .MainHTML directly (no .tab-pane wrapper)
+   — nothing below applies and the page renders exactly like v0.5.0. */
+.tab-pane {
+  /* Pull-to-refresh is disabled on the active pane's own content only, not
+     the whole document — the outer shell/tab bar keep normal overscroll. */
+  overscroll-behavior-y: contain;
+}
+
+/* Visibility is governed entirely by the `hidden` attribute tab-manager.js
+   toggles (contract §3) — .is-active is a hook for the rest of this file,
+   not itself a display switch. */
+
+/* ── Split-view stub (§11 — reserved, unused in v0.6.0) ──────────────── */
+/* A future release fills these in per pane count; nothing renders into
+   #tab-split-root and nothing removes its `hidden` attribute today. */
+
+.tab-split-grid { display: none; /* grid-template-columns set per pane count in a later release */ }
+.tab-split-grid[data-panes="2"] { }
+.tab-split-grid[data-panes="4"] { }
+
+/* ── Mobile tab switcher (bottom-sheet overlay) ──────────────────────── */
+/* §9's breakpoint table lists this as "not rendered" above the mobile tier,
+   so — unlike .modal, which adapts desktop/mobile — this component only
+   ever appears under the `max-width: 767px` query near the end of this
+   file; the plain `display: none` below is the desktop/tablet default. */
+
+.tab-switcher {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.tab-switcher[hidden] {
+  display: none;
+}
+
+.tab-switcher__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.62);
+  backdrop-filter: blur(3px);
+  animation: tab-switcher-backdrop-in 0.2s ease;
+}
+
+@keyframes tab-switcher-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tab-switcher__sheet {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 80vh;
+  background: linear-gradient(185deg, #111c33 0%, #0b1120 100%);
+  border: 1px solid var(--border-strong);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.45);
+  animation: tab-switcher-sheet-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes tab-switcher-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-switcher__backdrop,
+  .tab-switcher__sheet {
+    animation: none;
+  }
+}
+
+.tab-switcher__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab-switcher__count {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: var(--fw-medium);
+}
+
+.tab-switcher__new,
+.tab-switcher__close-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: rgba(2, 6, 23, 0.4);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.tab-switcher__new {
+  color: var(--accent-bright);
+  border-color: rgba(96, 165, 250, 0.3);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.tab-switcher__new:hover {
+  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(59, 130, 246, 0.16);
+}
+
+.tab-switcher__new svg {
+  width: 15px;
+  height: 15px;
+}
+
+.tab-switcher__close-all:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.tab-switcher__dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: rgba(2, 6, 23, 0.4);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tab-switcher__dismiss:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
+.tab-switcher__dismiss svg {
+  width: 17px;
+  height: 17px;
+}
+
+.tab-switcher__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Cards are built entirely by tab-manager.js (contract §3 does not freeze
+   their internal markup beyond "icon, title, url, status dot, a per-card
+   close"). This stylesheet assumes reuse of the .tab__icon / .tab__title /
+   .tab__status-dot / .tab__close classes already defined above (the natural,
+   DRY choice for shared icon/title/status/close rendering helpers) plus one
+   new element, .tab-switcher__card-url, for the second text line. Grid
+   placement is explicit by class, not by DOM order, so this still lays out
+   correctly even if tab-manager.js emits these children in a different
+   order. */
+.tab-switcher__card {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(148, 163, 184, 0.05);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.tab-switcher__card:hover,
+.tab-switcher__card:active {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(96, 165, 250, 0.25);
+}
+
+.tab-switcher__card .tab__icon {
+  grid-row: 1 / 3;
+  grid-column: 1;
+  width: 18px;
+  height: 18px;
+}
+
+.tab-switcher__card .tab__title {
+  grid-row: 1;
+  grid-column: 2;
+  max-width: none;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: var(--fw-medium);
+}
+
+.tab-switcher__card-url {
+  grid-row: 2;
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-switcher__card .tab__status-dot {
+  grid-row: 1 / 3;
+  grid-column: 3;
+}
+
+.tab-switcher__card .tab__close {
+  grid-row: 1 / 3;
+  grid-column: 4;
+  width: 44px;
+  height: 44px;
+}
+
+/* ── Mobile FAB ───────────────────────────────────────────────────────── */
+/* Mobile-only (< 768px, §9 table) — the plain `display: none` below is the
+   desktop/tablet default, mirroring .nav-toggle/.drawer/.bottom-nav in
+   style.css, all of which stay hidden until their own mobile media query. */
+
+.tab-fab {
+  display: none;
+  position: fixed;
+  /* Opposite side from .back-to-top (inset-inline-end) so the two floating
+     buttons never collide; raised above .bottom-nav both visually (bottom
+     offset, set under the mobile query below) and in the stacking order. */
+  inset-inline-start: 20px;
+  z-index: 1150;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 50%;
+  background: rgba(30, 41, 59, 0.92);
+  color: #cbd5e1;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.tab-fab:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(96, 165, 250, 0.5);
+  color: #fff;
+}
+
+.tab-fab:active {
+  transform: scale(0.94);
+}
+
+.tab-fab svg {
+  width: 22px;
+  height: 22px;
+}
+
+.tab-fab__badge {
+  position: absolute;
+  top: -4px;
+  inset-inline-end: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: var(--fw-bold);
+  line-height: 1;
+}
+
+.tab-fab__badge:empty {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-fab {
+    transition: none;
+  }
+
+  .tab-fab:active {
+    transform: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════
+   Breakpoints (§9) — distinct from style.css's own ad-hoc 700px/1000px
+   breakpoints elsewhere, which are untouched. Plain max-/min-width queries
+   only; there is no build step for custom media in this project.
+   ════════════════════════════════════════════════════════ */
+
+/* Desktop > 1024px — explicit for clarity, though it also doubles as the
+   unqueried default above (nothing below 1025px overrides these). */
+@media (min-width: 1025px) {
+  .tab-bar {
+    --tab-bar-height: 40px;
+    --tab-hit-height: 36px;
+    --tab-pinned-size: 32px;
+    --tab-title-max-width: 170px;
+  }
+}
+
+/* Tablet and mobile share the same "horizontally scrollable strip" tab-bar
+   mode (§9 table); only the exact sizing differs per tier below. */
+@media (max-width: 1024px) {
+  .tab-bar__scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .tab-bar__scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-bar__list {
+    flex-wrap: nowrap;
+  }
+}
+
+/* Tablet 768–1024px */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .tab-bar {
+    --tab-bar-height: 44px;
+    --tab-hit-height: 44px;
+    --tab-pinned-size: 40px;
+    --tab-title-max-width: 150px;
+  }
+}
+
+/* Mobile < 768px — sizing, switcher/FAB reveal, and every touch target in
+   this tier is given an explicit width/height (not padding alone) so it
+   independently measures >= 44px in DevTools' box model. */
+@media (max-width: 767px) {
+  .tab-bar {
+    --tab-bar-height: 48px;
+    --tab-hit-height: 48px;
+    --tab-pinned-size: 44px;
+    --tab-title-max-width: 120px;
+  }
+
+  .tab__close {
+    width: 44px;
+    height: 44px;
+  }
+
+  .tab-switcher {
+    display: flex;
+  }
+
+  .tab-fab {
+    display: inline-flex;
+    /* Mirrors .back-to-top's own mobile offset (style.css) so both floating
+       buttons sit at the same height above the bottom nav. */
+    bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ── RTL ──────────────────────────────────────────────────────────────
+   Every rule above is authored with logical properties (inset-inline-*,
+   margin/padding/border-inline-*) exactly like the rest of style.css, so
+   [dir="rtl"] mirrors this whole file automatically — the FAB's
+   inset-inline-start flips to the visual right, the pinned status-dot's
+   inset-inline-end flips to the visual left, and the tab bar's flex `row`
+   direction already follows the inline axis per the flexbox spec. No
+   left/right values are used anywhere in this file, so no [dir="rtl"]
+   overrides are needed. */

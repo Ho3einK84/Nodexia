@@ -49,7 +49,13 @@
     el.style.display = shown ? (display || '') : 'none';
   }
 
-  var card = document.getElementById('terminal-card');
+  // v0.6.0: scope every lookup to this script's own .tab-pane (if any) so two
+  // concurrent terminal tabs never resolve each other's DOM nodes.
+  var scopeRoot = (document.currentScript && document.currentScript.closest &&
+    document.currentScript.closest('.tab-pane')) || document;
+  function byId(id) { return scopeRoot.querySelector('#' + id); }
+
+  var card = byId('terminal-card');
   if (!card) return;
 
   var ticket  = card.getAttribute('data-ticket');
@@ -60,10 +66,15 @@
   // The credential page for this server (used by Reconnect): strip the /ws tail.
   var pageURL = wsBase.replace(/\/ws$/, '');
 
-  var container = document.getElementById('terminal-container');
-  var statusEl  = document.getElementById('terminal-status');
+  var container = byId('terminal-container');
+  var statusEl  = byId('terminal-status');
   var statusTextEl = statusEl ? statusEl.querySelector('.terminal-status__text') : null;
-  var errorEl   = document.getElementById('terminal-error');
+  var errorEl   = byId('terminal-error');
+
+  // v0.6.0: true while this pane is the visible/foreground tab. Gates only the
+  // resize/measurement work below; the WebSocket, heartbeat, and PTY input
+  // keep running regardless so a backgrounded tab never loses output.
+  var active = true;
 
   var isMobile = window.matchMedia('(max-width: 700px)').matches;
   var FONT_KEY = 'nodexia.terminal.fontSize';
@@ -78,6 +89,7 @@
     statusEl.className = 'terminal-status terminal-status--' + state;
     if (statusTextEl) statusTextEl.textContent = text;
     else statusEl.textContent = text;
+    if (card) card.dispatchEvent(new CustomEvent('nodexia:terminal-status', { bubbles: true, detail: { state: state } }));
   }
 
   function showError(msg) {
@@ -214,14 +226,15 @@
   }
 
   /* ── Status bar (dims + latency) ──────────────────────── */
-  var dimsEl = document.getElementById('term-dims');
-  var latencyEl = document.getElementById('term-latency');
+  var dimsEl = byId('term-dims');
+  var latencyEl = byId('term-latency');
   function updateDims() {
     if (dimsEl && term.cols && term.rows) dimsEl.textContent = term.cols + '×' + term.rows;
   }
 
   /* ── Fit helper ───────────────────────────────────────── */
   function fitAndResize() {
+    if (!active) return;
     if (fitAddon) {
       try { fitAddon.fit(); } catch (e) { /* ignore */ }
     }
@@ -370,8 +383,8 @@
   }
 
   /* ── Theme menu ───────────────────────────────────────── */
-  var themeMenu = document.getElementById('terminal-theme-menu');
-  var themeBtn = document.getElementById('term-tool-theme');
+  var themeMenu = byId('terminal-theme-menu');
+  var themeBtn = byId('term-tool-theme');
   function buildThemeMenu() {
     if (!themeMenu || !ThemeStore) return;
     themeMenu.innerHTML = '';
@@ -456,10 +469,10 @@
   });
 
   /* ── Search bar ───────────────────────────────────────── */
-  var searchBar = document.getElementById('terminal-search');
-  var searchInput = document.getElementById('terminal-search-input');
-  var searchCount = document.getElementById('terminal-search-count');
-  var searchCaseBtn = document.getElementById('terminal-search-case');
+  var searchBar = byId('terminal-search');
+  var searchInput = byId('terminal-search-input');
+  var searchCount = byId('terminal-search-count');
+  var searchCaseBtn = byId('terminal-search-case');
   var caseSensitive = false;
 
   function searchOpts() {
@@ -523,7 +536,7 @@
   }
 
   function bindClick(id, fn) {
-    var el = document.getElementById(id);
+    var el = byId(id);
     if (el) el.addEventListener('click', function (e) { e.preventDefault(); fn(); });
   }
 
@@ -762,7 +775,7 @@
   }
 
   /* ── Back button ──────────────────────────────────────── */
-  var backBtn = document.getElementById('terminal-back');
+  var backBtn = byId('terminal-back');
   if (backBtn) {
     backBtn.addEventListener('click', function () {
       userClosing = true;
@@ -937,6 +950,7 @@
   var rafPending = false;
 
   function updateMobileViewport() {
+    if (!active) return;
     if (!card.classList.contains('terminal-card--mobile')) return;
     if (vv) {
       card.style.top = vv.offsetTop + 'px';
@@ -986,4 +1000,21 @@
     if (isMobile) updateMobileViewport();
     else fitAndResize();
   });
+
+  /* ── v0.6.0 tab-lifecycle surface ──────────────────────── */
+  // Bridges this pane's terminal.js instance to terminal-tab-adapter.js. The
+  // two files never reference each other directly — only through this object
+  // and the nodexia:terminal-status/ready DOM events.
+  card.__nodexiaTerminal = {
+    pause: function () { active = false; },
+    resume: function () { active = true; fitAndResize(); term.focus(); },
+    dispose: function () {
+      userClosing = true;
+      stopHeartbeat();
+      try { if (ws) ws.close(1000, 'tab closed'); } catch (e) {}
+      try { term.dispose(); } catch (e) {}
+    },
+    isConnected: function () { return !!(ws && ws.readyState === WebSocket.OPEN); }
+  };
+  card.dispatchEvent(new CustomEvent('nodexia:terminal-ready', { bubbles: true }));
 })();
