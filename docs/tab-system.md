@@ -199,11 +199,11 @@ dismisses the sheet on tap.
   ad-hoc breakpoints elsewhere in the app).
 - **Gestures:** swiping the tab bar scrolls it natively (no custom JS).
   Swiping the content area left/right switches tabs (vertical drags are left
-  alone so page scrolling is never hijacked). Long-pressing a tab (500 ms)
-  opens the same context menu as desktop right-click. Long-pressing a link
-  offers an "Open" / "Open in new tab" action sheet, since mobile taps on a
-  link navigate the *current* tab in place by default (unlike desktop, where
-  a plain click opens a new foreground tab). Pull-to-refresh is disabled on
+  alone so page scrolling is never hijacked). The mobile tab switcher sheet
+  can also be dismissed with a downward swipe. Long-pressing a tab (500 ms)
+  opens the same context menu as desktop right-click; long-pressing a link
+  offers an "Open" / "Open in new tab" action sheet. Both the context menu
+  and action sheet are keyboard-navigable. Pull-to-refresh is disabled on
   pane content so an accidental vertical drag can't trigger a full reload.
 - **5-tab mobile cap:** `NodexiaTabs.MOBILE_TAB_LIMIT` is `5`, enforced only
   below the `768px` breakpoint, inside `NodexiaTabs.open()`. Opening a 6th
@@ -220,6 +220,6 @@ dismisses the sheet on tap.
 
 This documentation and the tab system implementation do **not** bump the
 app's version string. That is a separate, manual step for a maintainer:
-running `make release VERSION=v0.6.0` (the existing `scripts/release.sh`)
+running `make release VERSION=v0.6.2` (the existing `scripts/release.sh`)
 once the change set has been reviewed and `make test` passes. See
 `CHANGELOG.md` for the corresponding entry.

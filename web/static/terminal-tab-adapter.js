@@ -1,4 +1,4 @@
-// Nodexia v0.6.1: bridges one terminal pane's terminal.js instance to tab lifecycle events.
+// Nodexia v0.6.2: bridges one terminal pane's terminal.js instance to tab lifecycle events.
 (function () {
   'use strict';
 

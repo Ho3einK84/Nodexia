@@ -107,7 +107,7 @@
         topBar.classList.remove('is-active', 'is-done');
         topBar.style.width = '0%';
       }
-    }, 400);
+    }, 220);
   }
   window.addEventListener('pageshow', finishTopBar);
 

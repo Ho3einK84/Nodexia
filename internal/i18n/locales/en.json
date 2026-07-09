@@ -1103,5 +1103,6 @@
   "js.tabs.status_connecting": "connecting",
   "js.tabs.status_disconnected": "disconnected",
   "js.tabs.open_in_new_tab": "Open in new tab",
+  "js.tabs.no_tabs": "No open tabs",
   "js.tabs.shortcut_hint": "Alt+T new · Alt+W close · Alt+Shift+←/→ switch"
 }

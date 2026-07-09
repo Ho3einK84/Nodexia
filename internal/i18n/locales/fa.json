@@ -1103,5 +1103,6 @@
   "js.tabs.status_connecting": "در حال اتصال",
   "js.tabs.status_disconnected": "قطع شده",
   "js.tabs.open_in_new_tab": "باز کردن در تب جدید",
+  "js.tabs.no_tabs": "تب باز نیست",
   "js.tabs.shortcut_hint": "Alt+T تب جدید · Alt+W بستن · Alt+Shift+←/→ جابجایی"
 }

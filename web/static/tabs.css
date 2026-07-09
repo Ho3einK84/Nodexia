@@ -1,4 +1,4 @@
-/* Introduced in v0.6.0 multi-tab workspace; polished in v0.6.1. */
+/* Introduced in v0.6.0 multi-tab workspace; polished in v0.6.1 and v0.6.2. */
 
 /* ════════════════════════════════════════════════════════
    Multi-tab workspace
@@ -91,6 +91,11 @@
   background: rgba(59, 130, 246, 0.08);
 }
 
+.tab-bar__new:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+
 .tab-bar__new:active {
   transform: scale(0.92);
   background: rgba(59, 130, 246, 0.12);
@@ -159,6 +164,11 @@
   background: rgba(148, 163, 184, 0.08);
 }
 
+.tab:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+
 .tab.is-active {
   color: var(--accent-bright);
   background: rgba(59, 130, 246, 0.12);
@@ -213,6 +223,8 @@
 .tab.is-active .tab__close,
 .tab__close:focus-visible {
   opacity: 0.7;
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 1px;
 }
 
 .tab__close:hover {
@@ -351,11 +363,25 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  min-height: 200px;
-  padding: 32px 16px;
+  gap: 16px;
+  min-height: 220px;
+  padding: 40px 20px;
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+.tab-pane__loading::before {
+  content: '';
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(148, 163, 184, 0.15);
+  border-top-color: var(--accent-soft);
+  border-radius: 50%;
+  animation: tab-pane-loading-spin 0.9s linear infinite;
+}
+
+@keyframes tab-pane-loading-spin {
+  to { transform: rotate(360deg); }
 }
 
 .tab-pane__loading {
@@ -414,6 +440,10 @@
   display: none;
 }
 
+body.tab-switcher-open {
+  overflow: hidden;
+}
+
 .tab-switcher__backdrop {
   position: absolute;
   inset: 0;
@@ -469,9 +499,21 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-  padding: 14px 16px;
+  padding: 18px 16px 14px;
   border-bottom: 1px solid var(--border);
   background: rgba(15, 23, 42, 0.4);
+  position: relative;
+}
+
+.tab-switcher__handle {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(148, 163, 184, 0.25);
 }
 
 .tab-switcher__count {
@@ -498,7 +540,20 @@
   font-weight: var(--fw-medium);
   white-space: nowrap;
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+
+.tab-switcher__new:focus-visible,
+.tab-switcher__close-all:focus-visible,
+.tab-switcher__dismiss:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+
+.tab-switcher__new:active,
+.tab-switcher__close-all:active,
+.tab-switcher__dismiss:active {
+  transform: scale(0.96);
 }
 
 .tab-switcher__new {
@@ -559,6 +614,14 @@
   -webkit-overflow-scrolling: touch;
 }
 
+.tab-switcher__empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
 @media (min-width: 420px) and (max-width: 767px) {
   .tab-switcher__grid {
     grid-template-columns: 1fr 1fr;
@@ -614,6 +677,11 @@
 .tab-switcher__card:active {
   background: rgba(59, 130, 246, 0.08);
   border-color: rgba(96, 165, 250, 0.25);
+}
+
+.tab-switcher__card:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
 }
 
 .tab-switcher__card:active {
@@ -895,6 +963,13 @@
 .tab-floating-menu__item:hover {
   background: rgba(59, 130, 246, 0.1);
   color: var(--accent-bright);
+}
+
+.tab-floating-menu__item:focus-visible {
+  outline: none;
+  background: rgba(59, 130, 246, 0.14);
+  color: var(--accent-bright);
+  box-shadow: inset 0 0 0 2px var(--accent-soft);
 }
 
 .tab-floating-menu__item:active {

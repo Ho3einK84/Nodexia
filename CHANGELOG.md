@@ -7,6 +7,70 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.6.2 — Comprehensive tab system review, bug fixes, and polish
+
+> **Release status:** this entry describes the change set as implemented and
+> reviewed. The version string itself (`Makefile`, `scripts/install.sh`,
+> `.env.production.example`, CI) is bumped separately by a maintainer running
+> `make release VERSION=v0.6.2` (the existing `scripts/release.sh`) once
+> `make test` passes — that step is not part of this change set and has not
+> been run yet.
+
+### Fixed
+
+- **Bottom navigation highlight now uses prefix matching.** Nav highlight
+  updates after in-pane navigation correctly highlight the deepest matching
+  top-level section (e.g. `/servers` stays active when navigating to
+  `/servers/123/monitoring`), instead of requiring an exact URL match that
+  left server-scoped routes unhighlighted.
+- **Progress bar timing is now correct.** The top progress bar's completion
+  delay is reduced, and it now finishes when a new tab's content actually
+  loads rather than immediately after the tab is created. In-pane mobile
+  navigations still finish the bar after the fetch completes, so it never
+  appears "stuck" longer than the actual load.
+- **In-flight fetches are cancelled on navigation/reload.** Each tab now uses
+  an `AbortController` so a new navigation or reload aborts the previous
+  fetch instead of racing and potentially overwriting newer content.
+- **Form UI is restored when navigation is vetoed.** If a pane's
+  `tab-closing` event cancels an in-tab form submission, the loading overlay,
+  busy button, and progress bar are now properly restored.
+- **Back/forward no longer reloads identical URLs.** `navigateInPane` skips
+  teardown and re-fetch when the target URL is the same as the tab's current
+  URL, preventing unnecessary terminal disposal and pane rebuilds.
+- **Long-press no longer fires while scrolling.** Both tab and link
+  long-press handlers now cancel when vertical scroll intent is detected,
+  eliminating accidental context-menu triggers during normal page scrolling.
+- **Long-press tolerance increased** from 10 px to 16 px for a more forgiving
+  mobile gesture.
+- **Middle-click on a tab now closes it**, matching desktop browser
+  conventions.
+- **Long-pressing a tab's close button no longer opens the context menu.**
+- **Keyboard shortcuts are disabled while the tab switcher is open.**
+
+### Improved
+
+- **Mobile tab switcher is significantly more polished:**
+  - Added a drag handle and swipe-down-to-dismiss gesture.
+  - Added a focus trap so Tab cycles within the switcher while open.
+  - Focus moves to the first card when opened and returns to the FAB when
+    closed.
+  - Cards are keyboard-focusable and activatable with Enter/Space.
+  - Added an empty-state message when no tabs are open.
+  - Body scroll is locked while the switcher is open.
+- **Context menus and link action sheets support keyboard navigation.**
+  Arrow keys move between items, Home/End jump to first/last, Enter/Space
+  activate, and Escape closes the menu and returns focus to the originating
+  element.
+- **In-pane navigation resets scroll to top** so a new page doesn't inherit
+  the previous page's scroll position.
+- **Pinned tabs show a tooltip** with their full title on hover/focus.
+- **Loading state has a visible spinner** in addition to the pulse animation.
+- **Focus-visible outlines added** for tabs, the New Tab button, close
+  buttons, switcher header buttons, switcher cards, and floating menu items,
+  improving keyboard accessibility.
+- **Switcher header buttons have `:active` scale feedback.**
+- **New `js.tabs.no_tabs` localized string** in English and Farsi.
+
 ## v0.6.1 — Tab system polish & bug fixes
 
 > **Release status:** this entry describes the change set as implemented and

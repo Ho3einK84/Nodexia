@@ -1,4 +1,4 @@
-// Nodexia v0.6.1: core multi-tab workspace manager (window.NodexiaTabs).
+// Nodexia v0.6.2: core multi-tab workspace manager (window.NodexiaTabs).
 /* Client-side tab system: a global tab bar plus one .tab-pane per open tab,
  * built entirely from the same full-page HTML a direct URL visit would
  * receive (fetch() + DOMParser extraction of #tab-content, per docs/tab-system.md).
@@ -17,7 +17,7 @@
   var MOBILE_BREAKPOINT = 768;
   var PERSIST_DEBOUNCE_MS = 150;
   var LONG_PRESS_MS = 500;
-  var LONG_PRESS_TOLERANCE_PX = 10;
+  var LONG_PRESS_TOLERANCE_PX = 16;
   var SWIPE_MIN_PX = 60;
   var TOAST_MS = 3200;
 
@@ -38,31 +38,51 @@
     }
   }
 
+  function restoreFormUI(submitter) {
+    var overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.style.display = 'none';
+    if (submitter && submitter.dataset && submitter.dataset.busy === '1') {
+      submitter.dataset.busy = '';
+      submitter.classList.remove('is-busy');
+      var label = submitter.getAttribute('data-busy-label');
+      if (label) submitter.textContent = label;
+      submitter.style.minWidth = '';
+    }
+    finishTopBar();
+  }
+
+  function matchNavHref(path, href) {
+    if (!href || href.charAt(0) !== '/') return false;
+    return path === href || path.indexOf(href + '/') === 0;
+  }
+
   function updateNavHighlight(path) {
-    var shellNav = document.querySelector('.shell-nav');
-    if (shellNav) {
-      shellNav.querySelectorAll('a[href]').forEach(function (a) {
-        var isActive = a.getAttribute('href') === path;
-        a.classList.toggle('is-active', isActive);
-        if (isActive) { a.setAttribute('aria-current', 'page'); } else { a.removeAttribute('aria-current'); }
+    var containers = [
+      document.querySelector('.shell-nav'),
+      document.querySelector('.bottom-nav'),
+      document.getElementById('mobile-drawer')
+    ];
+    var links = [];
+    containers.forEach(function (container) {
+      if (!container) return;
+      container.querySelectorAll('a[href]').forEach(function (a) {
+        var href = a.getAttribute('href');
+        a.classList.remove('is-active');
+        a.removeAttribute('aria-current');
+        if (matchNavHref(path, href)) links.push({ el: a, href: href });
       });
-    }
-    var bottomNav = document.querySelector('.bottom-nav');
-    if (bottomNav) {
-      bottomNav.querySelectorAll('a[href]').forEach(function (a) {
-        var isActive = a.getAttribute('href') === path;
-        a.classList.toggle('is-active', isActive);
-        if (isActive) { a.setAttribute('aria-current', 'page'); } else { a.removeAttribute('aria-current'); }
+    });
+    if (!links.length) return;
+    var best = links.reduce(function (a, b) { return a.href.length >= b.href.length ? a : b; });
+    containers.forEach(function (container) {
+      if (!container) return;
+      container.querySelectorAll('a[href]').forEach(function (a) {
+        if (a.getAttribute('href') === best.href) {
+          a.classList.add('is-active');
+          a.setAttribute('aria-current', 'page');
+        }
       });
-    }
-    var drawer = document.getElementById('mobile-drawer');
-    if (drawer) {
-      drawer.querySelectorAll('.drawer__link[href]').forEach(function (a) {
-        var isActive = a.getAttribute('href') === path;
-        a.classList.toggle('is-active', isActive);
-        if (isActive) { a.setAttribute('aria-current', 'page'); } else { a.removeAttribute('aria-current'); }
-      });
-    }
+    });
   }
 
   function renderIcons() {
@@ -274,13 +294,24 @@
       closeBtn.addEventListener('click', function (e) { e.stopPropagation(); close(tab.id); });
       btn.appendChild(closeBtn);
 
-      btn.addEventListener('click', function () { activate(tab.id); });
+      btn.addEventListener('click', function (e) {
+        if (e.target.closest && e.target.closest('.tab__close')) return;
+        activate(tab.id);
+      });
+      btn.addEventListener('auxclick', function (e) {
+        if (e.button !== 1) return;
+        e.preventDefault();
+        close(tab.id);
+      });
       btn.addEventListener('contextmenu', function (e) {
         e.preventDefault();
         showContextMenu(tab, e.clientX, e.clientY);
       });
       attachDragHandlers(btn, tab);
-      attachLongPress(btn, function (x, y) { showContextMenu(tab, x, y); });
+      attachLongPress(btn, function (x, y, startTarget) {
+        if (startTarget && startTarget.closest && startTarget.closest('.tab__close')) return;
+        showContextMenu(tab, x, y);
+      });
 
       tab.btn = btn;
     }
@@ -289,6 +320,8 @@
     var titleEl = tab.btn.querySelector('.tab__title');
     if (titleEl) titleEl.textContent = tab.title;
     tab.btn.classList.toggle('is-pinned', tab.pinned);
+    if (tab.pinned) tab.btn.setAttribute('title', tab.title);
+    else tab.btn.removeAttribute('title');
     setTabButtonActive(tab, tab.id === activeTabId);
     ensureStatusDot(tab);
     renderIcons();
@@ -436,9 +469,13 @@
     opts = opts || {};
     var pane = tab.pane;
     if (!pane) return Promise.resolve();
+    if (tab.abortController) {
+      try { tab.abortController.abort(); } catch (err) { /* ignore */ }
+    }
+    tab.abortController = new AbortController();
     tab.loading = true;
     showPaneLoading(pane);
-    var fetchOpts = { method: opts.method || 'GET' };
+    var fetchOpts = { method: opts.method || 'GET', signal: tab.abortController.signal };
     if (opts.body) fetchOpts.body = opts.body;
     return fetch(url, fetchOpts).then(function (resp) {
       return resp.text().then(function (text) { return { resp: resp, text: text }; });
@@ -464,7 +501,8 @@
       }
       renderIcons();
       schedulePersist();
-    }).catch(function () {
+    }).catch(function (err) {
+      if (err && err.name === 'AbortError') return;
       tab.loading = false;
       showPaneError(pane, tab, url);
     });
@@ -479,14 +517,24 @@
   }
 
   function navigateInPane(tab, url, fetchOpts, pushHistory) {
-    if (!teardownPaneContent(tab)) { finishTopBar(); return Promise.resolve(); }
-    return loadPane(tab, url, fetchOpts || {}).then(function () {
+    var normUrl = pathAndSearch(url);
+    if (normUrl === tab.url && tab.loaded) {
       if (pushHistory) {
         try { window.history.pushState({ nodexiaTabId: tab.id }, '', tab.url); } catch (err) { /* ignore */ }
       }
       updateNavHighlight(tab.url.split('?')[0]);
       finishTopBar();
-    }).catch(function () { finishTopBar(); });
+      return Promise.resolve();
+    }
+    if (!teardownPaneContent(tab)) { restoreFormUI(fetchOpts && fetchOpts.__submitter); return Promise.resolve(); }
+    return loadPane(tab, url, fetchOpts || {}).then(function () {
+      if (pushHistory) {
+        try { window.history.pushState({ nodexiaTabId: tab.id }, '', tab.url); } catch (err) { /* ignore */ }
+      }
+      if (tab.pane) tab.pane.scrollTop = 0;
+      updateNavHighlight(tab.url.split('?')[0]);
+      finishTopBar();
+    }).catch(function () { restoreFormUI(fetchOpts && fetchOpts.__submitter); });
   }
 
   /* ── CRUD (§5) ───────────────────────────────────────────── */
@@ -536,7 +584,13 @@
 
     fire('tab-created', { tabId: tab.id, url: tab.url, kind: tab.kind, pinned: tab.pinned, background: !!opts.background }, false);
 
-    loadPane(tab, tab.url, { keepTitle: !!opts.title, keepIcon: !!opts.icon });
+    loadPane(tab, tab.url, { keepTitle: !!opts.title, keepIcon: !!opts.icon })
+      .then(function () {
+        if (!opts.background && tab.pane) tab.pane.scrollTop = 0;
+      })
+      .finally(function () {
+        finishTopBar();
+      });
 
     if (!opts.background) {
       activate(tab.id);
@@ -670,20 +724,61 @@
    * enumerate one), so this builds a minimal, self-contained menu rather than
    * assuming CSS support that may not exist for it. */
   var floatingUI = null;
+  var floatingUIReturnFocus = null;
+  var floatingUIKeyHandler = null;
   function closeFloatingUI() {
+    if (floatingUIKeyHandler) {
+      document.removeEventListener('keydown', floatingUIKeyHandler, true);
+      floatingUIKeyHandler = null;
+    }
     if (floatingUI && floatingUI.parentNode) floatingUI.parentNode.removeChild(floatingUI);
     floatingUI = null;
     document.removeEventListener('click', onDocClickCloseFloat, true);
     document.removeEventListener('keydown', onEscCloseFloat);
+    if (floatingUIReturnFocus && floatingUIReturnFocus.focus) {
+      try { floatingUIReturnFocus.focus(); } catch (err) {}
+    }
+    floatingUIReturnFocus = null;
   }
   function onDocClickCloseFloat(e) {
     if (floatingUI && !floatingUI.contains(e.target)) closeFloatingUI();
   }
   function onEscCloseFloat(e) {
-    if (e.key === 'Escape') closeFloatingUI();
+    if (e.key === 'Escape') { e.stopPropagation(); closeFloatingUI(); }
   }
-  function openFloatingUI(el, x, y) {
+  function focusMenuItem(items, idx) {
+    if (idx < 0) idx = items.length - 1;
+    if (idx >= items.length) idx = 0;
+    if (items[idx] && items[idx].focus) items[idx].focus();
+    return idx;
+  }
+  function attachMenuKeyboard(menu) {
+    floatingUIKeyHandler = function (e) {
+      var items = Array.prototype.slice.call(menu.querySelectorAll('.tab-floating-menu__item'));
+      var current = document.activeElement;
+      var idx = items.indexOf(current);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        focusMenuItem(items, idx + 1);
+        return;
+      }
+      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        focusMenuItem(items, idx - 1);
+        return;
+      }
+      if (e.key === 'Home') { e.preventDefault(); focusMenuItem(items, 0); return; }
+      if (e.key === 'End') { e.preventDefault(); focusMenuItem(items, items.length - 1); return; }
+      if ((e.key === 'Enter' || e.key === ' ') && idx >= 0) {
+        e.preventDefault();
+        items[idx].click();
+      }
+    };
+    document.addEventListener('keydown', floatingUIKeyHandler, true);
+  }
+  function openFloatingUI(el, x, y, returnFocus) {
     closeFloatingUI();
+    floatingUIReturnFocus = returnFocus || document.activeElement;
     el.className += ' tab-floating-menu';
     document.body.appendChild(el);
     var vw = window.innerWidth, vh = window.innerHeight;
@@ -693,7 +788,10 @@
     el.style.left = left + 'px';
     el.style.top = top + 'px';
     floatingUI = el;
+    attachMenuKeyboard(el);
     setTimeout(function () {
+      var items = el.querySelectorAll('.tab-floating-menu__item');
+      if (items.length) focusMenuItem(items, 0);
       document.addEventListener('click', onDocClickCloseFloat, true);
       document.addEventListener('keydown', onEscCloseFloat);
     }, 0);
@@ -719,7 +817,7 @@
     menu.appendChild(floatingMenuItem(T('js.tabs.close_tab'), function () { close(tab.id); }));
     menu.appendChild(floatingMenuItem(T('js.tabs.close_others'), function () { closeOthers(tab.id); }));
     menu.appendChild(floatingMenuItem(T('js.tabs.close_all'), function () { closeAll(); }));
-    openFloatingUI(menu, x, y);
+    openFloatingUI(menu, x, y, tab.btn);
   }
   function showLinkSheet(anchor, x, y) {
     var url = anchor.getAttribute('href');
@@ -733,18 +831,18 @@
     sheet.appendChild(floatingMenuItem(T('js.tabs.open_in_new_tab'), function () {
       open(url, { background: true });
     }));
-    openFloatingUI(sheet, x, y);
+    openFloatingUI(sheet, x, y, anchor);
   }
 
   /* ── Long-press (tabs + links, §9) ───────────────────────── */
   function attachLongPress(el, cb) {
-    var timer = null, sx = 0, sy = 0, fired = false;
+    var timer = null, sx = 0, sy = 0, fired = false, startTarget = null;
     el.addEventListener('touchstart', function (e) {
       if (e.touches.length !== 1) return;
       sx = e.touches[0].clientX; sy = e.touches[0].clientY;
-      fired = false;
+      fired = false; startTarget = e.target;
       clearTimeout(timer);
-      timer = setTimeout(function () { fired = true; cb(sx, sy); }, LONG_PRESS_MS);
+      timer = setTimeout(function () { fired = true; cb(sx, sy, startTarget); }, LONG_PRESS_MS);
     }, { passive: true });
     el.addEventListener('touchmove', function (e) {
       if (!timer) return;
@@ -771,12 +869,12 @@
   }
 
   function initLinkLongPress() {
-    var timer = null, sx = 0, sy = 0, targetA = null, fired = false;
+    var timer = null, sx = 0, sy = 0, targetA = null, fired = false, intent = null;
     document.addEventListener('touchstart', function (e) {
       if (window.innerWidth >= MOBILE_BREAKPOINT || e.touches.length !== 1) { targetA = null; return; }
       var a = e.target.closest && e.target.closest('a[href]');
       if (!a || shouldBypassLink(a)) { targetA = null; return; }
-      targetA = a; fired = false;
+      targetA = a; fired = false; intent = null;
       sx = e.touches[0].clientX; sy = e.touches[0].clientY;
       clearTimeout(timer);
       timer = setTimeout(function () { fired = true; showLinkSheet(targetA, sx, sy); }, LONG_PRESS_MS);
@@ -784,7 +882,10 @@
     document.addEventListener('touchmove', function (e) {
       if (!timer || !targetA) return;
       var dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
-      if (Math.abs(dx) > LONG_PRESS_TOLERANCE_PX || Math.abs(dy) > LONG_PRESS_TOLERANCE_PX) {
+      if (intent === null && (Math.abs(dx) > LONG_PRESS_TOLERANCE_PX || Math.abs(dy) > LONG_PRESS_TOLERANCE_PX)) {
+        intent = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+      }
+      if (intent === 'v' || Math.abs(dx) > LONG_PRESS_TOLERANCE_PX || Math.abs(dy) > LONG_PRESS_TOLERANCE_PX) {
         clearTimeout(timer); timer = null;
       }
     }, { passive: true });
@@ -810,7 +911,6 @@
         return;
       }
       open(url.pathname + url.search, { background: e.metaKey || e.ctrlKey });
-      finishTopBar();
     });
     // Middle-click fires `auxclick`, not `click`, in every modern browser.
     document.addEventListener('auxclick', function (e) {
@@ -825,18 +925,6 @@
   }
 
   /* ── In-tab form submission (never a full top-level navigation) ─ */
-  function restoreFormUI(submitter) {
-    var overlay = document.getElementById('loading-overlay');
-    if (overlay) overlay.style.display = 'none';
-    if (submitter && submitter.dataset && submitter.dataset.busy === '1') {
-      submitter.dataset.busy = '';
-      submitter.classList.remove('is-busy');
-      var label = submitter.getAttribute('data-busy-label');
-      if (label) submitter.textContent = label;
-      submitter.style.minWidth = '';
-    }
-    finishTopBar();
-  }
   function initFormInterception() {
     document.addEventListener('submit', function (e) {
       var form = e.target;
@@ -852,7 +940,7 @@
 
       e.preventDefault();
       var method = (form.getAttribute('method') || 'GET').toUpperCase();
-      var fetchOpts = { method: method };
+      var fetchOpts = { method: method, __submitter: e.submitter };
       if (method === 'GET') {
         try {
           var qs = new URLSearchParams(new FormData(form));
@@ -958,6 +1046,7 @@
     var el = document.activeElement;
     if (isTyping(el)) return true;
     if (el && el.closest && el.closest('[data-modal].is-open')) return true;
+    if (switcherEl && !switcherEl.hasAttribute('hidden')) return true;
     return false;
   }
   function initKeyboard() {
@@ -1005,10 +1094,22 @@
   function renderSwitcherGrid() {
     if (!switcherGrid) return;
     switcherGrid.innerHTML = '';
-    orderedAll().forEach(function (tab) {
+    var list = orderedAll();
+    if (!list.length) {
+      var empty = document.createElement('div');
+      empty.className = 'tab-switcher__empty';
+      empty.textContent = T('js.tabs.no_tabs');
+      switcherGrid.appendChild(empty);
+      renderIcons();
+      return;
+    }
+    list.forEach(function (tab) {
       var card = document.createElement('div');
       card.className = 'tab-switcher__card' + (tab.id === activeTabId ? ' is-active' : '');
       card.dataset.tabId = tab.id;
+      card.setAttribute('tabindex', '0');
+      card.setAttribute('role', 'button');
+      card.setAttribute('aria-label', tab.title);
 
       var icon = document.createElement('i');
       icon.setAttribute('data-lucide', tab.icon);
@@ -1044,6 +1145,9 @@
       card.appendChild(closeBtn);
 
       card.addEventListener('click', function () { activate(tab.id); hideSwitcher(); });
+      card.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(tab.id); hideSwitcher(); }
+      });
       switcherGrid.appendChild(card);
     });
     renderIcons();
@@ -1053,9 +1157,16 @@
     renderSwitcherGrid();
     updateFabBadge();
     switcherEl.removeAttribute('hidden');
+    document.body.classList.add('tab-switcher-open');
+    setTimeout(function () {
+      var first = switcherEl.querySelector('.tab-switcher__card, [data-tab-switcher-new], [data-tab-switcher-dismiss]');
+      if (first && first.focus) first.focus();
+    }, 30);
   }
   function hideSwitcher() {
-    if (switcherEl) switcherEl.setAttribute('hidden', '');
+    if (!switcherEl) return;
+    switcherEl.setAttribute('hidden', '');
+    document.body.classList.remove('tab-switcher-open');
   }
   function initSwitcherUI() {
     if (switcherBackdrop) switcherBackdrop.addEventListener('click', hideSwitcher);
@@ -1064,8 +1175,52 @@
     if (switcherCloseAllBtn) switcherCloseAllBtn.addEventListener('click', function () { closeAll(); hideSwitcher(); });
     if (fabEl) fabEl.addEventListener('click', showSwitcher);
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && switcherEl && !switcherEl.hasAttribute('hidden')) hideSwitcher();
+      if (e.key === 'Escape' && switcherEl && !switcherEl.hasAttribute('hidden')) { e.stopPropagation(); hideSwitcher(); }
     });
+    // Focus trap: keep Tab inside the switcher while it is open.
+    if (switcherEl) {
+      switcherEl.addEventListener('keydown', function (e) {
+        if (e.key !== 'Tab' || switcherEl.hasAttribute('hidden')) return;
+        var focusables = switcherEl.querySelectorAll(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])');
+        if (!focusables.length) return;
+        var first = focusables[0];
+        var last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      });
+    }
+    // Swipe-down on the sheet to dismiss.
+    var sheet = switcherEl ? switcherEl.querySelector('.tab-switcher__sheet') : null;
+    if (sheet) {
+      var sx = 0, sy = 0, tracking = false;
+      sheet.addEventListener('touchstart', function (e) {
+        if (e.touches.length !== 1) return;
+        sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+        tracking = true;
+      }, { passive: true });
+      sheet.addEventListener('touchmove', function (e) {
+        if (!tracking) return;
+        var dy = e.touches[0].clientY - sy;
+        if (dy > 0) {
+          sheet.style.transition = 'none';
+          sheet.style.transform = 'translateY(' + Math.min(dy, 120) + 'px)';
+        }
+      }, { passive: true });
+      sheet.addEventListener('touchend', function (e) {
+        if (!tracking) return;
+        tracking = false;
+        var dy = e.changedTouches[0].clientY - sy;
+        sheet.style.transition = '';
+        sheet.style.transform = '';
+        if (dy > 72) hideSwitcher();
+      });
+    }
   }
 
   /* ── Boot ────────────────────────────────────────────────── */
