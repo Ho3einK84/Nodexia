@@ -1417,6 +1417,11 @@
       initStream(root);
       initBulkStream(root);
       renderIcons();
+    },
+    finishNavigation: function () {
+      finishTopBar();
+      var overlay = document.getElementById('loading-overlay');
+      if (overlay) overlay.style.display = 'none';
     }
   };
 

@@ -83,6 +83,9 @@ func TestEvaluateEligibility(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.name == "agent_ready blocked when SSH_AUTH_SOCK unset" {
+				t.Setenv("SSH_AUTH_SOCK", "")
+			}
 			got := r.evaluateEligibility(tc.server)
 			if got.Allowed != tc.wantAllowed {
 				t.Errorf("Allowed = %v, want %v (reason: %q)", got.Allowed, tc.wantAllowed, got.Reason)

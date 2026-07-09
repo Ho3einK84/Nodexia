@@ -1,4 +1,4 @@
-/* Introduced in v0.6.0: multi-tab workspace (bar, panes, mobile switcher/FAB, split-view stub). */
+/* Introduced in v0.6.0 multi-tab workspace; polished in v0.6.1. */
 
 /* ════════════════════════════════════════════════════════
    Multi-tab workspace
@@ -31,6 +31,7 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 /* Rendered `hidden` server-side; tab-manager.js removes the attribute once
@@ -91,7 +92,8 @@
 }
 
 .tab-bar__new:active {
-  transform: scale(0.94);
+  transform: scale(0.92);
+  background: rgba(59, 130, 246, 0.12);
 }
 
 .tab-bar__new svg {
@@ -141,6 +143,17 @@
   cursor: grab;
 }
 
+.tab.is-dragging {
+  opacity: 0.45;
+  transform: scale(0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.tab.is-drop-target {
+  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(59, 130, 246, 0.06);
+}
+
 .tab:hover {
   color: var(--text);
   background: rgba(148, 163, 184, 0.08);
@@ -151,6 +164,18 @@
   background: rgba(59, 130, 246, 0.12);
   border-color: rgba(96, 165, 250, 0.3);
   font-weight: var(--fw-semibold);
+  position: relative;
+}
+
+.tab.is-active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  inset-inline-start: 8px;
+  inset-inline-end: 8px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
 }
 
 .tab__icon {
@@ -179,15 +204,25 @@
   border-radius: 6px;
   background: transparent;
   color: inherit;
-  opacity: 0.7;
+  opacity: 0;
   cursor: pointer;
-  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.tab:hover .tab__close,
+.tab.is-active .tab__close,
+.tab__close:focus-visible {
+  opacity: 0.7;
 }
 
 .tab__close:hover {
-  opacity: 1;
+  opacity: 1 !important;
   background: rgba(239, 68, 68, 0.12);
   color: #fca5a5;
+}
+
+.tab__close:active {
+  transform: scale(0.88);
 }
 
 .tab__close svg {
@@ -264,14 +299,23 @@
     animation: none;
   }
 
+  .tab-pane {
+    animation: none;
+  }
+
   .tab__status-dot--connecting,
   .tab__status-dot--reconnecting,
   .tab__status-dot--connected {
     animation: none;
   }
 
-  .tab-bar__new:active {
+  .tab-bar__new:active,
+  .tab__close:active {
     transform: none;
+  }
+
+  .tab-switcher__card {
+    animation: none;
   }
 }
 
@@ -288,9 +332,55 @@
 /* Without JS, #tab-content holds .MainHTML directly (no .tab-pane wrapper)
    — nothing below applies and the page renders exactly like v0.5.0. */
 .tab-pane {
-  /* Pull-to-refresh is disabled on the active pane's own content only, not
-     the whole document — the outer shell/tab bar keep normal overscroll. */
   overscroll-behavior-y: contain;
+  animation: tab-pane-in 0.18s ease;
+}
+
+@keyframes tab-pane-in {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+
+.tab-pane.is-active {
+  position: relative;
+}
+
+.tab-pane__loading,
+.tab-pane__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 200px;
+  padding: 32px 16px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.tab-pane__loading {
+  animation: tab-pane-loading-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes tab-pane-loading-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.tab-pane__error {
+  text-align: center;
+}
+
+.tab-pane__error p {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-pane__loading {
+    animation: none;
+    opacity: 0.8;
+  }
 }
 
 /* Visibility is governed entirely by the `hidden` attribute tab-manager.js
@@ -348,7 +438,7 @@
   border: 1px solid var(--border-strong);
   border-top-left-radius: var(--radius-lg);
   border-top-right-radius: var(--radius-lg);
-  box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.45), 0 -2px 8px rgba(0, 0, 0, 0.2);
   animation: tab-switcher-sheet-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -368,6 +458,10 @@
   .tab-switcher__sheet {
     animation: none;
   }
+
+  .tab-switcher__card {
+    animation: none;
+  }
 }
 
 .tab-switcher__header {
@@ -377,6 +471,7 @@
   flex-shrink: 0;
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.4);
 }
 
 .tab-switcher__count {
@@ -461,6 +556,13 @@
   padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 420px) and (max-width: 767px) {
+  .tab-switcher__grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 /* Cards are built entirely by tab-manager.js (contract §3 does not freeze
@@ -479,13 +581,33 @@
   align-items: center;
   column-gap: 12px;
   min-height: 56px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: rgba(148, 163, 184, 0.05);
   color: var(--text-muted);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+  animation: tab-switcher-card-in 0.2s ease both;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab-switcher__card:nth-child(1) { animation-delay: 0ms; }
+.tab-switcher__card:nth-child(2) { animation-delay: 30ms; }
+.tab-switcher__card:nth-child(3) { animation-delay: 60ms; }
+.tab-switcher__card:nth-child(4) { animation-delay: 90ms; }
+.tab-switcher__card:nth-child(5) { animation-delay: 120ms; }
+.tab-switcher__card:nth-child(n+6) { animation-delay: 150ms; }
+
+@keyframes tab-switcher-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .tab-switcher__card:hover,
@@ -494,11 +616,23 @@
   border-color: rgba(96, 165, 250, 0.25);
 }
 
+.tab-switcher__card:active {
+  transform: scale(0.98);
+}
+
+.tab-switcher__card.is-active {
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(59, 130, 246, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.15);
+}
+
 .tab-switcher__card .tab__icon {
   grid-row: 1 / 3;
   grid-column: 1;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
+  color: var(--accent-soft);
+  opacity: 0.8;
 }
 
 .tab-switcher__card .tab__title {
@@ -515,9 +649,10 @@
   grid-column: 2;
   overflow: hidden;
   color: var(--text-dim);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+  opacity: 0.7;
 }
 
 .tab-switcher__card .tab__status-dot {
@@ -530,6 +665,18 @@
   grid-column: 4;
   width: 44px;
   height: 44px;
+  opacity: 0.6;
+  border-radius: 10px;
+}
+
+.tab-switcher__card .tab__close:hover {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.tab-switcher__card-close {
+  grid-row: 1 / 3;
+  grid-column: 4;
 }
 
 /* ── Mobile FAB ───────────────────────────────────────────────────────── */
@@ -579,18 +726,24 @@
   position: absolute;
   top: -4px;
   inset-inline-end: -4px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
   background: var(--accent);
   color: #fff;
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: var(--fw-bold);
   line-height: 1;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+  transition: transform 0.15s ease;
+}
+
+.tab-fab:active .tab-fab__badge {
+  transform: scale(0.9);
 }
 
 .tab-fab__badge:empty {
@@ -668,6 +821,12 @@
   .tab__close {
     width: 44px;
     height: 44px;
+    opacity: 0.6;
+  }
+
+  .tab:hover .tab__close,
+  .tab.is-active .tab__close {
+    opacity: 0.8;
   }
 
   .tab-switcher {
@@ -679,6 +838,112 @@
     /* Mirrors .back-to-top's own mobile offset (style.css) so both floating
        buttons sit at the same height above the bottom nav. */
     bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ── Floating context menu + link action sheet ───────────────────── */
+/* Built by tab-manager.js for right-click/long-press on tabs and links. */
+
+.tab-floating-menu {
+  position: fixed;
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  max-width: 260px;
+  padding: 4px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: tab-floating-in 0.14s ease;
+}
+
+@keyframes tab-floating-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.tab-floating-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: var(--fw-medium);
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab-floating-menu__item:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent-bright);
+}
+
+.tab-floating-menu__item:active {
+  background: rgba(59, 130, 246, 0.16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-floating-menu {
+    animation: none;
+  }
+}
+
+/* ── Toast (mobile tab cap notice, etc.) ───────────────────────────── */
+
+.tab-toast {
+  position: fixed;
+  bottom: calc(90px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%) translateY(12px);
+  z-index: 1600;
+  max-width: 320px;
+  padding: 10px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, 0.95);
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: var(--fw-medium);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.tab-toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-toast {
+    transition: opacity 0.15s ease;
+    transform: translateX(-50%);
+  }
+  .tab-toast.is-visible {
+    transform: translateX(-50%);
   }
 }
 

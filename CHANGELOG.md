@@ -7,6 +7,80 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.6.1 — Tab system polish & bug fixes
+
+> **Release status:** this entry describes the change set as implemented and
+> reviewed. The version string itself (`Makefile`, `scripts/install.sh`,
+> `.env.production.example`, CI) is bumped separately by a maintainer running
+> `make release VERSION=v0.6.1` (the existing `scripts/release.sh`) once
+> `make test` passes — that step is not part of this change set and has not
+> been run yet.
+
+### Fixed
+
+- **Bottom navigation highlight now updates after in-pane navigation.**
+  When navigating to a new page via a link click on mobile (in-pane fetch),
+  the bottom nav's active state, desktop shell nav, and drawer links now
+  correctly reflect the current URL instead of staying stuck on the previous
+  page's highlight.
+- **Progress bar no longer gets stuck after tab navigation.** The top
+  progress bar (started by `app.js` on link/form clicks) is now properly
+  finished when the tab system intercepts the navigation and loads content
+  via fetch instead of a full page reload.
+- **Loading overlay dismissed after tab form submissions.** In-tab form
+  submissions that are intercepted by the tab system now correctly hide the
+  loading overlay and restore the submit button state after the fetch
+  completes.
+- **Tab context menu and link action sheet now have proper styling.** The
+  floating context menu (right-click/long-press on tabs) and link action
+  sheet (long-press on links, mobile) were missing CSS — they now render
+  with a polished, frosted-glass appearance with proper hover/active states.
+- **Tab toast notification now styled.** The toast used for mobile tab cap
+  notices and other tab-system messages now has proper positioning,
+  animation, and visual styling.
+- **Tab switcher card close button properly styled.** The close button in
+  the mobile tab switcher cards now picks up the shared `.tab__close`
+  styling with correct grid placement and touch target sizing.
+- **Tab pane loading/error states styled.** The loading spinner and error
+  retry UI shown inside a tab pane during fetch now have proper centered
+  layout and animation.
+
+### Improved
+
+- **Desktop tab close buttons less visually noisy.** Close buttons on
+  inactive tabs are now hidden until hover, reducing visual clutter while
+  keeping the active tab's close button always visible.
+- **Active tab has a bottom accent indicator.** A subtle accent-colored bar
+  at the bottom of the active tab provides an additional visual cue beyond
+  background color and border.
+- **Drag-to-reorder has better visual feedback.** Dragged tabs now show
+  reduced opacity and a slight scale-down, while valid drop targets
+  highlight with an accent border.
+- **Tab pane switch has a subtle fade-in transition.** Switching between
+  tabs now animates with a brief opacity transition instead of an abrupt
+  content swap.
+- **Mobile tab switcher uses 2-column grid on wider screens.** Phones with
+  viewports ≥ 420px now show tab switcher cards in a 2-column grid, making
+  better use of screen real estate.
+- **Tab switcher cards have staggered entrance animations.** Cards animate
+  in with a slight stagger for a more polished, sequential reveal.
+- **Active tab in switcher is visually distinguished.** The currently active
+  tab's card has a highlighted border and background to make it immediately
+  identifiable.
+- **Tab switcher card close buttons are more prominent.** Larger touch
+  targets with better visual feedback on tap.
+- **FAB badge is larger and has a subtle shadow.** The tab count badge on
+  the mobile FAB is slightly larger with a blue glow shadow for better
+  visibility.
+- **Tab bar has a subtle inner highlight.** A faint top inner shadow gives
+  the tab bar a more refined, layered appearance.
+- **Switcher sheet header has a subtle background tint.** The header area of
+  the mobile tab switcher sheet now has a slightly darker background for
+  better visual separation from the card grid.
+- **Reduced-motion preferences respected for all new animations.** Pane
+  transitions, card entrances, toast animations, and floating menu
+  animations are all disabled under `prefers-reduced-motion: reduce`.
+
 ## v0.6.0 — Multi-tab workspace
 
 > **Release status:** this entry describes the change set as implemented and

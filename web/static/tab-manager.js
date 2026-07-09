@@ -1,4 +1,4 @@
-// Nodexia v0.6.0: core multi-tab workspace manager (window.NodexiaTabs).
+// Nodexia v0.6.1: core multi-tab workspace manager (window.NodexiaTabs).
 /* Client-side tab system: a global tab bar plus one .tab-pane per open tab,
  * built entirely from the same full-page HTML a direct URL visit would
  * receive (fetch() + DOMParser extraction of #tab-content, per docs/tab-system.md).
@@ -30,6 +30,39 @@
   function isTyping(el) {
     return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ||
       el.tagName === 'SELECT' || el.isContentEditable);
+  }
+
+  function finishTopBar() {
+    if (window.NodexiaApp && typeof window.NodexiaApp.finishNavigation === 'function') {
+      try { window.NodexiaApp.finishNavigation(); } catch (err) { /* never break tabs over progress bar */ }
+    }
+  }
+
+  function updateNavHighlight(path) {
+    var shellNav = document.querySelector('.shell-nav');
+    if (shellNav) {
+      shellNav.querySelectorAll('a[href]').forEach(function (a) {
+        var isActive = a.getAttribute('href') === path;
+        a.classList.toggle('is-active', isActive);
+        if (isActive) { a.setAttribute('aria-current', 'page'); } else { a.removeAttribute('aria-current'); }
+      });
+    }
+    var bottomNav = document.querySelector('.bottom-nav');
+    if (bottomNav) {
+      bottomNav.querySelectorAll('a[href]').forEach(function (a) {
+        var isActive = a.getAttribute('href') === path;
+        a.classList.toggle('is-active', isActive);
+        if (isActive) { a.setAttribute('aria-current', 'page'); } else { a.removeAttribute('aria-current'); }
+      });
+    }
+    var drawer = document.getElementById('mobile-drawer');
+    if (drawer) {
+      drawer.querySelectorAll('.drawer__link[href]').forEach(function (a) {
+        var isActive = a.getAttribute('href') === path;
+        a.classList.toggle('is-active', isActive);
+        if (isActive) { a.setAttribute('aria-current', 'page'); } else { a.removeAttribute('aria-current'); }
+      });
+    }
   }
 
   function renderIcons() {
@@ -293,14 +326,20 @@
     btn.addEventListener('dragend', function () {
       dragTabId = null;
       btn.classList.remove('is-dragging');
+      document.querySelectorAll('.tab.is-drop-target').forEach(function (el) { el.classList.remove('is-drop-target'); });
     });
     btn.addEventListener('dragover', function (e) {
       var dragged = dragTabId && tabsById[dragTabId];
       if (!dragged || dragged.id === tab.id || dragged.pinned !== tab.pinned) return;
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      btn.classList.add('is-drop-target');
+    });
+    btn.addEventListener('dragleave', function () {
+      btn.classList.remove('is-drop-target');
     });
     btn.addEventListener('drop', function (e) {
+      btn.classList.remove('is-drop-target');
       var dragged = dragTabId && tabsById[dragTabId];
       if (!dragged || dragged.id === tab.id || dragged.pinned !== tab.pinned) return;
       e.preventDefault();
@@ -440,12 +479,14 @@
   }
 
   function navigateInPane(tab, url, fetchOpts, pushHistory) {
-    if (!teardownPaneContent(tab)) return Promise.resolve();
+    if (!teardownPaneContent(tab)) { finishTopBar(); return Promise.resolve(); }
     return loadPane(tab, url, fetchOpts || {}).then(function () {
       if (pushHistory) {
         try { window.history.pushState({ nodexiaTabId: tab.id }, '', tab.url); } catch (err) { /* ignore */ }
       }
-    });
+      updateNavHighlight(tab.url.split('?')[0]);
+      finishTopBar();
+    }).catch(function () { finishTopBar(); });
   }
 
   /* ── CRUD (§5) ───────────────────────────────────────────── */
@@ -558,6 +599,7 @@
     if (tab.btn && tab.btn.scrollIntoView) {
       try { tab.btn.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (err) { /* ignore */ }
     }
+    updateNavHighlight(tab.url.split('?')[0]);
     fire('tab-activated', paneDetail(tab), false);
     schedulePersist();
   }
@@ -768,6 +810,7 @@
         return;
       }
       open(url.pathname + url.search, { background: e.metaKey || e.ctrlKey });
+      finishTopBar();
     });
     // Middle-click fires `auxclick`, not `click`, in every modern browser.
     document.addEventListener('auxclick', function (e) {
@@ -792,6 +835,7 @@
       if (label) submitter.textContent = label;
       submitter.style.minWidth = '';
     }
+    finishTopBar();
   }
   function initFormInterception() {
     document.addEventListener('submit', function (e) {
@@ -988,7 +1032,7 @@
 
       var closeBtn = document.createElement('button');
       closeBtn.type = 'button';
-      closeBtn.className = 'tab-switcher__card-close';
+      closeBtn.className = 'tab__close tab-switcher__card-close';
       closeBtn.setAttribute('aria-label', T('js.tabs.close_tab'));
       closeBtn.innerHTML = '<i data-lucide="x"></i>';
       closeBtn.addEventListener('click', function (e) {
@@ -1140,6 +1184,7 @@
       tabBarEl.removeAttribute('hidden');
       ready = true;
 
+      updateNavHighlight(bootTab.url.split('?')[0]);
       fire('tabs-restored', { tabs: getAll(), activeTabId: activeTabId }, false);
     } catch (err) {
       // A tab-system failure must never break the page's own content — the
