@@ -559,7 +559,8 @@
 
   function navigateInPane(tab, url, fetchOpts, pushHistory) {
     var normUrl = pathAndSearch(url);
-    if (normUrl === tab.url && tab.loaded) {
+    var method = (fetchOpts && fetchOpts.method) || 'GET';
+    if (normUrl === tab.url && tab.loaded && method === 'GET') {
       if (pushHistory) {
         try { window.history.pushState({ nodexiaTabId: tab.id }, '', tab.url); } catch (err) { /* ignore */ }
       }

@@ -44,6 +44,18 @@ Confirmed live against production with `curl`:
   encoded key-value pairs. Forms with `enctype="multipart/form-data"` (the
   backup-restore form) are exempted and keep multipart encoding — that form
   already carries the CSRF token in the URL query string as a workaround.
+- **`tab-manager.js`: same-URL navigation dedup is now GET-only.** The
+  `navigateInPane()` early-return that skips `fetch()` when the target URL
+  matches the current tab URL now also checks the HTTP method. POST/PUT/PATCH
+  forms whose action equals the current tab URL were being silently
+  no-op'd: `e.preventDefault()` had already stopped the native form
+  submission, then the dedup branch returned a resolved Promise, and
+  `restoreFormUI` cleared the loading overlay without ever hitting the
+  backend. This affected the three forms whose action is the current page:
+  "Refresh Snapshot" (`/servers/{id}/monitoring`), "Run Discovery"
+  (`/servers/{id}/nodes`), and "Open Terminal" (`/servers/{id}/terminal`).
+  Fixed by adding `&& method === 'GET'` to the dedup guard so non-GET
+  navigations always re-fetch.
 
 ### Also in this release (service-worker cache fix)
 
