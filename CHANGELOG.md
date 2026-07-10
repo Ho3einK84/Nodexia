@@ -7,6 +7,54 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.6.6 — Stale service-worker cache root cause fix
+
+### Root cause confirmed
+
+The recurring symptoms across v0.6.3–v0.6.5 (terminal not rendering after
+connect, "Access denied" on delete, stale CSS/JS) were caused by the
+**service worker serving stale cached assets**, not by application logic
+errors in the v0.6.4/v0.6.5 fixes. The evidence:
+
+- `CACHE_VERSION` in `sw.js` was stuck at `'v6'` since before v0.6.0 — it
+  was never bumped in any of the 6 tab-system releases. The stale-while-
+  revalidate cache name `nodexia-static-v6` persisted across all of them.
+- `skipWaiting()` was intentionally omitted, so a new service worker waited
+  in "installed" state until every old tab was closed. Users with persistent
+  sessions (the primary use case for a self-hosted control panel) never
+  received updated assets.
+- The `PRECACHE_URLS` list was stale — missing `tabs.css`, `tab-manager.js`,
+  and `terminal-tab-adapter.js` added in v0.6.0.
+- All templates and static assets are compiled into the Go binary via
+  `go:embed` (`assets.go`), so any change requires a full `go build` and
+  container replacement — a container restart alone is not enough.
+
+### Fixed
+
+- **Service worker `CACHE_VERSION` bumped from `'v6'` to `'v7'`.** This
+  forces every client to drop the old `nodexia-static-v6` cache and re-fetch
+  all assets from the new binary.
+- **`skipWaiting()` added to the install handler.** The new service worker
+  now activates immediately instead of waiting for all old tabs to close.
+  Combined with `clients.claim()` (already present in the activate handler),
+  updated assets reach all open tabs on the next navigation.
+- **`PRECACHE_URLS` updated** to include `tabs.css` and `tab-manager.js`
+  (core multi-tab workspace assets introduced in v0.6.0).
+
+### Deployment note
+
+After pulling this release, a **full forced rebuild** is required — a
+container restart is not sufficient because `go:embed` bakes files into the
+binary at compile time:
+
+```bash
+docker compose build --no-cache && docker compose up -d --force-recreate
+```
+
+In the browser, verify the new service worker is active via DevTools →
+Application → Service Workers (should show `nodexia-static-v7`). If old
+assets persist, use DevTools → Application → Storage → Clear site data.
+
 ## v0.6.5 — Terminal hang, delete-server, loading overlay, tab UI fixes
 
 ### Fixed

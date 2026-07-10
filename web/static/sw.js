@@ -17,7 +17,7 @@
  */
 'use strict';
 
-var CACHE_VERSION = 'v6';
+var CACHE_VERSION = 'v7';
 var STATIC_CACHE = 'nodexia-static-' + CACHE_VERSION;
 var OFFLINE_URL = '/static/offline.html';
 
@@ -28,9 +28,11 @@ var PRECACHE_URLS = [
   OFFLINE_URL,
   '/static/offline.js',
   '/static/style.css',
+  '/static/tabs.css',
   '/static/login.css',
   '/static/fonts/exo2-latin.woff2',
   '/static/app.js',
+  '/static/tab-manager.js',
   '/static/login.js',
   '/static/lucide.min.js',
   '/static/favicon.svg',
@@ -47,9 +49,14 @@ self.addEventListener('install', function (event) {
       return Promise.all(PRECACHE_URLS.map(function (url) {
         return cache.add(new Request(url, { cache: 'reload' })).catch(function () {});
       }));
+    }).then(function () {
+      // Activate immediately so updated assets reach users who have the app
+      // open in long-lived tabs. The old cache is deleted in the activate
+      // handler; stale-while-revalidate + ?v=<hash> cache-busting ensures
+      // per-asset URLs are unique per build, so a brief overlap where the old
+      // and new workers both serve requests never causes a version mismatch.
+      return self.skipWaiting();
     })
-    // Note: intentionally no skipWaiting() — an updated worker waits until the
-    // old clients are gone so a running session never mixes asset versions.
   );
 });
 
