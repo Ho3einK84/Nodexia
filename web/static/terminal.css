@@ -590,6 +590,41 @@ body.terminal-mobile-active .bottom-nav {
   display: none;
 }
 
+/* ── Mobile tab-access button ────────────────────────────
+ * Hidden on desktop; on mobile it opens the existing tab switcher so the
+ * user can peek at other open tabs while the terminal is fullscreen.
+ * Sized to match the mobile Back button, sitting right before it. */
+.terminal-tabs {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .terminal-tabs {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: rgba(148, 163, 184, 0.08);
+    color: var(--text);
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background 0.1s ease, border-color 0.1s ease;
+  }
+  .terminal-tabs:active {
+    background: rgba(148, 163, 184, 0.18);
+    border-color: rgba(148, 163, 184, 0.3);
+  }
+  .terminal-tabs svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
 /* ── Responsive ──────────────────────────────────────── */
 
 @media (max-width: 700px) {

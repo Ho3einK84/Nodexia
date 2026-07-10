@@ -91,7 +91,7 @@
   var FONT_MIN = 10;
   var FONT_MAX = 28;
 
-  function defaultFontSize() { return isMobile ? 15 : 14; }
+  function defaultFontSize() { return isMobile ? 12 : 14; }
 
   /* ── Status helpers ───────────────────────────────────── */
   function setStatus(state, text) {
@@ -555,6 +555,20 @@
   bindClick('term-tool-font-dec', function () { setFontSize(term.options.fontSize - 1); term.focus(); });
   bindClick('term-tool-font-inc', function () { setFontSize(term.options.fontSize + 1); term.focus(); });
   bindClick('term-tool-fullscreen', toggleFullscreen);
+
+  /* ── Mobile tab access ──────────────────────────────────
+   * On mobile the terminal owns the full screen and the tab bar is hidden
+   * behind the fixed card. This button opens the existing tab switcher
+   * (same component the FAB uses) so the user can peek at other tabs and
+   * come back. Reuses NodexiaTabs.showSwitcher / hideSwitcher. */
+  var terminalTabsBtn = byId('terminal-tabs');
+  if (terminalTabsBtn) {
+    terminalTabsBtn.addEventListener('click', function () {
+      if (window.NodexiaTabs && typeof window.NodexiaTabs.showSwitcher === 'function') {
+        window.NodexiaTabs.showSwitcher();
+      }
+    });
+  }
 
   /* ── Keybindings ──────────────────────────────────────── */
   if (window.NodexiaTermKeybindings) {

@@ -95,6 +95,13 @@ nodexia uninstall [--purge] [--yes]       # remove stack + CLI; --purge also wip
 
 ---
 
+## 📚 Documentation
+
+- [`docs/architecture.md`](docs/architecture.md) — codebase map, module patterns, auth/CSRF model, module invariants.
+- [`docs/tab-system.md`](docs/tab-system.md) — multi-tab workspace design and contract.
+
+---
+
 ## 📸 Screenshots
 
 > From **v0.5.0**, with demo data shown purely to illustrate the interface.

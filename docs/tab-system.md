@@ -85,7 +85,7 @@ worked around:
 - A tab's own **Reload** action (`NodexiaTabs.reload(id)`) always re-fetches
   fresh state for that pane, independent of which pane's live JS happens to
   be active.
-- **Terminal is the one exception**, because CLAUDE.md requires true
+- **Terminal is the one exception**, because the architecture requires true
   concurrent independent terminal sessions. `terminal.js` was given a small,
   targeted rewrite (see below) so each terminal pane is fully independent —
   two terminal tabs can be typed in, left running, and switched between

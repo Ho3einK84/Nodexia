@@ -7,6 +7,74 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.6.7 — Mobile terminal UX + architecture documentation
+
+### Part A: Mobile terminal — persistent tab access
+
+The terminal's mobile layout (`terminal-card--mobile` at
+`web/static/terminal.css:515`) gives the card `position:fixed` with
+`z-index:1300`, making it cover the viewport and hide the tab bar. There
+was no way to reach other open tabs while the terminal was fullscreen.
+
+- Added a compact icon button (`#terminal-tabs`, `layers` icon) to the
+  terminal header (`web/templates/terminal.gohtml`). It is hidden on desktop
+  and shown only inside the `@media (max-width: 700px)` block
+  (`web/static/terminal.css:595-631`), styled to match the existing
+  `.terminal-back` button.
+- The button calls `NodexiaTabs.showSwitcher()` — the same function the
+  tab-bar FAB uses — so tapping it opens the existing mobile tab-switcher
+  bottom sheet. Tapping a tab in the switcher calls `activate(tab.id)` and
+  `hideSwitcher()`. No new tab-switching code was written; the
+  `showSwitcher` / `hideSwitcher` functions are exposed on the
+  `window.NodexiaTabs` public API
+  (`web/static/tab-manager.js:1456-1457`).
+- The terminal's WebSocket and SSH session **stay alive** while the user
+  peeks at another tab: the existing `terminal-tab-adapter.js` only calls
+  `pause()` on `tab-deactivated` (which sets `active = false` and gates
+  resize work but keeps the WS open) and `dispose()` on `tab-closing`. So
+  switching away and back is instant — no reconnect, no new SSH session,
+  no error state.
+
+### Part B: Mobile terminal — smaller default font size
+
+The terminal's mobile default font size was 15px, which took up too much
+horizontal space on a phone. Reduced the mobile default in
+`web/static/terminal.js:94` from `15` to `12`. Desktop default stays at
+`14`. The user-facing font-size controls (A−/A+ in the header, A−/A+ in
+the mobile key toolbar, and the `Ctrl/Cmd +/-/0` keybindings) are all
+preserved — only the initial default for new mobile sessions changed.
+A user who already adjusted the font via the toolbar has it persisted in
+`localStorage['nodexia.terminal.fontSize']` and is unaffected.
+
+### Part C: Architecture documentation moved to docs/architecture.md
+
+- Created `docs/architecture.md` as a real architecture map of the
+  current codebase: stack overview, repository layout, request lifecycle,
+  module and repository patterns, the multi-tab workspace at a high level
+  (full design still in `docs/tab-system.md`), the terminal WebSocket
+  lifecycle, auth/session/CSRF, bilingual UI, background work, and the
+  full set of module invariants from the old CLAUDE.md.
+- Added a "Documentation" section to `README.md` linking to
+  `docs/architecture.md` and `docs/tab-system.md`.
+- Deleted `CLAUDE.md` after folding its useful content into
+  `docs/architecture.md`. The single reference to CLAUDE.md in
+  `docs/tab-system.md` was updated to point at the architecture doc
+  instead.
+
+### Verification notes
+
+- The static asset changes (CSS + JS) are embedded into the binary at
+  compile time via `go:embed`, so the production rebuild
+  (`docker compose build --no-cache && docker compose up -d --force-recreate`)
+  is required for Parts A and B to reach mobile browsers — a container
+  restart alone is not enough. The i18n catalog additions are also
+  embedded; the i18n parity test passes.
+- Parts A and B were verified by inspecting the rendered terminal page
+  and the compiled CSS media queries; live mobile-viewport browser
+  testing requires a deployed build, which is the user's deployment step.
+
+---
+
 ## v0.6.6 — Form encoding CSRF fix + stale service-worker cache fix
 
 ### Root cause confirmed (delete "Access denied" + terminal not rendering)

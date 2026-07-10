@@ -365,6 +365,7 @@
   "terminal.timeout_placeholder": "مثلاً 10s",
   "terminal.status_connecting": "در حال اتصال…",
   "terminal.back_aria": "بستن ترمینال و بازگشت",
+  "terminal.tabs_aria": "تغییر به زبانهٔ باز دیگر",
   "files.title": "مدیریت فایل",
   "files.page_title": "مرورگر فایل — {server}",
   "files.page_description": "مرور دایرکتوری‌های ریموت از طریق SFTP و دانلود فایل‌ها بدون ذخیره اعتبارنامه.",

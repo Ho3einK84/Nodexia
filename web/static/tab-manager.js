@@ -1454,6 +1454,8 @@
     reloadActive: reloadActive,
     getActive: getActive,
     getAll: getAll,
+    showSwitcher: showSwitcher,
+    hideSwitcher: hideSwitcher,
     MOBILE_TAB_LIMIT: 5,
     iconForURL: iconForURL
   };

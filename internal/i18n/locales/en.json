@@ -365,6 +365,7 @@
   "terminal.timeout_placeholder": "e.g. 10s",
   "terminal.status_connecting": "connecting…",
   "terminal.back_aria": "Close terminal and go back",
+  "terminal.tabs_aria": "Switch to another open tab",
   "files.title": "Files",
   "files.page_title": "File browser for {server}",
   "files.page_description": "Browse remote directories over SFTP and download files with runtime credentials only.",
