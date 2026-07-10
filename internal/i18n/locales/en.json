@@ -1017,6 +1017,7 @@
   "js.terminal.status_error": "error",
   "js.terminal.connection_error": "connection error",
   "js.terminal.ws_failed": "WebSocket connection failed.",
+  "js.terminal.connection_timeout": "Connection timed out. The server may be unreachable.",
   "js.terminal.closed_unexpectedly": "Connection closed unexpectedly (code {code}).",
   "js.terminal.paste_prompt": "Paste text to send to the terminal:",
   "js.terminal.select": "Select",

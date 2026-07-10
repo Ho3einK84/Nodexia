@@ -664,6 +664,7 @@
   /* ── WebSocket ────────────────────────────────────────── */
   var ws = null;
   var heartbeatTimer = null;
+  var connectTimer = null;
   var lastPingAt = 0;
   var userClosing = false;
 
@@ -701,7 +702,16 @@
     var wsURL = wsScheme + window.location.host + wsBase + '?ticket=' + encodeURIComponent(ticket);
     ws = new WebSocket(wsURL);
 
+    connectTimer = setTimeout(function () {
+      if (!ws || ws.readyState === WebSocket.CONNECTING) {
+        setStatus('error', T('js.terminal.status_error'));
+        showError(T('js.terminal.connection_timeout'));
+        try { ws.close(1000, 'connect timeout'); } catch (e) { /* ignore */ }
+      }
+    }, 30000);
+
     ws.onopen = function () {
+      if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
       clearError();
       hideDisconnectOverlay();
       setStatus('connected', T('js.terminal.connected'));
@@ -734,6 +744,7 @@
     };
 
     ws.onerror = function () {
+      if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
       setStatus('error', T('js.terminal.connection_error'));
       showError(T('js.terminal.ws_failed'));
     };
@@ -1020,6 +1031,7 @@
     resume: function () { active = true; fitAndResize(); term.focus(); },
     dispose: function () {
       userClosing = true;
+      if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
       stopHeartbeat();
       try { if (ws) ws.close(1000, 'tab closed'); } catch (e) {}
       try { term.dispose(); } catch (e) {}

@@ -7,6 +7,35 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.6.4 — Terminal hang fix, delete-server CSRF fix, tab UI polish
+
+### Fixed
+
+- **Terminal tab no longer hangs on "Working over SSH…" indefinitely.**
+  A 30-second connection timeout was added to `terminal.js`. If the WebSocket
+  does not open within 30 seconds (server unreachable, ticket expired, network
+  issue), the terminal now shows an explicit error message and offers a
+  Reconnect action instead of staying stuck on the connecting state forever.
+- **Deleting a server from within a tab no longer returns "Access denied".**
+  The tab system's form interception now fetches a fresh CSRF token from a new
+  `GET /api/csrf-token` endpoint immediately before every POST submission. This
+  eliminates a race where the session cookie could be refreshed between the
+  page load (which embedded the CSRF token) and the form POST, causing the
+  embedded token to no longer match the live session and the CSRF middleware
+  to reject the request with 403.
+- **Tab close button no longer shows a boxed outline on Android/mobile.**
+  The close ("×") button on each tab now uses a circular hover/active
+  background instead of a hard-edged rectangular outline. The focus-visible
+  indicator uses a circular box-shadow instead of a square outline. The touch
+  target remains 44×44px on mobile for adequate tappability.
+
+### Added
+
+- **`GET /api/csrf-token` endpoint.** Returns the current session's CSRF token
+  as JSON (`{"csrf_token":"..."}`). Used by the tab system to refresh stale
+  tokens before form submissions. Requires authentication (goes through the
+  standard middleware chain).
+
 ## v0.6.3 — Multi-tab bug fixes (failed tabs, resource leaks, slowness)
 
 ### Fixed

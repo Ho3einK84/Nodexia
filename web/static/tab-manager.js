@@ -963,6 +963,26 @@
     });
   }
 
+  /* ── CSRF token refresh ──────────────────────────────────────
+   * v0.6.4: the session cookie can be refreshed between the page load that
+   * embedded the CSRF token and a later form POST (the session nears its TTL
+   * expiry window, an intermediate fetch triggers a Set-Cookie, etc.). When
+   * that happens the embedded token no longer matches the live session and
+   * the CSRF middleware returns 403. Fetching a fresh token from the server
+   * right before every POST eliminates the race entirely. */
+  function refreshCSRFToken() {
+    return fetch('/api/csrf-token', { credentials: 'same-origin' }).then(function (resp) {
+      if (!resp.ok) return;
+      return resp.json().then(function (data) {
+        if (data && data.csrf_token) {
+          document.querySelectorAll('input[name="_csrf_token"]').forEach(function (input) {
+            input.value = data.csrf_token;
+          });
+        }
+      });
+    }).catch(function () { /* best-effort — the existing token may still work */ });
+  }
+
   /* ── In-tab form submission (never a full top-level navigation) ─ */
   function initFormInterception() {
     document.addEventListener('submit', function (e) {
@@ -980,18 +1000,27 @@
       e.preventDefault();
       var method = (form.getAttribute('method') || 'GET').toUpperCase();
       var submitter = e.submitter;
-      var fetchOpts = { method: method, __submitter: submitter };
-      if (method === 'GET') {
-        try {
-          var qs = new URLSearchParams(new FormData(form, submitter));
-          action.search = qs.toString() ? '?' + qs.toString() : '';
-        } catch (err) { /* leave action.search as-is */ }
-      } else {
-        fetchOpts.body = new FormData(form, submitter);
+
+      function doNavigate() {
+        var fetchOpts = { method: method, __submitter: submitter };
+        if (method === 'GET') {
+          try {
+            var qs = new URLSearchParams(new FormData(form, submitter));
+            action.search = qs.toString() ? '?' + qs.toString() : '';
+          } catch (err) { /* leave action.search as-is */ }
+        } else {
+          fetchOpts.body = new FormData(form, submitter);
+        }
+        navigateInPane(tab, action.pathname + action.search, fetchOpts, tab.id === activeTabId)
+          .then(function () { restoreFormUI(submitter); })
+          .catch(function () { restoreFormUI(submitter); });
       }
-      navigateInPane(tab, action.pathname + action.search, fetchOpts, tab.id === activeTabId)
-        .then(function () { restoreFormUI(submitter); })
-        .catch(function () { restoreFormUI(submitter); });
+
+      if (method !== 'GET') {
+        refreshCSRFToken().then(doNavigate);
+      } else {
+        doNavigate();
+      }
     });
   }
 

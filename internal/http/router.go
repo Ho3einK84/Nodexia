@@ -74,6 +74,7 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 	mux.HandleFunc("POST /ops/backup/import", diagHandler.BackupImport)
 	mux.Handle("GET /errors/not-found", notFoundHandler)
 	mux.Handle("GET /errors/internal", internalErrorPreviewHandler)
+	mux.Handle("GET /api/csrf-token", handlers.NewCSRFTokenHandler())
 	mux.HandleFunc("GET /healthz", health.Liveness)
 	mux.HandleFunc("GET /healthz/live", health.Live)
 	mux.HandleFunc("GET /healthz/ready", health.Ready)

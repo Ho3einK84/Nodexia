@@ -211,7 +211,7 @@
   height: 20px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 50%;
   background: transparent;
   color: inherit;
   opacity: 0;
@@ -220,21 +220,25 @@
 }
 
 .tab:hover .tab__close,
-.tab.is-active .tab__close,
+.tab.is-active .tab__close {
+  opacity: 0.7;
+}
+
 .tab__close:focus-visible {
   opacity: 0.7;
-  outline: 2px solid var(--accent-soft);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 .tab__close:hover {
   opacity: 1 !important;
-  background: rgba(239, 68, 68, 0.12);
+  background: rgba(239, 68, 68, 0.15);
   color: #fca5a5;
 }
 
 .tab__close:active {
   transform: scale(0.88);
+  background: rgba(239, 68, 68, 0.25);
 }
 
 .tab__close svg {
@@ -889,12 +893,18 @@ body.tab-switcher-open {
   .tab__close {
     width: 44px;
     height: 44px;
-    opacity: 0.6;
+    opacity: 0.5;
+    border-radius: 50%;
   }
 
   .tab:hover .tab__close,
   .tab.is-active .tab__close {
-    opacity: 0.8;
+    opacity: 0.7;
+  }
+
+  .tab__close:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--accent-soft);
   }
 
   .tab-switcher {

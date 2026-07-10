@@ -1017,6 +1017,7 @@
   "js.terminal.status_error": "خطا",
   "js.terminal.connection_error": "خطای اتصال",
   "js.terminal.ws_failed": "خطا در WebSocket.",
+  "js.terminal.connection_timeout": "زمان اتصال به پایان رسید. سرور ممکن است در دسترس نباشد.",
   "js.terminal.closed_unexpectedly": "اتصال غیرمنتظره بسته شد ({code}).",
   "js.terminal.paste_prompt": "متن جهت ارسال:",
   "js.terminal.select": "انتخاب",
