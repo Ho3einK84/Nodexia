@@ -182,6 +182,7 @@
       }
       if (confirmMsg && !window.confirm(confirmMsg)) {
         e.preventDefault();
+        finishTopBar();
         return;
       }
 
@@ -192,6 +193,12 @@
       if (overlay && form.matches('form[method="post"]')) {
         if (submitter && submitter.hasAttribute('data-no-loading')) return;
         overlay.style.display = 'flex';
+        // Safety net: if the overlay is still visible after 15 seconds, hide it.
+        // This covers edge cases where the tab system's fetch hangs or the
+        // restoreFormUI callback never fires (e.g. an unhandled promise rejection).
+        setTimeout(function () {
+          if (overlay.style.display === 'flex') overlay.style.display = 'none';
+        }, 15000);
       }
     });
   }

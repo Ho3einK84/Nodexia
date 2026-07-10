@@ -39,8 +39,10 @@
   }
 
   function restoreFormUI(submitter) {
-    var overlay = document.getElementById('loading-overlay');
-    if (overlay) overlay.style.display = 'none';
+    try {
+      var overlay = document.getElementById('loading-overlay');
+      if (overlay) overlay.style.display = 'none';
+    } catch (err) { /* overlay hide must never fail */ }
     if (submitter && submitter.dataset && submitter.dataset.busy === '1') {
       submitter.dataset.busy = '';
       submitter.classList.remove('is-busy');

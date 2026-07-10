@@ -7,6 +7,48 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.6.5 — Terminal hang, delete-server, loading overlay, tab UI fixes
+
+### Fixed
+
+- **Terminal WebSocket and xterm not disposed when closing the initial
+  terminal tab.** `terminal-tab-adapter.js` resolved its pane reference via
+  `document.currentScript.closest('.tab-pane')` at script load time. On the
+  initial page load (direct URL visit), the PageScripts are rendered in
+  `<body>` outside `#tab-content` — the tab-manager wraps `#tab-content`
+  children into a pane, but the scripts remain in `<body>`. So
+  `.closest('.tab-pane')` returned `null`, and the adapter's `tab-closing`
+  event handler (which checks `event.detail.pane === pane`) never matched
+  the real pane. The WebSocket and xterm instance leaked until the server's
+  30-second ping timeout cleaned them up. Fixed by resolving the pane lazily
+  from the active tab record or `card.closest('.tab-pane')` on first use,
+  instead of caching a stale `null` at load time.
+- **Loading overlay ("Working over SSH…") can get stuck after form
+  submission through the tab system.** The `#loading-overlay` is a
+  full-screen `position:fixed;z-index:9999` element shown by app.js's
+  submit handler. The tab-system's `restoreFormUI` hides it after the fetch
+  completes, but two edge cases could leave it visible: (1) if the fetch
+  promise never settled (server hang, unhandled rejection), and (2) if the
+  user cancelled a `data-confirm` dialog after `startTopBar()` had already
+  fired, leaving the progress bar stuck. Fixed by: adding a 15-second
+  safety timeout to the overlay in app.js's submit handler; wrapping
+  `restoreFormUI`'s overlay hide in try/catch so it never fails silently;
+  and calling `finishTopBar()` in the confirm-cancel path.
+- **Tab close button shows a boxed outline on Android/mobile.** Added
+  `-webkit-tap-highlight-color: transparent` to `.tab__close` (both desktop
+  and mobile) to suppress the browser's default tap highlight, which on
+  Android renders as a visible rectangle around the button.
+
+### Changed
+
+- `terminal-tab-adapter.js` now resolves the pane lazily via
+  `NodexiaTabs.getActive()` or `card.closest('.tab-pane')` instead of
+  caching `document.currentScript.closest('.tab-pane')` at load time.
+- `app.js` `initForms` now calls `finishTopBar()` when a `data-confirm`
+  dialog is cancelled.
+- `app.js` loading overlay now auto-hides after 15 seconds as a safety net.
+- `tab-manager.js` `restoreFormUI` wraps the overlay hide in try/catch.
+
 ## v0.6.4 — Terminal hang fix, delete-server CSRF fix, tab UI polish
 
 ### Fixed
