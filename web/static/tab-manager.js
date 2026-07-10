@@ -1186,6 +1186,11 @@
 
       var icon = document.createElement('i');
       icon.setAttribute('data-lucide', tab.icon);
+      icon.className = 'tab__icon';
+      if (tab.kind === 'terminal') {
+        icon.classList.add('tab__icon--terminal');
+        if (tab.statusState === 'connected') card.classList.add('is-connected');
+      }
       card.appendChild(icon);
 
       if (tab.kind === 'terminal') {

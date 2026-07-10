@@ -120,6 +120,44 @@ is now simply toggled in sync with the tab's active state instead of
 being set once and forgotten. The terminal-card--mobile class on the
 card itself is unchanged and remains scoped to the terminal pane.
 
+### Polish: mobile tab-switcher sheet (font, radius, icon chips)
+
+The mobile tab-switcher bottom sheet (the one the Part A tab-access
+button and the FAB open to list open app-tabs) was inheriting the app's
+UI font in theory but didn't declare it explicitly, so on some browsers
+the dialog-like container fell back to a system font. It also used
+small `--radius-sm` corners and flat monochrome icons that didn't match
+the softer, pill-shaped style used elsewhere in the panel.
+
+Changes in `web/static/tabs.css` (mobile tab-switcher section) and
+`web/static/tab-manager.js` (`renderSwitcherGrid`):
+
+- **Font:** declared `font-family: var(--font-ui)` and
+  `-webkit-font-smoothing: antialiased` on `.tab-switcher` so the sheet
+  and every descendant consistently use the app's Exo 2 / Vazirmatn
+  stack regardless of the browser's dialog default.
+- **Corner radius:** bumped to a softer shape across the component —
+  `24px` on the sheet's top corners, `999px` (pill) on the header
+  action buttons (`+ New tab`, `Close all`, the `X` dismiss), and
+  `16px` on each tab row card and on the per-row close button.
+- **Tinted icon chips:** each row's leading icon is now a
+  `36×36` rounded-square chip, matching the icon treatment used by
+  the Overview stat cards. Generic tabs use the blue accent tint
+  (`rgba(59,130,246,0.14)` background, `--accent-soft` icon). Terminal
+  tabs use a violet tint when idle and a green tint with a subtle ring
+  shadow when connected, so the kind and connection state are
+  recognisable at a glance. `tab-manager.js` adds the
+  `tab__icon--terminal` and `is-connected` classes accordingly.
+- **Active state indicator:** the green status dot on a connected
+  terminal row now has a soft `0 0 6px` glow so it reads as part of
+  the row rather than an afterthought.
+- **Touch feedback:** the per-row close button and the top action
+  buttons all get explicit `:active` background changes (red tint for
+  close, scale for the rest) for clear pressed-state feedback in this
+  touch-only context. `-webkit-tap-highlight-color: transparent` and
+  `touch-action: manipulation` on the card prevent the iOS flash and
+  300ms tap delay respectively.
+
 ---
 
 ## v0.6.6 — Form encoding CSRF fix + stale service-worker cache fix

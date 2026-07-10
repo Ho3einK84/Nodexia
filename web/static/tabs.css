@@ -439,6 +439,11 @@
   z-index: 1400;
   align-items: flex-end;
   justify-content: center;
+  /* Explicit font token so the sheet and every descendant inherit the
+     app's UI typeface (Exo 2 / Vazirmatn) rather than any UA dialog
+     default. */
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
 }
 
 .tab-switcher[hidden] {
@@ -471,9 +476,9 @@ body.tab-switcher-open {
   max-height: 80vh;
   background: linear-gradient(185deg, #111c33 0%, #0b1120 100%);
   border: 1px solid var(--border-strong);
-  border-top-left-radius: var(--radius-lg);
-  border-top-right-radius: var(--radius-lg);
-  box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.45), 0 -2px 8px rgba(0, 0, 0, 0.2);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  box-shadow: 0 -24px 60px rgba(0, 0, 0, 0.55), 0 -2px 8px rgba(0, 0, 0, 0.25);
   animation: tab-switcher-sheet-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -527,7 +532,10 @@ body.tab-switcher-open {
   text-align: center;
   color: var(--text-muted);
   font-size: 0.78rem;
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-semibold);
+  padding: 0 4px;
+  align-self: center;
+  line-height: 1;
 }
 
 .tab-switcher__new,
@@ -536,9 +544,9 @@ body.tab-switcher-open {
   align-items: center;
   gap: 6px;
   min-height: 44px;
-  padding: 0 12px;
+  padding: 0 14px;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   background: rgba(2, 6, 23, 0.4);
   color: var(--text-muted);
   font-size: 0.82rem;
@@ -592,7 +600,7 @@ body.tab-switcher-open {
   height: 44px;
   padding: 0;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   background: rgba(2, 6, 23, 0.4);
   color: var(--text-muted);
   cursor: pointer;
@@ -648,16 +656,17 @@ body.tab-switcher-open {
   grid-template-rows: auto auto;
   align-items: center;
   column-gap: 12px;
-  min-height: 56px;
-  padding: 10px 12px;
+  min-height: 60px;
+  padding: 12px 12px 12px 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: 16px;
   background: rgba(148, 163, 184, 0.05);
   color: var(--text-muted);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
   animation: tab-switcher-card-in 0.2s ease both;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .tab-switcher__card:nth-child(1) { animation-delay: 0ms; }
@@ -699,13 +708,39 @@ body.tab-switcher-open {
   box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.15);
 }
 
+/* Tinted rounded-square icon chip for the card's leading icon, matching
+   the icon treatment used by the Overview stat cards. Generic (non-terminal)
+   tabs get a blue chip; terminal tabs get a violet/green chip to
+   distinguish the kind at a glance. */
 .tab-switcher__card .tab__icon {
   grid-row: 1 / 3;
   grid-column: 1;
-  width: 20px;
-  height: 20px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.14);
   color: var(--accent-soft);
-  opacity: 0.8;
+  box-sizing: border-box;
+}
+
+.tab-switcher__card .tab__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Terminal-kind tab: violet chip + soft glow when connected. */
+.tab-switcher__card .tab__icon--terminal {
+  background: rgba(139, 92, 246, 0.16);
+  color: #c4b5fd;
+}
+
+.tab-switcher__card.is-connected .tab__icon--terminal {
+  background: rgba(74, 222, 128, 0.16);
+  color: var(--ok);
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.2);
 }
 
 .tab-switcher__card .tab__title {
@@ -731,6 +766,9 @@ body.tab-switcher-open {
 .tab-switcher__card .tab__status-dot {
   grid-row: 1 / 3;
   grid-column: 3;
+  /* Subtle glow so the connected indicator reads as part of the row rather
+     than a separate floating dot. */
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.45);
 }
 
 .tab-switcher__card .tab__close {
@@ -739,12 +777,17 @@ body.tab-switcher-open {
   width: 44px;
   height: 44px;
   opacity: 0.6;
-  border-radius: 10px;
+  border-radius: 999px;
+  transition: opacity 0.15s ease, background 0.15s ease;
 }
 
 .tab-switcher__card .tab__close:hover {
   opacity: 1;
   background: rgba(239, 68, 68, 0.15);
+}
+
+.tab-switcher__card .tab__close:active {
+  background: rgba(239, 68, 68, 0.25);
 }
 
 .tab-switcher__card-close {
