@@ -1041,14 +1041,28 @@
   // two files never reference each other directly — only through this object
   // and the nodexia:terminal-status/ready DOM events.
   card.__nodexiaTerminal = {
-    pause: function () { active = false; },
-    resume: function () { active = true; fitAndResize(); term.focus(); },
+    pause: function () {
+      active = false;
+      // Release the mobile scroll/body lock when the terminal pane leaves the
+      // foreground. Without this, the html.terminal-mobile-active class set
+      // by enableMobile() persists across tab switches, leaving a newly
+      // created or newly activated tab with overflow:hidden and the bottom
+      // nav hidden. Only the active terminal pane should own the lock.
+      if (isMobile) setScrollLock(false);
+    },
+    resume: function () {
+      active = true;
+      if (isMobile) setScrollLock(true);
+      fitAndResize();
+      term.focus();
+    },
     dispose: function () {
       userClosing = true;
       if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
       stopHeartbeat();
       try { if (ws) ws.close(1000, 'tab closed'); } catch (e) {}
       try { term.dispose(); } catch (e) {}
+      if (isMobile) setScrollLock(false);
     },
     isConnected: function () { return !!(ws && ws.readyState === WebSocket.OPEN); }
   };

@@ -73,6 +73,53 @@ A user who already adjusted the font via the toolbar has it persisted in
   and the compiled CSS media queries; live mobile-viewport browser
   testing requires a deployed build, which is the user's deployment step.
 
+### Regression fix: mobile scroll lock leaks to newly created tabs
+
+**Trigger confirmed by control tests (all on the live deployment, before
+this fix):**
+
+- **Terminal open, create new tab on mobile** → new tab does not scroll,
+  bottom nav is missing. **Reproduced.**
+- **No terminal open, create new tab on mobile** → new tab scrolls
+  normally, bottom nav present. Not reproduced (no scroll lock was set).
+- **Terminal open, create new tab on desktop** → new tab works fine.
+  Not reproduced (Part A's mobile fullscreen layout only activates at
+  `matchMedia('(max-width: 700px)').matches`).
+
+These control tests pinpoint Part A's mobile fullscreen state as the
+sole trigger, and rule out tab creation itself or any other change.
+
+**Root cause:** `terminal.js`'s `enableMobile()` calls `setScrollLock(true)`
+once on script load, which adds the `terminal-mobile-active` class to
+`<html>` and `<body>`. The CSS at `web/static/terminal.css:576-591`
+uses that class to set `overflow: hidden` on both elements and to hide
+`.bottom-nav`. The class was only ever removed on explicit
+`terminal-back` click, `reconnect()`, or `pagehide` — **never on tab
+switch**. So once a mobile terminal had connected, every subsequent tab
+activation inherited `html/body { overflow: hidden }` and a hidden
+bottom nav, regardless of which tab was now active. A full page refresh
+cleared it (because the new load went through `enableMobile()` again
+only for the terminal tab, and the non-terminal tabs never set the
+class), which is why refresh "fixed" it.
+
+**Fix:** Scope the scroll lock to the terminal tab's *active* state, not
+its lifetime. Moved the `setScrollLock` calls into the
+`card.__nodexiaTerminal` lifecycle methods in `web/static/terminal.js`:
+
+- `pause()` (fired by `terminal-tab-adapter.js` on `tab-deactivated`)
+  now calls `setScrollLock(false)` on mobile, so the lock is released
+  the moment any other tab becomes active.
+- `resume()` (fired on `tab-activated`) calls `setScrollLock(true)` on
+  mobile, so the lock is re-acquired only when the terminal tab is the
+  active one.
+- `dispose()` (fired on `tab-closing`) also calls `setScrollLock(false)`
+  as a safety net so closing the terminal tab never strands the lock.
+
+No CSS or template changes; the existing `terminal-mobile-active` class
+is now simply toggled in sync with the tab's active state instead of
+being set once and forgotten. The terminal-card--mobile class on the
+card itself is unchanged and remains scoped to the terminal pane.
+
 ---
 
 ## v0.6.6 — Form encoding CSRF fix + stale service-worker cache fix
