@@ -7,29 +7,45 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
-## v0.6.6 — Stale service-worker cache root cause fix
+## v0.6.6 — Form encoding CSRF fix + stale service-worker cache fix
 
-### Root cause confirmed
+### Root cause confirmed (delete "Access denied" + terminal not rendering)
 
-The recurring symptoms across v0.6.3–v0.6.5 (terminal not rendering after
-connect, "Access denied" on delete, stale CSS/JS) were caused by the
-**service worker serving stale cached assets**, not by application logic
-errors in the v0.6.4/v0.6.5 fixes. The evidence:
+Both the "Access denied" error on server deletion and the terminal not
+rendering after connect share a single root cause: **the tab-manager sent
+all POST forms as `multipart/form-data`**, which Go's CSRF middleware cannot
+parse.
 
-- `CACHE_VERSION` in `sw.js` was stuck at `'v6'` since before v0.6.0 — it
-  was never bumped in any of the 6 tab-system releases. The stale-while-
-  revalidate cache name `nodexia-static-v6` persisted across all of them.
-- `skipWaiting()` was intentionally omitted, so a new service worker waited
-  in "installed" state until every old tab was closed. Users with persistent
-  sessions (the primary use case for a self-hosted control panel) never
-  received updated assets.
-- The `PRECACHE_URLS` list was stale — missing `tabs.css`, `tab-manager.js`,
-  and `terminal-tab-adapter.js` added in v0.6.0.
-- All templates and static assets are compiled into the Go binary via
-  `go:embed` (`assets.go`), so any change requires a full `go build` and
-  container replacement — a container restart alone is not enough.
+The chain:
+
+1. `tab-manager.js` intercepts every `<form>` submit inside a tab pane and
+   sends it via `fetch()` with `new FormData(form)` as the body.
+2. `fetch()` with a `FormData` body automatically sets `Content-Type:
+   multipart/form-data; boundary=…`.
+3. The CSRF middleware calls `r.ParseForm()`, which (in Go's `net/http`) only
+   parses `application/x-www-form-urlencoded` bodies. For `multipart/form-
+   data`, `ParseForm` silently succeeds but populates nothing.
+4. `r.FormValue("_csrf_token")` returns `""`, the `submitted == ""` check
+   fires, and the middleware responds **403 "csrf: invalid token"**.
+
+This broke every POST form in the tab system — server create/edit, terminal
+credentials, delete, alert rules, etc. The delete and terminal flows were the
+most visible because they were explicitly tested.
+
+Confirmed live against production with `curl`:
+- `multipart/form-data` POST → **403** "csrf: invalid token"
+- `application/x-www-form-urlencoded` POST → **303** redirect (success)
 
 ### Fixed
+
+- **`tab-manager.js`: POST forms now send `application/x-www-form-urlencoded`
+  instead of `multipart/form-data`.** `new FormData(form)` is converted to
+  `new URLSearchParams(new FormData(form))`, which `fetch()` encodes as URL-
+  encoded key-value pairs. Forms with `enctype="multipart/form-data"` (the
+  backup-restore form) are exempted and keep multipart encoding — that form
+  already carries the CSRF token in the URL query string as a workaround.
+
+### Also in this release (service-worker cache fix)
 
 - **Service worker `CACHE_VERSION` bumped from `'v6'` to `'v7'`.** This
   forces every client to drop the old `nodexia-static-v6` cache and re-fetch

@@ -1010,8 +1010,10 @@
             var qs = new URLSearchParams(new FormData(form, submitter));
             action.search = qs.toString() ? '?' + qs.toString() : '';
           } catch (err) { /* leave action.search as-is */ }
-        } else {
+        } else if (form.enctype === 'multipart/form-data') {
           fetchOpts.body = new FormData(form, submitter);
+        } else {
+          fetchOpts.body = new URLSearchParams(new FormData(form, submitter));
         }
         navigateInPane(tab, action.pathname + action.search, fetchOpts, tab.id === activeTabId)
           .then(function () { restoreFormUI(submitter); })
