@@ -143,6 +143,9 @@ type Repository interface {
 	// SetStreak upserts the streak for (ruleID, serverID). A value of 0 deletes
 	// the row so the table stays small.
 	SetStreak(ctx context.Context, ruleID, serverID int64, streak int) error
+	// IncrementStreak atomically increments the streak for (ruleID, serverID)
+	// and returns the new value. If no row exists, it inserts a streak of 1.
+	IncrementStreak(ctx context.Context, ruleID, serverID int64) (int, error)
 	// ListStreaksForRules returns the current streak for each (rule_id, server_id)
 	// pair. Used by the overview page to show pending breach counts.
 	ListStreaksForRules(ctx context.Context, ruleIDs []int64) (map[streakKey]int, error)

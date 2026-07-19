@@ -3,6 +3,7 @@ package monitoring
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -112,6 +113,7 @@ func parseFloat(value string) float64 {
 	}
 	parsed, err := strconv.ParseFloat(value, 64)
 	if err != nil {
+		slog.Debug("monitoring: parse float failed", slog.String("value", value))
 		return 0
 	}
 	return parsed
@@ -124,6 +126,7 @@ func parseInt64(value string) int64 {
 	}
 	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
+		slog.Debug("monitoring: parse int failed", slog.String("value", value))
 		return 0
 	}
 	return parsed

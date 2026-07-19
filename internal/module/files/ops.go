@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"unicode"
 
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
@@ -294,7 +295,12 @@ func friendlyError(err error) string {
 	if msg == "" {
 		return "The operation failed."
 	}
-	return strings.ToUpper(msg[:1]) + msg[1:]
+	runes := []rune(msg)
+	if len(runes) > 0 {
+		runes[0] = unicode.ToUpper(runes[0])
+		return string(runes)
+	}
+	return msg
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

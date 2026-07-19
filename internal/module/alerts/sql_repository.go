@@ -746,6 +746,60 @@ func (r SQLRepository) SetStreak(ctx context.Context, ruleID, serverID int64, st
 	return nil
 }
 
+func (r SQLRepository) IncrementStreak(ctx context.Context, ruleID, serverID int64) (int, error) {
+	now := time.Now().UTC()
+
+	tx, err := r.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("alerts: begin increment streak transaction: %w", err)
+	}
+
+	res, err := tx.ExecContext(
+		ctx,
+		`UPDATE alert_rule_streaks SET streak = streak + 1, updated_at = ? WHERE rule_id = ? AND server_id = ?`,
+		now, ruleID, serverID,
+	)
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, fmt.Errorf("alerts: increment streak rule %d server %d: %w", ruleID, serverID, err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, fmt.Errorf("alerts: read affected rows for streak rule %d server %d: %w", ruleID, serverID, err)
+	}
+
+	if affected == 0 {
+		if _, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO alert_rule_streaks (rule_id, server_id, streak, updated_at) VALUES (?, ?, ?, ?)`,
+			ruleID, serverID, 1, now,
+		); err != nil {
+			_ = tx.Rollback()
+			return 0, fmt.Errorf("alerts: insert streak rule %d server %d: %w", ruleID, serverID, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return 0, fmt.Errorf("alerts: commit increment streak transaction: %w", err)
+		}
+		return 1, nil
+	}
+
+	var streak int
+	if err := tx.QueryRowContext(
+		ctx,
+		`SELECT streak FROM alert_rule_streaks WHERE rule_id = ? AND server_id = ?`,
+		ruleID, serverID,
+	).Scan(&streak); err != nil {
+		_ = tx.Rollback()
+		return 0, fmt.Errorf("alerts: read incremented streak rule %d server %d: %w", ruleID, serverID, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("alerts: commit increment streak transaction: %w", err)
+	}
+	return streak, nil
+}
+
 func (r SQLRepository) ListStreaksForRules(ctx context.Context, ruleIDs []int64) (map[streakKey]int, error) {
 	if len(ruleIDs) == 0 {
 		return map[streakKey]int{}, nil
