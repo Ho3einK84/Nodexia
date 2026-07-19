@@ -223,7 +223,10 @@ func TestTerminalWSRejectsCrossOrigin(t *testing.T) {
 	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
 	s := seedServer(t, serverRepo, true)
 
-	ticketID := deps.TerminalTickets.Create(s.ID, sshclient.ConnectionRequest{})
+	ticketID, err := deps.TerminalTickets.Create(s.ID, sshclient.ConnectionRequest{})
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
 
 	mux := registerRoutes(t, deps)
 	req := httptest.NewRequest(http.MethodGet,
@@ -261,7 +264,10 @@ func TestTerminalWSRejectsExpiredTicket(t *testing.T) {
 	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
 	s := seedServer(t, serverRepo, true)
 
-	ticketID := deps.TerminalTickets.Create(s.ID, sshclient.ConnectionRequest{})
+	ticketID, err := deps.TerminalTickets.Create(s.ID, sshclient.ConnectionRequest{})
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
 	time.Sleep(5 * time.Millisecond)
 
 	mux := registerRoutes(t, deps)
@@ -287,7 +293,10 @@ func TestTerminalWSSessionLimitRejected(t *testing.T) {
 		deps.TerminalTickets.TryAcquireSession("", max)
 	}
 
-	ticketID := deps.TerminalTickets.Create(s.ID, sshclient.ConnectionRequest{})
+	ticketID, err := deps.TerminalTickets.Create(s.ID, sshclient.ConnectionRequest{})
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
 
 	mux := registerRoutes(t, deps)
 	req := sameOriginRequest(http.MethodGet,

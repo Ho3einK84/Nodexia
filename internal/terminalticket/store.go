@@ -16,6 +16,8 @@ package terminalticket
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -67,10 +69,13 @@ func New(ttl time.Duration) *Store {
 }
 
 // Create stores a new ticket and returns its ID.
-func (s *Store) Create(serverID int64, req sshclient.ConnectionRequest) string {
+func (s *Store) Create(serverID int64, req sshclient.ConnectionRequest) (string, error) {
 	s.pruneExpired()
 
 	id := newID()
+	if id == "" {
+		return "", errors.New("terminalticket: failed to generate ticket ID")
+	}
 	s.mu.Lock()
 	s.tickets[id] = &ticketState{
 		ticket: Ticket{
@@ -81,7 +86,7 @@ func (s *Store) Create(serverID int64, req sshclient.ConnectionRequest) string {
 		},
 	}
 	s.mu.Unlock()
-	return id
+	return id, nil
 }
 
 // Consume atomically marks the ticket as used and returns it.  Returns
@@ -151,7 +156,8 @@ func (s *Store) pruneExpired() {
 func newID() string {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
-		return hex.EncodeToString([]byte(time.Now().UTC().Format("20060102150405.000000000")))
+		slog.Error("terminalticket: failed to generate random ticket ID", slog.Any("error", err))
+		return ""
 	}
 	return hex.EncodeToString(buf)
 }

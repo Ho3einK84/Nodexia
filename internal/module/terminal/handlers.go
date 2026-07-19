@@ -230,7 +230,11 @@ func (h postHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ConnectTimeout: connectTimeout,
 	}
 
-	ticketID := h.deps.TerminalTickets.Create(serverID, req)
+	ticketID, err := h.deps.TerminalTickets.Create(serverID, req)
+	if err != nil {
+		http.Error(w, "failed to create terminal ticket", http.StatusInternalServerError)
+		return
+	}
 	renderTerminalPage(w, r, h.deps, server, view.TerminalFormView{}, ticketID, initCmd)
 }
 

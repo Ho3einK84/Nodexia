@@ -171,6 +171,9 @@ func open(raw []byte, passphrase string) ([]byte, error) {
 	if n == 0 {
 		n, r, p = scryptN, scryptR, scryptP
 	}
+	if err := validateScryptParams(n, r, p); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+	}
 	key, err := scrypt.Key([]byte(passphrase), salt, n, r, p, scryptKeyLen)
 	if err != nil {
 		return nil, fmt.Errorf("backup: derive key: %w", err)
@@ -191,6 +194,24 @@ func open(raw []byte, passphrase string) ([]byte, error) {
 		return nil, ErrMalformed
 	}
 	return plaintext, nil
+}
+
+// validateScryptParams rejects scrypt cost parameters that could exhaust
+// memory or CPU when decrypting a crafted backup envelope.
+func validateScryptParams(n, r, p int) error {
+	if n <= 0 || (n&(n-1)) != 0 {
+		return errors.New("scrypt N must be a power of 2")
+	}
+	if n > 1<<20 {
+		return errors.New("scrypt N is too large")
+	}
+	if r < 1 || r > 32 {
+		return errors.New("scrypt r must be between 1 and 32")
+	}
+	if p < 1 || p > 32 {
+		return errors.New("scrypt p must be between 1 and 32")
+	}
+	return nil
 }
 
 func newGCM(key []byte) (cipher.AEAD, error) {
