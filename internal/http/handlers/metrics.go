@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -58,6 +59,7 @@ func (h MetricsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // or, for scrapers that cannot set headers, the ?token= query parameter.
 func metricsTokenMatches(r *http.Request, expected string) bool {
 	presented := ""
+	fromQuery := false
 	if auth := strings.TrimSpace(r.Header.Get("Authorization")); auth != "" {
 		if bearer, ok := strings.CutPrefix(auth, "Bearer "); ok {
 			presented = strings.TrimSpace(bearer)
@@ -65,6 +67,10 @@ func metricsTokenMatches(r *http.Request, expected string) bool {
 	}
 	if presented == "" {
 		presented = strings.TrimSpace(r.URL.Query().Get("token"))
+		fromQuery = presented != ""
+	}
+	if fromQuery {
+		slog.Warn("metrics: token supplied via query string; use Authorization: Bearer header to avoid leaking the token in access logs")
 	}
 	return presented != "" && subtle.ConstantTimeCompare([]byte(presented), []byte(expected)) == 1
 }

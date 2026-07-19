@@ -574,6 +574,8 @@ var (
 		xssh.HMACSHA512ETM,
 		xssh.HMACSHA256,
 		xssh.HMACSHA512,
+		// HMAC-SHA1 is a last-resort compatibility fallback for legacy SSH
+		// peers; prefer the SHA-256/512 options above when available.
 		xssh.HMACSHA1,
 	}
 	hostKeyAlgorithms = []string{

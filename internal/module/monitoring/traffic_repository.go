@@ -33,6 +33,7 @@ type TrafficSnapshot struct {
 type TrafficRepository interface {
 	AppendTraffic(ctx context.Context, snapshot TrafficSnapshot) (TrafficSnapshot, error)
 	GetLatestTrafficByServer(ctx context.Context, serverID int64) (TrafficSnapshot, error)
+	GetLatestTrafficByServerIDs(ctx context.Context, serverIDs []int64) ([]TrafficSnapshot, error)
 }
 
 func (r SQLRepository) AppendTraffic(ctx context.Context, snapshot TrafficSnapshot) (TrafficSnapshot, error) {
@@ -132,6 +133,95 @@ func (r SQLRepository) GetLatestTrafficByServer(ctx context.Context, serverID in
 			return TrafficSnapshot{}, ErrNotFound
 		}
 		return TrafficSnapshot{}, fmt.Errorf("monitoring: get latest vnstat snapshot for server %d: %w", serverID, err)
+	}
+
+	snapshot.Available = available == 1
+	if err := json.Unmarshal([]byte(availableInterfacesJSON), &snapshot.AvailableInterfaces); err != nil {
+		return TrafficSnapshot{}, fmt.Errorf("monitoring: unmarshal vnstat interfaces: %w", err)
+	}
+	if err := json.Unmarshal([]byte(dailyRowsJSON), &snapshot.DailyRows); err != nil {
+		return TrafficSnapshot{}, fmt.Errorf("monitoring: unmarshal vnstat daily rows: %w", err)
+	}
+	if err := json.Unmarshal([]byte(monthlyRowsJSON), &snapshot.MonthlyRows); err != nil {
+		return TrafficSnapshot{}, fmt.Errorf("monitoring: unmarshal vnstat monthly rows: %w", err)
+	}
+
+	collectedAt, err := parseDatabaseTime(collectedAtRaw)
+	if err != nil {
+		return TrafficSnapshot{}, fmt.Errorf("monitoring: parse vnstat collected_at: %w", err)
+	}
+	snapshot.CollectedAt = collectedAt
+	return normalizeTrafficSnapshot(snapshot), nil
+}
+
+// GetLatestTrafficByServerIDs returns the most recent vnstat snapshot for each
+// of the requested server IDs in a single query.
+func (r SQLRepository) GetLatestTrafficByServerIDs(ctx context.Context, serverIDs []int64) ([]TrafficSnapshot, error) {
+	if len(serverIDs) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(serverIDs))
+	args := make([]any, len(serverIDs))
+	for i, id := range serverIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := `SELECT id, server_id, available, interface_name, available_interfaces_json,
+		         daily_rows_json, monthly_rows_json, peak_mbps, avg_mbps, message, collected_at
+		  FROM vnstat_snapshots
+		  WHERE id IN (
+		      SELECT MAX(id)
+		      FROM vnstat_snapshots
+		      WHERE server_id IN (` + strings.Join(placeholders, ",") + `)
+		      GROUP BY server_id
+		  )`
+
+	rows, err := r.conn.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("monitoring: get latest vnstat snapshots for servers: %w", err)
+	}
+	defer rows.Close()
+
+	var snapshots []TrafficSnapshot
+	for rows.Next() {
+		snapshot, err := scanTrafficRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("monitoring: scan vnstat snapshot row: %w", err)
+		}
+		snapshots = append(snapshots, snapshot)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("monitoring: iterate vnstat snapshots: %w", err)
+	}
+
+	return snapshots, nil
+}
+
+func scanTrafficRow(rows *sql.Rows) (TrafficSnapshot, error) {
+	var snapshot TrafficSnapshot
+	var available int
+	var availableInterfacesJSON string
+	var dailyRowsJSON string
+	var monthlyRowsJSON string
+	var collectedAtRaw any
+
+	if err := rows.Scan(
+		&snapshot.ID,
+		&snapshot.ServerID,
+		&available,
+		&snapshot.InterfaceName,
+		&availableInterfacesJSON,
+		&dailyRowsJSON,
+		&monthlyRowsJSON,
+		&snapshot.PeakMbps,
+		&snapshot.AvgMbps,
+		&snapshot.Message,
+		&collectedAtRaw,
+	); err != nil {
+		return TrafficSnapshot{}, err
 	}
 
 	snapshot.Available = available == 1
