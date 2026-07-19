@@ -56,6 +56,10 @@ func Session(cfg config.Config) Middleware {
 			}
 
 			sessionID, needsRefresh := validateOrCreateSession(r, secret, cookieName, sessionTTL)
+			if sessionID == "" {
+				http.Error(w, "session unavailable", http.StatusInternalServerError)
+				return
+			}
 			if needsRefresh {
 				http.SetCookie(w, buildSessionCookie(cookieName, sessionID, secret, sessionTTL, cookieSecure))
 			}
@@ -178,7 +182,7 @@ func validateOrCreateSession(r *http.Request, secret []byte, cookieName string, 
 	if err != nil {
 		sessionID, createErr := randomSessionID()
 		if createErr != nil {
-			return "fallback-session", true
+			return "", true
 		}
 		return sessionID, true
 	}
@@ -187,7 +191,7 @@ func validateOrCreateSession(r *http.Request, secret []byte, cookieName string, 
 	if err != nil {
 		newID, createErr := randomSessionID()
 		if createErr != nil {
-			return "fallback-session", true
+			return "", true
 		}
 		return newID, true
 	}
@@ -195,7 +199,7 @@ func validateOrCreateSession(r *http.Request, secret []byte, cookieName string, 
 	if time.Since(issuedAt) > ttl {
 		newID, createErr := randomSessionID()
 		if createErr != nil {
-			return "fallback-session", true
+			return "", true
 		}
 		return newID, true
 	}

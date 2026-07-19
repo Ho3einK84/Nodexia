@@ -15,7 +15,10 @@ func req() sshclient.ConnectionRequest {
 func TestCreateAndConsume(t *testing.T) {
 	s := terminalticket.New(30 * time.Second)
 
-	id := s.Create(1, req())
+	id, err := s.Create(1, req())
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
 	if id == "" {
 		t.Fatal("Create returned empty id")
 	}
@@ -34,7 +37,10 @@ func TestCreateAndConsume(t *testing.T) {
 
 func TestConsumeSingleUse(t *testing.T) {
 	s := terminalticket.New(30 * time.Second)
-	id := s.Create(1, req())
+	id, err := s.Create(1, req())
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
 
 	if _, ok := s.Consume(id); !ok {
 		t.Fatal("first Consume returned false")
@@ -47,7 +53,10 @@ func TestConsumeSingleUse(t *testing.T) {
 func TestConsumeExpired(t *testing.T) {
 	// TTL of 1 ms so the ticket is already expired.
 	s := terminalticket.New(1 * time.Millisecond)
-	id := s.Create(1, req())
+	id, err := s.Create(1, req())
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
 	time.Sleep(5 * time.Millisecond)
 
 	if _, ok := s.Consume(id); ok {
@@ -64,7 +73,10 @@ func TestConsumeUnknown(t *testing.T) {
 
 func TestRelease(t *testing.T) {
 	s := terminalticket.New(30 * time.Second)
-	id := s.Create(1, req())
+	id, err := s.Create(1, req())
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
 	s.Consume(id)
 	s.Release(id)
 
