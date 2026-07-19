@@ -50,6 +50,7 @@ const homeDashboardPerPage = 5
 
 func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	snapPage, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("snap_page")))
+	schedPage, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("sched_page")))
 
 	page := view.NewPageData(h.config, r)
 	page.CSRFToken = middleware.GetCSRFToken(r.Context())
@@ -71,12 +72,12 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// (localStorage) so the server always renders the full, current set.
 	page.HomeWarnings = homeWarnings(r.Context(), h.database, &page)
 
-	page.SchedulerOverview = schedulerOverviewView(h.scheduler, 1, 8, countries, func(p int) string {
+	page.SchedulerOverview = schedulerOverviewView(h.scheduler, schedPage, 8, countries, func(p int) string {
 		return homeURL(snapPage, p)
 	})
 
 	if h.database != nil && h.database.SQL != nil {
-		ctx := context.Background()
+		ctx := r.Context()
 		snapshotRepo := monitoring.NewSQLRepository(h.database.SQL)
 		if allSnaps, err := snapshotRepo.ListAllLatestByServer(ctx); err == nil {
 			total := len(allSnaps)
@@ -84,17 +85,31 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			page.DashboardSnapshotTotal = total
 			page.DashboardSnapshotPagination = buildPaginationView(currentPage, totalPages, func(p int) string {
-				return homeURL(p, 0)
+				return homeURL(p, schedPage)
 			})
+
+			// Batch-fetch the latest traffic snapshot for every visible server
+			// instead of issuing one query per row.
+			visibleIDs := make([]int64, 0, end-start)
+			for _, snapshot := range allSnaps[start:end] {
+				visibleIDs = append(visibleIDs, snapshot.ServerID)
+			}
+			trafficByServer := make(map[int64]monitoring.TrafficSnapshot)
+			if trafficSnaps, err := snapshotRepo.GetLatestTrafficByServerIDs(ctx, visibleIDs); err == nil {
+				for _, ts := range trafficSnaps {
+					trafficByServer[ts.ServerID] = ts
+				}
+			}
+
 			page.DashboardSnapshots = make([]view.DashboardMonitoringView, 0, end-start)
+			currentMonth := time.Now().UTC().Format("2006-01")
 			for _, snapshot := range allSnaps[start:end] {
 				v := monitoringDashboardView(snapshot)
 				if badge, ok := countries[snapshot.ServerID]; ok {
 					v.FlagEmoji = badge.Flag
 					v.CountryName = badge.Name
 				}
-				if traffic, err := snapshotRepo.GetLatestTrafficByServer(ctx, snapshot.ServerID); err == nil && traffic.Available {
-					currentMonth := time.Now().UTC().Format("2006-01")
+				if traffic, ok := trafficByServer[snapshot.ServerID]; ok && traffic.Available {
 					for _, row := range traffic.MonthlyRows {
 						if row.Label == currentMonth {
 							v.CurrentMonthDL = dashboardFormatBytes(row.RXBytes)
@@ -198,11 +213,14 @@ func nodeStateRank(state string) int {
 	}
 }
 
-// homeURL builds a home-page URL for snapshot pagination.
-func homeURL(snapPage, _ int) string {
+// homeURL builds a home-page URL for snapshot and scheduler pagination.
+func homeURL(snapPage, schedPage int) string {
 	v := url.Values{}
 	if snapPage > 1 {
 		v.Set("snap_page", strconv.Itoa(snapPage))
+	}
+	if schedPage > 1 {
+		v.Set("sched_page", strconv.Itoa(schedPage))
 	}
 	if q := v.Encode(); q != "" {
 		return "/?" + q

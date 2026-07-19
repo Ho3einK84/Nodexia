@@ -144,10 +144,13 @@ func (s *Store) ReleaseSession(username string) {
 
 func (s *Store) pruneExpired() {
 	cutoff := time.Now().Add(-s.ttl)
+	consumedCutoff := time.Now().Add(-s.ttl * 5)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for id, st := range s.tickets {
 		if !st.used.Load() && st.ticket.CreatedAt.Before(cutoff) {
+			delete(s.tickets, id)
+		} else if st.used.Load() && st.ticket.CreatedAt.Before(consumedCutoff) {
 			delete(s.tickets, id)
 		}
 	}
