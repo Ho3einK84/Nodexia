@@ -44,7 +44,10 @@
     <span>{{ t "shell.meta.version" "value" .Version }}</span>
     <span>{{ t "shell.meta.db" "value" .DatabaseDriver }}</span>
     {{ template "lang-switcher" . }}
-    <a href="/logout" class="logout-link" data-tab-bypass>{{ t "nav.logout" }}</a>
+    <form action="/logout" method="post" style="display:inline">
+      <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+      <button type="submit" class="logout-link">{{ t "nav.logout" }}</button>
+    </form>
   </div>
   {{ if ne .ContentTemplate "content-login" }}
   <button type="button" class="nav-toggle" data-drawer-open aria-label="{{ t "shell.menu.open" }}" aria-expanded="false" aria-controls="mobile-drawer">
@@ -104,7 +107,10 @@
     {{ template "lang-switcher" . }}
   </div>
 
-  <a href="/logout" class="btn btn--secondary drawer__logout" data-tab-bypass><i data-lucide="log-out" class="icon-in-button"></i> {{ t "nav.logout" }}</a>
+  <form action="/logout" method="post" style="display:inline">
+    <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+    <button type="submit" class="btn btn--secondary drawer__logout"><i data-lucide="log-out" class="icon-in-button"></i> {{ t "nav.logout" }}</button>
+  </form>
 </aside>
 {{ end }}
 
