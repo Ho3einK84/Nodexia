@@ -59,6 +59,11 @@ func (h LoginHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimSpace(r.FormValue("username"))
 	password := r.FormValue("password")
 
+	if len(username) > 1024 || len(password) > 1024 {
+		h.renderLogin(w, r, http.StatusBadRequest, "error", loc.T("login.invalid"))
+		return
+	}
+
 	expectedUser := strings.TrimSpace(h.config.Security.AdminUsername)
 	expectedPass := h.config.Security.AdminPassword
 
@@ -161,6 +166,10 @@ func NewLogoutHandler(cookieSecure bool) LogoutHandler {
 }
 
 func (h LogoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	http.SetCookie(w, middleware.ClearAuthCookie(h.cookieSecure))
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }

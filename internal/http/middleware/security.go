@@ -36,7 +36,8 @@ func SecurityHeaders() Middleware {
 			w.Header().Set("X-Frame-Options", "DENY")
 			w.Header().Set("Referrer-Policy", "same-origin")
 			w.Header().Set("Cache-Control", "no-store")
-			w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; script-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -298,7 +299,20 @@ func requestHost(r *http.Request) string {
 }
 
 func equalHost(left, right string) bool {
-	left = strings.TrimSpace(strings.ToLower(left))
-	right = strings.TrimSpace(strings.ToLower(right))
+	left = stripDefaultPort(strings.TrimSpace(strings.ToLower(left)))
+	right = stripDefaultPort(strings.TrimSpace(strings.ToLower(right)))
 	return left != "" && right != "" && left == right
+}
+
+// stripDefaultPort removes the default HTTP/HTTPS port suffix so that
+// "example.com:443" matches "example.com" for same-origin checks.
+func stripDefaultPort(host string) string {
+	switch {
+	case strings.HasSuffix(host, ":80"):
+		return host[:len(host)-3]
+	case strings.HasSuffix(host, ":443"):
+		return host[:len(host)-4]
+	default:
+		return host
+	}
 }

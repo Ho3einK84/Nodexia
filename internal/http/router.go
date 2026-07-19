@@ -64,7 +64,7 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 	loginHandler := handlers.NewLoginHandler(cfg, renderer, loginThrottle)
 	mux.HandleFunc("GET /login", loginHandler.ServeHTTP)
 	mux.HandleFunc("POST /login", loginHandler.ServeHTTP)
-	mux.Handle("GET /logout", handlers.NewLogoutHandler(cfg.Security.SessionCookieSecure))
+	mux.Handle("POST /logout", handlers.NewLogoutHandler(cfg.Security.SessionCookieSecure))
 
 	mux.Handle("GET /{$}", handlers.NewHomeHandler(cfg, database, renderer, backgroundScheduler, registry.RouteGroups(modules)))
 	diagHandler := handlers.NewDiagnosticsHandler(cfg, database, renderer, backgroundScheduler, commandStreams)

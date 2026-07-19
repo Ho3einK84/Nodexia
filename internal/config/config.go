@@ -344,6 +344,9 @@ func (c Config) Validate() error {
 		if pw := strings.TrimSpace(c.Security.AdminPassword); pw == weakAdminPassword || pw == exampleAdminPassword {
 			return errors.New("config: NODEXIA_AUTH_PASSWORD must not use a known-weak password outside development or test")
 		}
+		if len(strings.TrimSpace(c.Security.AdminPassword)) < 8 {
+			return errors.New("config: NODEXIA_AUTH_PASSWORD must be at least 8 characters outside development or test")
+		}
 	}
 
 	if c.Digest.Enabled && c.Digest.Interval <= 0 {
