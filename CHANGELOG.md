@@ -7,6 +7,76 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.6.8 — Security & quality hardening
+
+### Security fixes
+
+- **Scrypt DoS protection**: backup decryption now validates scrypt
+  parameters (`N` must be a power of two and ≤ 2^20, `r` and `p` within
+  1..32) before calling `scrypt.Key`, preventing a crafted backup envelope
+  from exhausting memory.
+- **Predictable session fallback removed**: `randomSessionID()` no longer
+  falls back to the static `"fallback-session"` ID; the `Session`
+  middleware returns HTTP 500 if a session ID cannot be generated.
+- **Predictable terminal ticket ID removed**: ticket generation returns an
+  empty ID and logs the error on RNG failure instead of using a guessable
+  timestamp.
+- **Logout CSRF fixed**: `/logout` now only accepts `POST`, and the logout
+  links in the shell header and mobile drawer have been converted to
+  CSRF-protected inline forms.
+- **CSRF default-port normalization**: `equalHost` strips `:80` and `:443`
+  suffixes so legitimate same-origin requests are not rejected when the
+  browser omits the default port.
+- **HSTS added**: `Strict-Transport-Security: max-age=31536000;
+  includeSubDomains` is now set by the security-headers middleware.
+- **CSP hardened**: `object-src 'none'` is now included in the CSP.
+- **Admin password minimum length**: production/staging configurations now
+  require the admin password to be at least 8 characters.
+- **Login length limit**: usernames and passwords over 1024 bytes are
+  rejected before the constant-time comparison to avoid DoS.
+
+### XSS fixes
+
+- **analytics.js**: all server-sourced values interpolated into
+  `innerHTML` (chart tooltips, legend, forecast cards, trend/exhaustion
+  indicators) are now escaped via `escapeHTML()`. Color values are validated
+  against a hex-color regex.
+- **app.js**: `bulkChip()` validates the incoming status against an
+  allowlist and falls back to `"unknown"`.
+
+### Backend fixes
+
+- **Home handler context**: dashboard DB queries now use `r.Context()`
+  instead of `context.Background()` so they are cancelled when the client
+  disconnects.
+- **N+1 traffic query eliminated**: the home dashboard batch-fetches latest
+  traffic snapshots via the new `GetLatestTrafficByServerIDs` repository
+  method instead of one query per visible server.
+- **Scheduler pagination fixed**: `homeURL` now includes `sched_page` and
+  the home handler reads the `sched_page` query parameter.
+- **Consumed terminal ticket pruning**: `pruneExpired` now also removes
+  consumed tickets older than 5×TTL, preventing a memory leak if `Release`
+  is missed.
+- **Metrics token log warning**: using `?token=` now logs a warning
+  advising operators to prefer `Authorization: Bearer` to keep tokens out of
+  access logs.
+- **SSH MAC preference**: `HMAC-SHA1` is now the last-resort compatibility
+  entry in the SSH MAC list.
+
+### Middleware fixes
+
+- **Multibyte-safe log truncation**: `safeLogValue` now truncates by rune
+  instead of byte, preserving Persian/RTL text.
+- **Multibyte-safe capitalization**: `friendlyError` now uppercases the
+  first rune via `unicode.ToUpper` instead of the first byte.
+- **Constant-time username comparison**: `RequireAuth` compares the token
+  username with `crypto/subtle`.
+- **Monitoring parse errors logged**: `parseFloat` and `parseInt64` now emit
+  `slog.Debug` when parsing fails instead of silently returning zero.
+- **Atomic alert streak increment**: `incStreak` uses a single atomic
+  `UPDATE ... SET streak = streak + 1` inside a transaction, removing the
+  GetStreak/SetStreak TOCTOU window.
+
 ## v0.6.7 — Mobile terminal UX + architecture documentation
 
 ### Part A: Mobile terminal — persistent tab access
