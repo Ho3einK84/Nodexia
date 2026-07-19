@@ -5,6 +5,20 @@
   // Localization helper (see app.js for window.nxT). Falls back to the key.
   function T(key, params) { return window.nxT ? window.nxT(key, params) : key; }
 
+  // Escape HTML-special characters so server-sourced values can safely be
+  // interpolated into innerHTML.
+  function escapeHTML(str) {
+    return String(str).replace(/[&<>"']/g, function (m) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+    });
+  }
+
+  // Only accept hex color values; fall back to a safe default otherwise.
+  const COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+  function validColor(color) {
+    return COLOR_RE.test(color) ? color : '#3b82f6';
+  }
+
   // ── SVG chart renderer ────────────────────────────────────────────────────
 
   const CHART_PAD = { top: 12, right: 16, bottom: 28, left: 42 };
@@ -81,7 +95,7 @@
       plotG.appendChild(createSVGEl('path', {
         class: 'chart-area',
         d: areaD,
-        fill: s.color || '#3b82f6',
+        fill: validColor(s.color),
       }));
 
       // Line
@@ -89,7 +103,7 @@
       plotG.appendChild(createSVGEl('path', {
         class: 'chart-path',
         d: lineD,
-        stroke: s.color || '#3b82f6',
+        stroke: validColor(s.color),
       }));
     }
 
@@ -154,7 +168,7 @@
         container.appendChild(tooltipEl);
       }
 
-      let html = `<div class="chart-tooltip__label">${labels[idx]}</div>`;
+      let html = `<div class="chart-tooltip__label">${escapeHTML(labels[idx])}</div>`;
       for (const s of series) {
         if (!s.data || idx >= s.data.length) continue;
         const v = s.data[idx];
@@ -162,8 +176,8 @@
           : unit === 'GiB' ? v.toFixed(3) + ' GiB'
           : v.toFixed(2) + (unit ? ' ' + unit : '');
         html += `<div class="chart-tooltip__row">
-          <span class="chart-tooltip__dot" style="background:${s.color}"></span>
-          <span>${s.label}</span>
+          <span class="chart-tooltip__dot" style="background:${validColor(s.color)}"></span>
+          <span>${escapeHTML(s.label)}</span>
           <span class="chart-tooltip__value">${formatted}</span>
         </div>`;
       }
@@ -322,8 +336,8 @@
     if (!legend) return;
     legend.innerHTML = series.map(s => `
       <div class="legend-item">
-        <span class="legend-dot" style="background:${s.color}"></span>
-        ${s.label}
+        <span class="legend-dot" style="background:${validColor(s.color)}"></span>
+        ${escapeHTML(s.label)}
       </div>
     `).join('');
   }
@@ -410,15 +424,15 @@
       : '';
     return `
       <div class="forecast-card">
-        <div class="forecast-card__label">${label} <span class="forecast-card__scope">${scopeLabel}</span></div>
-        <div class="forecast-card__current">${period.current_human}</div>
+        <div class="forecast-card__label">${escapeHTML(label)} <span class="forecast-card__scope">${escapeHTML(scopeLabel)}</span></div>
+        <div class="forecast-card__current">${escapeHTML(period.current_human)}</div>
         <div class="forecast-card__predicted">
-          ${T('js.analytics.predicted_end')} <strong>${period.predicted_human}</strong>
+          ${escapeHTML(T('js.analytics.predicted_end'))} <strong>${escapeHTML(period.predicted_human)}</strong>
         </div>
         <div class="forecast-progress">
           <div class="forecast-progress__bar ${progressClass}" style="width:${Math.min(100, pct)}%"></div>
         </div>
-        <div class="forecast-progress__label">${T('js.analytics.period_elapsed', { pct: pct })}${periodNote ? ` · ${periodNote}` : ''}</div>
+        <div class="forecast-progress__label">${escapeHTML(T('js.analytics.period_elapsed', { pct: pct }))}${periodNote ? ` · ${escapeHTML(periodNote)}` : ''}</div>
       </div>
     `;
   }
@@ -474,9 +488,9 @@
     panel.innerHTML = `
       <i data-lucide="${icon}" class="forecast-exhaustion__icon"></i>
       <div class="forecast-exhaustion__body">
-        <div class="forecast-exhaustion__title">${T('js.analytics.exhaustion_title')}</div>
-        <div class="forecast-exhaustion__message">${message}</div>
-        ${sub ? `<div class="forecast-exhaustion__sub">${sub}</div>` : ''}
+        <div class="forecast-exhaustion__title">${escapeHTML(T('js.analytics.exhaustion_title'))}</div>
+        <div class="forecast-exhaustion__message">${escapeHTML(message)}</div>
+        ${sub ? `<div class="forecast-exhaustion__sub">${escapeHTML(sub)}</div>` : ''}
       </div>
     `;
   }
@@ -488,15 +502,16 @@
       stable:     { cls: 'trend-indicator--stable',     icon: '→', label: T('js.analytics.trend_stable') },
     };
     const t = map[trend] || map.stable;
-    return `<span class="trend-indicator ${t.cls}">${t.icon} ${t.label}</span>`;
+    return `<span class="trend-indicator ${t.cls}">${t.icon} ${escapeHTML(t.label)}</span>`;
   }
 
   function renderConfidence(confidence) {
-    const level = T('js.analytics.confidence_' + confidence);
+    const validConfidence = ['low', 'medium', 'high'].includes(confidence) ? confidence : 'low';
+    const level = T('js.analytics.confidence_' + validConfidence);
     return `
       <span class="forecast-confidence">
-        <span class="confidence-dot confidence-dot--${confidence}"></span>
-        ${T('js.analytics.confidence', { level: level })}
+        <span class="confidence-dot confidence-dot--${validConfidence}"></span>
+        ${escapeHTML(T('js.analytics.confidence', { level: level }))}
       </span>
     `;
   }

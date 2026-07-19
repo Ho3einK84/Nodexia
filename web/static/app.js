@@ -888,14 +888,17 @@
   }
 
   function bulkChip(status) {
+    var allowed = ['ok', 'failed', 'skipped', 'pending', 'running', 'timeout'];
+    var safeStatus = allowed.indexOf(status) !== -1 ? status : 'unknown';
     var inner = {
       ok: '<i data-lucide="check-circle-2" class="icon-in-button"></i> ' + I18N.t('bulk.status_ok'),
       failed: '<i data-lucide="x-circle" class="icon-in-button"></i> ' + I18N.t('bulk.status_failed'),
       skipped: '<i data-lucide="skip-forward" class="icon-in-button"></i> ' + I18N.t('bulk.status_skipped'),
       pending: '<span class="spinner spinner--sm"></span> ' + I18N.t('bulk.status_pending'),
-      running: '<span class="spinner spinner--sm"></span> ' + I18N.t('bulk.status_running')
-    }[status] || ('<i data-lucide="x-circle" class="icon-in-button"></i> ' + I18N.t('bulk.status_failed'));
-    return '<span class="bulk-status bulk-status--' + status + '" data-bulk-status>' + inner + '</span>';
+      running: '<span class="spinner spinner--sm"></span> ' + I18N.t('bulk.status_running'),
+      timeout: '<i data-lucide="x-circle" class="icon-in-button"></i> ' + I18N.t('bulk.status_failed')
+    }[safeStatus] || ('<i data-lucide="x-circle" class="icon-in-button"></i> ' + I18N.t('bulk.status_failed'));
+    return '<span class="bulk-status bulk-status--' + safeStatus + '" data-bulk-status>' + inner + '</span>';
   }
 
   function updateBulkSummary(card, done) {
