@@ -89,8 +89,9 @@ func safeLogValue(value string) string {
 	value = strings.TrimSpace(value)
 	value = strings.ReplaceAll(value, "\n", " ")
 	value = strings.ReplaceAll(value, "\r", " ")
-	if len(value) > 240 {
-		return value[:240] + "..."
+	runes := []rune(value)
+	if len(runes) > 240 {
+		return string(runes[:240]) + "..."
 	}
 	return value
 }

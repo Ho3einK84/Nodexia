@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -51,12 +52,12 @@ func RequireAuth(cfg config.Config) Middleware {
 				return
 			}
 
-			token, err := parseAuthToken(cookie.Value, secret)
-			if err != nil || token.Username != cfg.Security.AdminUsername || time.Now().After(token.ExpiresAt) {
-				http.SetCookie(w, ClearAuthCookie(cfg.Security.SessionCookieSecure))
-				redirectLogin(w, r)
-				return
-			}
+		token, err := parseAuthToken(cookie.Value, secret)
+		if err != nil || subtle.ConstantTimeCompare([]byte(token.Username), []byte(cfg.Security.AdminUsername)) != 1 || time.Now().After(token.ExpiresAt) {
+			http.SetCookie(w, ClearAuthCookie(cfg.Security.SessionCookieSecure))
+			redirectLogin(w, r)
+			return
+		}
 
 			ctx := context.WithValue(r.Context(), authTokenKey, token.Username)
 			next.ServeHTTP(w, r.WithContext(ctx))

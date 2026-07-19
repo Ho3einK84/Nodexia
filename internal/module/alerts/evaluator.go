@@ -433,15 +433,7 @@ func (e *Evaluator) message(rule Rule, target Target, value float64, state strin
 }
 
 func (e *Evaluator) incStreak(ctx context.Context, rule Rule, target Target) (int, error) {
-	current, err := e.repo.GetStreak(ctx, rule.ID, target.ID)
-	if err != nil {
-		return 0, err
-	}
-	next := current + 1
-	if err := e.repo.SetStreak(ctx, rule.ID, target.ID, next); err != nil {
-		return 0, err
-	}
-	return next, nil
+	return e.repo.IncrementStreak(ctx, rule.ID, target.ID)
 }
 
 func (e *Evaluator) resetStreak(ctx context.Context, rule Rule, target Target) error {
