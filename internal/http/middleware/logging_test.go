@@ -37,7 +37,7 @@ func TestLoggingRecorderSupportsHijack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET error = %v", err)
 	}
-	resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if err := <-hijacked; err != nil {
 		if err == io.EOF {
@@ -65,7 +65,7 @@ func TestLoggingRecorderSupportsFlush(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET error = %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (flusher missing on recorder)", resp.StatusCode)
 	}

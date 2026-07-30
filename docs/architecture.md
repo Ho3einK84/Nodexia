@@ -202,8 +202,11 @@ These are the non-obvious behaviours future changes must not silently break.
   hardcode node names — they come from remote config and must pass
   `ValidateNodeName`. Actions and installs run as background
   `commandstream`/job sessions. The PasarGuard install drives the official
-  script over positional stdin (fragile — re-count prompts if it breaks)
-  then patches `/opt/<name>/.env`; generated shell must stay
+  script over positional stdin, but preflights the downloaded script's prompt
+  contract before sending answers, then patches `/opt/<name>/.env`. Rebecca
+  binary installs allocate a non-echoing command PTY and deliver the
+  certificate/key bundle plus ports through that PTY so upstream `/dev/tty`
+  reads work. Generated shell must stay
   single-quote-free inside `sh -c '...'` (`TestGeneratedShellSyntax` guard).
   Discovery + Docker actions use `sudo -n`. One discovery sweep = one
   `created_at`. API key/cert are shown once, never persisted.

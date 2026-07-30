@@ -94,8 +94,8 @@ type PageData struct {
 	DashboardNodeStatus         FleetNodeStatusView
 	// HomeWarnings are the dismissible fleet warning banners at the top of the
 	// home dashboard (exhaustion, hot resources, traffic anomalies).
-	HomeWarnings []HomeWarningView
-	SchedulerOverview           SchedulerOverviewView
+	HomeWarnings      []HomeWarningView
+	SchedulerOverview SchedulerOverviewView
 	// BackupCanRun gates the diagnostics backup/restore section; it is false
 	// when the database runtime is unavailable.
 	BackupCanRun           bool
@@ -806,9 +806,9 @@ type AlertOptionView struct {
 // picker. The visible label is resolved in the template from the i18n catalog
 // (alerts.metric.<value>) so the form is fully bilingual.
 type AlertMetricOptionView struct {
-	Value        string
-	Kind         string
-	Unit         string
+	Value string
+	Kind  string
+	Unit  string
 	// DefaultThreshold seeds the threshold input when the operator switches to
 	// this metric ("" for boolean metrics, which take no threshold).
 	DefaultThreshold string
@@ -819,11 +819,11 @@ type AlertMetricOptionView struct {
 
 // AlertRuleView renders one row in the rules section of the alerts overview.
 type AlertRuleView struct {
-	ID               int64
-	ServerLabel      string
-	IsGlobal         bool
-	Metric           string
-	MetricLabel      string
+	ID          int64
+	ServerLabel string
+	IsGlobal    bool
+	Metric      string
+	MetricLabel string
 	// ConditionKind mirrors alerts.MetricKind: "boolean" rules render an
 	// "on detection" badge instead of the meaningless internal "≥ 1".
 	ConditionKind    string
@@ -1142,7 +1142,9 @@ func NewRenderer() (*Renderer, error) {
 		"hasSuffix":  strings.HasSuffix,
 		"float64": func(s string) float64 {
 			var v float64
-			fmt.Sscanf(s, "%f", &v)
+			if _, err := fmt.Sscanf(s, "%f", &v); err != nil {
+				return 0
+			}
 			return v
 		},
 		// t/tn/tsafe are placeholders so the templates parse; Render rebinds them

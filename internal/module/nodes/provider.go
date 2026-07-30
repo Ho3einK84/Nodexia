@@ -76,9 +76,10 @@ func actionByKey(actions []Action, key string) (Action, bool) {
 // Non-interactive SSH exit codes produced by the command preambles, mirroring
 // the bulk module's convention (88 = sudo locked out).
 const (
-	exitSudoPassword = 88
-	exitMissingCLI   = 86
-	exitNoDownloader = 85
+	exitSudoPassword         = 88
+	exitPromptContractChange = 87
+	exitMissingCLI           = 86
+	exitNoDownloader         = 85
 	// exitRemoteTimeout is GNU timeout's exit code; the PasarGuard install
 	// script tails container logs forever after installing, so the install
 	// command is bounded remotely and 124 does NOT mean the install failed.

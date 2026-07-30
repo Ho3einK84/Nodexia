@@ -13,6 +13,7 @@ import (
 
 	"github.com/Ho3einK84/Nodexia/internal/http/httperrors"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
+	"github.com/Ho3einK84/Nodexia/internal/humanize"
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 	"github.com/Ho3einK84/Nodexia/internal/sshclient"
@@ -214,7 +215,9 @@ func (h ActionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
-		defer file.Content.Close()
+		defer func() {
+			_ = file.Content.Close()
+		}()
 
 		downloadName := sanitizeDownloadName(file.Name)
 		contentType := mime.TypeByExtension(path.Ext(downloadName))
@@ -364,7 +367,7 @@ func validateForm(input FormInput, server servers.Server, deps module.Dependenci
 
 	remotePath, err := normalizeRemotePath(input.Path, defaultRemotePath(server))
 	if err != nil {
-		validationErrors["path"] = err.Error()
+		validationErrors["path"] = validationErrorMessage(err)
 	}
 
 	password := strings.TrimSpace(input.Password)
@@ -410,10 +413,15 @@ func listingViewFromResult(listing sshclient.DirectoryListing) view.FileListingV
 			modUnix = entry.ModifiedAt.Unix()
 		}
 		items = append(items, view.FileEntryView{
-			Name:       entry.Name,
-			Path:       entry.Path,
-			Kind:       kind,
-			Size:       formatSize(entry.Size),
+			Name: entry.Name,
+			Path: entry.Path,
+			Kind: kind,
+			Size: humanize.Bytes(
+				entry.Size,
+				humanize.WithPrecision(1),
+				humanize.WithIntegerBytes(),
+				humanize.WithoutNonPositiveFallback(),
+			),
 			SizeBytes:  entry.Size,
 			Mode:       entry.Mode,
 			ModifiedAt: formatTimestamp(entry.ModifiedAt),
@@ -432,7 +440,7 @@ func listingViewFromResult(listing sshclient.DirectoryListing) view.FileListingV
 func normalizeRemotePath(rawPath string, fallback string) (string, error) {
 	rawPath = strings.TrimSpace(rawPath)
 	if strings.Contains(rawPath, "\x00") {
-		return "", errors.New("Enter a valid remote path without null bytes.")
+		return "", errors.New("enter a valid remote path without null bytes")
 	}
 	if rawPath == "" {
 		rawPath = fallback
@@ -528,19 +536,6 @@ func fallbackString(value, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-func formatSize(size int64) string {
-	const unit = 1024
-	if size < unit {
-		return fmt.Sprintf("%d B", size)
-	}
-	div, exp := int64(unit), 0
-	for n := size / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", float64(size)/float64(div), "KMGTPE"[exp])
 }
 
 func formatTimestamp(value time.Time) string {

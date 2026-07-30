@@ -7,6 +7,59 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.7.0 — Stabilization & production readiness
+
+### Display consistency
+
+- **Traffic and capacity labels standardized**: all Go views and
+  notifications now use one shared base-1024 byte formatter, and browser
+  code uses one shared JavaScript formatter. User-facing units are
+  `B/KB/MB/GB/TB/PB`; only the suffixes changed, so displayed values and
+  stored traffic-limit math remain base 1024. Analytics limit forms and
+  charts now use `GB/TB` labels as well.
+
+### Node discovery and install resilience
+
+- **PasarGuard versions resolved from startup logs**: discovery now reads
+  each linked container's `Starting Node: v…` startup line over the
+  existing SSH transport and treats it as authoritative. A meaningful
+  pinned image tag remains a fallback; `latest`, empty, and malformed tags
+  render as `unknown` instead of masquerading as real versions. Rebecca's
+  `.binary-release.json` resolution is unchanged.
+- **PasarGuard prompt contract guarded**: before positional answers are
+  sent, Nodexia validates the freshly downloaded upstream install script's
+  expected prompt text, count, and runtime order. A changed prompt sequence
+  now stops before installation with an actionable error and a dedicated
+  exit status, rather than applying an answer to the wrong question.
+- **Rebecca `/dev/tty` install crash fixed**: Rebecca binary/dev installs
+  now run in a non-echoing SSH pseudo-terminal. The certificate/private-key
+  bundle and both ports are written through the PTY input stream, allowing
+  the upstream script's `/dev/tty` fallback to work while keeping secrets
+  out of command strings, persisted storage, and streamed output.
+
+### Workspace behavior
+
+- **Node cards collapse to summaries**: each Nodes card starts with its
+  details closed and keeps its name, type, confidence, health/mode/protocol/
+  uptime pills, and action menu visible. Expanding reveals ports,
+  credentials, dependencies, and evidence; per-node state remains
+  localStorage-backed and works after dynamic rescans.
+- **All collapsibles default closed**: monitoring output, node probes and
+  scope, system output, Evidence, and every other template collapsible now
+  start closed on a fresh profile. Previously saved open/closed preferences
+  still take precedence.
+- **Plain desktop links stay in-pane**: ordinary tablet/desktop clicks now
+  navigate the active workspace pane, matching mobile taps. `Ctrl`/`Cmd`
+  click and middle-click still create background workspace tabs, and the
+  mobile long-press action sheet is unchanged.
+
+### CI hardening
+
+- **Required quality gates expanded**: push and pull-request CI now runs
+  `go vet ./...`, golangci-lint, `go test -race ./...`, and
+  `govulncheck ./...` before the existing build. Findings exposed by the
+  new gates were fixed in the current tree instead of suppressed.
+
 ## v0.6.8 — Security & quality hardening
 
 ### Security fixes

@@ -17,10 +17,27 @@ type ProbeReport struct {
 	Error   error
 }
 
+type commandRunner interface {
+	RunCommand(context.Context, sshclient.CommandRequest) (sshclient.CommandResult, error)
+}
+
+// versionResolvingProvider is an optional provider capability. PasarGuard uses
+// it to perform a follow-up Docker-log probe after its general discovery output
+// has revealed the real container names. Rebecca intentionally does not
+// implement it; its existing .binary-release.json path remains unchanged.
+type versionResolvingProvider interface {
+	VersionDiscoveryCommand(discoveryOutput string) string
+	ResolveVersions(snapshots []Snapshot, versionOutput string) []Snapshot
+}
+
 // Collect runs every provider's discovery probe over SSH and aggregates the
 // parsed node snapshots.  One probe failing (e.g. a transient SSH error) does
 // not abort the run — the per-probe error is reported alongside the results.
 func Collect(ctx context.Context, sshService *sshclient.Service, req sshclient.CommandRequest, providers []Provider) ([]Snapshot, []ProbeReport, error) {
+	return collect(ctx, sshService, req, providers)
+}
+
+func collect(ctx context.Context, sshService commandRunner, req sshclient.CommandRequest, providers []Provider) ([]Snapshot, []ProbeReport, error) {
 	if len(providers) == 0 {
 		providers = DefaultProviders()
 	}
@@ -49,7 +66,33 @@ func Collect(ctx context.Context, sshService *sshclient.Service, req sshclient.C
 		if err != nil {
 			continue
 		}
-		snapshots = append(snapshots, provider.ParseDiscovery(result.Stdout, result.CompletedAt)...)
+
+		providerSnapshots := provider.ParseDiscovery(result.Stdout, result.CompletedAt)
+		if resolver, ok := provider.(versionResolvingProvider); ok {
+			versionCommand := resolver.VersionDiscoveryCommand(result.Stdout)
+			if versionCommand != "" {
+				versionResult, versionErr := sshService.RunCommand(ctx, sshclient.CommandRequest{
+					ConnectionRequest: req.ConnectionRequest,
+					Command:           versionCommand,
+					CommandTimeout:    req.CommandTimeout,
+				})
+				if versionResult.CompletedAt.After(collectedAt) {
+					collectedAt = versionResult.CompletedAt
+				}
+				reports = append(reports, ProbeReport{
+					Label:   provider.Type() + "-version",
+					Command: versionCommand,
+					Result:  versionResult,
+					Error:   versionErr,
+				})
+				// A transport error can still leave complete stdout for one or
+				// more containers. The parser accepts only exact startup lines,
+				// so applying valid partial results is safe; every other node
+				// simply retains its image-tag/unknown fallback.
+				providerSnapshots = resolver.ResolveVersions(providerSnapshots, versionResult.Stdout)
+			}
+		}
+		snapshots = append(snapshots, providerSnapshots...)
 	}
 
 	if collectedAt.IsZero() {

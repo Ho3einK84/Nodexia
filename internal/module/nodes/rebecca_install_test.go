@@ -1,7 +1,8 @@
 package nodes
 
 import (
-	"encoding/base64"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -212,29 +213,20 @@ func TestRebeccaInstallCommand(t *testing.T) {
 		rebeccaDevScriptURL,
 		"REBECCA_NODE_SCRIPT_FLAVOR=binary",
 		"install --name rebecca-node --binary --dev",
-		"base64 -d",
 		"timeout",
-		`printf "62050\n62051\n"`,
+		"</dev/null",
 	} {
 		if !strings.Contains(command, want) {
 			t.Errorf("install command missing %q:\n%s", want, command)
 		}
 	}
 
-	// The bundle (cert + private key) must travel as base64 — neither the raw
-	// certificate nor the private key may appear in the command (sensitive).
-	if strings.Contains(command, "BEGIN CERTIFICATE") || strings.Contains(command, "PRIVATE KEY") {
-		t.Errorf("raw certificate/key leaked into the install command:\n%s", command)
-	}
-	// Decoding the embedded base64 must reproduce the bundle (cert + key).
-	normalized, _ := cfg.Normalize()
-	wantB64 := base64.StdEncoding.EncodeToString([]byte(normalized.Bundle))
-	if !strings.Contains(command, wantB64) {
-		t.Errorf("install command does not carry the base64-encoded bundle")
-	}
-	decoded, derr := base64.StdEncoding.DecodeString(wantB64)
-	if derr != nil || !strings.Contains(string(decoded), "BEGIN CERTIFICATE") || !strings.Contains(string(decoded), "PRIVATE KEY") {
-		t.Errorf("embedded base64 does not decode back to the cert+key bundle")
+	// The bundle is delivered only through the PTY input on the InstallStep.
+	// Neither raw PEM nor an encoded copy belongs in the shell command.
+	for _, secretMarker := range []string{"BEGIN CERTIFICATE", "PRIVATE KEY", "base64", "nodexia-rebecca-in"} {
+		if strings.Contains(command, secretMarker) {
+			t.Errorf("install command contains secret/input marker %q:\n%s", secretMarker, command)
+		}
 	}
 
 	// A malformed config must be rejected before any shell is produced.
@@ -260,6 +252,28 @@ func TestRebeccaBuildInstallPlan(t *testing.T) {
 	if plan.Steps[0].TolerateTimeout {
 		t.Errorf("Rebecca install step must not tolerate the remote timeout (it detaches)")
 	}
+	if !plan.Steps[0].AllocatePTY {
+		t.Errorf("Rebecca install step must allocate a PTY for the upstream /dev/tty fallback")
+	}
+	normalized, err := (RebeccaInstallConfig{
+		Channel: "dev",
+		Bundle:  testRebeccaBundle,
+	}).Normalize()
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if got, want := plan.Steps[0].Input, rebeccaInstallAnswers(normalized); got != want {
+		t.Fatalf("managed install input does not contain the normalized bundle and ports")
+	}
+	for _, want := range []string{"BEGIN CERTIFICATE", "BEGIN RSA PRIVATE KEY", "\n62050\n62051\n"} {
+		if !strings.Contains(plan.Steps[0].Input, want) {
+			t.Errorf("managed install input missing %q", want)
+		}
+	}
+	if strings.Contains(plan.Steps[0].Command, plan.Steps[0].Input) ||
+		strings.Contains(plan.Steps[0].Command, "BEGIN CERTIFICATE") {
+		t.Errorf("managed install input leaked into the command")
+	}
 	// No readback: the user supplied the bundle, nothing is read back.
 	if plan.Readback.Command != "" {
 		t.Errorf("Rebecca plan must have no readback command, got %q", plan.Readback.Command)
@@ -269,5 +283,77 @@ func TestRebeccaBuildInstallPlan(t *testing.T) {
 	_, errs = RebeccaProvider{}.BuildInstallPlan(installFormInput{Bundle: "bad"})
 	if _, ok := errs["bundle"]; !ok {
 		t.Errorf("expected bundle error from BuildInstallPlan, got %v", errs)
+	}
+}
+
+// TestRebeccaPreparedAnswersReachDevTTYFallback exercises the exact upstream
+// dispatch shape that triggered the production failure:
+//
+//	if [ ! -t 0 ] && [ -r /dev/tty ]; then install_command </dev/tty
+//
+// util-linux `script` supplies a real controlling PTY while process stdin is
+// redirected to /dev/null. The fixture succeeds only if the certificate, key,
+// and both ports written to the PTY all reach install_command.
+func TestRebeccaPreparedAnswersReachDevTTYFallback(t *testing.T) {
+	scriptTool, err := exec.LookPath("script")
+	if err != nil {
+		t.Skip("util-linux script is unavailable; cannot exercise /dev/tty fallback")
+	}
+
+	const fixture = `#!/usr/bin/env bash
+set -e
+install_command() {
+    have_cert=0
+    have_key=0
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [ "$line" = "-----END CERTIFICATE-----" ]; then
+            have_cert=1
+        fi
+        case "$line" in
+            -----END\ *PRIVATE\ KEY-----)
+                have_key=1
+                break
+                ;;
+        esac
+    done
+    IFS= read -r service_port
+    IFS= read -r api_port
+    if [ "$have_cert" -ne 1 ] || [ "$have_key" -ne 1 ] ||
+       [ "$service_port" != "62050" ] || [ "$api_port" != "62051" ]; then
+        echo "prepared answers were not delivered to install_command" >&2
+        exit 42
+    fi
+    echo "tty-fallback-answers-ok"
+}
+if [ ! -t 0 ] && [ -r /dev/tty ]; then
+    install_command </dev/tty
+else
+    echo "fixture did not enter the /dev/tty fallback" >&2
+    exit 43
+fi
+`
+	fixturePath := t.TempDir() + "/rebecca-tty-fixture.sh"
+	if err := os.WriteFile(fixturePath, []byte(fixture), 0o700); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	cfg, err := (RebeccaInstallConfig{
+		Channel:     "dev",
+		ServicePort: "62050",
+		APIPort:     "62051",
+		Bundle:      testRebeccaBundle,
+	}).Normalize()
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+
+	cmd := exec.Command(scriptTool, "-qec", "bash "+fixturePath+" </dev/null", "/dev/null")
+	cmd.Stdin = strings.NewReader(rebeccaInstallAnswers(cfg))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("/dev/tty fallback fixture failed: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "tty-fallback-answers-ok") {
+		t.Fatalf("fixture did not confirm answer delivery:\n%s", output)
 	}
 }

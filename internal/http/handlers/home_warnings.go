@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/db"
+	"github.com/Ho3einK84/Nodexia/internal/humanize"
 	"github.com/Ho3einK84/Nodexia/internal/module/analytics"
 	"github.com/Ho3einK84/Nodexia/internal/module/monitoring"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
@@ -131,7 +132,7 @@ func trafficWarnings(ctx context.Context, loc interface {
 		warnings = append(warnings, view.HomeWarningView{
 			ID: fmt.Sprintf("exh:%d:over", server.ID), Severity: "danger", Icon: "alert-octagon",
 			ServerID: server.ID, ServerName: server.Name,
-			Message:   loc.T("home.warn.limit_over", "server", server.Name, "limit", formatWarnBytes(ex.LimitBytes)),
+			Message:   loc.T("home.warn.limit_over", "server", server.Name, "limit", humanize.Bytes(ex.LimitBytes, humanize.WithNonPositiveFallback("-"))),
 			ActionURL: analyticsURL, ActionLabel: loc.T("home.warn.open_analytics"),
 		})
 	case ex.HasLimit && ex.WillExhaust:
@@ -170,8 +171,4 @@ func trafficWarnings(ctx context.Context, loc interface {
 		})
 	}
 	return warnings
-}
-
-func formatWarnBytes(b int64) string {
-	return dashboardFormatBytes(b)
 }

@@ -117,7 +117,9 @@ func (r *jobRunsRepository) ListRecent(ctx context.Context, limit int) ([]JobRun
 	if err != nil {
 		return nil, fmt.Errorf("scheduler: list job runs: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var out []JobRun
 	for rows.Next() {

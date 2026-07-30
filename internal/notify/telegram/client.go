@@ -110,7 +110,9 @@ func (c *Client) Send(ctx context.Context, chatID, text string) error {
 	if err != nil {
 		return c.redact(fmt.Errorf("telegram: send: %w", err))
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
 

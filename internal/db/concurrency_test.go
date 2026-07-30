@@ -38,7 +38,11 @@ func TestSQLiteConcurrentWritesAndReads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	defer runtime.Close()
+	t.Cleanup(func() {
+		if err := runtime.Close(); err != nil {
+			t.Errorf("close sqlite: %v", err)
+		}
+	})
 
 	ctx := context.Background()
 	if _, err := runtime.SQL.ExecContext(ctx, `CREATE TABLE latest_snapshots (

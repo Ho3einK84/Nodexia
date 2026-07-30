@@ -56,7 +56,7 @@ func TestHealthEndpointsSmoke(t *testing.T) {
 
 	t.Run("liveness", func(t *testing.T) {
 		resp := mustGet(t, server.URL+"/healthz")
-		defer resp.Body.Close()
+		defer closeResponseBody(resp)
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d", resp.StatusCode)
 		}
@@ -68,7 +68,7 @@ func TestHealthEndpointsSmoke(t *testing.T) {
 
 	t.Run("ready", func(t *testing.T) {
 		resp := mustGet(t, server.URL+"/healthz/ready")
-		defer resp.Body.Close()
+		defer closeResponseBody(resp)
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d", resp.StatusCode)
 		}
@@ -95,7 +95,7 @@ func TestHealthEndpointsSmoke(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GET /ops/diagnostics error = %v", err)
 		}
-		defer resp.Body.Close()
+		defer closeResponseBody(resp)
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d", resp.StatusCode)
 		}
@@ -165,6 +165,12 @@ func readBody(t *testing.T, resp *http.Response) string {
 	return string(data)
 }
 
+func closeResponseBody(resp *http.Response) {
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+}
+
 // TestStaticAssetCaching guards the cache validators on /static: every asset
 // must carry an ETag and a Cache-Control, fonts are immutable, and a matching
 // If-None-Match returns 304 (no re-download). Without these, embed.FS's zero
@@ -191,7 +197,7 @@ func TestStaticAssetCaching(t *testing.T) {
 
 	t.Run("css carries etag and revalidatable cache-control", func(t *testing.T) {
 		resp := mustGet(t, server.URL+"/static/style.css")
-		defer resp.Body.Close()
+		defer closeResponseBody(resp)
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d", resp.StatusCode)
 		}
@@ -210,7 +216,7 @@ func TestStaticAssetCaching(t *testing.T) {
 		if err != nil {
 			t.Fatalf("conditional GET error = %v", err)
 		}
-		defer cond.Body.Close()
+		defer closeResponseBody(cond)
 		if cond.StatusCode != http.StatusNotModified {
 			t.Fatalf("conditional status = %d, want 304", cond.StatusCode)
 		}
@@ -218,7 +224,7 @@ func TestStaticAssetCaching(t *testing.T) {
 
 	t.Run("fonts are immutable", func(t *testing.T) {
 		resp := mustGet(t, server.URL+"/static/fonts/exo2-latin.woff2")
-		defer resp.Body.Close()
+		defer closeResponseBody(resp)
 		if cc := resp.Header.Get("Cache-Control"); !strings.Contains(cc, "immutable") {
 			t.Fatalf("font Cache-Control = %q, want immutable", cc)
 		}

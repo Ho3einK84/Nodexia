@@ -55,7 +55,7 @@ func TestManifestServedPublicly(t *testing.T) {
 	server := newPWATestServer(t)
 
 	resp := mustGet(t, server.URL+"/manifest.webmanifest")
-	defer resp.Body.Close()
+	defer closeResponseBody(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (manifest must be public)", resp.StatusCode)
@@ -110,7 +110,7 @@ func TestManifestLocksPortrait(t *testing.T) {
 	server := newPWATestServer(t)
 
 	resp := mustGet(t, server.URL+"/manifest.webmanifest")
-	defer resp.Body.Close()
+	defer closeResponseBody(resp)
 
 	var manifest map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
@@ -131,7 +131,7 @@ func TestManifestShortcutsHaveIcons(t *testing.T) {
 	server := newPWATestServer(t)
 
 	resp := mustGet(t, server.URL+"/manifest.webmanifest")
-	defer resp.Body.Close()
+	defer closeResponseBody(resp)
 
 	var manifest struct {
 		Shortcuts []struct {
@@ -165,7 +165,7 @@ func TestManifestShortcutsHaveIcons(t *testing.T) {
 				has96 = true
 				// The referenced icon must actually be served.
 				iconResp := mustGet(t, server.URL+icon.Src)
-				iconResp.Body.Close()
+				closeResponseBody(iconResp)
 				if iconResp.StatusCode != http.StatusOK {
 					t.Fatalf("shortcut %q icon %s = %d, want 200", sc.Name, icon.Src, iconResp.StatusCode)
 				}
@@ -196,7 +196,7 @@ func TestShortcutTargetsResolveCleanly(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GET %s error = %v", url, err)
 		}
-		resp.Body.Close()
+		closeResponseBody(resp)
 		if resp.StatusCode != http.StatusSeeOther {
 			t.Fatalf("GET %s = %d, want 303 (clean auth redirect)", url, resp.StatusCode)
 		}
@@ -212,7 +212,7 @@ func TestServiceWorkerServedFromRoot(t *testing.T) {
 	server := newPWATestServer(t)
 
 	resp := mustGet(t, server.URL+"/sw.js")
-	defer resp.Body.Close()
+	defer closeResponseBody(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -247,7 +247,7 @@ func TestPWAAssetsPresent(t *testing.T) {
 		"/static/sw.js",
 	} {
 		resp := mustGet(t, server.URL+path)
-		resp.Body.Close()
+		closeResponseBody(resp)
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("GET %s = %d, want 200", path, resp.StatusCode)
 		}

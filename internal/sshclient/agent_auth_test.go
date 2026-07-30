@@ -129,7 +129,7 @@ func TestAgentAuthHandshake(t *testing.T) {
 		t.Fatalf("client handshake with agent auth failed: %v", err)
 	}
 	client := xssh.NewClient(conn, chans, reqs)
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	select {
 	case err := <-serverDone:
@@ -148,7 +148,7 @@ func tcpPipe(t *testing.T) (net.Conn, net.Conn) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	type accepted struct {
 		conn net.Conn

@@ -101,7 +101,7 @@ func ValidateForm(input FormInput) (ValidatedForm, ValidationErrors) {
 
 	tags, tagErr := normalizeTags(input.Tags)
 	if tagErr != nil {
-		errors.Add("tags", tagErr.Error())
+		errors.Add("tags", validationErrorMessage(tagErr))
 	}
 	server.Tags = tags
 
@@ -277,7 +277,7 @@ func validateCredential(strategy string, reference string, errors ValidationErro
 		}
 		if reference != "" {
 			if err := validateCredentialReference(reference); err != nil {
-				errors.Add("credential_ref", err.Error())
+				errors.Add("credential_ref", validationErrorMessage(err))
 			}
 		}
 	default:
@@ -304,7 +304,7 @@ func normalizeTags(raw string) ([]string, error) {
 		}
 
 		if len(tag) > 40 {
-			return nil, fmt.Errorf("Each label must be 40 characters or fewer")
+			return nil, fmt.Errorf("each label must be 40 characters or fewer")
 		}
 
 		normalized := strings.ToLower(tag)
@@ -333,7 +333,7 @@ func validateCredentialReference(value string) error {
 		return r == ';' || r == '\n' || r == '\r'
 	})
 	if len(parts) == 0 {
-		return fmt.Errorf("Credential reference must use key=value segments or a secret-manager URI")
+		return fmt.Errorf("credential reference must use key=value segments or a secret-manager URI")
 	}
 
 	allowedKeys := map[string]struct{}{
@@ -349,22 +349,34 @@ func validateCredentialReference(value string) error {
 	for _, part := range parts {
 		key, current, ok := strings.Cut(strings.TrimSpace(part), "=")
 		if !ok {
-			return fmt.Errorf("Credential reference segment %q must use key=value", part)
+			return fmt.Errorf("credential reference segment %q must use key=value", part)
 		}
 		key = strings.TrimSpace(strings.ToLower(key))
 		current = strings.TrimSpace(current)
 		if _, ok := allowedKeys[key]; !ok {
-			return fmt.Errorf("Credential reference key %q is not supported", key)
+			return fmt.Errorf("credential reference key %q is not supported", key)
 		}
 		if current == "" {
-			return fmt.Errorf("Credential reference key %q must include a non-empty value", key)
+			return fmt.Errorf("credential reference key %q must include a non-empty value", key)
 		}
 		if !isSafeReferenceValue(current) {
-			return fmt.Errorf("Credential reference value for %q contains unsupported characters", key)
+			return fmt.Errorf("credential reference value for %q contains unsupported characters", key)
 		}
 	}
 
 	return nil
+}
+
+// validationErrorMessage restores sentence casing where validation errors are
+// copied into standalone form-field messages.
+func validationErrorMessage(err error) string {
+	msg := err.Error()
+	if msg == "" {
+		return ""
+	}
+	runes := []rune(msg)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
 }
 
 func isSafeReferenceValue(value string) bool {

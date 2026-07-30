@@ -90,6 +90,7 @@
   margin-inline-start: 0;
 }
 
+.node-card__body-toggle,
 .node-card__menu-toggle {
   width: 32px;
   min-height: 32px;
@@ -97,6 +98,11 @@
   flex-shrink: 0;
 }
 
+.node-card__body-toggle {
+  justify-content: center;
+}
+
+.node-card__body-toggle .collapsible__icon,
 .node-card__menu-toggle svg {
   width: 18px;
   height: 18px;
@@ -231,6 +237,16 @@
   color: #fb923c;
   background: rgba(251, 146, 60, 0.07);
   border-color: rgba(251, 146, 60, 0.18);
+}
+
+/* ── Collapsible card body ──────────────────────────────────────────────── */
+
+.node-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  min-width: 0;
+  padding-top: 0;
 }
 
 /* ── Mini facts grid ─────────────────────────────────────────────────────── */

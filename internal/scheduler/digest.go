@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Ho3einK84/Nodexia/internal/humanize"
 	"github.com/Ho3einK84/Nodexia/internal/module/alerts"
 	"github.com/Ho3einK84/Nodexia/internal/module/analytics"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
@@ -166,12 +167,12 @@ func digestServerLine(name string, summary analytics.ServerTrafficSummary, fc an
 	download := "no data yet"
 	total := "no data yet"
 	if summary.MonthBytes > 0 || summary.MonthRX > 0 || summary.MonthTX > 0 {
-		download = formatBytes(summary.MonthRX)
+		download = humanize.Bytes(summary.MonthRX)
 		monthTotal := summary.MonthBytes
 		if monthTotal == 0 {
 			monthTotal = summary.MonthRX + summary.MonthTX
 		}
-		total = formatBytes(monthTotal)
+		total = humanize.Bytes(monthTotal)
 	}
 
 	return notify.DigestServer{
@@ -191,26 +192,10 @@ func digestLimitState(fc analytics.ForecastOutput) string {
 	case !ex.HasLimit:
 		return "No monthly download limit set"
 	case ex.AlreadyOver:
-		return fmt.Sprintf("⚠️ Monthly limit already exceeded (limit %s)", formatBytes(ex.LimitBytes))
+		return fmt.Sprintf("⚠️ Monthly limit already exceeded (limit %s)", humanize.Bytes(ex.LimitBytes))
 	case ex.WillExhaust:
-		return fmt.Sprintf("⚠️ Projected to reach limit in %d day(s) on %s (limit %s)", ex.DaysRemaining, ex.ExhaustionDate, formatBytes(ex.LimitBytes))
+		return fmt.Sprintf("⚠️ Projected to reach limit in %d day(s) on %s (limit %s)", ex.DaysRemaining, ex.ExhaustionDate, humanize.Bytes(ex.LimitBytes))
 	default:
-		return fmt.Sprintf("On track to stay under limit (%s)", formatBytes(ex.LimitBytes))
+		return fmt.Sprintf("On track to stay under limit (%s)", humanize.Bytes(ex.LimitBytes))
 	}
-}
-
-// formatBytes renders a byte count as a human-readable size, matching the
-// analytics module's own formatting so the digest reads like the overview.
-func formatBytes(b int64) string {
-	if b <= 0 {
-		return "0 B"
-	}
-	units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
-	size := float64(b)
-	unit := units[0]
-	for i := 0; i < len(units)-1 && size >= 1024; i++ {
-		size /= 1024
-		unit = units[i+1]
-	}
-	return fmt.Sprintf("%.2f %s", size, unit)
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/db"
 	"github.com/Ho3einK84/Nodexia/internal/geoip"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
+	"github.com/Ho3einK84/Nodexia/internal/humanize"
 	"github.com/Ho3einK84/Nodexia/internal/module/monitoring"
 	"github.com/Ho3einK84/Nodexia/internal/module/nodes"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
@@ -112,7 +113,7 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if traffic, ok := trafficByServer[snapshot.ServerID]; ok && traffic.Available {
 					for _, row := range traffic.MonthlyRows {
 						if row.Label == currentMonth {
-							v.CurrentMonthDL = dashboardFormatBytes(row.RXBytes)
+							v.CurrentMonthDL = humanize.Bytes(row.RXBytes, humanize.WithNonPositiveFallback("-"))
 							break
 						}
 					}
@@ -426,20 +427,6 @@ func formatDuration(value time.Duration) string {
 		return "-"
 	}
 	return value.Round(time.Millisecond).String()
-}
-
-func dashboardFormatBytes(value int64) string {
-	if value <= 0 {
-		return "-"
-	}
-	units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
-	size := float64(value)
-	unit := units[0]
-	for i := 0; i < len(units)-1 && size >= 1024; i++ {
-		size /= 1024
-		unit = units[i+1]
-	}
-	return fmt.Sprintf("%.2f %s", size, unit)
 }
 
 func dashboardFormatMbps(mbps float64) string {

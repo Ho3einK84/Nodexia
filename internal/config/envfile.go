@@ -20,7 +20,9 @@ func loadEnvFile(path string) error {
 
 		return fmt.Errorf("config: open env file %q: %w", path, err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	scanner := bufio.NewScanner(file)
 	for lineNo := 1; scanner.Scan(); lineNo++ {

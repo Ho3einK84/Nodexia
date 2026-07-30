@@ -1,6 +1,9 @@
 package nodes
 
 import (
+	"errors"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -68,8 +71,8 @@ func TestPasarGuardParseDiscovery(t *testing.T) {
 	if pgNode.Protocol != "grpc" {
 		t.Errorf("pg-node Protocol = %q, want grpc", pgNode.Protocol)
 	}
-	if pgNode.Version != "latest" {
-		t.Errorf("pg-node Version = %q, want latest (from linked container)", pgNode.Version)
+	if pgNode.Version != pasarguardUnresolvedVersion {
+		t.Errorf("pg-node Version = %q, want %q when the only image tag is latest", pgNode.Version, pasarguardUnresolvedVersion)
 	}
 	if pgNode.DataDir != "/var/lib/pg-node" {
 		t.Errorf("pg-node DataDir = %q, want /var/lib/pg-node", pgNode.DataDir)
@@ -123,6 +126,9 @@ func TestPasarGuardParseDiscovery(t *testing.T) {
 	if orphan.Confidence != "medium" {
 		t.Errorf("orphan Confidence = %q, want medium (no .env evidence)", orphan.Confidence)
 	}
+	if orphan.Version != pasarguardUnresolvedVersion {
+		t.Errorf("orphan Version = %q, want %q when startup logs are unavailable and the image tag is latest", orphan.Version, pasarguardUnresolvedVersion)
+	}
 
 	if _, found := byName["caddy"]; found {
 		t.Fatalf("non-PasarGuard container must not produce a snapshot")
@@ -137,6 +143,127 @@ func containsSubstring(values []string, sub string) bool {
 		}
 	}
 	return false
+}
+
+func TestPasarGuardResolveVersions(t *testing.T) {
+	base := []Snapshot{
+		{NodeType: pasarguardType, ServiceName: "pg-node", Version: pasarguardUnresolvedVersion},
+		// A valid startup-log version must override even a meaningful pinned
+		// image-tag fallback because the process log is authoritative.
+		{NodeType: pasarguardType, ServiceName: "node2", Version: "v0.5.0"},
+		// The optional resolver must never touch another provider's snapshots.
+		{NodeType: rebeccaType, ServiceName: "rebecca-node", Version: "v0.2.1"},
+	}
+
+	tests := []struct {
+		name       string
+		output     string
+		wantPGNode string
+		wantNode2  string
+	}{
+		{
+			name: "startup log present",
+			output: `=PGVERSIONS=
+pg-node	Starting Node: v0.5.3
+node2	Starting Node: v0.6.1
+=PGVERSIONSEND=`,
+			wantPGNode: "0.5.3",
+			wantNode2:  "0.6.1",
+		},
+		{
+			name: "startup log absent uses graceful fallback",
+			output: `=PGVERSIONS=
+=PGVERSIONSEND=`,
+			wantPGNode: pasarguardUnresolvedVersion,
+			wantNode2:  "v0.5.0",
+		},
+		{
+			name: "malformed startup logs are ignored",
+			output: `=PGVERSIONS=
+pg-node	Starting Node: v0..5
+node2	Starting Node: v0.6.1-beta
+other	random output
+=PGVERSIONSEND=`,
+			wantPGNode: pasarguardUnresolvedVersion,
+			wantNode2:  "v0.5.0",
+		},
+	}
+
+	provider := PasarGuardProvider{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := provider.ResolveVersions(base, tt.output)
+			if got[0].Version != tt.wantPGNode {
+				t.Errorf("pg-node Version = %q, want %q", got[0].Version, tt.wantPGNode)
+			}
+			if got[1].Version != tt.wantNode2 {
+				t.Errorf("node2 Version = %q, want %q", got[1].Version, tt.wantNode2)
+			}
+			if got[2].Version != "v0.2.1" {
+				t.Errorf("Rebecca Version = %q, want unchanged v0.2.1", got[2].Version)
+			}
+			// ResolveVersions must not mutate the caller's baseline slice.
+			if base[0].Version != pasarguardUnresolvedVersion || base[1].Version != "v0.5.0" {
+				t.Fatalf("ResolveVersions mutated its input: %+v", base)
+			}
+		})
+	}
+}
+
+func TestParsePasarguardStartupVersion(t *testing.T) {
+	tests := map[string]string{
+		"Starting Node: v0.5.3":        "0.5.3",
+		"  Starting Node: v12.0  ":     "12.0",
+		"Starting Node: v0..5":         "",
+		"Starting Node: v0.5.":         "",
+		"Starting Node: v0.5.3-beta":   "",
+		"Starting Node: latest":        "",
+		"prefix Starting Node: v0.5.3": "",
+		"":                             "",
+	}
+	for line, want := range tests {
+		if got := parsePasarguardStartupVersion(line); got != want {
+			t.Errorf("parsePasarguardStartupVersion(%q) = %q, want %q", line, got, want)
+		}
+	}
+}
+
+func TestPasarGuardVersionDiscoveryCommand(t *testing.T) {
+	command := PasarGuardProvider{}.VersionDiscoveryCommand(pgDiscoveryFixture)
+	for _, containerName := range []string{"node", "node2", "orphan"} {
+		if !strings.Contains(command, `docker logs "`+containerName+`" 2>&1`) {
+			t.Errorf("version command must read startup logs for container %q:\n%s", containerName, command)
+		}
+	}
+	if strings.Contains(command, `docker logs "caddy"`) {
+		t.Errorf("version command must not read unrelated container logs:\n%s", command)
+	}
+	if !strings.Contains(command, `grep -o "Starting Node: v[0-9][0-9.]*"`) {
+		t.Errorf("version command is missing the constrained startup-version match:\n%s", command)
+	}
+	if !strings.Contains(command, `"pg-node" "$line"`) {
+		t.Errorf("version command must associate /opt/pg-node with its real container node:\n%s", command)
+	}
+}
+
+func TestPasarGuardImageVersionFallback(t *testing.T) {
+	tests := map[string]string{
+		"pasarguard/node:v0.5.3":                         "v0.5.3",
+		"pasarguard/node:edge":                           "edge",
+		"pasarguard/node:latest":                         "",
+		"pasarguard/node:LATEST":                         "",
+		"pasarguard/node":                                "",
+		"registry:5000/pasarguard/node":                  "",
+		"pasarguard/node@sha256:0123456789abcdef":        "",
+		"pasarguard/node:v0.5.3@sha256:0123456789abcdef": "v0.5.3",
+		"pasarguard/node:${NODE_VERSION:-latest}":        "",
+		"": "",
+	}
+	for image, want := range tests {
+		if got := pasarguardImageVersion(image); got != want {
+			t.Errorf("pasarguardImageVersion(%q) = %q, want %q", image, got, want)
+		}
+	}
 }
 
 // TestPasarGuardDiscoveryNoGhostDuplicate reproduces the exact reported server
@@ -345,9 +472,79 @@ func TestPasarGuardInstallCommand(t *testing.T) {
 	if strings.Contains(command, "--yes") {
 		t.Errorf("install command must not pass --yes (it locks port to 62050):\n%s", command)
 	}
+	guardAt := strings.Index(command, "PROMPT_RE=")
+	answersAt := strings.Index(command, `printf "\n\n\n\n62011\nn\n"`)
+	if guardAt < 0 || answersAt < 0 || guardAt >= answersAt {
+		t.Errorf("install command must validate the prompt contract before sending answers:\n%s", command)
+	}
 
 	if _, err := (PasarGuardProvider{}).InstallCommand("$(reboot)", cfg); err == nil {
 		t.Fatalf("InstallCommand must reject unsafe node names")
+	}
+}
+
+func TestPasarGuardPromptContractGuard(t *testing.T) {
+	const expected = `gen_self_signed_cert() {
+    read -rp "Enter additional SAN entries (comma separated): " extra_san
+}
+install_node() {
+    read -r -p "Do you want to use your own public certificate instead? (Y/n): " use_public_cert
+    gen_self_signed_cert
+    read -p "Enter your API Key (leave blank): " -r API_KEY
+    read -p "Do you want to use REST protocol instead? (y/N): " -r use_rest
+    read -p "Enter the SERVICE_PORT (default 62050): " -r SERVICE_PORT
+}
+install_command() {
+    read -p "Do you want to override the previous installation? (y/n) "
+    install_node "$node_version"
+    read -p "Do you want to install and start the systemd service? (Y/n): " install_service_choice
+}
+`
+
+	runGuard := func(t *testing.T, script string) (string, error) {
+		t.Helper()
+		path := t.TempDir() + "/pg-node.sh"
+		if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
+			t.Fatalf("write prompt fixture: %v", err)
+		}
+		cmd := exec.Command("sh", "-c", pasarguardPromptContractGuard())
+		cmd.Env = append(os.Environ(), "SCRIPT="+path)
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+
+	if output, err := runGuard(t, expected); err != nil {
+		t.Fatalf("expected prompt contract rejected: %v\n%s", err, output)
+	}
+
+	tests := map[string]string{
+		"unexpected prompt": strings.Replace(
+			expected,
+			`    read -p "Enter your API Key (leave blank): " -r API_KEY`,
+			"    read -p \"New upstream question: \" answer\n    read -p \"Enter your API Key (leave blank): \" -r API_KEY",
+			1,
+		),
+		"runtime order changed": strings.Replace(
+			expected,
+			"    gen_self_signed_cert\n    read -p \"Enter your API Key",
+			"    read -p \"Enter your API Key",
+			1,
+		),
+	}
+	for name, fixture := range tests {
+		t.Run(name, func(t *testing.T) {
+			output, err := runGuard(t, fixture)
+			if err == nil {
+				t.Fatalf("changed prompt contract unexpectedly passed")
+			}
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) || exitErr.ExitCode() != exitPromptContractChange {
+				t.Fatalf("guard error = %v, want exit %d\n%s", err, exitPromptContractChange, output)
+			}
+			if !strings.Contains(output, "prompt sequence changed") || !strings.Contains(output, "no answers were sent") {
+				t.Fatalf("guard output is not actionable: %q", output)
+			}
+		})
 	}
 }
 

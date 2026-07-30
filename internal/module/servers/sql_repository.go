@@ -105,7 +105,9 @@ func (r SQLRepository) List(ctx context.Context) ([]Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("servers: list: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var serversList []Server
 	var serverIDs []int64
@@ -390,7 +392,9 @@ func loadTags(ctx context.Context, queryer interface {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var tags []string
 	for rows.Next() {
@@ -423,7 +427,9 @@ func loadTagsBatch(ctx context.Context, db *sql.DB, serverIDs []int64) (map[int6
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	result := make(map[int64][]string, len(serverIDs))
 	for rows.Next() {

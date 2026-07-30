@@ -13,6 +13,7 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/geoip"
 	"github.com/Ho3einK84/Nodexia/internal/http/httperrors"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
+	"github.com/Ho3einK84/Nodexia/internal/humanize"
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
 	"github.com/Ho3einK84/Nodexia/internal/view"
@@ -154,7 +155,7 @@ func (h PageHandler) limitView(r *http.Request, server servers.Server) view.Anal
 	limit, ok, err := h.repo.GetTrafficLimit(r.Context(), server.ID)
 	if err == nil && ok {
 		v.HasLimit = true
-		v.LimitHuman = formatBytes(limit.Bytes)
+		v.LimitHuman = humanize.Bytes(limit.Bytes)
 		v.ValueInput, v.UnitInput = limitToValueUnit(limit.Bytes)
 		v.KindInput = limit.Kind
 		v.KindLabel = limitKindLabel(page, limit.Kind)
@@ -164,7 +165,7 @@ func (h PageHandler) limitView(r *http.Request, server servers.Server) view.Anal
 	// No per-server override: surface the inherited group/global cap (if any) so
 	// the operator sees the limit the forecast actually uses.
 	if eff, source, ok, err := h.repo.ResolveEffectiveLimit(r.Context(), server.ID, server.Tags); err == nil && ok {
-		v.InheritedHuman = formatBytes(eff.Bytes)
+		v.InheritedHuman = humanize.Bytes(eff.Bytes)
 		v.InheritedSource = limitSourceLabel(page, source)
 	}
 	return v
@@ -237,9 +238,9 @@ func (h PageHandler) currentPeriodTraffic(r *http.Request, server servers.Server
 		}
 		if rx > 0 || tx > 0 {
 			summary.HasData = true
-			summary.Download = formatBytes(rx)
-			summary.Upload = formatBytes(tx)
-			summary.Total = formatBytes(total)
+			summary.Download = humanize.Bytes(rx)
+			summary.Upload = humanize.Bytes(tx)
+			summary.Total = humanize.Bytes(total)
 		}
 		return summary
 	}
@@ -254,9 +255,9 @@ func (h PageHandler) currentPeriodTraffic(r *http.Request, server servers.Server
 			total = m.RX + m.TX
 		}
 		summary.HasData = true
-		summary.Download = formatBytes(m.RX)
-		summary.Upload = formatBytes(m.TX)
-		summary.Total = formatBytes(total)
+		summary.Download = humanize.Bytes(m.RX)
+		summary.Upload = humanize.Bytes(m.TX)
+		summary.Total = humanize.Bytes(total)
 		break
 	}
 	return summary
@@ -305,9 +306,9 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			ServerName:  s.ServerName,
 			FlagEmoji:   geoip.FlagEmoji(s.CountryCode),
 			CountryName: geoip.CountryName(s.CountryCode),
-			Download:    formatBytes(s.MonthRX),
-			Upload:      formatBytes(s.MonthTX),
-			MonthBytes:  formatBytes(s.MonthBytes),
+			Download:    humanize.Bytes(s.MonthRX),
+			Upload:      humanize.Bytes(s.MonthTX),
+			MonthBytes:  humanize.Bytes(s.MonthBytes),
 			MonthLabel:  s.MonthLabel,
 		})
 	}
@@ -331,7 +332,7 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Best-effort: a read error just renders the banner without figures.
 	if limit, ok, err := h.repo.GetScopedLimit(r.Context(), LimitScopeGlobal, ""); err == nil && ok {
 		globalView.HasGlobalLimit = true
-		globalView.GlobalLimitHuman = formatBytes(limit)
+		globalView.GlobalLimitHuman = humanize.Bytes(limit)
 	}
 	if rules, err := h.repo.ListScopedLimits(r.Context()); err == nil {
 		for _, rule := range rules {
@@ -513,7 +514,7 @@ func (h DataHandler) buildTrafficChart(r *http.Request, serverID int64) (ChartDa
 	return ChartDataResponse{
 		Metric: "traffic",
 		Range:  "30d",
-		Unit:   "GiB",
+		Unit:   "GB",
 		Labels: labels,
 		Series: []ChartSeries{
 			{Label: "Download", Color: "#3b82f6", Fill: "#3b82f622", Data: rxData},
@@ -570,22 +571,22 @@ func (h ForecastHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Today: PeriodForecastJSON{
 			CurrentBytes:   out.Today.CurrentBytes,
 			PredictedBytes: out.Today.PredictedBytes,
-			CurrentHuman:   formatBytes(out.Today.CurrentBytes),
-			PredictedHuman: formatBytes(out.Today.PredictedBytes),
+			CurrentHuman:   humanize.Bytes(out.Today.CurrentBytes),
+			PredictedHuman: humanize.Bytes(out.Today.PredictedBytes),
 			PctElapsed:     todayPctElapsed,
 		},
 		ThisWeek: PeriodForecastJSON{
 			CurrentBytes:   out.ThisWeek.CurrentBytes,
 			PredictedBytes: out.ThisWeek.PredictedBytes,
-			CurrentHuman:   formatBytes(out.ThisWeek.CurrentBytes),
-			PredictedHuman: formatBytes(out.ThisWeek.PredictedBytes),
+			CurrentHuman:   humanize.Bytes(out.ThisWeek.CurrentBytes),
+			PredictedHuman: humanize.Bytes(out.ThisWeek.PredictedBytes),
 			PctElapsed:     weekPctElapsed,
 		},
 		ThisMonth: PeriodForecastJSON{
 			CurrentBytes:   out.ThisMonth.CurrentBytes,
 			PredictedBytes: out.ThisMonth.PredictedBytes,
-			CurrentHuman:   formatBytes(out.ThisMonth.CurrentBytes),
-			PredictedHuman: formatBytes(out.ThisMonth.PredictedBytes),
+			CurrentHuman:   humanize.Bytes(out.ThisMonth.CurrentBytes),
+			PredictedHuman: humanize.Bytes(out.ThisMonth.PredictedBytes),
 			PctElapsed:     monthPctElapsed,
 		},
 		Algorithm:   out.Algorithm,
@@ -602,14 +603,14 @@ func (h ForecastHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Exhaustion: ExhaustionForecastJSON{
 			HasLimit:          out.Exhaustion.HasLimit,
 			LimitBytes:        out.Exhaustion.LimitBytes,
-			LimitHuman:        formatBytes(out.Exhaustion.LimitBytes),
+			LimitHuman:        humanize.Bytes(out.Exhaustion.LimitBytes),
 			AlreadyOver:       out.Exhaustion.AlreadyOver,
 			WillExhaust:       out.Exhaustion.WillExhaust,
 			DaysRemaining:     out.Exhaustion.DaysRemaining,
 			ExhaustionDate:    out.Exhaustion.ExhaustionDate,
 			DaysUntilMonthEnd: out.Exhaustion.DaysUntilMonthEnd,
 			ProjectedBytes:    out.Exhaustion.ProjectedMonth,
-			ProjectedHuman:    formatBytes(out.Exhaustion.ProjectedMonth),
+			ProjectedHuman:    humanize.Bytes(out.Exhaustion.ProjectedMonth),
 		},
 	}
 
@@ -618,12 +619,12 @@ func (h ForecastHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // ── Traffic-limit form handler ──────────────────────────────────────────────
 
-// limitUnitOptions are the units the limit form accepts. GiB and TiB cover the
+// limitUnitOptions are the units the limit form accepts. GB and TB cover the
 // realistic range of VPS monthly download caps; defaultLimitUnit pre-selects the
 // most common one for a fresh form.
-var limitUnitOptions = []string{"GiB", "TiB"}
+var limitUnitOptions = []string{"GB", "TB"}
 
-const defaultLimitUnit = "GiB"
+const defaultLimitUnit = "GB"
 
 type LimitHandler struct {
 	deps       module.Dependencies
@@ -704,7 +705,7 @@ func (h LimitHandler) renderError(w http.ResponseWriter, r *http.Request, server
 		CredentialStrategy: server.CredentialStrategy,
 	}
 
-	pageHandler := PageHandler{deps: h.deps, serverRepo: h.serverRepo, repo: h.repo}
+	pageHandler := PageHandler(h)
 	page.AnalyticsTrafficMonth = pageHandler.currentPeriodTraffic(r, server)
 	limitView := pageHandler.limitView(r, server)
 	limitView.ValueInput = value
@@ -760,9 +761,9 @@ func parseLimitBytes(rawValue, unit string) (int64, bool) {
 	}
 	var mult float64
 	switch unit {
-	case "TiB":
+	case "TB":
 		mult = 1024 * 1024 * 1024 * 1024
-	default: // GiB
+	default: // GB
 		mult = 1024 * 1024 * 1024
 	}
 	bytes := int64(value * mult)
@@ -773,14 +774,14 @@ func parseLimitBytes(rawValue, unit string) (int64, bool) {
 }
 
 // limitToValueUnit renders a stored byte count back into a form-friendly value +
-// unit, preferring TiB once the cap reaches 1 TiB so large plans read cleanly.
+// unit, preferring TB once the cap reaches 1 TB so large plans read cleanly.
 func limitToValueUnit(bytes int64) (value, unit string) {
 	const tib = float64(1024 * 1024 * 1024 * 1024)
 	const gib = float64(1024 * 1024 * 1024)
 	if float64(bytes) >= tib {
-		return trimFloat(float64(bytes) / tib), "TiB"
+		return trimFloat(float64(bytes) / tib), "TB"
 	}
-	return trimFloat(float64(bytes) / gib), "GiB"
+	return trimFloat(float64(bytes) / gib), "GB"
 }
 
 // trimFloat formats a float with up to 2 decimals and no trailing zeros, so a
@@ -906,20 +907,6 @@ func ceilToNice(v float64) float64 {
 		}
 	}
 	return v * 1.2
-}
-
-func formatBytes(b int64) string {
-	if b <= 0 {
-		return "0 B"
-	}
-	units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
-	size := float64(b)
-	unit := units[0]
-	for i := 0; i < len(units)-1 && size >= 1024; i++ {
-		size /= 1024
-		unit = units[i+1]
-	}
-	return fmt.Sprintf("%.2f %s", size, unit)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

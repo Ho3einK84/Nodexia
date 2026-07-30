@@ -151,7 +151,7 @@ var metricUnits = map[string]string{
 	MetricCPU:              "%",
 	MetricRAM:              "%",
 	MetricDisk:             "%",
-	MetricTrafficTotal:     "GiB",
+	MetricTrafficTotal:     "GB",
 	MetricBandwidth:        "Mbps",
 	MetricDaysToExhaustion: "days",
 }

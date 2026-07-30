@@ -91,7 +91,9 @@ func (h DiagnosticsHandler) BackupImport(w http.ResponseWriter, r *http.Request)
 		h.renderPage(w, r, http.StatusBadRequest, "error", h.tr(r, "backup.flash.restore_no_file"))
 		return
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	raw, err := io.ReadAll(io.LimitReader(file, maxBackupUpload))
 	if err != nil {

@@ -5,13 +5,19 @@ import (
 	"testing"
 )
 
-func TestLimitedBuffer_WritesWithinCap(t *testing.T) {
-	buf := newLimitedBuffer()
-	data := strings.Repeat("a", 100)
-	n, err := buf.Write([]byte(data))
+func writeLimitedBuffer(t *testing.T, buf *limitedBuffer, data []byte) int {
+	t.Helper()
+	n, err := buf.Write(data)
 	if err != nil {
 		t.Fatalf("Write error: %v", err)
 	}
+	return n
+}
+
+func TestLimitedBuffer_WritesWithinCap(t *testing.T) {
+	buf := newLimitedBuffer()
+	data := strings.Repeat("a", 100)
+	n := writeLimitedBuffer(t, buf, []byte(data))
 	if n != 100 {
 		t.Errorf("Write returned n=%d, want 100", n)
 	}
@@ -22,7 +28,7 @@ func TestLimitedBuffer_WritesWithinCap(t *testing.T) {
 
 func TestLimitedBuffer_TruncatesAtCap(t *testing.T) {
 	buf := &limitedBuffer{remaining: 10}
-	_, _ = buf.Write([]byte("12345678901234567890")) // 20 bytes, cap is 10
+	writeLimitedBuffer(t, buf, []byte("12345678901234567890")) // 20 bytes, cap is 10
 
 	got := buf.String()
 	if !strings.HasPrefix(got, "1234567890") {
@@ -35,13 +41,10 @@ func TestLimitedBuffer_TruncatesAtCap(t *testing.T) {
 
 func TestLimitedBuffer_DropsAfterCap(t *testing.T) {
 	buf := &limitedBuffer{remaining: 5}
-	_, _ = buf.Write([]byte("hello")) // exactly fills the cap
+	writeLimitedBuffer(t, buf, []byte("hello")) // exactly fills the cap
 
 	// First overflow write adds the truncation notice.
-	_, err := buf.Write([]byte("overflow"))
-	if err != nil {
-		t.Fatalf("Write after cap should not return error: %v", err)
-	}
+	writeLimitedBuffer(t, buf, []byte("overflow"))
 	if !strings.Contains(buf.String(), "truncated") {
 		t.Errorf("first overflow write should add truncation notice, got %q", buf.String())
 	}
@@ -49,7 +52,7 @@ func TestLimitedBuffer_DropsAfterCap(t *testing.T) {
 	afterFirst := buf.String()
 
 	// Further writes should be fully dropped (capped = true now).
-	_, _ = buf.Write([]byte("even more data"))
+	writeLimitedBuffer(t, buf, []byte("even more data"))
 	if buf.String() != afterFirst {
 		t.Errorf("write after capped state should be dropped; got %q", buf.String())
 	}
@@ -59,10 +62,7 @@ func TestLimitedBuffer_ExactCapFill(t *testing.T) {
 	const cap = 16
 	buf := &limitedBuffer{remaining: cap}
 	payload := strings.Repeat("x", cap)
-	n, err := buf.Write([]byte(payload))
-	if err != nil {
-		t.Fatalf("Write error: %v", err)
-	}
+	n := writeLimitedBuffer(t, buf, []byte(payload))
 	if n != cap {
 		t.Errorf("n=%d, want %d", n, cap)
 	}
@@ -79,10 +79,10 @@ func TestLimitedBuffer_FullCapReportsLength(t *testing.T) {
 	for i := range chunk {
 		chunk[i] = 'z'
 	}
-	buf.Write(chunk)
+	writeLimitedBuffer(t, buf, chunk)
 
 	// One more write should be dropped entirely.
-	buf.Write([]byte("extra"))
+	writeLimitedBuffer(t, buf, []byte("extra"))
 
 	result := buf.String()
 	if strings.HasSuffix(result, "extra") {

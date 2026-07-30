@@ -67,7 +67,9 @@ func (r SQLRepository) ListByServer(ctx context.Context, serverID int64, limit i
 	if err != nil {
 		return nil, fmt.Errorf("commands: list history for server %d: %w", serverID, err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	history := make([]HistoryEntry, 0, limit)
 	for rows.Next() {

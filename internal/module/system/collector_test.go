@@ -36,12 +36,12 @@ func TestParseInt64(t *testing.T) {
 
 func TestFormatKiB(t *testing.T) {
 	cases := map[int64]string{
-		0:         "-",
-		-5:        "-",
-		16461176:  "16 GiB",   // ~15.7 → rounded GiB for >=10
-		2097152:   "2.0 GiB",  // exactly 2 GiB
-		264212084: "252 GiB",  // root disk
-		1610612736: "1.5 TiB", // 1.5 TiB in KiB
+		0:          "-",
+		-5:         "-",
+		16461176:   "16 GB",  // ~15.7 → rounded GB for >=10
+		2097152:    "2.0 GB", // exactly 2 GB
+		264212084:  "252 GB", // root disk
+		1610612736: "1.5 TB", // 1.5 TB in KiB
 	}
 	for in, want := range cases {
 		if got := formatKiB(in); got != want {

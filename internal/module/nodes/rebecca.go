@@ -1,7 +1,6 @@
 package nodes
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -429,14 +428,17 @@ func (RebeccaProvider) reinstallScriptCommand(nodeName string) string {
 // It then writes /opt/rebecca-node/.env + the binary release metadata and
 // enables the systemd unit (`systemctl enable --now`, which returns at once).
 //
-// The bundle is multi-line PEM, so a bare interactive `read` can't carry it. We
-// deliver it robustly by base64-encoding the (re-ordered) bundle on our side and
-// decoding it into a temp stdin file on the remote, then appending the two
-// ports. base64 has no quotes/newlines/metacharacters, so it is safe inside the
-// outer `sh -c '...'` (no single quote ever appears — the
-// TestGeneratedShellSyntax guard) and immune to set -e / non-tty / SSH issues.
-// The private key is sensitive: it only ever exists as in-memory base64, is
-// never persisted, and the script echoes "bundle saved", never its contents.
+// The upstream install dispatcher redirects install_command to /dev/tty when
+// stdin is not a terminal. A normal SSH exec session has no controlling tty, so
+// the old temp-file redirect failed at `/dev/tty: No such device or address`.
+// Rebecca install steps now allocate a PTY and Nodexia writes the normalized
+// bundle plus ports through the PTY input stream. The command deliberately
+// starts the upstream script with /dev/null as process stdin, exercising its
+// intended /dev/tty fallback; /dev/tty is the allocated PTY, so it receives the
+// managed answers. sshclient disables terminal echo before sending anything.
+//
+// The private key remains only in the in-memory InstallStep.Input. It is not
+// embedded in the shell command, persisted, or appended to streamed job output.
 
 // RebeccaInstallConfig carries the pre-install choices for a Rebecca dev install.
 // Bundle is the node install bundle from the Rebecca panel: the client
@@ -579,8 +581,9 @@ func (RebeccaProvider) normalizeInstallInput(in installFormInput) (RebeccaInstal
 }
 
 // InstallCommand downloads and runs the official rebecca-node dev install
-// script in BINARY mode, feeding the install bundle (base64-decoded into a temp
-// stdin file) and the two ports the way the binary install path reads them.
+// script in BINARY mode. BuildInstallPlan pairs it with a PTY and the managed
+// input returned by rebeccaInstallAnswers; running this command without that
+// PTY/input contract is intentionally unsupported.
 func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) {
 	normalized, err := cfg.Normalize()
 	if err != nil {
@@ -588,32 +591,30 @@ func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) 
 	}
 	scriptURL := rebeccaDevScriptURL // only dev wired today; stable adds its URL here
 
-	// The bundle (cert + private key) never appears literally in the command —
-	// only as base64, which carries no quotes/newlines and so is safe inside
-	// sh -c '...'. The script's bundle reader stops at the END PRIVATE KEY line,
-	// so the ports follow immediately (no terminating blank line needed).
-	bundleB64 := base64.StdEncoding.EncodeToString([]byte(normalized.Bundle))
-
 	command := `sh -c '` + sudoPreamble +
 		`SCRIPT="$(mktemp /tmp/nodexia-rebecca-node.XXXXXX)" || exit 1; ` +
 		`if command -v curl >/dev/null 2>&1; then curl -fsSL ` + scriptURL + ` -o "$SCRIPT" || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + scriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`else echo "curl or wget is required to install" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
-		// Build the stdin the binary install expects: the bundle (cert+key),
-		// then SERVICE_PORT and XRAY_API_PORT.
-		`IN="$(mktemp /tmp/nodexia-rebecca-in.XXXXXX)" || { rm -f "$SCRIPT"; exit 1; }; ` +
-		`printf "%s" "` + bundleB64 + `" | base64 -d > "$IN" || { echo "bundle decode failed" >&2; rm -f "$SCRIPT" "$IN"; exit 1; }; ` +
-		`printf "` + normalized.ServicePort + `\n` + normalized.APIPort + `\n" >> "$IN"; ` +
 		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + rebeccaInstallScriptTimeout + `"; fi; ` +
 		// Run the binary-flavored script in binary mode (REBECCA_NODE_SCRIPT_FLAVOR
 		// carries through sudo). --name pins the instance to /opt/<name> so several
 		// Rebecca nodes can coexist; the COMMAND (install) must be parsed before
-		// --name, so order matters. NodeName is validated in Normalize.
-		`$TMO $SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" install --name ` + normalized.NodeName + ` --binary --dev <"$IN"; ` +
-		`STATUS=$?; rm -f "$SCRIPT" "$IN"; ` +
+		// --name, so order matters. Redirecting process stdin to /dev/null makes
+		// the upstream dispatcher take its /dev/tty path; the install step's PTY
+		// is that controlling terminal and carries the managed answers.
+		`$TMO $SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" install --name ` + normalized.NodeName + ` --binary --dev </dev/null; ` +
+		`STATUS=$?; rm -f "$SCRIPT"; ` +
 		`if [ "$STATUS" -ne 0 ]; then echo "[rebecca-node install script exited with status $STATUS]" >&2; fi; ` +
 		`exit $STATUS'`
 	return command, nil
+}
+
+// rebeccaInstallAnswers returns exactly the input sequence consumed by the
+// binary installer: certificate + key, service port, then Xray API port. cfg is
+// already normalized by BuildInstallPlan, so Bundle ends with one newline.
+func rebeccaInstallAnswers(cfg RebeccaInstallConfig) string {
+	return cfg.Bundle + cfg.ServicePort + "\n" + cfg.APIPort + "\n"
 }
 
 // BuildInstallPlan assembles the Rebecca dev install procedure: a single
@@ -631,7 +632,12 @@ func (p RebeccaProvider) BuildInstallPlan(in installFormInput) (InstallPlan, Val
 	}
 	plan := InstallPlan{
 		Steps: []InstallStep{
-			{Command: installCmd, Timeout: installCommandTimeout},
+			{
+				Command:     installCmd,
+				Input:       rebeccaInstallAnswers(cfg),
+				AllocatePTY: true,
+				Timeout:     installCommandTimeout,
+			},
 		},
 	}
 	return plan, errs

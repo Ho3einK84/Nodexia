@@ -118,3 +118,18 @@ func TestFriendlyError(t *testing.T) {
 		})
 	}
 }
+
+func TestValidationErrorMessage(t *testing.T) {
+	for _, tt := range []struct {
+		err  error
+		want string
+	}{
+		{errors.New("enter a name"), "Enter a name."},
+		{errors.New("choose a different name"), "Choose a different name."},
+		{errors.New("already punctuated!"), "Already punctuated!"},
+	} {
+		if got := validationErrorMessage(tt.err); got != tt.want {
+			t.Errorf("validationErrorMessage(%q) = %q, want %q", tt.err, got, tt.want)
+		}
+	}
+}

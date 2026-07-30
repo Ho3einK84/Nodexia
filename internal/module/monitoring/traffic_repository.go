@@ -182,7 +182,9 @@ func (r SQLRepository) GetLatestTrafficByServerIDs(ctx context.Context, serverID
 	if err != nil {
 		return nil, fmt.Errorf("monitoring: get latest vnstat snapshots for servers: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var snapshots []TrafficSnapshot
 	for rows.Next() {

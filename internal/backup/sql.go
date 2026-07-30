@@ -19,7 +19,9 @@ func readServers(ctx context.Context, dbtx db.DBTX) ([]ServerRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("backup: query servers: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var out []ServerRow
 	for rows.Next() {
@@ -46,7 +48,9 @@ func readServerTags(ctx context.Context, dbtx db.DBTX) ([]ServerTagRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("backup: query server_tags: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var out []ServerTagRow
 	for rows.Next() {
@@ -70,7 +74,9 @@ func readAlertChannels(ctx context.Context, dbtx db.DBTX) ([]AlertChannelRow, er
 	if err != nil {
 		return nil, fmt.Errorf("backup: query alert_channels: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var out []AlertChannelRow
 	for rows.Next() {
@@ -99,7 +105,9 @@ func readAlertRules(ctx context.Context, dbtx db.DBTX) ([]AlertRuleRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("backup: query alert_rules: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var out []AlertRuleRow
 	for rows.Next() {
@@ -131,7 +139,9 @@ func readAlertSilences(ctx context.Context, dbtx db.DBTX) ([]AlertSilenceRow, er
 	if err != nil {
 		return nil, fmt.Errorf("backup: query alert_silences: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var out []AlertSilenceRow
 	for rows.Next() {
@@ -157,7 +167,9 @@ func readInstallMetadata(ctx context.Context, dbtx db.DBTX) ([]InstallMetaRow, e
 	if err != nil {
 		return nil, fmt.Errorf("backup: query install_metadata: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var out []InstallMetaRow
 	for rows.Next() {

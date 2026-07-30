@@ -55,6 +55,15 @@ type CommandRequest struct {
 	ConnectionRequest
 	Command        string
 	CommandTimeout time.Duration
+	// Stdin, when non-nil, is copied to the remote command after it starts.
+	// Callers must never also log the reader's contents: install commands use
+	// this path for one-time certificate/private-key material.
+	Stdin io.Reader
+	// AllocatePTY runs the command behind a pseudo-terminal. It is intended for
+	// upstream interactive installers that explicitly read /dev/tty even when
+	// their process stdin is redirected. ECHO is disabled so machine-supplied
+	// secrets cannot be reflected into captured command output.
+	AllocatePTY bool
 }
 
 type CommandResult struct {
@@ -111,7 +120,7 @@ func (s *Service) TestConnection(ctx context.Context, req ConnectionRequest) (Co
 	if err != nil {
 		return ConnectionResult{}, err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	return ConnectionResult{
 		RemoteAddress: address,
@@ -134,13 +143,32 @@ func (s *Service) StreamCommand(ctx context.Context, req CommandRequest, handler
 	if err != nil {
 		return CommandResult{}, err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	session, err := client.NewSession()
 	if err != nil {
 		return CommandResult{}, fmt.Errorf("sshclient: create session: %w", err)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
+
+	if req.AllocatePTY {
+		modes := xssh.TerminalModes{
+			xssh.ECHO:          0,
+			xssh.TTY_OP_ISPEED: 38400,
+			xssh.TTY_OP_OSPEED: 38400,
+		}
+		if err := session.RequestPty("xterm-256color", 24, 80, modes); err != nil {
+			return CommandResult{}, fmt.Errorf("sshclient: request command pty: %w", err)
+		}
+	}
+
+	var stdinWriter io.WriteCloser
+	if req.Stdin != nil {
+		stdinWriter, err = session.StdinPipe()
+		if err != nil {
+			return CommandResult{}, fmt.Errorf("sshclient: stdin pipe: %w", err)
+		}
+	}
 
 	stdoutReader, err := session.StdoutPipe()
 	if err != nil {
@@ -162,6 +190,21 @@ func (s *Service) StreamCommand(ctx context.Context, req CommandRequest, handler
 	go streamOutput(stdoutReader, stdout, handlers.OnStdout, &streamWG)
 	go streamOutput(stderrReader, stderr, handlers.OnStderr, &streamWG)
 
+	var stdinDone <-chan error
+	if stdinWriter != nil {
+		done := make(chan error, 1)
+		stdinDone = done
+		go func() {
+			_, copyErr := io.Copy(stdinWriter, req.Stdin)
+			closeErr := stdinWriter.Close()
+			if copyErr != nil {
+				done <- copyErr
+				return
+			}
+			done <- closeErr
+		}()
+	}
+
 	waitTimeout := s.resolveCommandTimeout(req.CommandTimeout)
 	waitCtx, cancel := context.WithTimeout(ctx, waitTimeout)
 	defer cancel()
@@ -178,6 +221,7 @@ func (s *Service) StreamCommand(ctx context.Context, req CommandRequest, handler
 	select {
 	case err := <-waitResult:
 		streamWG.Wait()
+		stdinErr := commandInputError(stdinDone)
 		result.Stdout = stdout.String()
 		result.Stderr = stderr.String()
 		result.Duration = time.Since(startedAt)
@@ -186,6 +230,9 @@ func (s *Service) StreamCommand(ctx context.Context, req CommandRequest, handler
 		if err == nil {
 			exitCode := 0
 			result.ExitCode = &exitCode
+			if stdinErr != nil {
+				return result, fmt.Errorf("sshclient: send command stdin: %w", stdinErr)
+			}
 			return result, nil
 		}
 
@@ -202,10 +249,18 @@ func (s *Service) StreamCommand(ctx context.Context, req CommandRequest, handler
 		result.CompletedAt = time.Now().UTC()
 		_ = session.Close()
 		streamWG.Wait()
+		_ = commandInputError(stdinDone)
 		result.Stdout = stdout.String()
 		result.Stderr = stderr.String()
 		return result, fmt.Errorf("sshclient: command timed out after %s", waitTimeout)
 	}
+}
+
+func commandInputError(done <-chan error) error {
+	if done == nil {
+		return nil
+	}
+	return <-done
 }
 
 // maxStreamLineBytes bounds a single line read by StreamScan so a hostile or
@@ -231,13 +286,13 @@ func (s *Service) StreamScan(ctx context.Context, req CommandRequest, onLine fun
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	session, err := client.NewSession()
 	if err != nil {
 		return fmt.Errorf("sshclient: create session: %w", err)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	stdoutReader, err := session.StdoutPipe()
 	if err != nil {
@@ -319,7 +374,7 @@ func (s *Service) OpenShell(ctx context.Context, req ConnectionRequest, pio Inte
 
 	session, err := client.NewSession()
 	if err != nil {
-		client.Close()
+		_ = client.Close()
 		return fmt.Errorf("sshclient: create shell session: %w", err)
 	}
 
@@ -336,8 +391,8 @@ func (s *Service) OpenShell(ctx context.Context, req ConnectionRequest, pio Inte
 		cols = 80
 	}
 	if err := session.RequestPty("xterm-256color", int(rows), int(cols), modes); err != nil {
-		session.Close()
-		client.Close()
+		_ = session.Close()
+		_ = client.Close()
 		return fmt.Errorf("sshclient: request pty: %w", err)
 	}
 
@@ -346,8 +401,8 @@ func (s *Service) OpenShell(ctx context.Context, req ConnectionRequest, pio Inte
 	session.Stderr = pio.Stderr
 
 	if err := session.Shell(); err != nil {
-		session.Close()
-		client.Close()
+		_ = session.Close()
+		_ = client.Close()
 		return fmt.Errorf("sshclient: start shell: %w", err)
 	}
 
@@ -752,7 +807,7 @@ func (s *Service) openSFTP(ctx context.Context, req ConnectionRequest) (*xssh.Cl
 
 	sftpClient, err := sftp.NewClient(client)
 	if err != nil {
-		client.Close()
+		_ = client.Close()
 		return nil, nil, func() {}, fmt.Errorf("sshclient: create sftp client: %w", err)
 	}
 
@@ -1025,7 +1080,7 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 		_, _ = b.buf.Write(p[:b.remaining])
 		b.remaining = 0
 		b.capped = true
-		_, _ = b.buf.WriteString("\n[output truncated at 1 MiB]")
+		_, _ = b.buf.WriteString("\n[output truncated at 1 MB]")
 		return len(p), nil
 	}
 	n, err := b.buf.Write(p)

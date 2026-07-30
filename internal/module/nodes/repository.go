@@ -232,7 +232,9 @@ func (r SQLRepository) UptimeStats(ctx context.Context, serverID int64, since ti
 	if err != nil {
 		return nil, fmt.Errorf("nodes: uptime stats for server %d: %w", serverID, err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	out := map[string]NodeUptime{}
 	for rows.Next() {
@@ -285,7 +287,9 @@ func (r SQLRepository) GetLatestByServer(ctx context.Context, serverID int64) ([
 	if err != nil {
 		return nil, fmt.Errorf("nodes: list latest snapshots for server %d: %w", serverID, err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	snapshots := make([]Snapshot, 0)
 	for rows.Next() {
@@ -326,7 +330,9 @@ func (r SQLRepository) ListLatestNodeStatus(ctx context.Context) ([]ServerNodeSt
 	if err != nil {
 		return nil, fmt.Errorf("nodes: list latest node status: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	byServer := map[int64]*ServerNodeStatus{}
 	order := make([]int64, 0)

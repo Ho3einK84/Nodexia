@@ -938,7 +938,7 @@
     });
   }
 
-  /* ── Link click interception (§9 "Mobile navigation default") ─ */
+  /* ── Link click interception (§9) ──────────────────────────── */
   function initLinkInterception() {
     document.addEventListener('click', function (e) {
       if (e.shiftKey || e.altKey) return;
@@ -947,12 +947,12 @@
       var url = toURL(a.href);
       if (!url || url.origin !== window.location.origin) return;
       e.preventDefault();
-      if (window.innerWidth < MOBILE_BREAKPOINT) {
-        var tab = tabsById[activeTabId];
-        if (tab) navigateInPane(tab, url.pathname + url.search, {}, true);
+      if (window.innerWidth >= MOBILE_BREAKPOINT && (e.metaKey || e.ctrlKey)) {
+        open(url.pathname + url.search, { background: true });
         return;
       }
-      open(url.pathname + url.search, { background: e.metaKey || e.ctrlKey });
+      var tab = tabsById[activeTabId];
+      if (tab) navigateInPane(tab, url.pathname + url.search, {}, true);
     });
     // Middle-click fires `auxclick`, not `click`, in every modern browser.
     document.addEventListener('auxclick', function (e) {

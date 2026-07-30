@@ -11,7 +11,7 @@ func TestRenderDigestPopulated(t *testing.T) {
 		ServerCount:  2,
 		ActiveAlerts: 1,
 		Servers: []DigestServer{
-			{Name: "edge-1", MonthDownload: "120.50 GiB", MonthTotal: "150.00 GiB", LimitState: "⚠️ Projected to reach limit in 2 day(s) on 2026-06-21 (limit 500.00 GiB)", ActiveAlerts: 1},
+			{Name: "edge-1", MonthDownload: "120.50 GB", MonthTotal: "150.00 GB", LimitState: "⚠️ Projected to reach limit in 2 day(s) on 2026-06-21 (limit 500.00 GB)", ActiveAlerts: 1},
 			{Name: "edge-2", MonthDownload: "no data yet", MonthTotal: "no data yet", LimitState: "No monthly download limit set"},
 		},
 	}
@@ -24,7 +24,7 @@ func TestRenderDigestPopulated(t *testing.T) {
 		"2026-06-19 09:00 UTC",
 		"2 server(s) · 1 active alert(s)",
 		"edge-1",
-		"120.50 GiB",
+		"120.50 GB",
 		"Projected to reach limit in 2 day(s)",
 		"🔔 1 active alert(s)",
 		"edge-2",

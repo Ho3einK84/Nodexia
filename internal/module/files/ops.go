@@ -111,7 +111,7 @@ func (h OpsHandler) handleUpload(w http.ResponseWriter, r *http.Request, server 
 		}
 		base, nerr := sanitizeUploadName(part.FileName())
 		if nerr != nil {
-			writeJSONError(w, http.StatusUnprocessableEntity, nerr.Error())
+			writeJSONError(w, http.StatusUnprocessableEntity, validationErrorMessage(nerr))
 			return
 		}
 		remotePath := path.Join(targetDir, base)
@@ -143,7 +143,7 @@ func (h OpsHandler) handleMkdir(w http.ResponseWriter, r *http.Request, server s
 	}
 	base, err := validateBaseName(r.PostFormValue("name"))
 	if err != nil {
-		writeJSONError(w, http.StatusUnprocessableEntity, err.Error())
+		writeJSONError(w, http.StatusUnprocessableEntity, validationErrorMessage(err))
 		return
 	}
 	parent, err := normalizeRemotePath(r.PostFormValue("path"), defaultRemotePath(server))
@@ -173,7 +173,7 @@ func (h OpsHandler) handleRename(w http.ResponseWriter, r *http.Request, server 
 	}
 	base, err := validateBaseName(r.PostFormValue("name"))
 	if err != nil {
-		writeJSONError(w, http.StatusUnprocessableEntity, err.Error())
+		writeJSONError(w, http.StatusUnprocessableEntity, validationErrorMessage(err))
 		return
 	}
 	newPath := path.Join(path.Dir(oldPath), base)
@@ -262,13 +262,13 @@ func targetPath(raw string) (string, bool) {
 func validateBaseName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return "", errors.New("Enter a name.")
+		return "", errors.New("enter a name")
 	}
 	if strings.ContainsAny(name, "/\x00") {
-		return "", errors.New("Name cannot contain slashes.")
+		return "", errors.New("name cannot contain slashes")
 	}
 	if name == "." || name == ".." {
-		return "", errors.New("Choose a different name.")
+		return "", errors.New("choose a different name")
 	}
 	return name, nil
 }
@@ -285,6 +285,24 @@ func sanitizeUploadName(name string) (string, error) {
 func readLimited(r io.Reader, limit int64) string {
 	data, _ := io.ReadAll(io.LimitReader(r, limit))
 	return string(data)
+}
+
+// validationErrorMessage turns a composable Go error back into the standalone
+// sentence expected by file-form fields and JSON error responses.
+func validationErrorMessage(err error) string {
+	msg := err.Error()
+	if msg == "" {
+		return ""
+	}
+	runes := []rune(msg)
+	runes[0] = unicode.ToUpper(runes[0])
+	msg = string(runes)
+	switch msg[len(msg)-1] {
+	case '.', '!', '?':
+		return msg
+	default:
+		return msg + "."
+	}
 }
 
 // friendlyError strips the internal "sshclient:" prefixes from an error so the

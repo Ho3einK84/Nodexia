@@ -87,7 +87,9 @@ func runHealthcheck() {
 	if err != nil {
 		log.Fatalf("healthcheck: request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		log.Fatalf("healthcheck: unexpected status code %d", resp.StatusCode)

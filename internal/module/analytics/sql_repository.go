@@ -29,7 +29,9 @@ func (r SQLRepository) ListRawSince(ctx context.Context, serverID int64, since t
 	if err != nil {
 		return nil, fmt.Errorf("analytics: list raw since: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var points []RawPoint
 	for rows.Next() {
@@ -61,7 +63,9 @@ func (r SQLRepository) ListHourlyRollups(ctx context.Context, serverID int64, si
 	if err != nil {
 		return nil, fmt.Errorf("analytics: list hourly rollups: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var rollups []HourlyRollup
 	for rows.Next() {
@@ -94,7 +98,9 @@ func (r SQLRepository) ListDailyRollups(ctx context.Context, serverID int64, sin
 	if err != nil {
 		return nil, fmt.Errorf("analytics: list daily rollups: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var rollups []DailyRollup
 	for rows.Next() {
@@ -174,7 +180,9 @@ func (r SQLRepository) ListServerIDs(ctx context.Context) ([]int64, error) {
 	if err != nil {
 		return nil, fmt.Errorf("analytics: list server ids: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var ids []int64
 	for rows.Next() {
@@ -369,7 +377,9 @@ func (r SQLRepository) ListScopedLimits(ctx context.Context) ([]ScopedLimit, err
 	if err != nil {
 		return nil, fmt.Errorf("analytics: list scoped limits: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var out []ScopedLimit
 	for rows.Next() {
@@ -496,7 +506,9 @@ func (r SQLRepository) ListServerMetricSummaries(ctx context.Context, limit int)
 	if err != nil {
 		return nil, fmt.Errorf("analytics: list server metric summaries: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var summaries []ServerMetricSummary
 	for rows.Next() {
@@ -529,7 +541,9 @@ func (r SQLRepository) ListServerTrafficSummaries(ctx context.Context, limit int
 	if err != nil {
 		return nil, fmt.Errorf("analytics: list server traffic summaries: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	currentMonth := time.Now().UTC().Format("2006-01")
 	type rawRow struct {

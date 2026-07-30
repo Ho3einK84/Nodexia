@@ -70,7 +70,7 @@
   <div class="node-grid">
     {{ range .NodeSnapshots }}
     {{ if ne .NodeType "none" }}
-    <article class="node-card node-card--{{ .NodeType }}">
+    <article class="node-card node-card--{{ .NodeType }} collapsible">
 
       <header class="node-card__head">
         <span class="node-card__icon">
@@ -89,6 +89,15 @@
             </span>
             <span class="node-confidence__label">{{ .Confidence }}</span>
           </div>
+
+          <button type="button"
+                  class="collapsible__toggle node-card__body-toggle"
+                  data-collapse-key="node_body_{{ .NodeType }}_{{ .Name }}"
+                  data-collapse-default="closed"
+                  aria-label="{{ t "nodes.details_aria" "name" .Name }}"
+                  title="{{ t "nodes.details_aria" "name" .Name }}">
+            <i data-lucide="chevron-right" class="collapsible__icon"></i>
+          </button>
 
           {{ if .Actions }}
           <div class="action-menu action-menu--below node-card__menu" data-action-menu>
@@ -145,6 +154,7 @@
         {{ end }}
       </div>
 
+      <div class="collapsible__content node-card__body">
       <div class="node-facts">
         <div class="node-fact">
           <span class="node-fact__label"><i data-lucide="tag"></i> {{ t "common.version" }}</span>
@@ -235,6 +245,7 @@
 
       <div class="node-card__footer">
         <span><i data-lucide="calendar"></i> {{ .CollectedAt }}</span>
+      </div>
       </div>
 
     </article>
@@ -371,7 +382,7 @@
       <div class="node-probes">
         {{ range .NodeCollection.Probes }}
         <div class="collapsible node-probe">
-          <button class="collapsible__toggle" data-collapse-key="probe_{{ .Label }}">
+          <button class="collapsible__toggle" data-collapse-key="probe_{{ .Label }}" data-collapse-default="closed">
             <i data-lucide="chevron-right" class="collapsible__icon"></i>
             <span class="node-probe__label">{{ .Label }}</span>
             {{ if .Error }}<span class="node-probe__badge node-probe__badge--err">{{ t "nodes.probe_error" }}</span>{{ end }}
@@ -533,7 +544,7 @@
   {{/* ── How node management works ─────────────────────── */}}
   <article class="card node-scope">
     <div class="collapsible">
-      <button class="collapsible__toggle" data-collapse-key="node_scope">
+      <button class="collapsible__toggle" data-collapse-key="node_scope" data-collapse-default="closed">
         <i data-lucide="chevron-right" class="collapsible__icon"></i>
         <span><i data-lucide="book-open" class="icon-in-button"></i> {{ t "nodes.scope_title" }}</span>
       </button>

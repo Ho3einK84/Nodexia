@@ -38,10 +38,18 @@ const (
 // InstallStep is one streamed remote command in a provider's install plan.
 type InstallStep struct {
 	// StartLog, when non-empty, is appended to the live output before the step
-	// runs. The command string itself is NEVER logged: it may carry secrets
-	// (e.g. the Rebecca certificate is base64-embedded in the install command).
+	// runs. The command string itself is never logged; managed Input may carry
+	// one-time credentials and is likewise never copied into job output.
 	StartLog string
 	Command  string
+	// Input is delivered over the SSH session rather than embedded in Command.
+	// It may contain one-time credentials, so runInstall never appends it to the
+	// job output. Empty means the command receives no managed stdin.
+	Input string
+	// AllocatePTY gives interactive upstream installers a controlling terminal.
+	// Input is still written by Nodexia through that PTY, with terminal echo
+	// disabled by sshclient, so /dev/tty reads work without exposing secrets.
+	AllocatePTY bool
 	// Timeout backstops this step's SSH session. 0 falls back to
 	// installCommandTimeout.
 	Timeout time.Duration
@@ -75,9 +83,9 @@ type InstallPlan struct {
 	Readback InstallReadback
 }
 
-// installJob tracks one background node installation. The plan it carries may
-// embed secrets (the Rebecca certificate) in its command strings, so the job
-// is in-memory only and the command strings are never written to job.output.
+// installJob tracks one background node installation. A plan may carry secrets
+// (the Rebecca certificate in InstallStep.Input), so the job is in-memory only
+// and neither command strings nor managed input are written to job.output.
 type installJob struct {
 	id       string
 	serverID int64
@@ -105,7 +113,7 @@ func (j *installJob) appendOutput(chunk string) {
 	}
 	remaining := maxInstallOutputBytes - len(j.output)
 	if len(chunk) > remaining {
-		j.output += chunk[:remaining] + "\n[output truncated at 1 MiB]"
+		j.output += chunk[:remaining] + "\n[output truncated at 1 MB]"
 		return
 	}
 	j.output += chunk
@@ -238,11 +246,16 @@ func runInstall(job *installJob, ssh *sshclient.Service, conn sshclient.Connecti
 			timeout = installCommandTimeout
 		}
 		stepCtx, cancel := context.WithTimeout(ctx, timeout)
-		result, runErr := ssh.StreamCommand(stepCtx, sshclient.CommandRequest{
+		commandReq := sshclient.CommandRequest{
 			ConnectionRequest: conn,
 			Command:           step.Command,
 			CommandTimeout:    timeout,
-		}, sshclient.StreamHandlers{
+			AllocatePTY:       step.AllocatePTY,
+		}
+		if step.Input != "" {
+			commandReq.Stdin = strings.NewReader(step.Input)
+		}
+		result, runErr := ssh.StreamCommand(stepCtx, commandReq, sshclient.StreamHandlers{
 			OnStdout: job.appendOutput,
 			OnStderr: job.appendOutput,
 		})
@@ -309,6 +322,8 @@ func installFailureMessage(exitCode int, stderr string) string {
 	switch exitCode {
 	case exitSudoPassword:
 		return "The install needs root or passwordless sudo on the target server."
+	case exitPromptContractChange:
+		return "The upstream PasarGuard installer prompt sequence has changed. Update Nodexia before retrying; no install answers were sent."
 	case exitNoDownloader:
 		return "The target server has neither curl nor wget to download the install script."
 	default:

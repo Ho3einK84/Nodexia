@@ -53,6 +53,21 @@
   window.nxT = I18N.t;
   window.nxTn = I18N.tn;
 
+  /* Shared byte formatter for page-specific scripts. Labels use the concise
+   * B/KB/MB/GB/TB/PB UI convention while scaling remains base 1024. */
+  function humanBytes(bytes) {
+    if (!bytes || bytes < 0) bytes = 0;
+    var units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+    var size = bytes;
+    var unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    return size.toFixed(size >= 100 || unitIndex === 0 ? 0 : 1) + ' ' + units[unitIndex];
+  }
+  window.nxHumanBytes = humanBytes;
+
   var prefersReducedMotion = window.matchMedia &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 

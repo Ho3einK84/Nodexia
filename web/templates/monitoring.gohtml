@@ -217,7 +217,7 @@
     {{ if .MonitoringTrafficCollection.Available }}
     <div class="traffic-collector">
       <div class="collapsible">
-        <button class="collapsible__toggle" data-collapse-key="traffic_collect">
+        <button class="collapsible__toggle" data-collapse-key="traffic_collect" data-collapse-default="closed">
           <i data-lucide="chevron-right" class="collapsible__icon"></i>
           <span>{{ t "monitoring.vnstat_output" }}</span>
           <code class="result-duration">{{ .MonitoringTrafficCollection.Duration }}</code>
@@ -354,7 +354,7 @@
       {{ if .MonitoringCollection.Error }}<pre class="output-block output-block--error">{{ .MonitoringCollection.Error }}</pre>{{ end }}
       {{ if .MonitoringCollection.Stdout }}
       <div class="collapsible">
-        <button class="collapsible__toggle" data-collapse-key="mon_stdout">
+        <button class="collapsible__toggle" data-collapse-key="mon_stdout" data-collapse-default="closed">
           <i data-lucide="chevron-right" class="collapsible__icon"></i> {{ t "common.stdout" }}
         </button>
         <div class="collapsible__content">
@@ -364,7 +364,7 @@
       {{ end }}
       {{ if .MonitoringCollection.Stderr }}
       <div class="collapsible">
-        <button class="collapsible__toggle" data-collapse-key="mon_stderr">
+        <button class="collapsible__toggle" data-collapse-key="mon_stderr" data-collapse-default="closed">
           <i data-lucide="chevron-right" class="collapsible__icon"></i> {{ t "common.stderr" }}
         </button>
         <div class="collapsible__content">

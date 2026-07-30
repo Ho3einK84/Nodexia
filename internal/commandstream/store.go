@@ -113,7 +113,7 @@ func appendCapped(buf, chunk string) string {
 	}
 	remaining := maxStreamOutputBytes - len(buf)
 	if len(chunk) > remaining {
-		return buf + chunk[:remaining] + "\n[output truncated at 1 MiB]"
+		return buf + chunk[:remaining] + "\n[output truncated at 1 MB]"
 	}
 	return buf + chunk
 }

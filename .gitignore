@@ -10,3 +10,4 @@ dist/
 *.sqlite3-shm
 *.sqlite3-wal
 coverage.out
+data/ssh_known_hosts.json

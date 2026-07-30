@@ -12,6 +12,7 @@ func TestGeneratedShellSyntax(t *testing.T) {
 	commands := []string{
 		PasarGuardProvider{}.DiscoveryCommand(),
 		RebeccaProvider{}.DiscoveryCommand(),
+		PasarGuardProvider{}.VersionDiscoveryCommand(pgDiscoveryFixture),
 	}
 	for _, p := range DefaultProviders() {
 		for _, a := range p.Actions() {

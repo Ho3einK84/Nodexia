@@ -173,7 +173,7 @@
         if (!s.data || idx >= s.data.length) continue;
         const v = s.data[idx];
         const formatted = unit === '%' ? v.toFixed(1) + '%'
-          : unit === 'GiB' ? v.toFixed(3) + ' GiB'
+          : unit === 'GB' ? v.toFixed(3) + ' GB'
           : v.toFixed(2) + (unit ? ' ' + unit : '');
         html += `<div class="chart-tooltip__row">
           <span class="chart-tooltip__dot" style="background:${validColor(s.color)}"></span>
@@ -246,7 +246,7 @@
 
   function formatAxisValue(v, unit) {
     if (unit === '%') return v.toFixed(0);
-    if (unit === 'GiB') return v.toFixed(1);
+    if (unit === 'GB') return v.toFixed(1);
     if (v >= 1000) return (v / 1000).toFixed(1) + 'k';
     return v.toFixed(v < 10 ? 1 : 0);
   }

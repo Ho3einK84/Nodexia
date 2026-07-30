@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Ho3einK84/Nodexia/internal/humanize"
 	"github.com/Ho3einK84/Nodexia/internal/sshclient"
 )
 
@@ -102,20 +103,21 @@ func parseInt64(value string) int64 {
 }
 
 // formatKiB renders a size given in kibibytes (1024-byte units, as /proc/meminfo
-// and `df -k` report) as a human-readable GiB/TiB string. Zero/negative → "-".
+// and `df -k` report) as a human-readable GB/TB string. Zero/negative → "-".
 func formatKiB(kib int64) string {
 	if kib <= 0 {
 		return "-"
 	}
-	const mib = 1024.0
-	gib := float64(kib) / mib / mib
-	if gib >= 1024 {
-		return fmt.Sprintf("%.1f TiB", gib/1024)
+	const kibPerGB = int64(1024 * 1024)
+	precision := 1
+	if kib >= 10*kibPerGB && kib < 1024*kibPerGB {
+		precision = 0
 	}
-	if gib >= 10 {
-		return fmt.Sprintf("%.0f GiB", gib)
-	}
-	return fmt.Sprintf("%.1f GiB", gib)
+	return humanize.Bytes(
+		kib*1024,
+		humanize.WithMinimumUnit(humanize.GB),
+		humanize.WithPrecision(precision),
+	)
 }
 
 func formatUnixTimestamp(value int64) string {

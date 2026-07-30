@@ -784,10 +784,11 @@ func (h *Handlers) loadStreamView(streamID string, serverID int64) (view.Command
 
 	flashKind := "success"
 	flashMessage := "The node action is running — output refreshes automatically."
-	if snapshot.Status == commandstream.StatusFailed {
+	switch snapshot.Status {
+	case commandstream.StatusFailed:
 		flashKind = "error"
 		flashMessage = "The node action ended with an error."
-	} else if snapshot.Status == commandstream.StatusCompleted {
+	case commandstream.StatusCompleted:
 		flashMessage = "Node action completed."
 	}
 

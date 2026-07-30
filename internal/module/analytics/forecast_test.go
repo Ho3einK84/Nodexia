@@ -18,7 +18,7 @@ func TestMovingAverageForecast(t *testing.T) {
 		}
 	})
 
-	t.Run("constant 1 GiB per day", func(t *testing.T) {
+	t.Run("constant 1 GB per day", func(t *testing.T) {
 		const gib = 1024 * 1024 * 1024
 		history := make([]int64, 14)
 		for i := range history {
@@ -136,7 +136,7 @@ func TestForecastServiceSmokeTest(t *testing.T) {
 	// Build 30 days of fake traffic data
 	days := make([]TrafficDay, 30)
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	const dailyBytes = 5 * 1024 * 1024 * 1024 // 5 GiB/day
+	const dailyBytes = 5 * 1024 * 1024 * 1024 // 5 GB/day
 	for i := range days {
 		days[i] = TrafficDay{
 			Label: base.AddDate(0, 0, i).Format("2006-01-02"),
@@ -161,7 +161,7 @@ func TestForecastServiceSmokeTest(t *testing.T) {
 func TestForecastUsesDownloadOnly(t *testing.T) {
 	svc := NewForecastService()
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	const rx = 3 * 1024 * 1024 * 1024 // 3 GiB/day download
+	const rx = 3 * 1024 * 1024 * 1024 // 3 GB/day download
 
 	// Same RX every day, but wildly different TX/Total between the two sets.
 	low := make([]TrafficDay, 30)
@@ -188,7 +188,7 @@ func TestForecastMonthMatchesMonthlyRX(t *testing.T) {
 	now := time.Now().UTC()
 	monthLabel := now.Format("2006-01")
 
-	const monthlyRX = 7 * 1024 * 1024 * 1024 * 1024 // 7 TiB authoritative month RX
+	const monthlyRX = 7 * 1024 * 1024 * 1024 * 1024 // 7 TB authoritative month RX
 
 	// Daily rows for the current month deliberately sum to a DIFFERENT (smaller)
 	// value than the monthly row — mirroring the 7-day daily cap. The forecast's
@@ -361,7 +361,7 @@ func TestExhaustionThroughCompute(t *testing.T) {
 	}
 	months := []TrafficMonth{{Label: monthLabel, RX: int64(now.Day()) << 30, TX: 0, Total: int64(now.Day()) << 30}}
 
-	tiny := svc.Compute(days, months, 1<<20) // 1 MiB — guaranteed exceeded
+	tiny := svc.Compute(days, months, 1<<20) // 1 MB — guaranteed exceeded
 	if !tiny.Risks.Exhaustion {
 		t.Errorf("expected exhaustion with a tiny limit, got false (predicted=%d)", tiny.ThisMonth.PredictedBytes)
 	}
@@ -377,7 +377,7 @@ func TestExhaustionThroughCompute(t *testing.T) {
 
 func TestComputeExhaustion(t *testing.T) {
 	const gib = int64(1024 * 1024 * 1024)
-	flat := func(time.Time) int64 { return gib } // 1 GiB/day
+	flat := func(time.Time) int64 { return gib } // 1 GB/day
 	// Mid-month so there is plenty of runway: Jan has 31 days.
 	now := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
 	const half = float64(gib) / 2 // today's remaining projected usage
@@ -404,8 +404,8 @@ func TestComputeExhaustion(t *testing.T) {
 	})
 
 	t.Run("exhausts today", func(t *testing.T) {
-		// 5 GiB used + 0.5 GiB remaining today crosses a 5.4 GiB limit.
-		limit := 5*gib + gib/2 - 1 // < 5.5 GiB
+		// 5 GB used + 0.5 GB remaining today crosses a 5.4 GB limit.
+		limit := 5*gib + gib/2 - 1 // < 5.5 GB
 		ef := computeExhaustion(now, 5*gib, 30*gib, limit, half, flat, daysInMonth(now.Year(), now.Month())-now.Day())
 		if !ef.WillExhaust || ef.DaysRemaining != 0 {
 			t.Errorf("expected exhaust today (days=0), got %+v", ef)
@@ -416,7 +416,7 @@ func TestComputeExhaustion(t *testing.T) {
 	})
 
 	t.Run("exhausts in N days", func(t *testing.T) {
-		// cum = 5 + 0.5 = 5.5, +1/day; crosses 10 GiB at i=5 → 2026-01-15.
+		// cum = 5 + 0.5 = 5.5, +1/day; crosses 10 GB at i=5 → 2026-01-15.
 		ef := computeExhaustion(now, 5*gib, 30*gib, 10*gib, half, flat, daysInMonth(now.Year(), now.Month())-now.Day())
 		if !ef.WillExhaust || ef.DaysRemaining != 5 {
 			t.Errorf("expected exhaust in 5 days, got %+v", ef)
@@ -465,7 +465,7 @@ func TestExhaustionPlumbedThroughCompute(t *testing.T) {
 		label := time.Date(now.Year(), now.Month(), d, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
 		days = append(days, TrafficDay{Label: label, RX: 1 << 30})
 	}
-	out := svc.Compute(days, nil, 1<<40) // 1 TiB limit
+	out := svc.Compute(days, nil, 1<<40) // 1 TB limit
 	if !out.Exhaustion.HasLimit {
 		t.Error("expected Exhaustion.HasLimit when a limit is configured")
 	}
@@ -489,14 +489,14 @@ func TestParseLimitBytes(t *testing.T) {
 		wantBytes   int64
 		wantOK      bool
 	}{
-		{"500", "GiB", 500 * gib, true},
-		{"1", "TiB", tib, true},
-		{"0.5", "TiB", tib / 2, true},
-		{"0", "GiB", 0, false},
-		{"-5", "GiB", 0, false},
-		{"abc", "GiB", 0, false},
-		{"", "GiB", 0, false},
-		{"100", "", 100 * gib, true}, // unknown unit falls back to GiB
+		{"500", "GB", 500 * gib, true},
+		{"1", "TB", tib, true},
+		{"0.5", "TB", tib / 2, true},
+		{"0", "GB", 0, false},
+		{"-5", "GB", 0, false},
+		{"abc", "GB", 0, false},
+		{"", "GB", 0, false},
+		{"100", "", 100 * gib, true}, // unknown unit falls back to GB
 	}
 	for _, c := range cases {
 		gotBytes, gotOK := parseLimitBytes(c.value, c.unit)
@@ -518,9 +518,9 @@ func TestLimitToValueUnit(t *testing.T) {
 		wantValue string
 		wantUnit  string
 	}{
-		{500 * gib, "500", "GiB"},
-		{tib, "1", "TiB"},
-		{tib + tib/2, "1.5", "TiB"},
+		{500 * gib, "500", "GB"},
+		{tib, "1", "TB"},
+		{tib + tib/2, "1.5", "TB"},
 	}
 	for _, c := range cases {
 		v, u := limitToValueUnit(c.bytes)

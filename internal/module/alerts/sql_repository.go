@@ -83,7 +83,9 @@ func (r SQLRepository) ListRules(ctx context.Context) ([]Rule, error) {
 	if err != nil {
 		return nil, fmt.Errorf("alerts: list rules: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	return scanRules(rows)
 }
@@ -100,7 +102,9 @@ func (r SQLRepository) ListEnabledRulesForServer(ctx context.Context, serverID i
 	if err != nil {
 		return nil, fmt.Errorf("alerts: list enabled rules for server %d: %w", serverID, err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	return scanRules(rows)
 }
@@ -241,7 +245,9 @@ func (r SQLRepository) queryChannels(ctx context.Context, query string, args ...
 	if err != nil {
 		return nil, fmt.Errorf("alerts: list channels: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var channels []Channel
 	for rows.Next() {
@@ -426,7 +432,9 @@ func (r SQLRepository) querySilences(ctx context.Context, query string, args ...
 	if err != nil {
 		return nil, fmt.Errorf("alerts: list silences: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var silences []Silence
 	for rows.Next() {
@@ -592,7 +600,9 @@ func (r SQLRepository) ListRecentEvents(ctx context.Context, limit int) ([]Event
 	if err != nil {
 		return nil, fmt.Errorf("alerts: list recent events: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var events []Event
 	for rows.Next() {
@@ -617,7 +627,9 @@ func (r SQLRepository) ListOpenEvents(ctx context.Context) ([]Event, error) {
 	if err != nil {
 		return nil, fmt.Errorf("alerts: list open events: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var events []Event
 	for rows.Next() {
@@ -655,7 +667,9 @@ func (r SQLRepository) ListEventsPage(ctx context.Context, limit, offset int) ([
 	if err != nil {
 		return nil, fmt.Errorf("alerts: list events page: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var events []Event
 	for rows.Next() {
@@ -821,7 +835,9 @@ func (r SQLRepository) ListStreaksForRules(ctx context.Context, ruleIDs []int64)
 	if err != nil {
 		return nil, fmt.Errorf("alerts: list streaks: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	out := map[streakKey]int{}
 	for rows.Next() {

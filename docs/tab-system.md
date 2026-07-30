@@ -155,6 +155,25 @@ in `tabs.css`, and a documented-but-never-dispatched event name
 splitting exists. Treat any of that as a placeholder, not a partially-working
 feature.
 
+## Link navigation
+
+Ordinary same-origin links replace the active pane on every viewport size.
+Opening another workspace tab remains an explicit gesture on tablet/desktop;
+mobile keeps its long-press action sheet.
+
+| Viewport and gesture | Result |
+|---|---|
+| Tablet/desktop plain click | Navigate in the active pane; tab count is unchanged |
+| Tablet/desktop `Ctrl`/`Cmd`+click | Open a background workspace tab |
+| Tablet/desktop middle-click | Open a background workspace tab |
+| Mobile plain tap | Navigate in the active pane |
+| Mobile long-press, then **Open in new tab** | Open a background workspace tab |
+
+For a manual regression check, start with one workspace tab and use a
+same-origin content link for each row. Confirm the active pane URL changes only
+for the plain click/tap rows, and the workspace tab count increases only for
+the three explicit new-tab rows.
+
 ## Keyboard shortcuts
 
 | Action | Real binding | Best-effort (may be blocked by the browser) |

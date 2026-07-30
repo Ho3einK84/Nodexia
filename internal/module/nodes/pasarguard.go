@@ -3,6 +3,7 @@ package nodes
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -21,8 +22,17 @@ const (
 	pasarguardType        = "pasarguard-node"
 	pasarguardScriptURL   = "https://github.com/PasarGuard/scripts/raw/main/pg-node.sh"
 	pasarguardDefaultPort = "62050"
+	// pasarguardUnresolvedVersion is persisted when neither the authoritative
+	// startup log nor a pinned image tag identifies the running node release.
+	// In particular, "latest" is a moving image alias, not a node version.
+	pasarguardUnresolvedVersion = "unknown"
 	// pasarguardDefaultProtocol matches the install script default (gRPC).
 	pasarguardDefaultProtocol = "grpc"
+)
+
+var (
+	pasarguardStartupVersionPattern = regexp.MustCompile(`^Starting Node: v([0-9]+(?:\.[0-9]+)*)$`)
+	pasarguardImageTagPattern       = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 )
 
 func (PasarGuardProvider) Type() string        { return pasarguardType }
@@ -152,6 +162,147 @@ func (p PasarGuardProvider) ParseDiscovery(output string, collectedAt time.Time)
 	return snapshots
 }
 
+// VersionDiscoveryCommand builds the read-only follow-up probe used by Collect
+// after the regular PasarGuard discovery command. The first probe is what maps
+// an install directory name (for example "pg-node") to its real Docker
+// container name (for example "node"), so the log lookup cannot be assembled
+// safely until that output has been parsed.
+//
+// One command resolves all discovered PasarGuard containers. Only grep's
+// tightly constrained "Starting Node: v<digits-and-dots>" match is returned;
+// arbitrary container log content never crosses the SSH boundary.
+func (PasarGuardProvider) VersionDiscoveryCommand(discoveryOutput string) string {
+	targets := pasarguardVersionTargets(discoveryOutput)
+	if len(targets) == 0 {
+		return ""
+	}
+
+	var command strings.Builder
+	command.WriteString(`sh -c '`)
+	command.WriteString(`if [ "$(id -u)" -eq 0 ]; then SUDO=""; elif sudo -n true 2>/dev/null; then SUDO="sudo -n"; else SUDO=""; fi; `)
+	command.WriteString(`printf "=PGVERSIONS=\n"; `)
+	command.WriteString(`if command -v docker >/dev/null 2>&1; then `)
+	for _, target := range targets {
+		command.WriteString(`line="$($SUDO docker logs "`)
+		command.WriteString(target.ContainerName)
+		command.WriteString(`" 2>&1 | grep -o "Starting Node: v[0-9][0-9.]*" | head -n 1 || true)"; `)
+		command.WriteString(`[ -n "$line" ] && printf "%s\t%s\n" "`)
+		command.WriteString(target.Name)
+		command.WriteString(`" "$line"; `)
+	}
+	command.WriteString(`fi; printf "=PGVERSIONSEND=\n"'`)
+	return command.String()
+}
+
+type pasarguardVersionTarget struct {
+	Name          string
+	ContainerName string
+}
+
+// pasarguardVersionTargets preserves the directory-to-container link from the
+// discovery output and also includes manual/orphan node containers. Every name
+// is validated before it is interpolated into a shell command.
+func pasarguardVersionTargets(discoveryOutput string) []pasarguardVersionTarget {
+	lines := strings.Split(discoveryOutput, "\n")
+	containers, _ := parseDockerSection(lines)
+	instances := parsePGInstances(lines)
+
+	targets := make([]pasarguardVersionTarget, 0, len(instances))
+	claimed := map[string]struct{}{}
+	addTarget := func(name, containerName string) {
+		name = strings.TrimSpace(name)
+		containerName = strings.TrimSpace(containerName)
+		if containerName == "" {
+			containerName = name
+		}
+		claimed[strings.ToLower(name)] = struct{}{}
+		claimed[strings.ToLower(containerName)] = struct{}{}
+		if ValidateNodeName(name) != nil || ValidateNodeName(containerName) != nil {
+			return
+		}
+		targets = append(targets, pasarguardVersionTarget{
+			Name:          name,
+			ContainerName: containerName,
+		})
+	}
+
+	for _, instance := range instances {
+		addTarget(instance.Name, instance.ContainerName)
+	}
+
+	// parseDockerSection intentionally returns a map. Sort its keys so the
+	// generated command (and probe evidence shown in the UI) stays stable.
+	containerKeys := make([]string, 0, len(containers))
+	for key := range containers {
+		containerKeys = append(containerKeys, key)
+	}
+	sort.Strings(containerKeys)
+	for _, key := range containerKeys {
+		container := containers[key]
+		if !isPasarguardNodeImage(container.Image) {
+			continue
+		}
+		if _, seen := claimed[strings.ToLower(container.Name)]; seen {
+			continue
+		}
+		addTarget(container.Name, container.Name)
+	}
+	return targets
+}
+
+// ResolveVersions applies authoritative versions extracted from PasarGuard
+// startup logs. Snapshots with no valid log match keep the image-tag fallback
+// chosen by buildSnapshot.
+func (PasarGuardProvider) ResolveVersions(snapshots []Snapshot, versionOutput string) []Snapshot {
+	resolved := parsePasarguardVersions(versionOutput)
+	out := append([]Snapshot(nil), snapshots...)
+	for i := range out {
+		if out[i].NodeType != pasarguardType {
+			continue
+		}
+		version := resolved[strings.ToLower(strings.TrimSpace(out[i].ServiceName))]
+		if version == "" {
+			continue
+		}
+		out[i].Version = version
+		out[i].Evidence = append(append([]string(nil), out[i].Evidence...), "Version from container startup log: "+version)
+		out[i] = normalizeSnapshot(out[i])
+	}
+	return out
+}
+
+func parsePasarguardVersions(output string) map[string]string {
+	section, _ := markerSection(strings.Split(output, "\n"), "=PGVERSIONS=", "=PGVERSIONSEND=")
+	versions := make(map[string]string)
+	for _, raw := range section {
+		name, logLine, ok := strings.Cut(raw, "\t")
+		name = strings.TrimSpace(name)
+		if !ok || name == "" {
+			continue
+		}
+		version := parsePasarguardStartupVersion(logLine)
+		if version == "" {
+			continue
+		}
+		key := strings.ToLower(name)
+		if _, exists := versions[key]; !exists {
+			versions[key] = version
+		}
+	}
+	return versions
+}
+
+// parsePasarguardStartupVersion accepts only the exact startup message emitted
+// by the node and returns the numeric release after "v". Anchoring the match
+// prevents malformed or unrelated log text from becoming a displayed version.
+func parsePasarguardStartupVersion(line string) string {
+	match := pasarguardStartupVersionPattern.FindStringSubmatch(strings.TrimSpace(line))
+	if len(match) != 2 {
+		return ""
+	}
+	return match[1]
+}
+
 // isPasarguardNodeImage reports whether a Docker image reference belongs to a
 // PasarGuard node. It matches the official image (pasarguard/node, including
 // registry-prefixed mirrors like ghcr.io/pasarguard/node) and the pg-node
@@ -251,10 +402,13 @@ func (PasarGuardProvider) buildSnapshot(inst pgInstance, containers map[string]d
 
 	version := ""
 	if hasContainer {
-		version = extractImageTag(container.Image)
+		version = pasarguardImageVersion(container.Image)
 	}
 	if version == "" {
-		version = extractImageTag(composeImage(inst.ComposeLine))
+		version = pasarguardImageVersion(composeImage(inst.ComposeLine))
+	}
+	if version == "" {
+		version = pasarguardUnresolvedVersion
 	}
 
 	health := pgHealth(inst.State, hasContainer, container.Status)
@@ -311,6 +465,24 @@ func (PasarGuardProvider) buildSnapshot(inst pgInstance, containers map[string]d
 		Evidence:     evidence,
 		CollectedAt:  collectedAt,
 	})
+}
+
+// pasarguardImageVersion provides the graceful fallback when the startup log
+// cannot be read. A non-empty pinned tag remains useful evidence; "latest" is
+// deliberately rejected because it does not identify a release.
+func pasarguardImageVersion(image string) string {
+	// A digest is not an image tag. Preserve a real tag that precedes one
+	// (repo/node:v1@sha256:...), but do not mistake the digest suffix or a
+	// registry port for a version.
+	reference := strings.TrimSpace(strings.SplitN(image, "@", 2)[0])
+	if strings.LastIndex(reference, ":") <= strings.LastIndex(reference, "/") {
+		return ""
+	}
+	tag := strings.TrimSpace(extractImageTag(reference))
+	if tag == "" || strings.EqualFold(tag, "latest") || !pasarguardImageTagPattern.MatchString(tag) {
+		return ""
+	}
+	return tag
 }
 
 // pgHealth resolves a node's health. The authoritative source is the
@@ -489,6 +661,7 @@ func (PasarGuardProvider) InstallCommand(nodeName string, cfg InstallConfig) (st
 		`if command -v curl >/dev/null 2>&1; then curl -fsSL ` + pasarguardScriptURL + ` -o "$SCRIPT" || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + pasarguardScriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`else echo "curl or wget is required to install" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
+		pasarguardPromptContractGuard() +
 		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + pasarguardInstallScriptTimeout + `"; fi; ` +
 		`printf "\n\n\n\n` + servicePort + `\nn\n" | $TMO $SUDO bash "$SCRIPT" install --name ` + nodeName + `; ` +
 		`STATUS=$?; rm -f "$SCRIPT"; ` +
@@ -499,6 +672,49 @@ func (PasarGuardProvider) InstallCommand(nodeName string, cfg InstallConfig) (st
 		`if [ "$STATUS" -ne 0 ] && [ "$STATUS" -ne 124 ]; then echo "[pg-node install script exited with status $STATUS]" >&2; fi; ` +
 		`exit $STATUS'`
 	return command, nil
+}
+
+// pasarguardPromptContractGuard returns a remote-shell preflight that inspects
+// the freshly downloaded upstream script before Nodexia sends positional stdin.
+// It deliberately validates both the expected prompt text and the structure of
+// the three functions on Nodexia's install path:
+//
+//   - gen_self_signed_cert must contain exactly the SAN prompt;
+//   - install_node must contain exactly four direct prompts, ordered around the
+//     self-signed-certificate call as public cert → SAN → API key → protocol →
+//     service port at runtime;
+//   - install_command must retain its existing override/systemd prompts and
+//     call install_node before asking the systemd question.
+//
+// This is intentionally stricter than merely grepping for six phrases. A new
+// prompt inserted into one of these functions changes the count and stops the
+// install before an answer can be applied to the wrong question. The error is
+// actionable, and the dedicated exit code is translated by runInstall.
+//
+// The fragment contains no single quotes because it is embedded in the outer
+// sh -c '...' command (guarded by TestGeneratedShellSyntax).
+func pasarguardPromptContractGuard() string {
+	return `SAN_BLOCK="$(sed -n "/^gen_self_signed_cert() {$/,/^}$/p" "$SCRIPT")"; ` +
+		`NODE_BLOCK="$(sed -n "/^install_node() {$/,/^}$/p" "$SCRIPT")"; ` +
+		`COMMAND_BLOCK="$(sed -n "/^install_command() {$/,/^}$/p" "$SCRIPT")"; ` +
+		`PROMPT_RE="^[[:space:]]*read[[:space:]].*(-p|-[[:alnum:]]*p)"; ` +
+		`SAN_COUNT="$(printf "%s\n" "$SAN_BLOCK" | grep -Ec "$PROMPT_RE" || true)"; ` +
+		`NODE_COUNT="$(printf "%s\n" "$NODE_BLOCK" | grep -Ec "$PROMPT_RE" || true)"; ` +
+		`COMMAND_COUNT="$(printf "%s\n" "$COMMAND_BLOCK" | grep -Ec "$PROMPT_RE" || true)"; ` +
+		`CONTRACT_BAD=0; ` +
+		`[ "$SAN_COUNT" = 1 ] && [ "$NODE_COUNT" = 4 ] && [ "$COMMAND_COUNT" = 2 ] || CONTRACT_BAD=1; ` +
+		`printf "%s\n" "$SAN_BLOCK" | grep -Fq "Enter additional SAN entries" || CONTRACT_BAD=1; ` +
+		`printf "%s\n" "$COMMAND_BLOCK" | grep -Fq "override the previous installation" || CONTRACT_BAD=1; ` +
+		`CERT_LINE="$(printf "%s\n" "$NODE_BLOCK" | grep -nF "use your own public certificate instead?" | head -n 1 | cut -d: -f1)"; ` +
+		`SAN_CALL_LINE="$(printf "%s\n" "$NODE_BLOCK" | grep -nE "^[[:space:]]+gen_self_signed_cert([[:space:]]|$)" | head -n 1 | cut -d: -f1)"; ` +
+		`KEY_LINE="$(printf "%s\n" "$NODE_BLOCK" | grep -nF "Enter your API Key" | head -n 1 | cut -d: -f1)"; ` +
+		`PROTOCOL_LINE="$(printf "%s\n" "$NODE_BLOCK" | grep -nF "use REST protocol instead?" | head -n 1 | cut -d: -f1)"; ` +
+		`PORT_LINE="$(printf "%s\n" "$NODE_BLOCK" | grep -nF "Enter the SERVICE_PORT" | head -n 1 | cut -d: -f1)"; ` +
+		`INSTALL_CALL_LINE="$(printf "%s\n" "$COMMAND_BLOCK" | grep -nF "install_node " | head -n 1 | cut -d: -f1)"; ` +
+		`SYSTEMD_LINE="$(printf "%s\n" "$COMMAND_BLOCK" | grep -nF "install and start the systemd service" | head -n 1 | cut -d: -f1)"; ` +
+		`if [ -z "$CERT_LINE" ] || [ -z "$SAN_CALL_LINE" ] || [ -z "$KEY_LINE" ] || [ -z "$PROTOCOL_LINE" ] || [ -z "$PORT_LINE" ] || [ -z "$INSTALL_CALL_LINE" ] || [ -z "$SYSTEMD_LINE" ]; then CONTRACT_BAD=1; ` +
+		`elif [ "$CERT_LINE" -ge "$SAN_CALL_LINE" ] || [ "$SAN_CALL_LINE" -ge "$KEY_LINE" ] || [ "$KEY_LINE" -ge "$PROTOCOL_LINE" ] || [ "$PROTOCOL_LINE" -ge "$PORT_LINE" ] || [ "$INSTALL_CALL_LINE" -ge "$SYSTEMD_LINE" ]; then CONTRACT_BAD=1; fi; ` +
+		`if [ "$CONTRACT_BAD" -ne 0 ]; then echo "[nodexia] Upstream PasarGuard installer prompt sequence changed; no answers were sent. Update Nodexia prompt mapping before retrying." >&2; rm -f "$SCRIPT"; exit 87; fi; `
 }
 
 // InstallConfig carries the pre-install choices the panel collects.

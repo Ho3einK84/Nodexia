@@ -327,7 +327,9 @@ func Import(ctx context.Context, conn *sql.DB, archive Archive) (RestoreSummary,
 	if err != nil {
 		return RestoreSummary{}, fmt.Errorf("backup: begin restore transaction: %w", err)
 	}
-	defer tx.Rollback() //nolint:errcheck // no-op after a successful Commit
+	defer func() {
+		_ = tx.Rollback() // no-op after a successful Commit
+	}()
 
 	// Delete children before parents. Removing servers cascades to their
 	// telemetry and alert rows (ON DELETE CASCADE), which is acceptable for a

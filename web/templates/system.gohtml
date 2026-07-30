@@ -168,7 +168,7 @@
       {{ if .SystemCollection.Error }}<pre class="output-block output-block--error">{{ .SystemCollection.Error }}</pre>{{ end }}
       {{ if .SystemCollection.Stdout }}
       <div class="collapsible">
-        <button class="collapsible__toggle" data-collapse-key="sys_stdout">
+        <button class="collapsible__toggle" data-collapse-key="sys_stdout" data-collapse-default="closed">
           <i data-lucide="chevron-right" class="collapsible__icon"></i> {{ t "common.stdout" }}
         </button>
         <div class="collapsible__content">
@@ -178,7 +178,7 @@
       {{ end }}
       {{ if .SystemCollection.Stderr }}
       <div class="collapsible">
-        <button class="collapsible__toggle" data-collapse-key="sys_stderr">
+        <button class="collapsible__toggle" data-collapse-key="sys_stderr" data-collapse-default="closed">
           <i data-lucide="chevron-right" class="collapsible__icon"></i> {{ t "common.stderr" }}
         </button>
         <div class="collapsible__content">

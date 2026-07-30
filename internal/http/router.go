@@ -153,7 +153,9 @@ func staticETags(staticFiles fs.FS) map[string]string {
 		if openErr != nil {
 			return nil
 		}
-		defer f.Close()
+		defer func() {
+			_ = f.Close()
+		}()
 		hash := sha256.New()
 		if _, copyErr := io.Copy(hash, f); copyErr != nil {
 			return nil

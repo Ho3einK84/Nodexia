@@ -343,7 +343,9 @@ func serverLastSeenMap(ctx context.Context, deps module.Dependencies) map[int64]
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	result := make(map[int64]time.Time)
 	for rows.Next() {
 		var serverID int64

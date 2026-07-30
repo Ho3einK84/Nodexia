@@ -140,7 +140,9 @@ func (r SQLRepository) ListLatestByServer(ctx context.Context, limit int) ([]Sna
 	if err != nil {
 		return nil, fmt.Errorf("monitoring: list latest snapshots: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	snapshots := make([]Snapshot, 0)
 	for rows.Next() {
@@ -174,7 +176,9 @@ func (r SQLRepository) ListAllLatestByServer(ctx context.Context) ([]Snapshot, e
 	if err != nil {
 		return nil, fmt.Errorf("monitoring: list all latest snapshots: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var snapshots []Snapshot
 	for rows.Next() {

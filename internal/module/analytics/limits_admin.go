@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
+	"github.com/Ho3einK84/Nodexia/internal/humanize"
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
@@ -62,7 +63,7 @@ func (h LimitsAdminHandler) limitsView(r *http.Request) view.TrafficLimitsView {
 	}
 	if limit, ok, err := h.repo.GetScopedLimit(r.Context(), LimitScopeGlobal, ""); err == nil && ok {
 		v.HasGlobal = true
-		v.GlobalHuman = formatBytes(limit)
+		v.GlobalHuman = humanize.Bytes(limit)
 		v.GlobalValue, v.GlobalUnit = limitToValueUnit(limit)
 	}
 	if rules, err := h.repo.ListScopedLimits(r.Context()); err == nil {
@@ -72,7 +73,7 @@ func (h LimitsAdminHandler) limitsView(r *http.Request) view.TrafficLimitsView {
 			}
 			v.Tags = append(v.Tags, view.TrafficLimitTagView{
 				Tag:        rule.Ref,
-				LimitHuman: formatBytes(rule.LimitBytes),
+				LimitHuman: humanize.Bytes(rule.LimitBytes),
 			})
 		}
 	}

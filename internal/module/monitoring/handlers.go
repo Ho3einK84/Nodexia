@@ -11,6 +11,7 @@ import (
 
 	"github.com/Ho3einK84/Nodexia/internal/http/httperrors"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
+	"github.com/Ho3einK84/Nodexia/internal/humanize"
 	"github.com/Ho3einK84/Nodexia/internal/livemetrics"
 	"github.com/Ho3einK84/Nodexia/internal/module"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
@@ -177,7 +178,7 @@ func (h PageHandler) collectAndRender(w http.ResponseWriter, r *http.Request, se
 	}
 
 	flashKind := "success"
-	flashMessage := "Resource monitoring snapshot was collected and stored successfully."
+	var flashMessage string
 	if trafficCollection.Error != "" {
 		flashKind = "error"
 		flashMessage = "Resource snapshot was stored, but vnStat integration did not complete successfully."
@@ -312,7 +313,7 @@ func (h RefreshHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	flashKind := "success"
-	flashMessage := "Resource monitoring snapshot was collected and stored successfully."
+	var flashMessage string
 	if trafficCollection.Error != "" {
 		flashKind = "error"
 		flashMessage = "Resource snapshot was stored, but vnStat integration did not complete successfully."
@@ -548,7 +549,7 @@ func trafficViewFromModel(snapshot TrafficSnapshot) view.MonitoringTrafficSnapsh
 	if snapshot.Available {
 		for _, row := range snapshot.MonthlyRows {
 			if row.Label == currentMonthLabel {
-				currentMonthRX = formatBytes(row.RXBytes)
+				currentMonthRX = humanize.Bytes(max(row.RXBytes, 0), humanize.WithoutNonPositiveFallback())
 				break
 			}
 		}
@@ -606,9 +607,9 @@ func buildTrafficRowViews(rows []TrafficRow, latestLabel, secondLabel string) []
 
 		result = append(result, view.MonitoringTrafficRowView{
 			Label:    label,
-			RX:       formatBytes(row.RXBytes),
-			TX:       formatBytes(row.TXBytes),
-			Total:    formatBytes(row.TotalBytes),
+			RX:       humanize.Bytes(max(row.RXBytes, 0), humanize.WithoutNonPositiveFallback()),
+			TX:       humanize.Bytes(max(row.TXBytes, 0), humanize.WithoutNonPositiveFallback()),
+			Total:    humanize.Bytes(max(row.TotalBytes, 0), humanize.WithoutNonPositiveFallback()),
 			Bar:      bar,
 			IsLatest: isLatest,
 		})
@@ -699,19 +700,4 @@ func formatMbps(mbps float64) string {
 		return "-"
 	}
 	return fmt.Sprintf("%.2f Mbps", mbps)
-}
-
-func formatBytes(value int64) string {
-	if value < 0 {
-		value = 0
-	}
-
-	units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
-	size := float64(value)
-	unit := units[0]
-	for index := 0; index < len(units)-1 && size >= 1024; index++ {
-		size = size / 1024
-		unit = units[index+1]
-	}
-	return fmt.Sprintf("%.2f %s", size, unit)
 }

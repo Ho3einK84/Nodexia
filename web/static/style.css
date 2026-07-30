@@ -3843,9 +3843,9 @@ html[lang="fa"] {
   unicode-bidi: isolate;
 }
 
-/* Measurement values pair a number with a Latin unit (e.g. "56 TiB",
-   "2.1 GiB / 11.7 GiB", "↓ 5 ↑ 3 Mbps"). Under an RTL base direction the unit
-   and number get reordered to the visually wrong "TiB 56", so every value
+/* Measurement values pair a number with a Latin unit (e.g. "56 TB",
+   "2.1 GB / 11.7 GB", "↓ 5 ↑ 3 Mbps"). Under an RTL base direction the unit
+   and number get reordered to the visually wrong "TB 56", so every value
    surface is forced LTR + isolated, mirroring the code rule above. */
 [dir="rtl"] .gauge__value,
 [dir="rtl"] .gauge__detail,

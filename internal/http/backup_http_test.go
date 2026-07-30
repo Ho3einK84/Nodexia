@@ -65,8 +65,8 @@ func TestBackupExportImportOverHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET diagnostics: %v", err)
 	}
+	defer closeResponseBody(getResp)
 	body := readBody(t, getResp)
-	getResp.Body.Close()
 
 	var sessionCookie *http.Cookie
 	for _, c := range getResp.Cookies() {
@@ -94,6 +94,7 @@ func TestBackupExportImportOverHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST export: %v", err)
 	}
+	defer closeResponseBody(exportResp)
 	if exportResp.StatusCode != http.StatusOK {
 		t.Fatalf("export status = %d", exportResp.StatusCode)
 	}
@@ -101,7 +102,6 @@ func TestBackupExportImportOverHTTP(t *testing.T) {
 		t.Fatalf("export missing attachment disposition: %q", cd)
 	}
 	backupBytes := []byte(readBody(t, exportResp))
-	exportResp.Body.Close()
 	if !bytes.Contains(backupBytes, []byte("topsecret")) {
 		t.Fatal("secrets opt-in export should contain the credential")
 	}
@@ -114,10 +114,19 @@ func TestBackupExportImportOverHTTP(t *testing.T) {
 	// Import (multipart) — CSRF token rides in the query string.
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
-	_ = mw.WriteField("confirm", "on")
-	fw, _ := mw.CreateFormFile("backup_file", "backup.json")
-	_, _ = fw.Write(backupBytes)
-	mw.Close()
+	if err := mw.WriteField("confirm", "on"); err != nil {
+		t.Fatalf("write multipart confirmation: %v", err)
+	}
+	fw, err := mw.CreateFormFile("backup_file", "backup.json")
+	if err != nil {
+		t.Fatalf("create multipart backup file: %v", err)
+	}
+	if _, err := fw.Write(backupBytes); err != nil {
+		t.Fatalf("write multipart backup file: %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("finalize multipart body: %v", err)
+	}
 
 	importURL := server.URL + "/ops/backup/import?_csrf_token=" + url.QueryEscape(csrf)
 	importReq, _ := http.NewRequest(http.MethodPost, importURL, &buf)
@@ -129,11 +138,11 @@ func TestBackupExportImportOverHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST import: %v", err)
 	}
+	defer closeResponseBody(importResp)
 	if importResp.StatusCode != http.StatusOK {
 		t.Fatalf("import status = %d, body = %q", importResp.StatusCode, readBody(t, importResp))
 	}
 	importBody := readBody(t, importResp)
-	importResp.Body.Close()
 	if !strings.Contains(importBody, "Backup restored") {
 		t.Fatalf("import did not report success: %q", importBody)
 	}
@@ -174,7 +183,7 @@ func TestBackupExportRejectsMissingCSRF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer closeResponseBody(resp)
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403 without CSRF token, got %d", resp.StatusCode)
 	}

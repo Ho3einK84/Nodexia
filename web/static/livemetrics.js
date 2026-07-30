@@ -74,14 +74,6 @@
     gauge.setAttribute('data-gauge', v.toFixed(2));
   }
 
-  function humanBytes(bytes) {
-    if (!bytes || bytes < 0) bytes = 0;
-    var units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
-    var size = bytes, i = 0;
-    while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
-    return size.toFixed(size >= 100 || i === 0 ? 0 : 1) + ' ' + units[i];
-  }
-
   function humanUptime(seconds) {
     seconds = Math.max(0, Math.floor(seconds || 0));
     var d = Math.floor(seconds / 86400); seconds %= 86400;
@@ -116,14 +108,14 @@
 
     setGauge('ram', m.memPercent);
     setText('[data-live-mem-detail]',
-      humanBytes(m.memUsedKB * 1024) + ' / ' + humanBytes(m.memTotalKB * 1024) +
+      window.nxHumanBytes(m.memUsedKB * 1024) + ' / ' + window.nxHumanBytes(m.memTotalKB * 1024) +
       (m.swapPercent > 0 ? '  ·  ' + T('js.live.swap') + ' ' + m.swapPercent.toFixed(0) + '%' : ''));
 
     var root = pickRootDisk(m.disks);
     if (root) {
       setGauge('disk', root.percent);
       setText('[data-live-disk-detail]',
-        root.mount + '  ·  ' + humanBytes(root.usedKB * 1024) + ' / ' + humanBytes(root.totalKB * 1024));
+        root.mount + '  ·  ' + window.nxHumanBytes(root.usedKB * 1024) + ' / ' + window.nxHumanBytes(root.totalKB * 1024));
     }
 
     setText('[data-live-load1]', fmt2(m.load1));

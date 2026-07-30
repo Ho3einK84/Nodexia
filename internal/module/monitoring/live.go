@@ -81,7 +81,9 @@ func (h LiveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	defer conn.Close(cwebsocket.StatusNormalClosure, "stream ended")
+	defer func() {
+		_ = conn.Close(cwebsocket.StatusNormalClosure, "stream ended")
+	}()
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()

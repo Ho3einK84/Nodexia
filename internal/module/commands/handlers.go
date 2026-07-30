@@ -437,10 +437,11 @@ func (h PageHandler) loadStreamView(r *http.Request, serverID int64) (view.Comma
 
 	flashKind := "success"
 	flashMessage := "Live output is refreshing automatically while the command is still running."
-	if snapshot.Status == commandstream.StatusFailed {
+	switch snapshot.Status {
+	case commandstream.StatusFailed:
 		flashKind = "error"
 		flashMessage = "The live command session ended with an error."
-	} else if snapshot.Status == commandstream.StatusCompleted {
+	case commandstream.StatusCompleted:
 		flashMessage = "Live command session completed."
 	}
 

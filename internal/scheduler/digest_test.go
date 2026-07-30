@@ -53,8 +53,8 @@ func TestDigestServerLinePopulated(t *testing.T) {
 	summary := analytics.ServerTrafficSummary{MonthRX: 120 * gib, MonthTX: 30 * gib, MonthBytes: 150 * gib}
 	fc := analytics.ForecastOutput{Exhaustion: analytics.ExhaustionForecast{HasLimit: true, LimitBytes: 500 * gib}}
 	line := digestServerLine("edge-1", summary, fc, 2)
-	if !strings.Contains(line.MonthDownload, "GiB") || line.MonthDownload == "no data yet" {
-		t.Fatalf("MonthDownload = %q, want a GiB value", line.MonthDownload)
+	if !strings.Contains(line.MonthDownload, "GB") || line.MonthDownload == "no data yet" {
+		t.Fatalf("MonthDownload = %q, want a GB value", line.MonthDownload)
 	}
 	if line.ActiveAlerts != 2 {
 		t.Fatalf("ActiveAlerts = %d, want 2", line.ActiveAlerts)
@@ -136,7 +136,7 @@ func TestCollectDigest(t *testing.T) {
 			if s.ActiveAlerts != 1 {
 				t.Fatalf("edge-1 ActiveAlerts = %d, want 1", s.ActiveAlerts)
 			}
-			if !strings.Contains(s.MonthDownload, "GiB") {
+			if !strings.Contains(s.MonthDownload, "GB") {
 				t.Fatalf("edge-1 MonthDownload = %q", s.MonthDownload)
 			}
 		case "edge-2":

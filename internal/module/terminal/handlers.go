@@ -285,14 +285,16 @@ func (h wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		h.deps.TerminalTickets.ReleaseSession(username)
 		h.deps.TerminalTickets.Release(ticketID)
-		conn.Close(cwebsocket.StatusNormalClosure, "session ended")
+		_ = conn.Close(cwebsocket.StatusNormalClosure, "session ended")
 	}()
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
 	stdinR, stdinW := io.Pipe()
-	defer stdinW.Close()
+	defer func() {
+		_ = stdinW.Close()
+	}()
 
 	resizeCh := make(chan sshclient.ResizeRequest, 8)
 

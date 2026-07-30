@@ -11,7 +11,7 @@ import (
 // of numeric/locale formatting.
 type DigestServer struct {
 	Name          string
-	MonthDownload string // month-to-date download, e.g. "120.50 GiB"
+	MonthDownload string // month-to-date download, e.g. "120.50 GB"
 	MonthTotal    string // month-to-date download+upload total
 	LimitState    string // human summary of the forecast / limit state
 	ActiveAlerts  int    // count of currently-firing alert events for this server
