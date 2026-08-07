@@ -16,10 +16,9 @@
  *                     {"type":"status","state":"connected|…"}
  *                     {"type":"heartbeat"}                 // echo, used for RTT
  *
- * Reconnect note: the WS ticket is single-use (a documented security invariant),
- * so we deliberately do NOT silently re-dial a dead socket — that would require
- * weakening the ticket model. Instead an unexpected close surfaces a Reconnect
- * action that re-issues a ticket through the normal page flow.
+ * Resume note: the WS ticket creates at most one SSH shell. After consumption it
+ * is also the opaque handle for reattaching that same shell, so a mobile network
+ * suspension can replace the WebSocket without creating a second PTY.
  *
  * Renderer strategy: WebGL (GPU) on desktop with a canvas fallback; canvas on
  * mobile for battery/compat. xterm's built-in DOM renderer is the last resort.
@@ -36,6 +35,21 @@
   // Localization helper (see app.js for window.nxT). Falls back to the key.
   function T(key, params) { return window.nxT ? window.nxT(key, params) : key; }
   function noop() {}
+
+  // Terminal panes are created and destroyed without a full page unload. Keep
+  // global listener references so dispose() can release the removed pane and
+  // its xterm instance instead of retaining them through document/window.
+  var globalListeners = [];
+  function addGlobalListener(target, type, listener, options) {
+    target.addEventListener(type, listener, options);
+    globalListeners.push({ target: target, type: type, listener: listener, options: options });
+  }
+  function removeGlobalListeners() {
+    globalListeners.forEach(function (entry) {
+      entry.target.removeEventListener(entry.type, entry.listener, entry.options);
+    });
+    globalListeners = [];
+  }
 
   // setShown drives an element's visibility through BOTH the `hidden` attribute
   // (state / accessibility) AND an inline display style. An inline style beats
@@ -441,7 +455,7 @@
     });
   }
   // Dismiss the menu on any outside click / Escape.
-  document.addEventListener('click', function (e) {
+  addGlobalListener(document, 'click', function (e) {
     if (themeMenu && !themeMenu.hidden && !themeMenu.contains(e.target) && e.target !== themeBtn) {
       toggleThemeMenu(false);
     }
@@ -471,10 +485,10 @@
     // On mobile the card is already CSS-fullscreen (terminal-card--mobile), so a
     // missing Fullscreen API is not a regression.
   }
-  document.addEventListener('fullscreenchange', function () {
+  addGlobalListener(document, 'fullscreenchange', function () {
     requestAnimationFrame(fitAndResize);
   });
-  document.addEventListener('webkitfullscreenchange', function () {
+  addGlobalListener(document, 'webkitfullscreenchange', function () {
     requestAnimationFrame(fitAndResize);
   });
 
@@ -623,10 +637,10 @@
       e.preventDefault();
       showContextMenu(e.clientX, e.clientY);
     });
-    document.addEventListener('click', function (e) {
+    addGlobalListener(document, 'click', function (e) {
       if (ctxMenu && !ctxMenu.hidden && !ctxMenu.contains(e.target)) hideContextMenu();
     });
-    document.addEventListener('keydown', function (e) {
+    addGlobalListener(document, 'keydown', function (e) {
       if (e.key === 'Escape') { hideContextMenu(); toggleThemeMenu(false); }
     });
   }
@@ -679,8 +693,14 @@
   var ws = null;
   var heartbeatTimer = null;
   var connectTimer = null;
+  var reconnectTimer = null;
+  var resumeProbeTimer = null;
+  var reconnectAttempts = 0;
   var lastPingAt = 0;
   var userClosing = false;
+  var disposed = false;
+  var everConnected = false;
+  var MAX_RECONNECT_ATTEMPTS = 6;
 
   function startHeartbeat() {
     stopHeartbeat();
@@ -695,6 +715,7 @@
     if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
   }
   function onHeartbeatEcho() {
+    if (resumeProbeTimer) { clearTimeout(resumeProbeTimer); resumeProbeTimer = null; }
     if (!latencyEl || !lastPingAt) return;
     var rtt = Date.now() - lastPingAt;
     latencyEl.textContent = rtt + ' ms';
@@ -711,31 +732,78 @@
     }, 150);
   }
 
+  function clearReconnectTimer() {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  }
+
+  function probeConnection() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    var socket = ws;
+    lastPingAt = Date.now();
+    try { socket.send(JSON.stringify({ type: 'heartbeat' })); } catch (e) { return; }
+    if (resumeProbeTimer) clearTimeout(resumeProbeTimer);
+    resumeProbeTimer = setTimeout(function () {
+      resumeProbeTimer = null;
+      if (socket === ws && socket.readyState === WebSocket.OPEN) {
+        try { socket.close(4000, 'resume probe timeout'); } catch (e) { /* ignore */ }
+      }
+    }, 8000);
+  }
+
+  function scheduleReconnect(event) {
+    if (userClosing || disposed) return;
+    setStatus('reconnecting', T('js.terminal.reconnecting'));
+    if (document.hidden) return;
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      showDisconnectOverlay(T('js.terminal.closed_unexpectedly', { code: event ? event.code : 1006 }));
+      return;
+    }
+    var delays = [0, 1000, 2000, 4000, 8000, 15000];
+    var delay = delays[reconnectAttempts] || 15000;
+    reconnectAttempts += 1;
+    clearReconnectTimer();
+    reconnectTimer = setTimeout(function () {
+      reconnectTimer = null;
+      connect();
+    }, delay);
+  }
+
   function connect() {
+    if (userClosing || disposed) return;
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
+    clearReconnectTimer();
     var wsScheme = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     var wsURL = wsScheme + window.location.host + wsBase + '?ticket=' + encodeURIComponent(ticket);
-    ws = new WebSocket(wsURL);
+    var socket = new WebSocket(wsURL);
+    ws = socket;
+    if (everConnected) setStatus('reconnecting', T('js.terminal.reconnecting'));
 
     connectTimer = setTimeout(function () {
-      if (!ws || ws.readyState === WebSocket.CONNECTING) {
+      if (socket === ws && socket.readyState === WebSocket.CONNECTING) {
         setStatus('error', T('js.terminal.status_error'));
         showError(T('js.terminal.connection_timeout'));
-        try { ws.close(1000, 'connect timeout'); } catch (e) { /* ignore */ }
+        try { socket.close(1000, 'connect timeout'); } catch (e) { /* ignore */ }
       }
     }, 30000);
 
-    ws.onopen = function () {
+    socket.onopen = function () {
+      if (socket !== ws) return;
       if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+      if (resumeProbeTimer) { clearTimeout(resumeProbeTimer); resumeProbeTimer = null; }
+      reconnectAttempts = 0;
+      everConnected = true;
       clearError();
       hideDisconnectOverlay();
       setStatus('connected', T('js.terminal.connected'));
+      if (isMobile && active) setScrollLock(true);
       startHeartbeat();
       fitAndResize();
       term.focus();
       if (initCmd) setTimeout(maybeSendInitCmd, 1200);
     };
 
-    ws.onmessage = function (event) {
+    socket.onmessage = function (event) {
+      if (socket !== ws) return;
       var msg;
       try { msg = JSON.parse(event.data); } catch (e) { return; }
       switch (msg.type) {
@@ -757,29 +825,34 @@
       }
     };
 
-    ws.onerror = function () {
+    socket.onerror = function () {
+      if (socket !== ws) return;
       if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
-      setStatus('error', T('js.terminal.connection_error'));
-      showError(T('js.terminal.ws_failed'));
+      setStatus('reconnecting', T('js.terminal.reconnecting'));
     };
 
-    ws.onclose = function (event) {
+    socket.onclose = function (event) {
+      if (socket !== ws) return;
+      ws = null;
+      if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+      if (resumeProbeTimer) { clearTimeout(resumeProbeTimer); resumeProbeTimer = null; }
       stopHeartbeat();
-      setStatus('disconnected', T('js.terminal.disconnected'));
       setScrollLock(false);
-      if (!userClosing && !event.wasClean) {
-        showDisconnectOverlay(T('js.terminal.closed_unexpectedly', { code: event.code }));
-      } else if (!userClosing) {
-        // Clean close (remote shell exited): still offer a quick way back in.
+      if (userClosing || disposed) return;
+      if (event.code === 1000 && event.reason === 'session ended') {
+        setStatus('disconnected', T('js.terminal.disconnected'));
         showDisconnectOverlay(T('js.terminal.session_ended'));
+        return;
       }
+      scheduleReconnect(event);
     };
   }
 
-  // The WS ticket is single-use, so "reconnect" re-enters the credential page
-  // (which issues a fresh ticket) rather than re-dialing the consumed socket.
+  // The explicit Reconnect button starts a genuinely new shell. Automatic
+  // transport recovery above always reuses the ticket to reattach the old one.
   function reconnect() {
     userClosing = true;
+    clearReconnectTimer();
     try { if (ws) ws.close(1000, 'reconnecting'); } catch (e) { /* ignore */ }
     setScrollLock(false);
     tabNavigate(pageURL);
@@ -820,7 +893,16 @@
       else tabNavigate('/servers');
     });
   }
-  window.addEventListener('pagehide', function () { setScrollLock(false); });
+  addGlobalListener(window, 'pagehide', function () { setScrollLock(false); });
+  addGlobalListener(document, 'visibilitychange', function () {
+    if (!document.hidden && !userClosing && !disposed) {
+      if (ws && ws.readyState === WebSocket.OPEN) probeConnection();
+      else if (!ws || ws.readyState === WebSocket.CLOSED) {
+        reconnectAttempts = 0;
+        connect();
+      }
+    }
+  });
 
   /* ── Select mode (mobile) ─────────────────────────────── */
   var selecting = false;
@@ -1011,17 +1093,17 @@
     setScrollLock(true);
     updateMobileViewport();
     if (vv) {
-      vv.addEventListener('resize', scheduleViewportUpdate);
-      vv.addEventListener('scroll', scheduleViewportUpdate);
+      addGlobalListener(vv, 'resize', scheduleViewportUpdate);
+      addGlobalListener(vv, 'scroll', scheduleViewportUpdate);
     }
-    window.addEventListener('orientationchange', function () {
+    addGlobalListener(window, 'orientationchange', function () {
       setTimeout(scheduleViewportUpdate, 250);
     });
   }
 
   /* ── Resize handling ──────────────────────────────────── */
   var resizeTimer = null;
-  window.addEventListener('resize', function () {
+  addGlobalListener(window, 'resize', function () {
     if (isMobile) { scheduleViewportUpdate(); return; }
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(fitAndResize, 80);
@@ -1053,13 +1135,26 @@
     resume: function () {
       active = true;
       if (isMobile) setScrollLock(true);
+      if (!userClosing && !disposed) {
+        if (ws && ws.readyState === WebSocket.OPEN) probeConnection();
+        else if (!ws || ws.readyState === WebSocket.CLOSED) {
+          reconnectAttempts = 0;
+          connect();
+        }
+      }
       fitAndResize();
       term.focus();
     },
     dispose: function () {
+      if (disposed) return;
       userClosing = true;
+      disposed = true;
+      clearReconnectTimer();
+      if (resumeProbeTimer) { clearTimeout(resumeProbeTimer); resumeProbeTimer = null; }
       if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
       stopHeartbeat();
+      clearTimeout(resizeTimer);
+      removeGlobalListeners();
       try { if (ws) ws.close(1000, 'tab closed'); } catch (e) {}
       try { term.dispose(); } catch (e) {}
       if (isMobile) setScrollLock(false);

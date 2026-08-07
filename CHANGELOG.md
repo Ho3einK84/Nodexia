@@ -7,6 +7,17 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.7.1 — Mobile terminal resilience
+
+- Terminal toolbar scrolling no longer triggers the workspace tab-swipe gesture
+  on mobile.
+- Live terminal PTYs now survive transient mobile/PWA suspension and reattach to
+  the same authenticated session with bounded output replay.
+- Rebecca Node dev installs keep their managed PTY connected through sudo and
+  accept bare PKCS#8 private-key bundles, preventing certificate-entry stalls.
+- Monitoring and terminal tab teardown now releases sockets, timers, and global
+  event listeners; dashboard country queries honor request cancellation.
+
 ## v0.7.0 — Stabilization & production readiness
 
 ### Display consistency

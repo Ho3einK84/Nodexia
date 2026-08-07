@@ -54,7 +54,7 @@ func (h DiagnosticsHandler) renderPage(w http.ResponseWriter, r *http.Request, s
 	page.BackupCanRun = h.database != nil && h.database.SQL != nil
 	schPage, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("sch_page")))
 	page.Diagnostics = h.buildDiagnostics(r)
-	page.SchedulerOverview = schedulerOverviewView(h.scheduler, schPage, 10, serverCountryBadges(h.database), func(p int) string {
+	page.SchedulerOverview = schedulerOverviewView(h.scheduler, schPage, 10, serverCountryBadges(r.Context(), h.database), func(p int) string {
 		if p <= 1 {
 			return "/ops/diagnostics"
 		}

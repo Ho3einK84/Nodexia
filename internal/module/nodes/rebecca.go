@@ -429,13 +429,11 @@ func (RebeccaProvider) reinstallScriptCommand(nodeName string) string {
 // enables the systemd unit (`systemctl enable --now`, which returns at once).
 //
 // The upstream install dispatcher redirects install_command to /dev/tty when
-// stdin is not a terminal. A normal SSH exec session has no controlling tty, so
-// the old temp-file redirect failed at `/dev/tty: No such device or address`.
-// Rebecca install steps now allocate a PTY and Nodexia writes the normalized
-// bundle plus ports through the PTY input stream. The command deliberately
-// starts the upstream script with /dev/null as process stdin, exercising its
-// intended /dev/tty fallback; /dev/tty is the allocated PTY, so it receives the
-// managed answers. sshclient disables terminal echo before sending anything.
+// stdin is not a terminal. Rebecca install steps therefore allocate a PTY and
+// keep it as process stdin while Nodexia writes the normalized bundle plus ports.
+// This matters on hosts where sudo uses a child PTY: redirecting sudo's stdin to
+// /dev/null leaves that child /dev/tty with no input and the certificate reader
+// waits forever. sshclient disables terminal echo before sending anything.
 //
 // The private key remains only in the in-memory InstallStep.Input. It is not
 // embedded in the shell command, persisted, or appended to streamed job output.
@@ -500,12 +498,11 @@ func (c RebeccaInstallConfig) Normalize() (RebeccaInstallConfig, error) {
 }
 
 // rebeccaCertBlockPattern / rebeccaKeyBlockPattern extract the whole PEM blocks
-// from a pasted bundle. The key pattern mirrors the script's terminator
-// (`-----END .+PRIVATE KEY-----`): the key type must carry a prefix word
-// (RSA / EC / ENCRYPTED …), exactly what the installer accepts.
+// from a pasted bundle. The key pattern mirrors the script's optional key type,
+// accepting RSA / EC / ENCRYPTED keys and bare PKCS#8 PRIVATE KEY blocks.
 var (
 	rebeccaCertBlockPattern = regexp.MustCompile(`(?s)-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----`)
-	rebeccaKeyBlockPattern  = regexp.MustCompile(`(?s)-----BEGIN [^\n-]+PRIVATE KEY-----.*?-----END [^\n-]+PRIVATE KEY-----`)
+	rebeccaKeyBlockPattern  = regexp.MustCompile(`(?s)-----BEGIN(?: [^\n-]+)? PRIVATE KEY-----.*?-----END(?: [^\n-]+)? PRIVATE KEY-----`)
 )
 
 // normalizeRebeccaBundle pulls the certificate and private-key blocks out of a
@@ -600,10 +597,9 @@ func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) 
 		// Run the binary-flavored script in binary mode (REBECCA_NODE_SCRIPT_FLAVOR
 		// carries through sudo). --name pins the instance to /opt/<name> so several
 		// Rebecca nodes can coexist; the COMMAND (install) must be parsed before
-		// --name, so order matters. Redirecting process stdin to /dev/null makes
-		// the upstream dispatcher take its /dev/tty path; the install step's PTY
-		// is that controlling terminal and carries the managed answers.
-		`$TMO $SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" install --name ` + normalized.NodeName + ` --binary --dev </dev/null; ` +
+		// --name, so order matters. The install step's non-echoing PTY remains
+		// stdin so both direct execution and sudo's child PTY receive the answers.
+		`$TMO $SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" install --name ` + normalized.NodeName + ` --binary --dev; ` +
 		`STATUS=$?; rm -f "$SCRIPT"; ` +
 		`if [ "$STATUS" -ne 0 ]; then echo "[rebecca-node install script exited with status $STATUS]" >&2; fi; ` +
 		`exit $STATUS'`

@@ -39,16 +39,23 @@
   // Resolve immediately so the status event can carry a valid tabId.
   getPane();
 
-  document.addEventListener('tab-activated', function (event) {
+  function onActivated(event) {
     if (event.detail.pane === getPane()) card.__nodexiaTerminal.resume();
-  });
-  document.addEventListener('tab-deactivated', function (event) {
+  }
+  function onDeactivated(event) {
     if (event.detail.pane === getPane()) card.__nodexiaTerminal.pause();
-  });
-  document.addEventListener('tab-closing', function (event) {
-    // The only path that closes the WebSocket or disposes xterm.
-    if (event.detail.pane === getPane()) card.__nodexiaTerminal.dispose();
-  });
+  }
+  function onClosing(event) {
+    if (event.detail.pane !== getPane()) return;
+    card.__nodexiaTerminal.dispose();
+    document.removeEventListener('tab-activated', onActivated);
+    document.removeEventListener('tab-deactivated', onDeactivated);
+    document.removeEventListener('tab-closing', onClosing);
+  }
+
+  document.addEventListener('tab-activated', onActivated);
+  document.addEventListener('tab-deactivated', onDeactivated);
+  document.addEventListener('tab-closing', onClosing);
 
   card.addEventListener('nodexia:terminal-status', function (event) {
     var p = getPane();

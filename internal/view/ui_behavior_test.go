@@ -178,7 +178,7 @@ func TestWorkspaceLinkGestureRoutingSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read tab-manager.js: %v", err)
 	}
-	script := string(raw)
+	script := strings.ReplaceAll(string(raw), "\r\n", "\n")
 
 	start := strings.Index(script, "function initLinkInterception()")
 	if start < 0 {
@@ -219,5 +219,75 @@ func TestWorkspaceLinkGestureRoutingSource(t *testing.T) {
 	linkSheet := script[linkSheetStart : linkSheetStart+linkSheetEnd]
 	if !strings.Contains(linkSheet, `open(url, { background: true });`) {
 		t.Error("mobile long-press action sheet must retain its explicit new-tab action")
+	}
+}
+
+func TestTerminalToolbarIsExcludedFromWorkspaceSwipe(t *testing.T) {
+	staticFS, err := assets.Static()
+	if err != nil {
+		t.Fatalf("open embedded static assets: %v", err)
+	}
+
+	tabManagerRaw, err := fs.ReadFile(staticFS, "tab-manager.js")
+	if err != nil {
+		t.Fatalf("read tab-manager.js: %v", err)
+	}
+	if !strings.Contains(string(tabManagerRaw), `e.target.closest('.terminal-toolbar')`) {
+		t.Error("mobile workspace swipe must ignore touches that originate in the terminal toolbar")
+	}
+
+	terminalCSSRaw, err := fs.ReadFile(staticFS, "terminal.css")
+	if err != nil {
+		t.Fatalf("read terminal.css: %v", err)
+	}
+	toolbarRule := regexp.MustCompile(`(?s)\.terminal-toolbar\s*\{[^}]*touch-action:\s*pan-x;`)
+	if !toolbarRule.Match(terminalCSSRaw) {
+		t.Error("terminal toolbar must reserve horizontal touch gestures for its own scrolling")
+	}
+}
+
+func TestTerminalClientResumesExistingSessionAfterVisibilityLoss(t *testing.T) {
+	staticFS, err := assets.Static()
+	if err != nil {
+		t.Fatalf("open embedded static assets: %v", err)
+	}
+	raw, err := fs.ReadFile(staticFS, "terminal.js")
+	if err != nil {
+		t.Fatalf("read terminal.js: %v", err)
+	}
+	script := string(raw)
+
+	for _, contract := range []string{
+		`'?ticket=' + encodeURIComponent(ticket)`,
+		`addGlobalListener(document, 'visibilitychange'`,
+		`socket.close(4000, 'resume probe timeout')`,
+		`if (everConnected) setStatus('reconnecting'`,
+		`removeGlobalListeners();`,
+	} {
+		if !strings.Contains(script, contract) {
+			t.Errorf("terminal resume client is missing %q", contract)
+		}
+	}
+}
+
+func TestLiveMetricsSocketIsScopedAndDisposedWithItsPane(t *testing.T) {
+	staticFS, err := assets.Static()
+	if err != nil {
+		t.Fatalf("open embedded static assets: %v", err)
+	}
+	raw, err := fs.ReadFile(staticFS, "livemetrics.js")
+	if err != nil {
+		t.Fatalf("read livemetrics.js: %v", err)
+	}
+	script := string(raw)
+
+	for _, contract := range []string{
+		`document.currentScript && document.currentScript.closest('.tab-pane')`,
+		`if (reconnectTimer) {`,
+		`cleanupRoot.__nxCleanups.push(stop);`,
+	} {
+		if !strings.Contains(script, contract) {
+			t.Errorf("live metrics pane cleanup is missing %q", contract)
+		}
 	}
 }

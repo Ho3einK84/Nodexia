@@ -10,8 +10,7 @@ import (
 // testRebeccaCertPEM / testRebeccaKeyPEM are a real self-signed certificate and
 // matching RSA private key. The binary dev install reads a BUNDLE — the
 // certificate followed by its private key — from stdin, so the tests exercise
-// both blocks. The key is PKCS#1 ("RSA PRIVATE KEY") because the installer's
-// terminator requires a key type with a prefix word.
+// both blocks.
 const testRebeccaCertPEM = `-----BEGIN CERTIFICATE-----
 MIIC/zCCAeegAwIBAgIUMkxG68SAZ1SZtjzy03DmVs9PbBwwDQYJKoZIhvcNAQEL
 BQAwDzENMAsGA1UEAwwEdGVzdDAeFw0yNjA2MTgxMjAwMjlaFw0yNzA2MTgxMjAw
@@ -110,10 +109,10 @@ func TestNormalizeRebeccaBundle(t *testing.T) {
 	if _, ok := normalizeRebeccaBundle(testRebeccaKeyPEM); ok {
 		t.Errorf("a private key without a certificate must be rejected")
 	}
-	// A bare PKCS#8 key (no prefix word) is rejected — the installer can't read it.
+	// The upstream installer also accepts a bare PKCS#8 key (no prefix word).
 	pkcs8 := testRebeccaCertPEM + "\n-----BEGIN PRIVATE KEY-----\nMIIBVgIBADAN\n-----END PRIVATE KEY-----"
-	if _, ok := normalizeRebeccaBundle(pkcs8); ok {
-		t.Errorf("a bare PKCS#8 PRIVATE KEY must be rejected (installer needs a prefixed key type)")
+	if _, ok := normalizeRebeccaBundle(pkcs8); !ok {
+		t.Errorf("a bare PKCS#8 PRIVATE KEY must be accepted")
 	}
 }
 
@@ -214,11 +213,13 @@ func TestRebeccaInstallCommand(t *testing.T) {
 		"REBECCA_NODE_SCRIPT_FLAVOR=binary",
 		"install --name rebecca-node --binary --dev",
 		"timeout",
-		"</dev/null",
 	} {
 		if !strings.Contains(command, want) {
 			t.Errorf("install command missing %q:\n%s", want, command)
 		}
+	}
+	if strings.Contains(command, "</dev/null") {
+		t.Errorf("install command must keep the allocated PTY as stdin:\n%s", command)
 	}
 
 	// The bundle is delivered only through the PTY input on the InstallStep.
@@ -253,7 +254,7 @@ func TestRebeccaBuildInstallPlan(t *testing.T) {
 		t.Errorf("Rebecca install step must not tolerate the remote timeout (it detaches)")
 	}
 	if !plan.Steps[0].AllocatePTY {
-		t.Errorf("Rebecca install step must allocate a PTY for the upstream /dev/tty fallback")
+		t.Errorf("Rebecca install step must allocate a PTY for managed installer input")
 	}
 	normalized, err := (RebeccaInstallConfig{
 		Channel: "dev",
@@ -286,18 +287,18 @@ func TestRebeccaBuildInstallPlan(t *testing.T) {
 	}
 }
 
-// TestRebeccaPreparedAnswersReachDevTTYFallback exercises the exact upstream
-// dispatch shape that triggered the production failure:
+// TestRebeccaPreparedAnswersReachPTYStdin exercises the upstream dispatch shape
+// used by Nodexia's managed install:
 //
-//	if [ ! -t 0 ] && [ -r /dev/tty ]; then install_command </dev/tty
+//	if [ -t 0 ]; then install_command
 //
-// util-linux `script` supplies a real controlling PTY while process stdin is
-// redirected to /dev/null. The fixture succeeds only if the certificate, key,
-// and both ports written to the PTY all reach install_command.
-func TestRebeccaPreparedAnswersReachDevTTYFallback(t *testing.T) {
+// util-linux `script` supplies a real controlling PTY as process stdin. The
+// fixture succeeds only if the certificate, key, and both ports written to the
+// PTY all reach install_command.
+func TestRebeccaPreparedAnswersReachPTYStdin(t *testing.T) {
 	scriptTool, err := exec.LookPath("script")
 	if err != nil {
-		t.Skip("util-linux script is unavailable; cannot exercise /dev/tty fallback")
+		t.Skip("util-linux script is unavailable; cannot exercise managed PTY input")
 	}
 
 	const fixture = `#!/usr/bin/env bash
@@ -325,10 +326,10 @@ install_command() {
     fi
     echo "tty-fallback-answers-ok"
 }
-if [ ! -t 0 ] && [ -r /dev/tty ]; then
-    install_command </dev/tty
+if [ -t 0 ]; then
+    install_command
 else
-    echo "fixture did not enter the /dev/tty fallback" >&2
+    echo "fixture did not receive a PTY on stdin" >&2
     exit 43
 fi
 `
@@ -347,11 +348,11 @@ fi
 		t.Fatalf("Normalize: %v", err)
 	}
 
-	cmd := exec.Command(scriptTool, "-qec", "bash "+fixturePath+" </dev/null", "/dev/null")
+	cmd := exec.Command(scriptTool, "-qec", "bash "+fixturePath, "/dev/null")
 	cmd.Stdin = strings.NewReader(rebeccaInstallAnswers(cfg))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("/dev/tty fallback fixture failed: %v\n%s", err, output)
+		t.Fatalf("PTY stdin fixture failed: %v\n%s", err, output)
 	}
 	if !strings.Contains(string(output), "tty-fallback-answers-ok") {
 		t.Fatalf("fixture did not confirm answer delivery:\n%s", output)

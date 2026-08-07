@@ -1058,6 +1058,7 @@
     if (!contentEl) return;
     var sx = 0, sy = 0, tracking = false, intent = null;
     contentEl.addEventListener('touchstart', function (e) {
+      if (e.target.closest && e.target.closest('.terminal-toolbar')) { tracking = false; return; }
       if (window.innerWidth >= MOBILE_BREAKPOINT || e.touches.length !== 1) { tracking = false; return; }
       sx = e.touches[0].clientX; sy = e.touches[0].clientY;
       tracking = true; intent = null;

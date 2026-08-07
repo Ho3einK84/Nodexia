@@ -66,7 +66,7 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Resolve each server's detected country once so both dashboard listings
 	// (resource snapshots and scheduler jobs) can show a flag next to the name
 	// without any extra per-row query.
-	countries := serverCountryBadges(h.database)
+	countries := serverCountryBadges(r.Context(), h.database)
 
 	// Fleet warnings lead the dashboard: exhaustion before the traffic reset,
 	// resources at/above 90%, and forecast anomalies. Dismissals are client-side
@@ -144,13 +144,13 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // are omitted (callers treat a missing key as "no flag"). Any error yields an
 // empty map so the page simply renders without flags. Shared by the home
 // dashboard and the diagnostics scheduler view.
-func serverCountryBadges(database *db.Runtime) map[int64]countryBadge {
+func serverCountryBadges(ctx context.Context, database *db.Runtime) map[int64]countryBadge {
 	badges := map[int64]countryBadge{}
 	if database == nil || database.SQL == nil {
 		return badges
 	}
 	repo := servers.NewSQLRepository(database.SQL)
-	list, err := repo.List(context.Background())
+	list, err := repo.List(ctx)
 	if err != nil {
 		return badges
 	}

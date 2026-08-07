@@ -39,7 +39,8 @@
 // POST → create ticket (30 s TTL) → render terminal page (ticket id in
 // data-ticket HTML attr) → JS opens WS → WS handler consumes ticket (single-use)
 // → start PTY shell.  Ticket id is in the WS query string (?ticket=) for the
-// upgrade request only; the actual credentials stay in the in-memory store.
+// upgrade request only; the actual credentials stay in memory. After the first
+// connection, the consumed ticket can only reattach that same live shell.
 //
 // # Session limit
 //
@@ -49,13 +50,11 @@ package terminal
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	cwebsocket "github.com/coder/websocket"
@@ -73,7 +72,7 @@ const (
 	maxTerminalSessionsPerUser = 3
 
 	// wsWriteTimeout is the per-frame write deadline; if the client is too slow
-	// the session is terminated rather than buffering output in memory.
+	// the viewer is detached and output is buffered within the resume limit.
 	wsWriteTimeout = 5 * time.Second
 
 	// maxInputFrameBytes caps the size of a single client→server input frame.
@@ -85,7 +84,7 @@ const (
 	// wsPingInterval is how often the server sends a protocol-level WebSocket
 	// ping. A missed pong (no reply within wsWriteTimeout) means the connection
 	// is a zombie — most often a silently dropped mobile/NAT link — and the
-	// session is torn down instead of lingering with a live SSH shell behind it.
+	// viewer is detached while the SSH shell remains available for bounded resume.
 	wsPingInterval = 30 * time.Second
 )
 
@@ -241,12 +240,12 @@ func (h postHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ── WebSocket handler ─────────────────────────────────────────────────────────
 
 type wsHandler struct {
-	deps       module.Dependencies
-	serverRepo servers.Repository
+	deps     module.Dependencies
+	sessions *terminalSessionHub
 }
 
-func newWSHandler(deps module.Dependencies, serverRepo servers.Repository) wsHandler {
-	return wsHandler{deps: deps, serverRepo: serverRepo}
+func newWSHandler(deps module.Dependencies, sessions *terminalSessionHub) wsHandler {
+	return wsHandler{deps: deps, sessions: sessions}
 }
 
 func (h wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -262,14 +261,47 @@ func (h wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	serverID, ok := pathServerID(r)
+	if !ok {
+		http.Error(w, "terminal: invalid server", http.StatusBadRequest)
+		return
+	}
+	username := middleware.GetAuthenticatedUser(r.Context())
+
+	// A consumed ticket may reattach only to its existing shell and only for
+	// the same authenticated user and server path. It never starts a second PTY.
+	if session, exists := h.sessions.get(ticketID); exists {
+		if session.username != username || session.serverID != serverID {
+			http.Error(w, "terminal: resume ticket does not match this session", http.StatusForbidden)
+			return
+		}
+		conn, err := cwebsocket.Accept(w, r, &cwebsocket.AcceptOptions{
+			InsecureSkipVerify: true,
+		})
+		if err != nil {
+			return
+		}
+		if !session.attach(conn) {
+			_ = conn.Close(cwebsocket.StatusTryAgainLater, "session is no longer available")
+			return
+		}
+		h.serveConnection(session, conn)
+		return
+	}
+
 	ticket, ok := h.deps.TerminalTickets.Consume(ticketID)
 	if !ok {
 		http.Error(w, "terminal: ticket invalid, expired, or already used", http.StatusUnauthorized)
 		return
 	}
+	if ticket.ServerID != serverID {
+		h.deps.TerminalTickets.Release(ticketID)
+		http.Error(w, "terminal: ticket does not match this server", http.StatusForbidden)
+		return
+	}
 
-	username := middleware.GetAuthenticatedUser(r.Context())
 	if !h.deps.TerminalTickets.TryAcquireSession(username, maxTerminalSessionsPerUser) {
+		h.deps.TerminalTickets.Release(ticketID)
 		// Reject before upgrading to keep the error response plain-text.
 		http.Error(w, fmt.Sprintf("terminal: session limit reached (max %d)", maxTerminalSessionsPerUser), http.StatusTooManyRequests)
 		return
@@ -280,73 +312,41 @@ func (h wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		h.deps.TerminalTickets.ReleaseSession(username)
+		h.deps.TerminalTickets.Release(ticketID)
 		return
 	}
-	defer func() {
-		h.deps.TerminalTickets.ReleaseSession(username)
-		h.deps.TerminalTickets.Release(ticketID)
-		_ = conn.Close(cwebsocket.StatusNormalClosure, "session ended")
-	}()
-
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-
-	stdinR, stdinW := io.Pipe()
-	defer func() {
-		_ = stdinW.Close()
-	}()
-
-	resizeCh := make(chan sshclient.ResizeRequest, 8)
-
-	wsOut := &wsOutputWriter{conn: conn, ctx: ctx}
-	pio := sshclient.InteractiveIO{
-		Stdin:  stdinR,
-		Stdout: wsOut,
-		Stderr: wsOut,
-		Rows:   24,
-		Cols:   80,
-		Resize: resizeCh,
+	session := h.sessions.create(ticket, username)
+	if !session.attach(conn) {
+		session.finishShell(context.Canceled)
+		_ = conn.Close(cwebsocket.StatusTryAgainLater, "session is no longer available")
+		return
 	}
-
-	// Tell the client the session is live so its status chip can flip from
-	// "connecting" to "connected" even before the shell emits its first byte.
-	_ = wsOut.writeStatus("connected")
-
-	// Protocol-level ping keepalive: detects a dead peer and tears the session
-	// down by cancelling ctx (which stops the shell and the read loop).
-	go h.pingKeepalive(ctx, cancel, conn)
-
-	shellDone := make(chan error, 1)
-	go func() {
-		shellDone <- h.deps.SSH.OpenShell(ctx, ticket.Req, pio)
-		cancel() // unblock the read loop when the shell exits
-	}()
-
-	// WS read loop runs until the client disconnects or the shell ends.
-	_ = h.runReadLoop(ctx, conn, stdinW, resizeCh, wsOut)
-
-	// Stop the shell if the read loop ended first, then wait for it.
-	cancel()
-	_ = stdinW.Close()
-	shellErr := <-shellDone
-
-	// Surface a real SSH/shell failure (auth rejected, host unreachable, PTY
-	// refused, …) to the client.  ctx is already cancelled here, so the final
-	// frame must use a fresh context — otherwise the write is dropped and the
-	// user sees an unexplained disconnect with no reason.
-	if shellErr != nil &&
-		!errors.Is(shellErr, context.Canceled) &&
-		!errors.Is(shellErr, context.DeadlineExceeded) {
-		errCtx, errCancel := context.WithTimeout(context.Background(), wsWriteTimeout)
-		_ = writeWSError(errCtx, conn, "ssh: "+shellErr.Error())
-		errCancel()
-	}
+	session.startShell()
+	h.serveConnection(session, conn)
 }
 
-// pingKeepalive sends a protocol-level WebSocket ping every wsPingInterval and
-// waits for the pong. A failed ping (timeout or write error) means the peer is
-// gone, so it cancels the session context to tear everything down.
-func (h wsHandler) pingKeepalive(ctx context.Context, cancel context.CancelFunc, conn *cwebsocket.Conn) {
+func (h wsHandler) serveConnection(session *terminalSession, conn *cwebsocket.Conn) {
+	connCtx, cancel := context.WithCancel(session.ctx)
+	defer cancel()
+
+	// A failed ping detaches only this browser transport. The SSH shell remains
+	// live for terminalResumeGrace and can be reattached by the same ticket.
+	go h.pingKeepalive(connCtx, conn)
+	readErr := h.runReadLoop(connCtx, conn, session.stdinW, session.resizeCh, session)
+
+	// A deliberate clean close (Back, reconnect, or tab close) ends the shell.
+	// Abnormal mobile/network loss retains it for a bounded resume window.
+	if cwebsocket.CloseStatus(readErr) == cwebsocket.StatusNormalClosure {
+		session.stop()
+		return
+	}
+	session.detach(conn)
+}
+
+// pingKeepalive sends a protocol-level WebSocket ping every wsPingInterval.
+// A failed ping closes this transport so the read loop detaches it; it does not
+// cancel the resumable SSH session.
+func (h wsHandler) pingKeepalive(ctx context.Context, conn *cwebsocket.Conn) {
 	ticker := time.NewTicker(wsPingInterval)
 	defer ticker.Stop()
 	for {
@@ -358,7 +358,7 @@ func (h wsHandler) pingKeepalive(ctx context.Context, cancel context.CancelFunc,
 			err := conn.Ping(pingCtx)
 			pingCancel()
 			if err != nil {
-				cancel()
+				_ = conn.CloseNow()
 				return
 			}
 		}
@@ -371,7 +371,7 @@ func (h wsHandler) runReadLoop(
 	conn *cwebsocket.Conn,
 	stdinW *io.PipeWriter,
 	resizeCh chan<- sshclient.ResizeRequest,
-	wsOut *wsOutputWriter,
+	session *terminalSession,
 ) error {
 	for {
 		_, data, err := conn.Read(ctx)
@@ -405,92 +405,10 @@ func (h wsHandler) runReadLoop(
 		case "heartbeat":
 			// Echo so the client can measure round-trip latency. Best-effort —
 			// a write failure here is surfaced by the next output write or ping.
-			_ = wsOut.writeHeartbeat()
+			_ = session.writeHeartbeat(conn)
 		}
 		// Unknown types are silently ignored.
 	}
-}
-
-// wsOutputWriter implements io.Writer by encoding each chunk as a JSON
-// {"type":"output","data":"..."} frame and writing it to the WebSocket.
-//
-// It enforces a per-write timeout: if the client is too slow and a write
-// exceeds wsWriteTimeout, Write returns an error which causes the SSH session
-// to terminate (no unbounded buffering).
-type wsOutputWriter struct {
-	conn *cwebsocket.Conn
-	ctx  context.Context
-	mu   sync.Mutex
-}
-
-func (w *wsOutputWriter) Write(p []byte) (int, error) {
-	total := len(p)
-	for len(p) > 0 {
-		chunk := p
-		if len(chunk) > wsOutputChunkBytes {
-			chunk = p[:wsOutputChunkBytes]
-		}
-		if err := w.writeFrame(chunk); err != nil {
-			return total - len(p), err
-		}
-		p = p[len(chunk):]
-	}
-	return total, nil
-}
-
-func (w *wsOutputWriter) writeFrame(data []byte) error {
-	msg, err := json.Marshal(struct {
-		Type string `json:"type"`
-		Data string `json:"data"`
-	}{"output", string(data)})
-	if err != nil {
-		return err
-	}
-	return w.writeRaw(msg)
-}
-
-// writeStatus emits a {"type":"status","state":...} control frame.
-func (w *wsOutputWriter) writeStatus(state string) error {
-	msg, err := json.Marshal(struct {
-		Type  string `json:"type"`
-		State string `json:"state"`
-	}{"status", state})
-	if err != nil {
-		return err
-	}
-	return w.writeRaw(msg)
-}
-
-// writeHeartbeat echoes a {"type":"heartbeat"} control frame.
-func (w *wsOutputWriter) writeHeartbeat() error {
-	msg, err := json.Marshal(struct {
-		Type string `json:"type"`
-	}{"heartbeat"})
-	if err != nil {
-		return err
-	}
-	return w.writeRaw(msg)
-}
-
-// writeRaw serialises all WebSocket writes through w.mu so output, status, and
-// heartbeat frames never interleave (coder/websocket forbids concurrent writes).
-func (w *wsOutputWriter) writeRaw(msg []byte) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	writeCtx, cancel := context.WithTimeout(w.ctx, wsWriteTimeout)
-	defer cancel()
-	return w.conn.Write(writeCtx, cwebsocket.MessageText, msg)
-}
-
-func writeWSError(ctx context.Context, conn *cwebsocket.Conn, msg string) error {
-	payload, _ := json.Marshal(struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
-	}{"error", msg})
-	writeCtx, cancel := context.WithTimeout(ctx, wsWriteTimeout)
-	defer cancel()
-	return conn.Write(writeCtx, cwebsocket.MessageText, payload)
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────

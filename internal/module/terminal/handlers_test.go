@@ -281,6 +281,38 @@ func TestTerminalWSRejectsExpiredTicket(t *testing.T) {
 	}
 }
 
+func TestTerminalWSRejectsTicketForDifferentServerPath(t *testing.T) {
+	deps := newTestDeps(t)
+	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
+	first := seedServer(t, serverRepo, true)
+	second, err := serverRepo.Create(context.Background(), servers.Server{
+		Name:               "other-server",
+		Host:               "10.0.0.2",
+		Port:               22,
+		AuthMode:           servers.AuthModePassword,
+		Username:           "root",
+		CredentialStrategy: servers.CredentialStrategyStored,
+		CredentialRef:      "secret",
+	})
+	if err != nil {
+		t.Fatalf("seed second server: %v", err)
+	}
+
+	ticketID, err := deps.TerminalTickets.Create(first.ID, sshclient.ConnectionRequest{})
+	if err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+	mux := registerRoutes(t, deps)
+	req := sameOriginRequest(http.MethodGet,
+		"/servers/"+sid(second.ID)+"/terminal/ws?ticket="+ticketID, "")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("cross-server ticket: status = %d, want 403", w.Code)
+	}
+}
+
 func TestTerminalWSSessionLimitRejected(t *testing.T) {
 	deps := newTestDeps(t)
 	serverRepo := servers.NewSQLRepository(deps.Database.SQL)

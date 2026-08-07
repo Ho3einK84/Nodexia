@@ -16,7 +16,11 @@
   function T(key, params) { return window.nxT ? window.nxT(key, params) : key; }
   function Tn(key, count, params) { return window.nxTn ? window.nxTn(key, count, params) : key; }
 
-  var card = document.querySelector('[data-live-url]');
+  // Dynamically loaded workspace scripts execute inside their owning pane.
+  // Scope the lookup so a second monitoring tab cannot bind to the first
+  // pane's card.
+  var scriptPane = document.currentScript && document.currentScript.closest('.tab-pane');
+  var card = (scriptPane || document).querySelector('[data-live-url]');
   if (!card || typeof WebSocket === 'undefined') return;
 
   var path = card.getAttribute('data-live-url');
@@ -189,10 +193,24 @@
     };
   }
 
-  window.addEventListener('beforeunload', function () {
+  function stop() {
+    if (stopped) return;
     stopped = true;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
     if (socket) { try { socket.close(); } catch (err) {} }
-  });
+    socket = null;
+  }
+
+  var cleanupRoot = card.closest('.tab-pane');
+  if (cleanupRoot) {
+    if (!cleanupRoot.__nxCleanups) cleanupRoot.__nxCleanups = [];
+    cleanupRoot.__nxCleanups.push(stop);
+  } else {
+    window.addEventListener('beforeunload', stop, { once: true });
+  }
 
   connect();
 })();
