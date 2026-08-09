@@ -9,12 +9,12 @@ still `vMAJOR.MINOR.PATCH`.
 
 ## v0.7.2 — Rebecca node dev install fix
 
-- Fixed Rebecca node dev installs stalling at the certificate bundle and port
-  prompts by pre-writing all config files (`.env`, `cert.pem`, `cert.key`)
-  directly in the install command via base64 encoding. The upstream script's
-  interactive prompts now read defaults from the pre-written `.env` via
-  `get_env_value`, eliminating dependency on PTY stdin data delivery which
-  was unreliable due to backgrounded package installs consuming the data.
+- Fixed Rebecca node dev installs stalling on existing/override installations
+  (`Do you want to override the previous installation? (y/n)` and port prompts).
+  The upstream installer is now patched inline via non-interactive `sed`
+  replacements to bypass override confirmation prompts, eliminate broken
+  `/dev/tty` input redirections, and use pre-written `.env` default fallback
+  values without waiting on PTY stdin.
 
 ## v0.7.1 — Mobile terminal resilience
 

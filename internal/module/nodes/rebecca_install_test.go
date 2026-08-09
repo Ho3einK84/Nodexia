@@ -224,9 +224,16 @@ func TestRebeccaInstallCommand(t *testing.T) {
 
 	// The cert, key, and .env are pre-written via base64 in the install command.
 	// They MUST be present so configure_binary_node_env skips all interactive prompts.
-	for _, want := range []string{"base64", "/var/lib/rebecca-node/cert.pem", "/var/lib/rebecca-node/cert.key", "/opt/rebecca-node/.env"} {
+	for _, want := range []string{
+		"base64",
+		"/var/lib/rebecca-node/cert.pem",
+		"/var/lib/rebecca-node/cert.key",
+		"/opt/rebecca-node/.env",
+		"is_rebecca_node_installed",
+		"install_command </dev/tty",
+	} {
 		if !strings.Contains(command, want) {
-			t.Errorf("install command missing pre-write marker %q:\n%s", want, command)
+			t.Errorf("install command missing marker %q:\n%s", want, command)
 		}
 	}
 

@@ -657,6 +657,14 @@ func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) 
 		`if command -v curl >/dev/null 2>&1; then curl -fsSL ` + scriptURL + ` -o "$SCRIPT" || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + scriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`else echo "curl or wget is required to install" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
+		// Apply non-interactive patches to the downloaded installer script so it
+		// never stalls on PTY stdin or /dev/tty reads:
+		// 1. Bypass the override prompt when /opt/<name> already exists
+		`sed -i "s|if is_rebecca_node_installed; then|if false; then|g" "$SCRIPT"; ` +
+		// 2. Remove broken </dev/tty redirection in dispatch_command
+		`sed -i "s|install_command </dev/tty|install_command|g" "$SCRIPT"; ` +
+		// 3. Bypass interactive port prompts so prompt_node_port_setting uses .env fallback without blocking
+		`sed -i "s|IFS= read -r value|value=\"\"|g" "$SCRIPT"; ` +
 		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + rebeccaInstallScriptTimeout + `"; fi; ` +
 		// Run the binary-flavored script in binary mode. We still send data
 		// through PTY stdin as a safety net, but the install does NOT depend on
