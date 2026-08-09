@@ -7,6 +7,15 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.7.2 — Rebecca node dev install fix
+
+- Fixed Rebecca node dev installs stalling at the certificate bundle and port
+  prompts by pre-writing all config files (`.env`, `cert.pem`, `cert.key`)
+  directly in the install command via base64 encoding. The upstream script's
+  interactive prompts now read defaults from the pre-written `.env` via
+  `get_env_value`, eliminating dependency on PTY stdin data delivery which
+  was unreliable due to backgrounded package installs consuming the data.
+
 ## v0.7.1 — Mobile terminal resilience
 
 - Terminal toolbar scrolling no longer triggers the workspace tab-swipe gesture

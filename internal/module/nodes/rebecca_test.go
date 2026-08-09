@@ -111,13 +111,19 @@ func TestRebeccaInstallCommandUsesNodeName(t *testing.T) {
 		Channel:     "dev",
 		ServicePort: "62050",
 		APIPort:     "62051",
-		Bundle:      "-----BEGIN CERTIFICATE-----\nx\n-----END CERTIFICATE-----\n-----BEGIN RSA PRIVATE KEY-----\ny\n-----END RSA PRIVATE KEY-----\n",
+		Bundle:      testRebeccaBundle,
 	})
 	if err != nil {
 		t.Fatalf("InstallCommand: %v", err)
 	}
 	if !strings.Contains(cmd, "install --name node2 --binary --dev") {
 		t.Errorf("install command = %q, want it to pin --name node2", cmd)
+	}
+	if !strings.Contains(cmd, "/var/lib/node2/cert.pem") || !strings.Contains(cmd, "/var/lib/node2/cert.key") {
+		t.Errorf("install command = %q, want cert pre-write to the node2 data dir", cmd)
+	}
+	if !strings.Contains(cmd, "/opt/node2/.env") {
+		t.Errorf("install command = %q, want .env pre-write to the node2 app dir", cmd)
 	}
 }
 

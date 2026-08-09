@@ -222,11 +222,11 @@ func TestRebeccaInstallCommand(t *testing.T) {
 		t.Errorf("install command must keep the allocated PTY as stdin:\n%s", command)
 	}
 
-	// The bundle is delivered only through the PTY input on the InstallStep.
-	// Neither raw PEM nor an encoded copy belongs in the shell command.
-	for _, secretMarker := range []string{"BEGIN CERTIFICATE", "PRIVATE KEY", "base64", "nodexia-rebecca-in"} {
-		if strings.Contains(command, secretMarker) {
-			t.Errorf("install command contains secret/input marker %q:\n%s", secretMarker, command)
+	// The cert, key, and .env are pre-written via base64 in the install command.
+	// They MUST be present so configure_binary_node_env skips all interactive prompts.
+	for _, want := range []string{"base64", "/var/lib/rebecca-node/cert.pem", "/var/lib/rebecca-node/cert.key", "/opt/rebecca-node/.env"} {
+		if !strings.Contains(command, want) {
+			t.Errorf("install command missing pre-write marker %q:\n%s", want, command)
 		}
 	}
 
@@ -264,16 +264,21 @@ func TestRebeccaBuildInstallPlan(t *testing.T) {
 		t.Fatalf("Normalize: %v", err)
 	}
 	if got, want := plan.Steps[0].Input, rebeccaInstallAnswers(normalized); got != want {
-		t.Fatalf("managed install input does not contain the normalized bundle and ports")
+		t.Fatalf("managed install input does not contain the ports")
 	}
-	for _, want := range []string{"BEGIN CERTIFICATE", "BEGIN RSA PRIVATE KEY", "\n62050\n62051\n"} {
+	for _, want := range []string{"y\n62050\n62051\n"} {
 		if !strings.Contains(plan.Steps[0].Input, want) {
 			t.Errorf("managed install input missing %q", want)
 		}
 	}
-	if strings.Contains(plan.Steps[0].Command, plan.Steps[0].Input) ||
-		strings.Contains(plan.Steps[0].Command, "BEGIN CERTIFICATE") {
-		t.Errorf("managed install input leaked into the command")
+	// The bundle is pre-written via base64 in the command, NOT sent through
+	// stdin. Only ports should flow through the PTY input.
+	if strings.Contains(plan.Steps[0].Command, plan.Steps[0].Input) {
+		t.Errorf("port-only input must not appear in the install command")
+	}
+	if strings.Contains(plan.Steps[0].Input, "BEGIN CERTIFICATE") ||
+		strings.Contains(plan.Steps[0].Input, "BEGIN RSA PRIVATE KEY") {
+		t.Errorf("managed install input must not contain PEM data (cert is pre-written via base64)")
 	}
 	// No readback: the user supplied the bundle, nothing is read back.
 	if plan.Readback.Command != "" {
@@ -292,9 +297,11 @@ func TestRebeccaBuildInstallPlan(t *testing.T) {
 //
 //	if [ -t 0 ]; then install_command
 //
-// util-linux `script` supplies a real controlling PTY as process stdin. The
-// fixture succeeds only if the certificate, key, and both ports written to the
-// PTY all reach install_command.
+// util-linux `script` supplies a real controlling PTY as process stdin.
+// Since the cert and key are pre-written via base64 in the install command,
+// only the override answer and port values flow through PTY stdin. The fixture
+// consumes the leading "y" as the override answer (mimicking a reinstall where
+// /opt/<name> already exists), then verifies both ports arrive.
 func TestRebeccaPreparedAnswersReachPTYStdin(t *testing.T) {
 	scriptTool, err := exec.LookPath("script")
 	if err != nil {
@@ -304,24 +311,16 @@ func TestRebeccaPreparedAnswersReachPTYStdin(t *testing.T) {
 	const fixture = `#!/usr/bin/env bash
 set -e
 install_command() {
-    have_cert=0
-    have_key=0
-    while IFS= read -r line || [ -n "$line" ]; do
-        if [ "$line" = "-----END CERTIFICATE-----" ]; then
-            have_cert=1
-        fi
-        case "$line" in
-            -----END\ *PRIVATE\ KEY-----)
-                have_key=1
-                break
-                ;;
-        esac
-    done
+    # Override prompt: consumes the first line ("y") when /opt/<name> exists.
+    read -r override_answer
+    if [ "$override_answer" != "y" ]; then
+        echo "override answer was not delivered to install_command" >&2
+        exit 44
+    fi
     IFS= read -r service_port
     IFS= read -r api_port
-    if [ "$have_cert" -ne 1 ] || [ "$have_key" -ne 1 ] ||
-       [ "$service_port" != "62050" ] || [ "$api_port" != "62051" ]; then
-        echo "prepared answers were not delivered to install_command" >&2
+    if [ "$service_port" != "62050" ] || [ "$api_port" != "62051" ]; then
+        echo "prepared port answers were not delivered to install_command" >&2
         exit 42
     fi
     echo "tty-fallback-answers-ok"

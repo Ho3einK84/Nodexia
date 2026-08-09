@@ -1,6 +1,7 @@
 package nodes
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -417,26 +418,26 @@ func (RebeccaProvider) reinstallScriptCommand(nodeName string) string {
 // passed via `env` (surviving sudo) to make the binary mode explicit.
 //
 // How rebecca-node.sh consumes its inputs in binary mode (verified against the
-// script's read_node_certificate_bundle + configure_binary_node_env): it reads
-// stdin in this exact order —
-//  1. the node install BUNDLE — the client CERTIFICATE block followed by its
-//     PRIVATE KEY block. The reader appends lines until it sees the
-//     "-----END <type> PRIVATE KEY-----" line with the certificate already
-//     present, so the certificate MUST come before the key;
-//  2. the SERVICE_PORT (the protocol is auto-set to REST, no prompt);
-//  3. the XRAY_API_PORT (must differ from SERVICE_PORT).
-// It then writes /opt/rebecca-node/.env + the binary release metadata and
-// enables the systemd unit (`systemctl enable --now`, which returns at once).
+// script's read_node_certificate_bundle + configure_binary_node_env): the cert
+// and key files are pre-written by InstallCommand to /var/lib/<name>/cert.pem
+// and cert.key before the install script runs. configure_binary_node_env checks
+// for existing non-empty cert files and skips read_node_certificate_bundle when
+// they are present. This avoids the interactive PTY stdin prompt entirely,
+// preventing timing races where backgrounded package installs (apt-get via
+// ui_spinner_run) consumed the PTY stdin buffer before the cert reader ran.
+//
+// With cert files pre-written, stdin only needs to carry:
+//  1. the SERVICE_PORT;
+//  2. the XRAY_API_PORT (must differ from SERVICE_PORT).
 //
 // The upstream install dispatcher redirects install_command to /dev/tty when
 // stdin is not a terminal. Rebecca install steps therefore allocate a PTY and
-// keep it as process stdin while Nodexia writes the normalized bundle plus ports.
-// This matters on hosts where sudo uses a child PTY: redirecting sudo's stdin to
-// /dev/null leaves that child /dev/tty with no input and the certificate reader
-// waits forever. sshclient disables terminal echo before sending anything.
+// keep it as process stdin while Nodexia writes the port answers.
+// sshclient disables terminal echo before sending anything.
 //
-// The private key remains only in the in-memory InstallStep.Input. It is not
-// embedded in the shell command, persisted, or appended to streamed job output.
+// The private key is embedded in the install command's heredoc and written
+// directly to the cert.key file on the remote host. It is not persisted by
+// Nodexia (not stored in the database or logs) and is request-scoped only.
 
 // RebeccaInstallConfig carries the pre-install choices for a Rebecca dev install.
 // Bundle is the node install bundle from the Rebecca panel: the client
@@ -518,6 +519,17 @@ func normalizeRebeccaBundle(s string) (string, bool) {
 	return strings.TrimSpace(cert) + "\n" + strings.TrimSpace(key) + "\n", true
 }
 
+// splitRebeccaBundle extracts the certificate and key PEM blocks separately
+// from a normalized bundle string. ok=false when either block is missing.
+func splitRebeccaBundle(s string) (cert, key string, ok bool) {
+	cert = rebeccaCertBlockPattern.FindString(s)
+	key = rebeccaKeyBlockPattern.FindString(s)
+	if cert == "" || key == "" {
+		return "", "", false
+	}
+	return strings.TrimSpace(cert) + "\n", strings.TrimSpace(key) + "\n", true
+}
+
 // normalizeInstallInput validates the raw install form fields for a Rebecca
 // install and returns the resolved config plus field-keyed validation errors
 // (the values are i18n keys the handler translates). Empty errors means valid.
@@ -581,24 +593,75 @@ func (RebeccaProvider) normalizeInstallInput(in installFormInput) (RebeccaInstal
 // script in BINARY mode. BuildInstallPlan pairs it with a PTY and the managed
 // input returned by rebeccaInstallAnswers; running this command without that
 // PTY/input contract is intentionally unsupported.
+//
+// Pre-writing strategy: the upstream install script runs several interactive
+// prompts that read from stdin (PTT). However, backgrounded processes
+// (package installs via ui_spinner_run) inherit the PTY slave and can consume
+// the stdin data before the prompts reach it. To prevent stalls, we pre-write
+// ALL config files that the upstream script would create interactively:
+//
+//  1. /opt/<name>/.env — port values, cert paths, protocol (prompt_node_port_setting
+//     reads defaults from here via get_env_value; if stdin data was consumed
+//     by a backgrounded process, read gets EOF and falls back to the .env value)
+//  2. /var/lib/<name>/cert.pem and cert.key — certificate and private key
+//     (configure_binary_node_env checks for existing cert files and skips
+//     the interactive read_node_certificate_bundle prompt)
+//
+// We still send "y\n" + port data through stdin as a safety net for the
+// override prompt (reinstall case) and as a belt-and-suspenders fallback,
+// but the install does NOT depend on the data arriving intact.
 func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) {
 	normalized, err := cfg.Normalize()
 	if err != nil {
 		return "", err
 	}
+
+	certPEM, keyPEM, ok := splitRebeccaBundle(normalized.Bundle)
+	if !ok {
+		return "", fmt.Errorf("nodes: rebecca: bundle must contain a certificate and a private key")
+	}
+
 	scriptURL := rebeccaDevScriptURL // only dev wired today; stable adds its URL here
+	dataDir := "/var/lib/" + normalized.NodeName
+	appDir := "/opt/" + normalized.NodeName
+
+	// Base64-encode the cert and key PEM content so it can be embedded in the
+	// shell command without any quoting issues (the command is wrapped in sh -c '...').
+	certB64 := base64.StdEncoding.EncodeToString([]byte(certPEM))
+	keyB64 := base64.StdEncoding.EncodeToString([]byte(keyPEM))
+
+	// Pre-write the .env file in the same format as set_env_value():
+	// KEY = "VALUE". This lets prompt_node_port_setting read defaults via
+	// get_env_value(), so read can fall back to correct values even if stdin
+	// data was consumed by backgrounded package installs.
+	envContent := fmt.Sprintf(
+		"SERVICE_PORT = \"%s\"\nXRAY_API_PORT = \"%s\"\nREBECCA_DATA_DIR = \"%s\"\n"+
+			"SSL_CLIENT_CERT_FILE = \"%s/cert.pem\"\nSSL_CERT_FILE = \"%s/cert.pem\"\n"+
+			"SSL_KEY_FILE = \"%s/cert.key\"\nXRAY_EXECUTABLE_PATH = \"%s/xray-core/xray\"\n"+
+			"XRAY_ASSETS_PATH = \"%s/xray-core\"\nSERVICE_PROTOCOL = \"rest\"\n",
+		normalized.ServicePort, normalized.APIPort,
+		dataDir, dataDir, dataDir, dataDir, dataDir, dataDir)
+	envB64 := base64.StdEncoding.EncodeToString([]byte(envContent))
 
 	command := `sh -c '` + sudoPreamble +
+		// Pre-write .env with port values and config so prompt_node_port_setting
+		// reads defaults from get_env_value() and never blocks on empty stdin.
+		`$SUDO mkdir -p ` + appDir + ` ` + dataDir + `; ` +
+		`echo ` + envB64 + ` | base64 -d | $SUDO tee ` + appDir + `/.env >/dev/null; ` +
+		// Pre-write cert and key so configure_binary_node_env skips the
+		// interactive read_node_certificate_bundle prompt.
+		`echo ` + certB64 + ` | base64 -d | $SUDO tee ` + dataDir + `/cert.pem >/dev/null; ` +
+		`echo ` + keyB64 + ` | base64 -d | $SUDO tee ` + dataDir + `/cert.key >/dev/null; ` +
+		`$SUDO chmod 600 ` + dataDir + `/cert.key; ` +
 		`SCRIPT="$(mktemp /tmp/nodexia-rebecca-node.XXXXXX)" || exit 1; ` +
 		`if command -v curl >/dev/null 2>&1; then curl -fsSL ` + scriptURL + ` -o "$SCRIPT" || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + scriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
 		`else echo "curl or wget is required to install" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
 		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + rebeccaInstallScriptTimeout + `"; fi; ` +
-		// Run the binary-flavored script in binary mode (REBECCA_NODE_SCRIPT_FLAVOR
-		// carries through sudo). --name pins the instance to /opt/<name> so several
-		// Rebecca nodes can coexist; the COMMAND (install) must be parsed before
-		// --name, so order matters. The install step's non-echoing PTY remains
-		// stdin so both direct execution and sudo's child PTY receive the answers.
+		// Run the binary-flavored script in binary mode. We still send data
+		// through PTY stdin as a safety net, but the install does NOT depend on
+		// it arriving intact — the pre-written .env and cert files provide all
+		// values via fallback defaults.
 		`$TMO $SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" install --name ` + normalized.NodeName + ` --binary --dev; ` +
 		`STATUS=$?; rm -f "$SCRIPT"; ` +
 		`if [ "$STATUS" -ne 0 ]; then echo "[rebecca-node install script exited with status $STATUS]" >&2; fi; ` +
@@ -606,11 +669,15 @@ func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) 
 	return command, nil
 }
 
-// rebeccaInstallAnswers returns exactly the input sequence consumed by the
-// binary installer: certificate + key, service port, then Xray API port. cfg is
-// already normalized by BuildInstallPlan, so Bundle ends with one newline.
+// rebeccaInstallAnswers returns the input sequence sent through PTY stdin as
+// a safety net. The leading "y" answers the override prompt when /opt/<name>
+// already exists (reinstall); on a fresh install it is harmlessly rejected as
+// an invalid port. Empty newlines follow so that read() returns immediately
+// with empty value, which prompt_node_port_setting defaults to the values from
+// the pre-written .env file. This data is NOT required for correctness — the
+// pre-written .env provides all values via the get_env_value fallback.
 func rebeccaInstallAnswers(cfg RebeccaInstallConfig) string {
-	return cfg.Bundle + cfg.ServicePort + "\n" + cfg.APIPort + "\n"
+	return "y\n" + cfg.ServicePort + "\n" + cfg.APIPort + "\n"
 }
 
 // BuildInstallPlan assembles the Rebecca dev install procedure: a single
