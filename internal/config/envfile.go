@@ -38,7 +38,12 @@ func loadEnvFile(path string) error {
 
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
-		value = strings.Trim(value, `"'`)
+		if len(value) >= 2 {
+			if (strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`)) ||
+				(strings.HasPrefix(value, `'`) && strings.HasSuffix(value, `'`)) {
+				value = value[1 : len(value)-1]
+			}
+		}
 
 		// Real environment variables keep precedence over the file.
 		if _, exists := os.LookupEnv(key); exists {
