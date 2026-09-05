@@ -69,7 +69,12 @@ func NewWithStream(stream StreamFunc) *Hub {
 }
 
 // Interval reports the live sampling cadence (for display in the UI).
-func (h *Hub) Interval() time.Duration { return h.interval }
+func (h *Hub) Interval() time.Duration {
+	if h == nil {
+		return DefaultInterval
+	}
+	return h.interval
+}
 
 // Subscribe registers a client for a server's live metrics, starting the
 // shared broker if it is the first subscriber. The returned Subscription must
@@ -150,10 +155,19 @@ func (h *Hub) Release(user string) {
 
 // Close cancels all running brokers and cleans up the hub.
 func (h *Hub) Close() error {
+	if h == nil {
+		return nil
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for id, b := range h.brokers {
 		delete(h.brokers, id)
+		b.mu.Lock()
+		if b.stopTimer != nil {
+			b.stopTimer.Stop()
+			b.stopTimer = nil
+		}
+		b.mu.Unlock()
 		b.cancel()
 	}
 	return nil
