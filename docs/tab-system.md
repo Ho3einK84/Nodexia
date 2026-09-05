@@ -239,6 +239,7 @@ dismisses the sheet on tap.
 
 This documentation and the tab system implementation do **not** bump the
 app's version string. That is a separate, manual step for a maintainer:
-running `make release VERSION=v0.7.2` (the existing `scripts/release.sh`)
-once the change set has been reviewed and `make test` passes. See
+running `make release VERSION=v0.7.3` (the existing `scripts/release.sh`)
+already updates `scripts/install.sh`, `Makefile`, and the production compose
+file. No new release automation was needed. See
 `CHANGELOG.md` for the corresponding entry.

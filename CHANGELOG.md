@@ -7,6 +7,17 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.7.3 — Runtime hardening, security remediation & repo standardization
+
+- **SSH client thread safety**: hardened `remoteReadCloser` with `sync.Mutex` synchronization to prevent nil-pointer dereferences on concurrent or post-close reads during SFTP file operations.
+- **Live metrics hub lifecycle**: added receiver nil guards and ensured pending broker idle timers (`b.stopTimer`) are explicitly stopped during graceful shutdown.
+- **Backup inspection integrity**: added upfront primary key and uniqueness validation for servers, channels, traffic limits, rules, and alert silences to reject corrupted archives before database transactions.
+- **Environment parser resilience**: added support for `export ` prefixes and sanitized inline comments following quoted and unquoted values in `.env` files.
+- **Multipart upload leak prevention**: guaranteed immediate closure of open multipart part readers on early validation failures in file operations.
+- **Telegram client enhancements**: added input validation to reject empty payloads and normalized CRLF line endings before message splitting.
+- **Security & dependency upgrade**: upgraded Go runtime to 1.26.8 and `golang.org/x/crypto` to v0.56.0, resolving all known CVEs (0 vulnerabilities reported by `govulncheck`). Updated `modernc.org/sqlite` to v1.58.0, `github.com/coder/websocket` to v1.8.15, `github.com/go-sql-driver/mysql` to v1.10.1, and `github.com/pkg/sftp` to v1.13.11.
+- **GitHub Actions & Dependabot**: updated `actions/checkout` and `actions/setup-go` to v7, added Dependabot automated updates, CI workflows, MIT license, contribution guidelines, and issue/PR templates.
+
 ## v0.7.2 — Rebecca node dev install fix
 
 - Fixed Rebecca node dev installs stalling on existing/override installations

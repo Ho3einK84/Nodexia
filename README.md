@@ -70,7 +70,7 @@ for an unattended run (a random admin password is printed once at the end).
 | `--email <addr>` | ACME / Let's Encrypt contact |
 | `--admin-user` / `--admin-password` | Admin login (preserved on rerun unless set) |
 | `--telegram-bot-token <token>` | Enable Telegram alert delivery |
-| `--image-version <tag>` | Release to deploy — a tag (e.g. `v0.7.2`) or `latest` |
+| `--image-version <tag>` | Release to deploy — a tag (e.g. `v0.7.3`) or `latest` |
 | `--build-from-source` | Always compile from source; skip prebuilt binaries |
 | `--non-interactive` | Never prompt; auto-generate missing values |
 | `-h`, `--help` | Show all options |
@@ -86,7 +86,7 @@ nodexia status                            # container status
 nodexia logs                              # follow logs (e.g. `nodexia logs app`)
 nodexia up / down / restart               # control the stack
 nodexia update                            # upgrade to the latest release, keeping secrets
-nodexia update --image-version v0.7.2     # or pin a specific version
+nodexia update --image-version v0.7.3     # or pin a specific version
 nodexia uninstall [--purge] [--yes]       # remove stack + CLI; --purge also wipes data
 ```
 
@@ -162,12 +162,12 @@ make test     # full test suite
 go vet ./...  # static analysis
 ```
 
-Pushing a version tag (`git tag v0.7.2 && git push origin v0.7.2`) triggers
+Pushing a version tag (`git tag v0.7.3 && git push origin v0.7.3`) triggers
 [`release.yml`](.github/workflows/release.yml): it runs the tests, cross-compiles
 static `linux/amd64` + `linux/arm64` binaries, and publishes them (with
 `checksums.txt`) to a GitHub Release. The project targets the latest **Go 1.26.x**.
 
-`make release VERSION=v0.7.2` is a shortcut: it bumps every version reference,
+`make release VERSION=v0.7.3` is a shortcut: it bumps every version reference,
 runs the tests, then commits and tags the release for you (push the branch and
 tag to publish).
 
