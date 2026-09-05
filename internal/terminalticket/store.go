@@ -94,16 +94,15 @@ func (s *Store) Create(serverID int64, req sshclient.ConnectionRequest) (string,
 // (Ticket{}, false).  Also returns false for unknown or expired ids.
 func (s *Store) Consume(id string) (Ticket, bool) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	st, ok := s.tickets[id]
-	s.mu.Unlock()
 	if !ok {
 		return Ticket{}, false
 	}
 
 	if time.Since(st.ticket.CreatedAt) > s.ttl {
-		s.mu.Lock()
 		delete(s.tickets, id)
-		s.mu.Unlock()
 		return Ticket{}, false
 	}
 
@@ -139,6 +138,9 @@ func (s *Store) ReleaseSession(username string) {
 	defer s.sessionMu.Unlock()
 	if s.sessionCounts[username] > 0 {
 		s.sessionCounts[username]--
+		if s.sessionCounts[username] == 0 {
+			delete(s.sessionCounts, username)
+		}
 	}
 }
 

@@ -35,6 +35,7 @@ func New(cfg config.Config) (*App, error) {
 		server: server,
 		closers: []func() error{
 			bootstrap.Scheduler.Close,
+			bootstrap.LiveMetrics.Close,
 			bootstrap.Database.Close,
 		},
 	}, nil

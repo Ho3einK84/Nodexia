@@ -142,7 +142,21 @@ func (h *Hub) Release(user string) {
 	defer h.sessMu.Unlock()
 	if h.sessions[user] > 0 {
 		h.sessions[user]--
+		if h.sessions[user] == 0 {
+			delete(h.sessions, user)
+		}
 	}
+}
+
+// Close cancels all running brokers and cleans up the hub.
+func (h *Hub) Close() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for id, b := range h.brokers {
+		delete(h.brokers, id)
+		b.cancel()
+	}
+	return nil
 }
 
 // broker owns one server's shared collection loop and its subscribers.
