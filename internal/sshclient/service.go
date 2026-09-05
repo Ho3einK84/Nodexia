@@ -1137,25 +1137,40 @@ func newFileEntry(parent string, info os.FileInfo) FileEntry {
 }
 
 type remoteReadCloser struct {
+	mu      sync.Mutex
 	reader  io.ReadCloser
 	cleanup func()
 	closers []io.Closer
 }
 
 func (r *remoteReadCloser) Read(p []byte) (int, error) {
-	return r.reader.Read(p)
+	r.mu.Lock()
+	reader := r.reader
+	r.mu.Unlock()
+	if reader == nil {
+		return 0, io.EOF
+	}
+	return reader.Read(p)
 }
 
 func (r *remoteReadCloser) Close() error {
+	r.mu.Lock()
+	reader := r.reader
+	r.reader = nil
+	closers := r.closers
+	r.closers = nil
+	cleanup := r.cleanup
+	r.cleanup = nil
+	r.mu.Unlock()
+
 	var combined error
-	if r.reader != nil {
-		if err := r.reader.Close(); err != nil {
+	if reader != nil {
+		if err := reader.Close(); err != nil {
 			combined = errors.Join(combined, err)
 		}
-		r.reader = nil
 	}
 
-	for _, closer := range r.closers {
+	for _, closer := range closers {
 		if closer == nil {
 			continue
 		}
@@ -1164,11 +1179,9 @@ func (r *remoteReadCloser) Close() error {
 		}
 	}
 
-	if r.cleanup != nil {
-		r.cleanup()
-		r.cleanup = nil
+	if cleanup != nil {
+		cleanup()
 	}
 
-	r.closers = nil
 	return combined
 }

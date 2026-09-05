@@ -84,8 +84,10 @@ func (h *terminalSessionHub) remove(s *terminalSession) {
 		delete(h.sessions, s.id)
 	}
 	h.mu.Unlock()
-	h.tickets.Release(s.id)
-	h.tickets.ReleaseSession(s.username)
+	if h.tickets != nil {
+		h.tickets.Release(s.id)
+		h.tickets.ReleaseSession(s.username)
+	}
 }
 
 type terminalSession struct {

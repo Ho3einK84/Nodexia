@@ -106,11 +106,13 @@ func (h OpsHandler) handleUpload(w http.ResponseWriter, r *http.Request, server 
 		// First file part: resolve the destination and stream it through.
 		targetDir, perr := normalizeRemotePath(dir, defaultRemotePath(server))
 		if perr != nil {
+			_ = part.Close()
 			writeJSONError(w, http.StatusUnprocessableEntity, "Invalid destination path.")
 			return
 		}
 		base, nerr := sanitizeUploadName(part.FileName())
 		if nerr != nil {
+			_ = part.Close()
 			writeJSONError(w, http.StatusUnprocessableEntity, validationErrorMessage(nerr))
 			return
 		}
