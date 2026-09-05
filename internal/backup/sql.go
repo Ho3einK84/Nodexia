@@ -14,7 +14,7 @@ import (
 // verbatim here; redaction (when secrets are not requested) happens in Export.
 func readServers(ctx context.Context, dbtx db.DBTX) ([]ServerRow, error) {
 	rows, err := dbtx.QueryContext(ctx,
-		`SELECT id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, country_code, country_name, created_at, updated_at
+		`SELECT id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, country_code, country_name, country_checked_at, traffic_reset_day, created_at, updated_at
 		 FROM servers ORDER BY id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("backup: query servers: %w", err)
@@ -26,10 +26,16 @@ func readServers(ctx context.Context, dbtx db.DBTX) ([]ServerRow, error) {
 	var out []ServerRow
 	for rows.Next() {
 		var r ServerRow
-		var createdRaw, updatedRaw any
+		var checkedRaw, createdRaw, updatedRaw any
 		if err := rows.Scan(&r.ID, &r.Name, &r.Host, &r.Port, &r.AuthMode, &r.Username, &r.Note,
-			&r.CredentialStrategy, &r.CredentialRef, &r.CountryCode, &r.CountryName, &createdRaw, &updatedRaw); err != nil {
+			&r.CredentialStrategy, &r.CredentialRef, &r.CountryCode, &r.CountryName, &checkedRaw, &r.TrafficResetDay, &createdRaw, &updatedRaw); err != nil {
 			return nil, fmt.Errorf("backup: scan server: %w", err)
+		}
+		if r.TrafficResetDay <= 0 {
+			r.TrafficResetDay = 1
+		}
+		if r.CountryCheckedAt, err = formatNullableDBTime(checkedRaw); err != nil {
+			return nil, fmt.Errorf("backup: server country_checked_at: %w", err)
 		}
 		if r.CreatedAt, err = formatDBTime(createdRaw); err != nil {
 			return nil, fmt.Errorf("backup: server created_at: %w", err)
@@ -61,6 +67,61 @@ func readServerTags(ctx context.Context, dbtx db.DBTX) ([]ServerTagRow, error) {
 		}
 		if r.CreatedAt, err = formatDBTime(createdRaw); err != nil {
 			return nil, fmt.Errorf("backup: server_tag created_at: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func readServerTrafficLimits(ctx context.Context, dbtx db.DBTX) ([]ServerTrafficLimitRow, error) {
+	rows, err := dbtx.QueryContext(ctx,
+		`SELECT server_id, monthly_limit_bytes, limit_kind, updated_at
+		 FROM server_traffic_limits ORDER BY server_id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("backup: query server_traffic_limits: %w", err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var out []ServerTrafficLimitRow
+	for rows.Next() {
+		var r ServerTrafficLimitRow
+		var updatedRaw any
+		if err := rows.Scan(&r.ServerID, &r.MonthlyLimitBytes, &r.LimitKind, &updatedRaw); err != nil {
+			return nil, fmt.Errorf("backup: scan server_traffic_limit: %w", err)
+		}
+		if r.LimitKind == "" {
+			r.LimitKind = "rx"
+		}
+		if r.UpdatedAt, err = formatDBTime(updatedRaw); err != nil {
+			return nil, fmt.Errorf("backup: server_traffic_limit updated_at: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func readTrafficLimitRules(ctx context.Context, dbtx db.DBTX) ([]TrafficLimitRuleRow, error) {
+	rows, err := dbtx.QueryContext(ctx,
+		`SELECT scope, ref, monthly_limit_bytes, updated_at
+		 FROM traffic_limit_rules ORDER BY scope ASC, ref ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("backup: query traffic_limit_rules: %w", err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var out []TrafficLimitRuleRow
+	for rows.Next() {
+		var r TrafficLimitRuleRow
+		var updatedRaw any
+		if err := rows.Scan(&r.Scope, &r.Ref, &r.MonthlyLimitBytes, &updatedRaw); err != nil {
+			return nil, fmt.Errorf("backup: scan traffic_limit_rule: %w", err)
+		}
+		if r.UpdatedAt, err = formatDBTime(updatedRaw); err != nil {
+			return nil, fmt.Errorf("backup: traffic_limit_rule updated_at: %w", err)
 		}
 		out = append(out, r)
 	}
@@ -191,11 +252,15 @@ func readInstallMetadata(ctx context.Context, dbtx db.DBTX) ([]InstallMetaRow, e
 
 func insertServers(ctx context.Context, tx *sql.Tx, rows []ServerRow) error {
 	for _, r := range rows {
+		resetDay := r.TrafficResetDay
+		if resetDay <= 0 {
+			resetDay = 1
+		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO servers (id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, country_code, country_name, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO servers (id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, country_code, country_name, country_checked_at, traffic_reset_day, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			r.ID, r.Name, r.Host, r.Port, r.AuthMode, r.Username, r.Note, r.CredentialStrategy, r.CredentialRef,
-			r.CountryCode, r.CountryName, restoreTime(r.CreatedAt), restoreTime(r.UpdatedAt)); err != nil {
+			r.CountryCode, r.CountryName, restoreNullableTime(r.CountryCheckedAt), resetDay, restoreTime(r.CreatedAt), restoreTime(r.UpdatedAt)); err != nil {
 			return fmt.Errorf("backup: insert server %d: %w", r.ID, err)
 		}
 	}
@@ -208,6 +273,34 @@ func insertServerTags(ctx context.Context, tx *sql.Tx, rows []ServerTagRow) erro
 			`INSERT INTO server_tags (id, server_id, tag, created_at) VALUES (?, ?, ?, ?)`,
 			r.ID, r.ServerID, r.Tag, restoreTime(r.CreatedAt)); err != nil {
 			return fmt.Errorf("backup: insert server_tag %d: %w", r.ID, err)
+		}
+	}
+	return nil
+}
+
+func insertServerTrafficLimits(ctx context.Context, tx *sql.Tx, rows []ServerTrafficLimitRow) error {
+	for _, r := range rows {
+		kind := strings.TrimSpace(r.LimitKind)
+		if kind == "" {
+			kind = "rx"
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO server_traffic_limits (server_id, monthly_limit_bytes, limit_kind, updated_at)
+			 VALUES (?, ?, ?, ?)`,
+			r.ServerID, r.MonthlyLimitBytes, kind, restoreTime(r.UpdatedAt)); err != nil {
+			return fmt.Errorf("backup: insert server_traffic_limit %d: %w", r.ServerID, err)
+		}
+	}
+	return nil
+}
+
+func insertTrafficLimitRules(ctx context.Context, tx *sql.Tx, rows []TrafficLimitRuleRow) error {
+	for _, r := range rows {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO traffic_limit_rules (scope, ref, monthly_limit_bytes, updated_at)
+			 VALUES (?, ?, ?, ?)`,
+			r.Scope, r.Ref, r.MonthlyLimitBytes, restoreTime(r.UpdatedAt)); err != nil {
+			return fmt.Errorf("backup: insert traffic_limit_rule (%s, %s): %w", r.Scope, r.Ref, err)
 		}
 	}
 	return nil

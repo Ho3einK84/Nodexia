@@ -24,9 +24,11 @@ func seed(t *testing.T, conn *sql.DB) {
 		q    string
 		args []any
 	}{
-		{`INSERT INTO servers (id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, created_at, updated_at)
-		  VALUES (1, 'edge-1', '10.0.0.1', 22, 'password', 'root', 'primary', 'stored', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`, []any{secretPassword}},
+		{`INSERT INTO servers (id, name, host, port, auth_mode, username, note, credential_strategy, credential_ref, traffic_reset_day, created_at, updated_at)
+		  VALUES (1, 'edge-1', '10.0.0.1', 22, 'password', 'root', 'primary', 'stored', ?, 15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`, []any{secretPassword}},
 		{`INSERT INTO server_tags (id, server_id, tag, created_at) VALUES (1, 1, 'prod', CURRENT_TIMESTAMP)`, nil},
+		{`INSERT INTO server_traffic_limits (server_id, monthly_limit_bytes, limit_kind, updated_at) VALUES (1, 1073741824000, 'rx', CURRENT_TIMESTAMP)`, nil},
+		{`INSERT INTO traffic_limit_rules (scope, ref, monthly_limit_bytes, updated_at) VALUES ('global', '', 2147483648000, CURRENT_TIMESTAMP)`, nil},
 		{`INSERT INTO alert_channels (id, kind, name, chat_id, message_template, enabled, created_at, updated_at)
 		  VALUES (1, 'telegram', 'ops', '12345', '', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`, nil},
 		{`INSERT INTO alert_rules (id, server_id, metric, comparator, threshold, consecutive_hits, cooldown_seconds, severity, channel_id, enabled, note, created_at, updated_at)
@@ -60,8 +62,14 @@ func TestExportImportRoundTrip(t *testing.T) {
 	if len(archive.Data.Servers) != 1 || archive.Data.Servers[0].CredentialRef != secretPassword {
 		t.Fatalf("expected secret credential preserved with opt-in, got %+v", archive.Data.Servers)
 	}
+	if archive.Data.Servers[0].TrafficResetDay != 15 {
+		t.Fatalf("expected traffic_reset_day=15, got %d", archive.Data.Servers[0].TrafficResetDay)
+	}
 	if len(archive.Data.AlertRules) != 2 {
 		t.Fatalf("expected 2 rules, got %d", len(archive.Data.AlertRules))
+	}
+	if len(archive.Data.ServerTrafficLimits) != 1 || len(archive.Data.TrafficLimitRules) != 1 {
+		t.Fatalf("expected traffic limits preserved, got %+v", archive.Data)
 	}
 
 	// Restore into a fresh database and re-export; the data must match exactly.
@@ -70,7 +78,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	if summary.Servers != 1 || summary.AlertRules != 2 || summary.AlertSilences != 1 {
+	if summary.Servers != 1 || summary.AlertRules != 2 || summary.AlertSilences != 1 || summary.ServerTrafficLimits != 1 || summary.TrafficLimitRules != 1 {
 		t.Fatalf("unexpected summary: %+v", summary)
 	}
 

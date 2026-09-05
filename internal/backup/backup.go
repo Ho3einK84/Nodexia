@@ -77,30 +77,50 @@ type Archive struct {
 // Data holds the exported rows, grouped by table. Only configuration/state
 // tables are included; telemetry the collectors rebuild is deliberately omitted.
 type Data struct {
-	Servers         []ServerRow       `json:"servers"`
-	ServerTags      []ServerTagRow    `json:"server_tags"`
-	AlertChannels   []AlertChannelRow `json:"alert_channels"`
-	AlertRules      []AlertRuleRow    `json:"alert_rules"`
-	AlertSilences   []AlertSilenceRow `json:"alert_silences"`
-	InstallMetadata []InstallMetaRow  `json:"install_metadata"`
+	Servers             []ServerRow             `json:"servers"`
+	ServerTags          []ServerTagRow          `json:"server_tags"`
+	ServerTrafficLimits []ServerTrafficLimitRow `json:"server_traffic_limits,omitempty"`
+	TrafficLimitRules   []TrafficLimitRuleRow   `json:"traffic_limit_rules,omitempty"`
+	AlertChannels       []AlertChannelRow       `json:"alert_channels"`
+	AlertRules          []AlertRuleRow          `json:"alert_rules"`
+	AlertSilences       []AlertSilenceRow       `json:"alert_silences"`
+	InstallMetadata     []InstallMetaRow        `json:"install_metadata"`
 }
 
 // ServerRow mirrors the secret-bearing servers table. CredentialRef is redacted
 // (empty) unless the export opted into secrets.
 type ServerRow struct {
-	ID                 int64  `json:"id"`
-	Name               string `json:"name"`
-	Host               string `json:"host"`
-	Port               int    `json:"port"`
-	AuthMode           string `json:"auth_mode"`
-	Username           string `json:"username"`
-	Note               string `json:"note"`
-	CredentialStrategy string `json:"credential_strategy"`
-	CredentialRef      string `json:"credential_ref"`
-	CountryCode        string `json:"country_code"`
-	CountryName        string `json:"country_name"`
-	CreatedAt          string `json:"created_at"`
-	UpdatedAt          string `json:"updated_at"`
+	ID                 int64   `json:"id"`
+	Name               string  `json:"name"`
+	Host               string  `json:"host"`
+	Port               int     `json:"port"`
+	AuthMode           string  `json:"auth_mode"`
+	Username           string  `json:"username"`
+	Note               string  `json:"note"`
+	CredentialStrategy string  `json:"credential_strategy"`
+	CredentialRef      string  `json:"credential_ref"`
+	CountryCode        string  `json:"country_code"`
+	CountryName        string  `json:"country_name"`
+	CountryCheckedAt   *string `json:"country_checked_at,omitempty"`
+	TrafficResetDay    int     `json:"traffic_reset_day,omitempty"`
+	CreatedAt          string  `json:"created_at"`
+	UpdatedAt          string  `json:"updated_at"`
+}
+
+// ServerTrafficLimitRow mirrors the server_traffic_limits table.
+type ServerTrafficLimitRow struct {
+	ServerID          int64  `json:"server_id"`
+	MonthlyLimitBytes int64  `json:"monthly_limit_bytes"`
+	LimitKind         string `json:"limit_kind"`
+	UpdatedAt         string `json:"updated_at"`
+}
+
+// TrafficLimitRuleRow mirrors the traffic_limit_rules table.
+type TrafficLimitRuleRow struct {
+	Scope             string `json:"scope"`
+	Ref               string `json:"ref"`
+	MonthlyLimitBytes int64  `json:"monthly_limit_bytes"`
+	UpdatedAt         string `json:"updated_at"`
 }
 
 // ServerTagRow mirrors the server_tags table.
@@ -175,12 +195,14 @@ type ExportOptions struct {
 
 // RestoreSummary reports what a successful import applied.
 type RestoreSummary struct {
-	Servers       int
-	ServerTags    int
-	AlertChannels int
-	AlertRules    int
-	AlertSilences int
-	EnvKeys       int
+	Servers             int
+	ServerTags          int
+	ServerTrafficLimits int
+	TrafficLimitRules   int
+	AlertChannels       int
+	AlertRules          int
+	AlertSilences       int
+	EnvKeys             int
 }
 
 // Export reads the configuration tables and returns the serialized backup
@@ -206,6 +228,12 @@ func Export(ctx context.Context, dbtx db.DBTX, opts ExportOptions) ([]byte, erro
 		return nil, err
 	}
 	if archive.Data.ServerTags, err = readServerTags(ctx, dbtx); err != nil {
+		return nil, err
+	}
+	if archive.Data.ServerTrafficLimits, err = readServerTrafficLimits(ctx, dbtx); err != nil {
+		return nil, err
+	}
+	if archive.Data.TrafficLimitRules, err = readTrafficLimitRules(ctx, dbtx); err != nil {
 		return nil, err
 	}
 	if archive.Data.AlertChannels, err = readAlertChannels(ctx, dbtx); err != nil {
@@ -299,6 +327,11 @@ func validateReferences(data Data) error {
 			return fmt.Errorf("%w: silence references server %d", ErrDanglingReference, s.ServerID)
 		}
 	}
+	for _, l := range data.ServerTrafficLimits {
+		if _, ok := serverIDs[l.ServerID]; !ok {
+			return fmt.Errorf("%w: traffic limit references server %d", ErrDanglingReference, l.ServerID)
+		}
+	}
 	return nil
 }
 
@@ -338,6 +371,8 @@ func Import(ctx context.Context, conn *sql.DB, archive Archive) (RestoreSummary,
 		`DELETE FROM alert_silences`,
 		`DELETE FROM alert_rules`,
 		`DELETE FROM alert_channels`,
+		`DELETE FROM traffic_limit_rules`,
+		`DELETE FROM server_traffic_limits`,
 		`DELETE FROM server_tags`,
 		`DELETE FROM servers`,
 		`DELETE FROM install_metadata`,
@@ -352,6 +387,12 @@ func Import(ctx context.Context, conn *sql.DB, archive Archive) (RestoreSummary,
 		return RestoreSummary{}, err
 	}
 	if err := insertServerTags(ctx, tx, archive.Data.ServerTags); err != nil {
+		return RestoreSummary{}, err
+	}
+	if err := insertServerTrafficLimits(ctx, tx, archive.Data.ServerTrafficLimits); err != nil {
+		return RestoreSummary{}, err
+	}
+	if err := insertTrafficLimitRules(ctx, tx, archive.Data.TrafficLimitRules); err != nil {
 		return RestoreSummary{}, err
 	}
 	if err := insertAlertChannels(ctx, tx, archive.Data.AlertChannels); err != nil {
@@ -373,6 +414,8 @@ func Import(ctx context.Context, conn *sql.DB, archive Archive) (RestoreSummary,
 
 	summary.Servers = len(archive.Data.Servers)
 	summary.ServerTags = len(archive.Data.ServerTags)
+	summary.ServerTrafficLimits = len(archive.Data.ServerTrafficLimits)
+	summary.TrafficLimitRules = len(archive.Data.TrafficLimitRules)
 	summary.AlertChannels = len(archive.Data.AlertChannels)
 	summary.AlertRules = len(archive.Data.AlertRules)
 	summary.AlertSilences = len(archive.Data.AlertSilences)
