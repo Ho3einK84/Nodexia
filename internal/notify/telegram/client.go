@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	defaultBaseURL = "https://api.telegram.org"
-	defaultTimeout = 10 * time.Second
-	maxResponse    = 64 << 10 // cap how much of a response body we read
+	defaultBaseURL  = "https://api.telegram.org"
+	defaultTimeout  = 10 * time.Second
+	maxResponse     = 64 << 10 // cap how much of a response body we read
+	maxMessageRunes = 4096     // Telegram maximum characters per sendMessage request
 )
 
 // Client sends messages through the Telegram Bot API sendMessage endpoint.
@@ -82,8 +83,9 @@ type telegramResponse struct {
 	ErrorCode   int    `json:"error_code"`
 }
 
-// Send delivers text to a Telegram chat. It returns a wrapped, token-redacted
-// error on transport failure or a non-OK API response.
+// Send delivers text to a Telegram chat. If text exceeds Telegram's 4096-character
+// limit, it is automatically split into multiple messages along line boundaries.
+// It returns a wrapped, token-redacted error on transport failure or a non-OK API response.
 func (c *Client) Send(ctx context.Context, chatID, text string) error {
 	if c.token == "" {
 		return errors.New("telegram: bot token is not configured")
@@ -92,6 +94,16 @@ func (c *Client) Send(ctx context.Context, chatID, text string) error {
 		return errors.New("telegram: chat id is required")
 	}
 
+	chunks := splitMessage(text, maxMessageRunes)
+	for _, chunk := range chunks {
+		if err := c.sendSingle(ctx, chatID, chunk); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) sendSingle(ctx context.Context, chatID, text string) error {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
@@ -131,6 +143,60 @@ func (c *Client) Send(ctx context.Context, chatID, text string) error {
 	}
 
 	return nil
+}
+
+func splitMessage(text string, limit int) []string {
+	if len([]rune(text)) <= limit {
+		return []string{text}
+	}
+
+	var chunks []string
+	lines := strings.Split(text, "\n")
+	var current strings.Builder
+	currentLen := 0
+
+	for _, line := range lines {
+		lineLen := len([]rune(line))
+		if lineLen > limit {
+			if current.Len() > 0 {
+				chunks = append(chunks, current.String())
+				current.Reset()
+				currentLen = 0
+			}
+			runes := []rune(line)
+			for len(runes) > 0 {
+				take := limit
+				if len(runes) < take {
+					take = len(runes)
+				}
+				chunks = append(chunks, string(runes[:take]))
+				runes = runes[take:]
+			}
+			continue
+		}
+
+		extra := 0
+		if current.Len() > 0 {
+			extra = 1
+		}
+		if currentLen+lineLen+extra > limit {
+			chunks = append(chunks, current.String())
+			current.Reset()
+			current.WriteString(line)
+			currentLen = lineLen
+		} else {
+			if current.Len() > 0 {
+				current.WriteString("\n")
+				currentLen++
+			}
+			current.WriteString(line)
+			currentLen += lineLen
+		}
+	}
+	if current.Len() > 0 {
+		chunks = append(chunks, current.String())
+	}
+	return chunks
 }
 
 // redact removes the bot token from an error message so it can never leak into

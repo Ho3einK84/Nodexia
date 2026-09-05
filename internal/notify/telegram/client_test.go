@@ -81,3 +81,30 @@ func TestSendRequiresTokenAndChatID(t *testing.T) {
 		t.Fatal("expected error when chat id is empty")
 	}
 }
+
+func TestSendSplitsLongMessage(t *testing.T) {
+	var sentTexts []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		sentTexts = append(sentTexts, r.FormValue("text"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1}}`))
+	}))
+	defer server.Close()
+
+	// 5000 chars total across multiple lines
+	longText := strings.Repeat("a line of text that is not too long\n", 150)
+	client := NewClient(testToken, WithBaseURL(server.URL))
+	if err := client.Send(context.Background(), "-100123", longText); err != nil {
+		t.Fatalf("Send() long text error = %v", err)
+	}
+
+	if len(sentTexts) < 2 {
+		t.Fatalf("expected message to be split into >= 2 requests, got %d", len(sentTexts))
+	}
+	for i, part := range sentTexts {
+		if len([]rune(part)) > 4096 {
+			t.Errorf("part %d exceeds 4096 runes: %d", i, len([]rune(part)))
+		}
+	}
+}
