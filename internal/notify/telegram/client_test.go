@@ -80,6 +80,12 @@ func TestSendRequiresTokenAndChatID(t *testing.T) {
 	if err := NewClient(testToken).Send(context.Background(), "  ", "hi"); err == nil {
 		t.Fatal("expected error when chat id is empty")
 	}
+	if err := NewClient(testToken).Send(context.Background(), "-100", ""); err == nil {
+		t.Fatal("expected error when text is empty")
+	}
+	if err := NewClient(testToken).Send(context.Background(), "-100", "   "); err == nil {
+		t.Fatal("expected error when text is whitespace")
+	}
 }
 
 func TestSendSplitsLongMessage(t *testing.T) {

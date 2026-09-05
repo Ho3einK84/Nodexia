@@ -93,6 +93,9 @@ func (c *Client) Send(ctx context.Context, chatID, text string) error {
 	if strings.TrimSpace(chatID) == "" {
 		return errors.New("telegram: chat id is required")
 	}
+	if strings.TrimSpace(text) == "" {
+		return errors.New("telegram: message text is empty")
+	}
 
 	chunks := splitMessage(text, maxMessageRunes)
 	for _, chunk := range chunks {
@@ -146,6 +149,10 @@ func (c *Client) sendSingle(ctx context.Context, chatID, text string) error {
 }
 
 func splitMessage(text string, limit int) []string {
+	if limit <= 0 {
+		limit = maxMessageRunes
+	}
+	text = strings.ReplaceAll(text, "\r\n", "\n")
 	if len([]rune(text)) <= limit {
 		return []string{text}
 	}
