@@ -1145,12 +1145,11 @@ type remoteReadCloser struct {
 
 func (r *remoteReadCloser) Read(p []byte) (int, error) {
 	r.mu.Lock()
-	reader := r.reader
-	r.mu.Unlock()
-	if reader == nil {
+	defer r.mu.Unlock()
+	if r.reader == nil {
 		return 0, io.EOF
 	}
-	return reader.Read(p)
+	return r.reader.Read(p)
 }
 
 func (r *remoteReadCloser) Close() error {
