@@ -16,9 +16,10 @@ workspace, see [`tab-system.md`](tab-system.md).
 - **Asset embedding**: `web/templates/` and `web/static/` are compiled into
   the binary with `go:embed` in `assets.go`. A rebuild is required to ship a
   template or JS change — a container restart is not enough.
-- **Database**: SQLite (via `modernc.org/sqlite`, pure Go) by default; MySQL
-  is planned. All queries go through the `db.DBTX` interface in `internal/db/`
-  so both drivers work behind the same code.
+- **Database**: SQLite (via `modernc.org/sqlite`, pure Go) by default, with
+  full MySQL / MariaDB 8+ support via `github.com/go-sql-driver/mysql` and
+  automatic DDL dialect translation. All queries go through the `db.DBTX`
+  interface in `internal/db/` so both drivers work behind the same code.
 - **SSH**: `golang.org/x/crypto/ssh`. A shared client lives in
   `internal/sshclient/`. Host keys are pinned on first use.
 - **SFTP**: `github.com/pkg/sftp`.
@@ -247,7 +248,7 @@ These are the non-obvious behaviours future changes must not silently break.
   `RETURNING`. All shared paths go through `db.DBTX`.
 - Schema lives in `schema.sql` and is append-only — never rewrite or delete
   statements. New migrations are added at the bottom with a version comment.
-- `internal/db/` wraps both SQLite and (planned) MySQL behind the same
+- `internal/db/` wraps both SQLite and MySQL behind the same
   interface so handlers stay driver-agnostic.
 
 ## Workflow
