@@ -1,12 +1,12 @@
 module github.com/Ho3einK84/Nodexia
 
-go 1.25.0
+go 1.26.8
 
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/pkg/sftp v1.13.11
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	modernc.org/sqlite v1.58.0
 )
 

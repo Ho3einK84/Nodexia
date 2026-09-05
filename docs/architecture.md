@@ -5,7 +5,7 @@ workspace, see [`tab-system.md`](tab-system.md).
 
 ## Stack at a glance
 
-- **Language**: Go 1.25.
+- **Language**: Go 1.26.
 - **HTTP**: standard library only — `net/http` + `ServeMux` (Go 1.22+ pattern
   matching). No web framework, no router library.
 - **Rendering**: server-side `html/template`. All pages are SSR; there is no

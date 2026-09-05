@@ -19,8 +19,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          # Matches CI and the Docker base image: float to the newest 1.25 patch.
-          go-version: "1.25.x"
+          # Matches CI and the Docker base image: float to the newest 1.26 patch.
+          go-version: "1.26.x"
           check-latest: true
 
       - name: Run tests

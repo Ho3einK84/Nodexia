@@ -6,11 +6,11 @@ Thank you for your interest in contributing to Nodexia! This document outlines o
 
 ## 🛠️ Development Setup
 
-Nodexia is written in Go (targets **Go 1.25+**) with standard library HTTP routing and server-rendered HTML templates.
+Nodexia is written in Go (targets **Go 1.26+**) with standard library HTTP routing and server-rendered HTML templates.
 
 ### Prerequisites
 
-- Go 1.25+ installed
+- Go 1.26+ installed
 - Docker (optional, for testing production deployment stacks)
 - Make
 

@@ -2,7 +2,7 @@
 
 > Lightweight, self-hosted control panel for monitoring and managing **Rebecca** and **Pasarguard** panel nodes.
 
-![status](https://img.shields.io/badge/status-active%20development-orange) ![license](https://img.shields.io/badge/license-MIT-blue) ![go](https://img.shields.io/badge/go-1.25-00ADD8)
+![status](https://img.shields.io/badge/status-active%20development-orange) ![license](https://img.shields.io/badge/license-MIT-blue) ![go](https://img.shields.io/badge/go-1.26-00ADD8)
 
 > ⚠️ **Under active development.** Built with AI assistance — review, test, and harden before using with sensitive production data.
 
@@ -165,7 +165,7 @@ go vet ./...  # static analysis
 Pushing a version tag (`git tag v0.7.2 && git push origin v0.7.2`) triggers
 [`release.yml`](.github/workflows/release.yml): it runs the tests, cross-compiles
 static `linux/amd64` + `linux/arm64` binaries, and publishes them (with
-`checksums.txt`) to a GitHub Release. The project targets the latest **Go 1.25.x**.
+`checksums.txt`) to a GitHub Release. The project targets the latest **Go 1.26.x**.
 
 `make release VERSION=v0.7.2` is a shortcut: it bumps every version reference,
 runs the tests, then commits and tags the release for you (push the branch and
