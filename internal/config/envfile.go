@@ -37,12 +37,22 @@ func loadEnvFile(path string) error {
 		}
 
 		key = strings.TrimSpace(key)
+		if strings.HasPrefix(key, "export ") {
+			key = strings.TrimSpace(strings.TrimPrefix(key, "export"))
+		}
+		if key == "" {
+			continue
+		}
+
 		value = strings.TrimSpace(value)
-		if len(value) >= 2 {
-			if (strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`)) ||
-				(strings.HasPrefix(value, `'`) && strings.HasSuffix(value, `'`)) {
-				value = value[1 : len(value)-1]
+		if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') {
+			quote := value[0]
+			end := strings.LastIndexByte(value[1:], quote)
+			if end != -1 {
+				value = value[1 : 1+end]
 			}
+		} else if commentIdx := strings.Index(value, " #"); commentIdx >= 0 {
+			value = strings.TrimSpace(value[:commentIdx])
 		}
 
 		// Real environment variables keep precedence over the file.

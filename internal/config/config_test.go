@@ -210,3 +210,30 @@ func TestLoadReadsEnvFileOverrides(t *testing.T) {
 		t.Fatalf("App.Name = %q, want FromFile", cfg.App.Name)
 	}
 }
+
+func TestLoadReadsEnvFileWithExportAndComments(t *testing.T) {
+	testutil.ClearNodexiaEnv(t)
+	envFile := filepath.Join(t.TempDir(), ".env")
+	content := `
+# Comment line
+export NODEXIA_APP_NAME="Exported App" # inline comment
+export NODEXIA_HTTP_ADDR = 127.0.0.1:9999 # port config
+`
+	if err := os.WriteFile(envFile, []byte(content), 0o600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	t.Setenv("NODEXIA_ENV_FILE", envFile)
+	t.Setenv("NODEXIA_ENV", "test")
+
+	cfg, err := config.Load("dev")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.App.Name != "Exported App" {
+		t.Fatalf("App.Name = %q, want 'Exported App'", cfg.App.Name)
+	}
+	if cfg.HTTP.Address != "127.0.0.1:9999" {
+		t.Fatalf("HTTP.Address = %q, want '127.0.0.1:9999'", cfg.HTTP.Address)
+	}
+}
