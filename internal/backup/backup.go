@@ -30,6 +30,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/db"
@@ -293,15 +294,22 @@ func Inspect(raw []byte, passphrase string) (Archive, error) {
 }
 
 // validateReferences rejects an archive whose rows point at servers or channels
-// that are not also present in the archive, so a restore can never write a
-// dangling foreign key.
+// that are not also present in the archive, or that contain duplicate primary keys
+// or unique constraint violations, so a restore can never write a dangling foreign key
+// or fail mid-transaction on a unique constraint.
 func validateReferences(data Data) error {
 	serverIDs := make(map[int64]struct{}, len(data.Servers))
 	for _, s := range data.Servers {
+		if _, exists := serverIDs[s.ID]; exists {
+			return fmt.Errorf("%w: duplicate server id %d", ErrMalformed, s.ID)
+		}
 		serverIDs[s.ID] = struct{}{}
 	}
 	channelIDs := make(map[int64]struct{}, len(data.AlertChannels))
 	for _, c := range data.AlertChannels {
+		if _, exists := channelIDs[c.ID]; exists {
+			return fmt.Errorf("%w: duplicate alert channel id %d", ErrMalformed, c.ID)
+		}
 		channelIDs[c.ID] = struct{}{}
 	}
 
@@ -322,15 +330,38 @@ func validateReferences(data Data) error {
 			}
 		}
 	}
+	silenceKeys := make(map[string]struct{}, len(data.AlertSilences))
 	for _, s := range data.AlertSilences {
 		if _, ok := serverIDs[s.ServerID]; !ok {
 			return fmt.Errorf("%w: silence references server %d", ErrDanglingReference, s.ServerID)
 		}
+		key := fmt.Sprintf("%d:%s", s.ServerID, s.Metric)
+		if _, exists := silenceKeys[key]; exists {
+			return fmt.Errorf("%w: duplicate alert silence for server %d metric %s", ErrMalformed, s.ServerID, s.Metric)
+		}
+		silenceKeys[key] = struct{}{}
 	}
+	trafficLimitServers := make(map[int64]struct{}, len(data.ServerTrafficLimits))
 	for _, l := range data.ServerTrafficLimits {
 		if _, ok := serverIDs[l.ServerID]; !ok {
 			return fmt.Errorf("%w: traffic limit references server %d", ErrDanglingReference, l.ServerID)
 		}
+		if _, exists := trafficLimitServers[l.ServerID]; exists {
+			return fmt.Errorf("%w: duplicate server traffic limit for server %d", ErrMalformed, l.ServerID)
+		}
+		trafficLimitServers[l.ServerID] = struct{}{}
+	}
+	ruleKeys := make(map[string]struct{}, len(data.TrafficLimitRules))
+	for _, r := range data.TrafficLimitRules {
+		scope := strings.TrimSpace(r.Scope)
+		if scope != "global" && scope != "tag" {
+			return fmt.Errorf("%w: invalid traffic limit rule scope %q", ErrMalformed, r.Scope)
+		}
+		key := scope + ":" + r.Ref
+		if _, exists := ruleKeys[key]; exists {
+			return fmt.Errorf("%w: duplicate traffic limit rule (%s, %s)", ErrMalformed, r.Scope, r.Ref)
+		}
+		ruleKeys[key] = struct{}{}
 	}
 	return nil
 }

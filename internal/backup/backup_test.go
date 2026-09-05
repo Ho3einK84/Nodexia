@@ -212,6 +212,52 @@ func TestImportIsAtomicOnBadReference(t *testing.T) {
 	}
 }
 
+func TestInspectRejectsDuplicateKeys(t *testing.T) {
+	// Duplicate server ID
+	dupServer := mustJSON(t, Archive{
+		Format:  FormatPlain,
+		Version: SchemaVersion,
+		Data: Data{
+			Servers: []ServerRow{
+				{ID: 1, Name: "s1"},
+				{ID: 1, Name: "s2"},
+			},
+		},
+	})
+	if _, err := Inspect(dupServer, ""); !errors.Is(err, ErrMalformed) {
+		t.Fatalf("expected ErrMalformed on duplicate server id, got %v", err)
+	}
+
+	// Duplicate traffic limit rule
+	dupRule := mustJSON(t, Archive{
+		Format:  FormatPlain,
+		Version: SchemaVersion,
+		Data: Data{
+			TrafficLimitRules: []TrafficLimitRuleRow{
+				{Scope: "global", Ref: "", MonthlyLimitBytes: 100},
+				{Scope: "global", Ref: "", MonthlyLimitBytes: 200},
+			},
+		},
+	})
+	if _, err := Inspect(dupRule, ""); !errors.Is(err, ErrMalformed) {
+		t.Fatalf("expected ErrMalformed on duplicate traffic limit rule, got %v", err)
+	}
+
+	// Invalid scope
+	badScope := mustJSON(t, Archive{
+		Format:  FormatPlain,
+		Version: SchemaVersion,
+		Data: Data{
+			TrafficLimitRules: []TrafficLimitRuleRow{
+				{Scope: "invalid", Ref: ""},
+			},
+		},
+	})
+	if _, err := Inspect(badScope, ""); !errors.Is(err, ErrMalformed) {
+		t.Fatalf("expected ErrMalformed on invalid scope, got %v", err)
+	}
+}
+
 func mustJSON(t *testing.T, v any) []byte {
 	t.Helper()
 	b, err := json.Marshal(v)
