@@ -53,12 +53,13 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hasStoredCreds := servers.HasStoredCredentials(server)
-	wantRefresh := strings.TrimSpace(r.URL.Query().Get("refresh")) == "1"
+	refreshParam := strings.TrimSpace(r.URL.Query().Get("refresh"))
+	wantRefresh := refreshParam == "1"
 	shouldCollect := hasStoredCreds && wantRefresh
 
-	if hasStoredCreds && !wantRefresh {
-		hasStored, _ := h.factRepo.HasAny(r.Context(), server.ID)
-		if !hasStored {
+	if hasStoredCreds && !wantRefresh && refreshParam != "0" {
+		latest, err := h.factRepo.GetLatestByServer(r.Context(), server.ID)
+		if err != nil || time.Since(latest.CollectedAt) > 5*time.Minute {
 			shouldCollect = true
 		}
 	}

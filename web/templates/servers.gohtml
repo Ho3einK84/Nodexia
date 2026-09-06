@@ -1,4 +1,4 @@
-﻿{{ define "content-servers-list" }}
+{{ define "content-servers-list" }}
 <section class="hero">
   {{ template "page-header" . }}
 
@@ -116,15 +116,15 @@
       <p class="server-card__note">{{ .Note }}</p>
       {{ end }}
       <div class="server-card__actions">
-        <a class="btn btn--primary" href="/servers/{{ .ID }}/monitoring" aria-label="{{ t "common.monitoring" }}"><i data-lucide="gauge" class="icon-in-button"></i><span class="btn-label"> {{ t "common.monitoring" }}</span></a>
-        <a class="btn btn--secondary" href="/servers/{{ .ID }}/nodes" aria-label="{{ t "common.nodes" }}"><i data-lucide="boxes" class="icon-in-button"></i><span class="btn-label"> {{ t "common.nodes" }}</span></a>
+        <a class="btn btn--primary" href="/servers/{{ .ID }}/monitoring?refresh=1" aria-label="{{ t "common.monitoring" }}"><i data-lucide="gauge" class="icon-in-button"></i><span class="btn-label"> {{ t "common.monitoring" }}</span></a>
+        <a class="btn btn--secondary" href="/servers/{{ .ID }}/nodes?refresh=1" aria-label="{{ t "common.nodes" }}"><i data-lucide="boxes" class="icon-in-button"></i><span class="btn-label"> {{ t "common.nodes" }}</span></a>
         <a class="btn btn--secondary" href="/servers/{{ .ID }}/terminal" aria-label="{{ t "common.terminal" }}"><i data-lucide="terminal-square" class="icon-in-button"></i><span class="btn-label"> {{ t "common.terminal" }}</span></a>
         <div class="action-menu" data-action-menu>
           <button type="button" class="btn btn--ghost action-menu__toggle" aria-haspopup="true" aria-expanded="false" aria-label="{{ t "servers.card.more_aria" "name" .Name }}"><i data-lucide="ellipsis-vertical" class="icon-in-button"></i><span class="action-menu__label"> {{ t "common.more" }}</span></button>
           <div class="action-menu__panel" role="menu">
             <span class="action-menu__caption"><i data-lucide="calendar"></i> {{ t "servers.card.created" "value" .CreatedAt }}</span>
             <div class="action-menu__divider" role="separator"></div>
-            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
+            <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/system?refresh=1"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
             <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
             <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
             <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}</a>

@@ -85,13 +85,15 @@ func (h *Handlers) Page(w http.ResponseWriter, r *http.Request) {
 
 	hasStoredCreds := servers.HasStoredCredentials(server)
 	streamID := strings.TrimSpace(r.URL.Query().Get("stream"))
-	wantRefresh := strings.TrimSpace(r.URL.Query().Get("refresh")) == "1"
+	refreshParam := strings.TrimSpace(r.URL.Query().Get("refresh"))
+	wantRefresh := refreshParam == "1"
 
 	// Never kick off an SSH discovery sweep while the page is polling a live
-	// action stream — only explicit refreshes or the first-ever visit collect.
+	// action stream — only explicit refreshes or stale/first-ever visit collect.
 	shouldCollect := hasStoredCreds && wantRefresh && streamID == ""
-	if hasStoredCreds && !wantRefresh && streamID == "" {
-		if hasStored, _ := h.repo.HasAny(r.Context(), server.ID); !hasStored {
+	if hasStoredCreds && !wantRefresh && streamID == "" && refreshParam != "0" {
+		latest, err := h.repo.GetLatestByServer(r.Context(), server.ID)
+		if err != nil || len(latest) == 0 || time.Since(latest[0].CollectedAt) > 5*time.Minute {
 			shouldCollect = true
 		}
 	}

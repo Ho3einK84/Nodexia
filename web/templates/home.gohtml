@@ -59,7 +59,7 @@
         <article class="dashboard-item">
           <div class="server-item__header">
             <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</h4>
-            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "home.monitor" }}</a>
+            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/monitoring?refresh=1"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "home.monitor" }}</a>
           </div>
           <div class="mini-metrics">
             <div class="mini-metric">
@@ -136,7 +136,7 @@
             <span><i data-lucide="boxes"></i> {{ t "home.node.total" "count" .Total }}</span>
             <span><i data-lucide="play"></i> {{ t "home.node.running_count" "count" .Running }}</span>
             {{ if gt .Stopped 0 }}<span class="status-pill status-pill--crit"><i data-lucide="square" class="icon-in-button"></i> {{ t "home.node.stopped_count" "count" .Stopped }}</span>{{ end }}
-            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "home.nodes" }}</a>
+            <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerID }}/nodes?refresh=1"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "home.nodes" }}</a>
           </div>
         </article>
         {{ end }}

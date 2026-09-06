@@ -832,6 +832,7 @@
   "alerts.flash.channel_deleted": "Notification channel deleted successfully.",
   "alerts.flash.silenced": "Metric silenced for the selected server.",
   "alerts.flash.silence_removed": "Silence removed.",
+  "nodes.title": "Nodes",
   "nodes.page_title": "Nodes on {server}",
   "nodes.page_description": "Discover PasarGuard and Rebecca node installations over SSH, manage them through their official CLIs, and install new PasarGuard nodes.",
   "nodes.install_title": "Install node",

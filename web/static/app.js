@@ -542,7 +542,7 @@
     var url = select.getAttribute('data-refresh-url');
     if (!url) return;
     var refreshURL = url + (url.indexOf('?') === -1 ? '?' : '&') + 'refresh=1';
-    var key = 'nodexia_auto_refresh_' + (select.getAttribute('data-refresh-key') || url);
+    var key = 'nodexia_auto_refresh_v2_' + (select.getAttribute('data-refresh-key') || url);
 
     var pill = document.createElement('span');
     pill.className = 'refresh-countdown';
@@ -596,8 +596,8 @@
       var selectedOpt = select.querySelector('option[selected]');
       if (selectedOpt) {
         select.value = selectedOpt.value;
-      } else if (select.querySelector('option[value="10000"]')) {
-        select.value = '10000';
+      } else {
+        select.value = '0';
       }
     }
     select.addEventListener('change', apply);
