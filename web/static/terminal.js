@@ -82,13 +82,15 @@
   var card = byId('terminal-card');
   if (!card) return;
 
-  var ticket  = card.getAttribute('data-ticket');
-  var wsBase  = card.getAttribute('data-ws-url');
-  var initCmd = card.getAttribute('data-init-cmd') || '';
+  var ticket    = card.getAttribute('data-ticket');
+  var wsBase    = card.getAttribute('data-ws-url');
+  var csrfToken = card.getAttribute('data-csrf') || '';
+  var initCmd   = card.getAttribute('data-init-cmd') || '';
   if (!ticket || !wsBase) return;
 
   // The credential page for this server (used by Reconnect): strip the /ws tail.
-  var pageURL = wsBase.replace(/\/ws$/, '');
+  var pageURL   = wsBase.replace(/\/ws$/, '');
+  var uploadURL = wsBase.replace(/\/ws$/, '/upload');
 
   var container = byId('terminal-container');
   var statusEl  = byId('terminal-status');
@@ -101,16 +103,18 @@
   var active = true;
 
   var isMobile = window.matchMedia('(max-width: 700px)').matches;
-  var FONT_KEY = 'nodexia.terminal.fontSize';
-  var FONT_MIN = 10;
-  var FONT_MAX = 28;
+  var FONT_KEY = isMobile ? 'nodexia.terminal.fontSize.mobile' : 'nodexia.terminal.fontSize';
+  var FONT_MIN = 9;
+  var FONT_MAX = 24;
 
-  function defaultFontSize() { return isMobile ? 12 : 14; }
+  function defaultFontSize() { return isMobile ? 11 : 13; }
 
   /* ── Status helpers ───────────────────────────────────── */
   function setStatus(state, text) {
     if (!statusEl) return;
     statusEl.className = 'terminal-status terminal-status--' + state;
+    statusEl.setAttribute('title', text);
+    statusEl.setAttribute('aria-label', text);
     if (statusTextEl) statusTextEl.textContent = text;
     else statusEl.textContent = text;
     if (card) card.dispatchEvent(new CustomEvent('nodexia:terminal-status', { bubbles: true, detail: { state: state } }));
@@ -152,8 +156,10 @@
   var term = new Terminal({
     cursorBlink: true,
     cursorStyle: 'block',
-    fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, "SFMono-Regular", monospace',
+    fontFamily: 'ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", "DejaVu Sans Mono", "Liberation Mono", Menlo, Monaco, Consolas, monospace',
     fontSize: initialFontSize(),
+    letterSpacing: 0,
+    lineHeight: 1.18,
     theme: currentTheme(),
     allowProposedApi: true,
     scrollback: 100000,
@@ -167,6 +173,7 @@
     // throughput. The PTY itself is xterm-256color (RequestPty, server side).
     screenReaderMode: false,
   });
+  updateFontValDisplay();
 
   /* ── Addons ───────────────────────────────────────────── */
   var fitAddon = null;
@@ -313,10 +320,24 @@
     return fallbackCopy(text);
   }
 
-  /* ── Clipboard paste (with non-secure-context fallback) ── */
+  /* ── Fast Clipboard paste (with non-secure-context fallback) ── */
+  function fastPaste(text) {
+    if (!text) return;
+    // Normalize newlines for interactive PTY shell
+    var normalized = text.replace(/\r\n/g, '\r').replace(/\n/g, '\r');
+    var CHUNK = 16384;
+    if (normalized.length <= CHUNK) {
+      sendInput(normalized);
+    } else {
+      for (var i = 0; i < normalized.length; i += CHUNK) {
+        sendInput(normalized.slice(i, i + CHUNK));
+      }
+    }
+  }
+
   function doPaste() {
     if (navigator.clipboard && navigator.clipboard.readText) {
-      navigator.clipboard.readText().then(sendInput).catch(promptPaste);
+      navigator.clipboard.readText().then(fastPaste).catch(promptPaste);
     } else {
       promptPaste();
     }
@@ -324,8 +345,65 @@
   function promptPaste() {
     try {
       var text = window.prompt(T('js.terminal.paste_prompt'));
-      if (text) sendInput(text);
+      if (text) fastPaste(text);
     } catch (e) { /* prompt unavailable */ }
+  }
+
+  // Intercept native browser paste on container and textarea for instant response
+  function handleNativePaste(e) {
+    var clip = e.clipboardData || window.clipboardData;
+    if (!clip) return;
+    var text = clip.getData('text');
+    if (text) {
+      e.preventDefault();
+      e.stopPropagation();
+      fastPaste(text);
+    }
+  }
+  container.addEventListener('paste', handleNativePaste);
+  card.addEventListener('paste', handleNativePaste);
+  if (term.textarea) {
+    term.textarea.addEventListener('paste', handleNativePaste);
+  }
+
+  /* ── Persian language & output reshaping ──────────────── */
+  var PERSIAN_KEY = 'nodexia.terminal.persianMode';
+  var persianMode = false;
+  try {
+    var storedPM = window.localStorage.getItem(PERSIAN_KEY);
+    if (storedPM !== null) persianMode = (storedPM === 'true');
+  } catch (e) {}
+
+  var outputBuffer = '';
+  var outputRaf = null;
+
+  function flushOutput() {
+    outputRaf = null;
+    if (!outputBuffer) return;
+    var chunk = outputBuffer;
+    outputBuffer = '';
+    term.write(chunk);
+  }
+
+  function writeTerminalOutput(data) {
+    if (!data) return;
+    var processed = data;
+    // Guard: only reshape multiline or complete blocks of Persian text, never single-character typing echo
+    if (persianMode && window.NodexiaPersian && data.length > 2 && (data.indexOf('\n') !== -1 || data.indexOf('\r') !== -1 || data.length > 16) && window.NodexiaPersian.hasPersian(data)) {
+      processed = window.NodexiaPersian.reshapeOutput(data);
+    }
+    if (processed.length > 8192) {
+      if (outputBuffer) {
+        term.write(outputBuffer);
+        outputBuffer = '';
+      }
+      term.write(processed);
+    } else {
+      outputBuffer += processed;
+      if (!outputRaf) {
+        outputRaf = requestAnimationFrame(flushOutput);
+      }
+    }
   }
 
   /* ── Selection sources ────────────────────────────────── */
@@ -357,11 +435,20 @@
 
   function flashCopied(btn) {
     if (!btn) return;
-    var orig = btn.getAttribute('data-label') || btn.textContent;
-    btn.textContent = T('js.copy.copied');
+    var origHTML = btn.innerHTML;
+    var origText = btn.getAttribute('data-label') || btn.textContent;
     btn.classList.add('is-copied');
+    if (btn.querySelector('svg')) {
+      btn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    } else {
+      btn.textContent = T('js.copy.copied');
+    }
     setTimeout(function () {
-      btn.textContent = orig;
+      if (btn.querySelector('svg') || origHTML.indexOf('svg') !== -1) {
+        btn.innerHTML = origHTML;
+      } else {
+        btn.textContent = origText;
+      }
       btn.classList.remove('is-copied');
     }, 1000);
   }
@@ -386,12 +473,21 @@
   }
 
   /* ── Font size control ────────────────────────────────── */
+  function updateFontValDisplay() {
+    var valEl = byId('term-more-font-val');
+    if (valEl && term && term.options) {
+      valEl.textContent = (term.options.fontSize || defaultFontSize()) + 'px';
+    }
+  }
+
   function setFontSize(px) {
     px = Math.max(FONT_MIN, Math.min(FONT_MAX, px));
+    updateFontValDisplay();
     if (px === term.options.fontSize) return;
     term.options.fontSize = px;
     try { window.localStorage.setItem(FONT_KEY, String(px)); } catch (e) { /* ignore */ }
     if (selectPre) selectPre.style.fontSize = px + 'px';
+    updateFontValDisplay();
     // Defer one frame so xterm has recomputed cell dims for the new size.
     requestAnimationFrame(fitAndResize);
   }
@@ -424,7 +520,8 @@
       sw.style.background = ThemeStore.themes[id].background;
       sw.style.borderColor = ThemeStore.themes[id].foreground;
       b.insertBefore(sw, b.firstChild);
-      b.addEventListener('click', function () {
+      b.addEventListener('click', function (e) {
+        if (e && e.stopPropagation) e.stopPropagation();
         applyTheme(id);
         toggleThemeMenu(false);
         term.focus();
@@ -446,23 +543,64 @@
     if (!themeMenu) return;
     var show = typeof force === 'boolean' ? force : themeMenu.hidden;
     setShown(themeMenu, show, 'flex');
+    if (show) syncThemeMenu();
     if (themeBtn) themeBtn.setAttribute('aria-expanded', show ? 'true' : 'false');
   }
+  /* ── More menu ────────────────────────────────────────── */
+  var moreMenu = byId('terminal-more-menu');
+  var moreBtn = byId('term-tool-more');
+
+  function openMoreMenu() {
+    if (!moreMenu) return;
+    setShown(moreMenu, true, 'flex');
+    updateFontValDisplay();
+    if (moreBtn) {
+      moreBtn.setAttribute('aria-expanded', 'true');
+      moreBtn.classList.add('is-active');
+    }
+    if (themeMenu && !themeMenu.hidden) toggleThemeMenu(false);
+  }
+
+  function closeMoreMenu() {
+    if (!moreMenu) return;
+    setShown(moreMenu, false);
+    if (moreBtn) {
+      moreBtn.setAttribute('aria-expanded', 'false');
+      moreBtn.classList.remove('is-active');
+    }
+  }
+
+  function toggleMoreMenu(force) {
+    if (!moreMenu) return;
+    var show = typeof force === 'boolean' ? force : moreMenu.hidden;
+    if (show) openMoreMenu();
+    else closeMoreMenu();
+  }
+
   if (themeBtn) {
     themeBtn.addEventListener('click', function (e) {
       e.stopPropagation();
+      closeMoreMenu();
       toggleThemeMenu();
     });
   }
-  // Dismiss the menu on any outside click / Escape.
+  // Dismiss menus on any outside click / Escape.
   addGlobalListener(document, 'click', function (e) {
-    if (themeMenu && !themeMenu.hidden && !themeMenu.contains(e.target) && e.target !== themeBtn) {
+    var moreThemeBtn = byId('term-more-theme');
+    var isThemeTrigger = (themeBtn && (e.target === themeBtn || themeBtn.contains(e.target))) ||
+                         (moreThemeBtn && (e.target === moreThemeBtn || moreThemeBtn.contains(e.target)));
+    if (themeMenu && !themeMenu.hidden && !themeMenu.contains(e.target) && !isThemeTrigger) {
       toggleThemeMenu(false);
+    }
+    var isMoreTrigger = moreBtn && (e.target === moreBtn || moreBtn.contains(e.target));
+    if (moreMenu && !moreMenu.hidden && !moreMenu.contains(e.target) && !isMoreTrigger) {
+      closeMoreMenu();
     }
   });
   buildThemeMenu();
   // Force-hide at startup so a stale stylesheet can never leave it open.
   setShown(themeMenu, false, 'flex');
+  setShown(moreMenu, false, 'flex');
 
   /* ── Fullscreen ───────────────────────────────────────── */
   function fsElement() {
@@ -561,14 +699,336 @@
 
   function bindClick(id, fn) {
     var el = byId(id);
-    if (el) el.addEventListener('click', function (e) { e.preventDefault(); fn(); });
+    if (el) el.addEventListener('click', function (e) { e.preventDefault(); fn(e); });
   }
 
-  /* ── Header tool buttons ──────────────────────────────── */
+  /* ── Quick Snippets & Command Runner (Termius-inspired) ── */
+  var DEFAULT_SNIPPETS = [
+    // System
+    { id: 'sys-htop',   cat: 'System',      name: 'HTop Monitor',          cmd: 'htop' },
+    { id: 'sys-df',     cat: 'System',      name: 'Disk Usage',            cmd: 'df -h' },
+    { id: 'sys-free',   cat: 'System',      name: 'Memory Stats',          cmd: 'free -h' },
+    { id: 'sys-uptime', cat: 'System',      name: 'Uptime & Load',         cmd: 'uptime' },
+    { id: 'sys-uname',  cat: 'System',      name: 'Kernel & OS',           cmd: 'uname -a' },
+    // Services
+    { id: 'srv-nodexia-st', cat: 'Services', name: 'Nodexia Status',       cmd: 'systemctl status nodexia' },
+    { id: 'srv-nodexia-log', cat: 'Services', name: 'Nodexia Logs (50)',   cmd: 'journalctl -u nodexia -n 50 --no-pager' },
+    { id: 'srv-nodexia-f',  cat: 'Services', name: 'Follow Nodexia Logs',  cmd: 'journalctl -u nodexia -f' },
+    { id: 'srv-nodexia-re', cat: 'Services', name: 'Restart Nodexia',      cmd: 'systemctl restart nodexia' },
+    { id: 'srv-docker-ps',  cat: 'Services', name: 'Docker Containers',    cmd: 'docker ps -a' },
+    // Network
+    { id: 'net-ports',  cat: 'Network',     name: 'Listening Ports',       cmd: 'ss -tulpn' },
+    { id: 'net-ip',     cat: 'Network',     name: 'Network Interfaces',    cmd: 'ip -c a' },
+    { id: 'net-pubip',  cat: 'Network',     name: 'Public IPv4',           cmd: 'curl -s https://api.ipify.org && echo' },
+    { id: 'net-ping',   cat: 'Network',     name: 'Ping Cloudflare DNS',   cmd: 'ping -c 4 1.1.1.1' },
+    // Diagnostics
+    { id: 'diag-dmesg', cat: 'Diagnostics', name: 'Kernel Messages',       cmd: 'dmesg -T | tail -n 30' },
+    { id: 'diag-boot',  cat: 'Diagnostics', name: 'Boot Errors',           cmd: 'journalctl -p 3 -xb --no-pager' },
+    { id: 'diag-cpu',   cat: 'Diagnostics', name: 'Top CPU Processes',     cmd: 'ps aux --sort=-%cpu | head -n 10' },
+    { id: 'diag-mem',   cat: 'Diagnostics', name: 'Top RAM Processes',     cmd: 'ps aux --sort=-%mem | head -n 10' },
+  ];
+
+  var SNIPPETS_STORAGE_KEY = 'nodexia.terminal.customSnippets';
+  function loadCustomSnippets() {
+    try {
+      var raw = window.localStorage.getItem(SNIPPETS_STORAGE_KEY);
+      if (raw) return JSON.parse(raw) || [];
+    } catch (e) {}
+    return [];
+  }
+  function saveCustomSnippets(items) {
+    try {
+      window.localStorage.setItem(SNIPPETS_STORAGE_KEY, JSON.stringify(items));
+    } catch (e) {}
+  }
+
+  var snippetsModal = byId('terminal-snippets-modal');
+  var snippetsList = byId('terminal-snippets-list');
+  var snippetsSearchInput = byId('terminal-snippets-search');
+  var snippetAddForm = byId('terminal-snippet-add-form');
+
+  function renderSnippets() {
+    if (!snippetsList) return;
+    snippetsList.innerHTML = '';
+    var q = (snippetsSearchInput && snippetsSearchInput.value ? snippetsSearchInput.value.trim().toLowerCase() : '');
+    var customs = loadCustomSnippets();
+    var all = customs.concat(DEFAULT_SNIPPETS);
+
+    var filtered = all.filter(function (s) {
+      if (!q) return true;
+      return (s.name && s.name.toLowerCase().indexOf(q) !== -1) ||
+             (s.cmd && s.cmd.toLowerCase().indexOf(q) !== -1) ||
+             (s.cat && s.cat.toLowerCase().indexOf(q) !== -1);
+    });
+
+    if (filtered.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'terminal-snippets__empty';
+      empty.style.textAlign = 'center';
+      empty.style.padding = '24px 0';
+      empty.style.color = 'var(--text-dim)';
+      empty.style.fontSize = '0.85rem';
+      empty.textContent = T('js.terminal.search_none');
+      snippetsList.appendChild(empty);
+      return;
+    }
+
+    filtered.forEach(function (s) {
+      var item = document.createElement('div');
+      item.className = 'terminal-snippet-item';
+
+      var info = document.createElement('div');
+      info.className = 'terminal-snippet-item__info';
+
+      var header = document.createElement('div');
+      header.className = 'terminal-snippet-item__header';
+
+      var name = document.createElement('span');
+      name.className = 'terminal-snippet-item__name';
+      name.textContent = s.name;
+
+      var cat = document.createElement('span');
+      cat.className = 'terminal-snippet-item__category';
+      cat.textContent = s.cat || 'Custom';
+
+      header.appendChild(name);
+      header.appendChild(cat);
+
+      var cmd = document.createElement('div');
+      cmd.className = 'terminal-snippet-item__cmd';
+      cmd.textContent = s.cmd;
+
+      info.appendChild(header);
+      info.appendChild(cmd);
+
+      var actions = document.createElement('div');
+      actions.className = 'terminal-snippet-item__actions';
+
+      var runBtn = document.createElement('button');
+      runBtn.type = 'button';
+      runBtn.className = 'terminal-snippet-btn terminal-snippet-btn--run';
+      runBtn.title = T('js.terminal.run') + ' (' + s.cmd + ')';
+      runBtn.setAttribute('aria-label', T('js.terminal.run'));
+      runBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"/></svg>';
+      runBtn.addEventListener('click', function () {
+        fastPaste(s.cmd + '\r');
+        closeSnippetsModal();
+      });
+
+      var insBtn = document.createElement('button');
+      insBtn.type = 'button';
+      insBtn.className = 'terminal-snippet-btn';
+      insBtn.title = T('js.terminal.insert');
+      insBtn.setAttribute('aria-label', T('js.terminal.insert'));
+      insBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>';
+      insBtn.addEventListener('click', function () {
+        fastPaste(s.cmd);
+        closeSnippetsModal();
+      });
+
+      var cpBtn = document.createElement('button');
+      cpBtn.type = 'button';
+      cpBtn.className = 'terminal-snippet-btn';
+      cpBtn.title = T('js.copy.label');
+      cpBtn.setAttribute('aria-label', T('js.copy.label'));
+      cpBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+      cpBtn.addEventListener('click', function () {
+        doCopy(s.cmd, cpBtn);
+      });
+
+      actions.appendChild(runBtn);
+      actions.appendChild(insBtn);
+      actions.appendChild(cpBtn);
+
+      if (s.isCustom) {
+        var delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'terminal-snippet-btn terminal-snippet-btn--del';
+        delBtn.title = T('common.delete');
+        delBtn.setAttribute('aria-label', T('common.delete'));
+        delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>';
+        delBtn.addEventListener('click', function () {
+          var updated = loadCustomSnippets().filter(function (c) { return c.id !== s.id; });
+          saveCustomSnippets(updated);
+          renderSnippets();
+        });
+        actions.appendChild(delBtn);
+      }
+
+      item.appendChild(info);
+      item.appendChild(actions);
+      snippetsList.appendChild(item);
+    });
+
+    if (window.lucide && window.lucide.createIcons) {
+      try { window.lucide.createIcons(); } catch (e) {}
+    }
+  }
+
+  function openSnippetsModal() {
+    if (!snippetsModal) return;
+    setShown(snippetsModal, true, 'flex');
+    renderSnippets();
+    if (snippetsSearchInput) {
+      snippetsSearchInput.focus();
+      snippetsSearchInput.select();
+    }
+  }
+  function closeSnippetsModal() {
+    if (!snippetsModal) return;
+    setShown(snippetsModal, false, 'flex');
+    term.focus();
+  }
+  function toggleSnippetsModal() {
+    if (snippetsModal && !snippetsModal.hidden) closeSnippetsModal();
+    else openSnippetsModal();
+  }
+
+  if (snippetsSearchInput) {
+    snippetsSearchInput.addEventListener('input', function () {
+      renderSnippets();
+    });
+    snippetsSearchInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeSnippetsModal();
+      }
+    });
+  }
+
+  if (snippetAddForm) {
+    snippetAddForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var nInp = byId('term-snippet-name');
+      var cInp = byId('term-snippet-cmd');
+      if (!nInp || !cInp) return;
+      var sName = nInp.value.trim();
+      var sCmd = cInp.value.trim();
+      if (!sName || !sCmd) return;
+      var customs = loadCustomSnippets();
+      customs.push({
+        id: 'cust-' + Date.now(),
+        cat: 'Custom',
+        name: sName,
+        cmd: sCmd,
+        isCustom: true
+      });
+      saveCustomSnippets(customs);
+      nInp.value = '';
+      cInp.value = '';
+      renderSnippets();
+    });
+  }
+
+  bindClick('terminal-snippets-backdrop', closeSnippetsModal);
+  bindClick('terminal-snippets-close', closeSnippetsModal);
+
+  /* ── Persian Language & Input Helper ─────────────────── */
+  var persianModal = byId('terminal-persian-modal');
+  var persianInput = byId('term-persian-input');
+  var persianPreview = byId('term-persian-preview');
+  var persianToggle = byId('term-persian-mode-toggle');
+
+  function updatePersianPreview() {
+    if (!persianPreview || !persianInput) return;
+    var txt = persianInput.value;
+    if (!txt) {
+      persianPreview.textContent = '';
+      return;
+    }
+    if (window.NodexiaPersian && window.NodexiaPersian.hasPersian(txt)) {
+      persianPreview.textContent = window.NodexiaPersian.shape(txt);
+    } else {
+      persianPreview.textContent = txt;
+    }
+  }
+
+  function sendPersianInput(withEnter) {
+    if (!persianInput) return;
+    var val = persianInput.value;
+    if (val) {
+      fastPaste(val + (withEnter ? '\r' : ''));
+      persianInput.value = '';
+      updatePersianPreview();
+      closePersianModal();
+    }
+  }
+
+  function openPersianModal() {
+    if (!persianModal) return;
+    setShown(persianModal, true, 'flex');
+    if (persianToggle) persianToggle.checked = persianMode;
+    if (persianInput) {
+      persianInput.focus();
+    }
+    updatePersianPreview();
+    if (window.lucide && window.lucide.createIcons) {
+      try { window.lucide.createIcons(); } catch (e) {}
+    }
+  }
+  function closePersianModal() {
+    if (!persianModal) return;
+    setShown(persianModal, false, 'flex');
+    term.focus();
+  }
+  function togglePersianModal() {
+    if (persianModal && !persianModal.hidden) closePersianModal();
+    else openPersianModal();
+  }
+
+  if (persianInput) {
+    persianInput.addEventListener('input', updatePersianPreview);
+    persianInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        sendPersianInput(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closePersianModal();
+      }
+    });
+  }
+
+  if (persianToggle) {
+    persianToggle.checked = persianMode;
+    persianToggle.addEventListener('change', function () {
+      persianMode = persianToggle.checked;
+      try { window.localStorage.setItem(PERSIAN_KEY, String(persianMode)); } catch (e) {}
+      updatePersianPreview();
+    });
+  }
+
+  bindClick('term-persian-send', function () { sendPersianInput(false); });
+  bindClick('term-persian-send-enter', function () { sendPersianInput(true); });
+  bindClick('terminal-persian-backdrop', closePersianModal);
+  bindClick('terminal-persian-close', closePersianModal);
+
+  setShown(snippetsModal, false, 'flex');
+  setShown(persianModal, false, 'flex');
+
+  /* ── Header tool buttons & More menu ──────────────────── */
+  bindClick('term-tool-snippets', toggleSnippetsModal);
+  bindClick('term-tool-keyboard', function () { toggleToolbar(); });
+  bindClick('term-tool-persian', togglePersianModal);
   bindClick('term-tool-search', toggleSearch);
-  bindClick('term-tool-font-dec', function () { setFontSize(term.options.fontSize - 1); term.focus(); });
-  bindClick('term-tool-font-inc', function () { setFontSize(term.options.fontSize + 1); term.focus(); });
+  bindClick('term-tool-theme', function () { toggleThemeMenu(); });
   bindClick('term-tool-fullscreen', toggleFullscreen);
+
+  if (moreBtn) {
+    moreBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleMoreMenu();
+    });
+  }
+
+  bindClick('term-more-persian', function (e) { if (e && e.stopPropagation) e.stopPropagation(); closeMoreMenu(); openPersianModal(); });
+  bindClick('term-more-search', function (e) { if (e && e.stopPropagation) e.stopPropagation(); closeMoreMenu(); openSearch(); });
+  bindClick('term-more-theme', function (e) { if (e && e.stopPropagation) e.stopPropagation(); closeMoreMenu(); toggleThemeMenu(true); });
+  bindClick('term-more-upload', function (e) { if (e && e.stopPropagation) e.stopPropagation(); closeMoreMenu(); triggerFileUpload(); });
+  bindClick('term-more-clear', function (e) { if (e && e.stopPropagation) e.stopPropagation(); closeMoreMenu(); try { term.clear(); } catch(e) {} term.focus(); });
+  bindClick('term-more-font-dec', function (e) { if (e && e.stopPropagation) e.stopPropagation(); setFontSize((term.options.fontSize || defaultFontSize()) - 1); });
+  bindClick('term-more-font-inc', function (e) { if (e && e.stopPropagation) e.stopPropagation(); setFontSize((term.options.fontSize || defaultFontSize()) + 1); });
+  bindClick('term-more-fullscreen', function (e) { if (e && e.stopPropagation) e.stopPropagation(); closeMoreMenu(); toggleFullscreen(); });
 
   /* ── Mobile tab access ──────────────────────────────────
    * On mobile the terminal owns the full screen and the tab bar is hidden
@@ -610,6 +1070,8 @@
       { label: T('js.terminal.ctx_copy'),       fn: function () { doCopy(currentSelection(), null); } },
       { label: T('js.terminal.ctx_paste'),      fn: doPaste },
       { label: T('js.terminal.ctx_select_all'), fn: selectAllBuffer },
+      { label: T('js.terminal.snippets'),       fn: openSnippetsModal },
+      { label: T('js.terminal.persian'),        fn: openPersianModal },
       { label: T('js.terminal.ctx_search'),     fn: openSearch },
       { label: T('js.terminal.ctx_clear'),      fn: function () { try { term.clear(); } catch (e) {} } },
     ].forEach(function (item) {
@@ -641,7 +1103,7 @@
       if (ctxMenu && !ctxMenu.hidden && !ctxMenu.contains(e.target)) hideContextMenu();
     });
     addGlobalListener(document, 'keydown', function (e) {
-      if (e.key === 'Escape') { hideContextMenu(); toggleThemeMenu(false); }
+      if (e.key === 'Escape') { hideContextMenu(); toggleThemeMenu(false); closeMoreMenu(); }
     });
   }
 
@@ -808,7 +1270,7 @@
       try { msg = JSON.parse(event.data); } catch (e) { return; }
       switch (msg.type) {
         case 'output':
-          term.write(msg.data);
+          writeTerminalOutput(msg.data);
           maybeSendInitCmd();
           break;
         case 'error':
@@ -948,65 +1410,205 @@
     }
   }
 
+  /* ── File upload & Toast feedback (Termius-style) ──────── */
+  var fileInput = byId('term-file-upload-input');
+  var uploadToastTimer = null;
+
+  function showTerminalToast(msg, durationMs, isError) {
+    var toast = card.querySelector('.terminal-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.className = 'terminal-toast';
+      card.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.classList.toggle('terminal-toast--error', !!isError);
+    toast.classList.add('is-active');
+    if (uploadToastTimer) clearTimeout(uploadToastTimer);
+    if (durationMs > 0) {
+      uploadToastTimer = setTimeout(function () {
+        toast.classList.remove('is-active');
+      }, durationMs);
+    }
+  }
+
+  function formatUploadSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function triggerFileUpload() {
+    if (!fileInput) fileInput = byId('term-file-upload-input');
+    if (fileInput) {
+      fileInput.value = '';
+      fileInput.click();
+    }
+  }
+
+  function handleFileSelected(e) {
+    var files = e.target.files;
+    if (!files || files.length === 0) return;
+    var file = files[0];
+
+    showTerminalToast(T('js.terminal.uploading') + ' (' + formatUploadSize(file.size) + ')', 0, false);
+
+    var targetURL = uploadURL;
+    var params = [];
+    if (ticket) params.push('ticket=' + encodeURIComponent(ticket));
+    if (csrfToken) params.push('_csrf_token=' + encodeURIComponent(csrfToken));
+    if (params.length > 0) targetURL += '?' + params.join('&');
+
+    var fd = new FormData();
+    fd.append('file', file);
+    if (ticket) fd.append('ticket', ticket);
+    if (csrfToken) fd.append('_csrf_token', csrfToken);
+
+    fetch(targetURL, {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin'
+    })
+      .then(function (resp) {
+        return resp.json().then(function (data) {
+          return { ok: resp.ok, status: resp.status, data: data };
+        }).catch(function () {
+          return { ok: resp.ok, status: resp.status, data: null };
+        });
+      })
+      .then(function (res) {
+        if (!res.ok || !res.data || !res.data.ok) {
+          var errMsg = (res.data && res.data.error) ? res.data.error : ('HTTP ' + res.status);
+          showTerminalToast(T('js.terminal.upload_failed', { error: errMsg }), 4500, true);
+          return;
+        }
+
+        var remotePath = res.data.path;
+        showTerminalToast(T('js.terminal.uploaded', { path: remotePath }), 3500, false);
+
+        // Termius behavior: type the uploaded remote file path directly into the active shell
+        sendInput(remotePath + ' ');
+        term.focus();
+      })
+      .catch(function (err) {
+        showTerminalToast(T('js.terminal.upload_failed', { error: err.message || 'Network error' }), 4500, true);
+      })
+      .finally(function () {
+        if (fileInput) fileInput.value = '';
+      });
+  }
+
+  if (fileInput) {
+    fileInput.addEventListener('change', handleFileSelected);
+  }
+
   /* ── Mobile key toolbar ───────────────────────────────── */
   var SEQ = {
-    esc:   '\x1b',
-    tab:   '\x09',
-    up:    '\x1b[A',
-    down:  '\x1b[B',
-    right: '\x1b[C',
-    left:  '\x1b[D',
-    home:  '\x1b[H',
-    end:   '\x1b[F',
-    del:   '\x1b[3~',
-    pgup:  '\x1b[5~',
-    pgdn:  '\x1b[6~',
+    esc:    '\x1b',
+    tab:    '\x09',
+    up:     '\x1b[A',
+    down:   '\x1b[B',
+    right:  '\x1b[C',
+    left:   '\x1b[D',
+    home:   '\x1b[H',
+    end:    '\x1b[F',
+    del:    '\x1b[3~',
+    pgup:   '\x1b[5~',
+    pgdn:   '\x1b[6~',
+    ctrl_c: '\x03',
+    ctrl_d: '\x04',
+    ctrl_z: '\x1a',
+    ctrl_l: '\x0c',
+    ctrl_a: '\x01',
+    ctrl_e: '\x05',
+    ctrl_r: '\x12',
+    ctrl_w: '\x17',
   };
 
   // Keycap glyphs (Ctrl/Alt/Esc/Tab/arrows/Home/…/A−/A+) stay Latin even in RTL
   // technical UIs by convention; only aria-labels and the action words
   // (Select/Copy/Paste) are localized.
   var SEP = { kind: 'sep' };
-  var BUTTONS = [
-    { label: 'Esc',   kind: 'seq', key: 'esc' },
-    { label: 'Ctrl',  kind: 'ctrl' },
-    { label: 'Alt',   kind: 'alt' },
-    { label: 'Tab',   kind: 'seq', key: 'tab' },
+  var TOGGLE_ROWS = { kind: 'togglerows' };
+
+  var BUTTONS_ROW1 = [
+    { label: 'Esc',    kind: 'seq', key: 'esc' },
+    { label: 'Ctrl',   kind: 'ctrl' },
+    { label: 'Alt',    kind: 'alt' },
+    { label: 'Tab',    kind: 'seq', key: 'tab' },
+    SEP,
+    { label: 'Ctrl+C', kind: 'seq', key: 'ctrl_c', highlight: 'crit', aria: 'Ctrl+C' },
+    { label: 'Ctrl+D', kind: 'seq', key: 'ctrl_d', highlight: 'crit', aria: 'Ctrl+D' },
+    { label: 'Ctrl+Z', kind: 'seq', key: 'ctrl_z', aria: 'Ctrl+Z' },
+    { label: 'Ctrl+L', kind: 'seq', key: 'ctrl_l', aria: 'Ctrl+L' },
     SEP,
     { label: '←', kind: 'seq', key: 'left',  aria: T('js.terminal.aria_left') },
     { label: '↑', kind: 'seq', key: 'up',    aria: T('js.terminal.aria_up') },
     { label: '↓', kind: 'seq', key: 'down',  aria: T('js.terminal.aria_down') },
     { label: '→', kind: 'seq', key: 'right', aria: T('js.terminal.aria_right') },
     SEP,
-    { label: '|', kind: 'lit' },
-    { label: '>', kind: 'lit' },
-    { label: '<', kind: 'lit' },
-    { label: '/', kind: 'lit' },
-    { label: '~', kind: 'lit' },
-    { label: '$', kind: 'lit' },
-    { label: '`', kind: 'lit' },
-    { label: '!', kind: 'lit' },
-    { label: '-', kind: 'lit' },
+    { label: '📎', kind: 'upload', aria: T('js.terminal.upload') },
+    { label: T('js.terminal.paste'), kind: 'paste' },
+    TOGGLE_ROWS,
+  ];
+
+  var BUTTONS_ROW2 = [
+    { label: 'Ctrl+R', kind: 'seq', key: 'ctrl_r', aria: 'Ctrl+R' },
+    { label: 'Ctrl+A', kind: 'seq', key: 'ctrl_a', aria: 'Ctrl+A' },
+    { label: 'Ctrl+E', kind: 'seq', key: 'ctrl_e', aria: 'Ctrl+E' },
+    { label: 'Ctrl+W', kind: 'seq', key: 'ctrl_w', aria: 'Ctrl+W' },
     SEP,
     { label: 'Home', kind: 'seq', key: 'home' },
     { label: 'End',  kind: 'seq', key: 'end' },
+    { label: 'Del',  kind: 'seq', key: 'del' },
     { label: 'PgUp', kind: 'seq', key: 'pgup' },
     { label: 'PgDn', kind: 'seq', key: 'pgdn' },
-    { label: 'Del',  kind: 'seq', key: 'del' },
     SEP,
+    { label: T('js.terminal.select'), kind: 'select', aria: T('js.terminal.aria_select') },
+    { label: T('js.copy.label'),      kind: 'copy',   aria: T('js.terminal.aria_copy') },
+    { label: 'A−', kind: 'font', key: 'dec', aria: T('js.terminal.aria_font_smaller') },
+    { label: 'A+', kind: 'font', key: 'inc', aria: T('js.terminal.aria_font_larger') },
+  ];
+
+  var BUTTONS_SINGLE = [
+    { label: 'Esc',    kind: 'seq', key: 'esc' },
+    { label: 'Ctrl',   kind: 'ctrl' },
+    { label: 'Alt',    kind: 'alt' },
+    { label: 'Tab',    kind: 'seq', key: 'tab' },
+    SEP,
+    { label: 'Ctrl+C', kind: 'seq', key: 'ctrl_c', highlight: 'crit', aria: 'Ctrl+C' },
+    { label: 'Ctrl+D', kind: 'seq', key: 'ctrl_d', highlight: 'crit', aria: 'Ctrl+D' },
+    { label: 'Ctrl+Z', kind: 'seq', key: 'ctrl_z', aria: 'Ctrl+Z' },
+    { label: 'Ctrl+L', kind: 'seq', key: 'ctrl_l', aria: 'Ctrl+L' },
+    { label: 'Ctrl+R', kind: 'seq', key: 'ctrl_r', aria: 'Ctrl+R' },
+    { label: 'Ctrl+A', kind: 'seq', key: 'ctrl_a', aria: 'Ctrl+A' },
+    { label: 'Ctrl+E', kind: 'seq', key: 'ctrl_e', aria: 'Ctrl+E' },
+    { label: 'Ctrl+W', kind: 'seq', key: 'ctrl_w', aria: 'Ctrl+W' },
+    SEP,
+    { label: '←', kind: 'seq', key: 'left',  aria: T('js.terminal.aria_left') },
+    { label: '↑', kind: 'seq', key: 'up',    aria: T('js.terminal.aria_up') },
+    { label: '↓', kind: 'seq', key: 'down',  aria: T('js.terminal.aria_down') },
+    { label: '→', kind: 'seq', key: 'right', aria: T('js.terminal.aria_right') },
+    SEP,
+    { label: 'Home', kind: 'seq', key: 'home' },
+    { label: 'End',  kind: 'seq', key: 'end' },
+    { label: 'Del',  kind: 'seq', key: 'del' },
+    { label: 'PgUp', kind: 'seq', key: 'pgup' },
+    { label: 'PgDn', kind: 'seq', key: 'pgdn' },
+    SEP,
+    { label: '📎', kind: 'upload', aria: T('js.terminal.upload') },
     { label: T('js.terminal.select'),   kind: 'select',  aria: T('js.terminal.aria_select') },
-    { label: '⌕',                       kind: 'search',  aria: T('js.terminal.search_label') },
     { label: T('js.copy.label'),        kind: 'copy',    aria: T('js.terminal.aria_copy') },
-    { label: T('js.terminal.copy_all'), kind: 'copyall', aria: T('js.terminal.aria_copy_all') },
     { label: T('js.terminal.paste'),    kind: 'paste' },
     { label: 'A−', kind: 'font', key: 'dec', aria: T('js.terminal.aria_font_smaller') },
     { label: 'A+', kind: 'font', key: 'inc', aria: T('js.terminal.aria_font_larger') },
-    { label: '⛶',  kind: 'fullscreen', aria: T('js.terminal.fullscreen') },
+    SEP,
+    TOGGLE_ROWS,
   ];
 
   // Actions that touch a selection must not pull focus back to the terminal —
   // that would clear the selection and pop the soft keyboard.
-  var NO_REFOCUS = { select: true, copy: true, copyall: true, search: true };
+  var NO_REFOCUS = { select: true, copy: true, copyall: true, search: true, snippets: true, persian: true, togglerows: true, upload: true };
 
   function handleKey(def, btn) {
     switch (def.kind) {
@@ -1014,6 +1616,10 @@
       case 'lit':        sendInput(def.label); break;
       case 'ctrl':       setCtrl(!ctrlPending); break;
       case 'alt':        setAlt(!altPending); break;
+      case 'upload':     triggerFileUpload(); break;
+      case 'snippets':   toggleSnippetsModal(); break;
+      case 'persian':    togglePersianModal(); break;
+      case 'clear':      try { term.clear(); } catch (e) {} break;
       case 'select':     setSelectMode(!selecting); break;
       case 'copy':       doCopy(currentSelection(), btn); break;
       case 'copyall':    doCopy(getBufferText(false), btn); break;
@@ -1021,45 +1627,156 @@
       case 'search':     openSearch(); break;
       case 'font':       setFontSize(term.options.fontSize + (def.key === 'inc' ? 1 : -1)); break;
       case 'fullscreen': toggleFullscreen(); break;
+      case 'togglerows':
+        toolbar2Rows = !toolbar2Rows;
+        try { window.localStorage.setItem(TOOLBAR_ROWS_KEY, String(toolbar2Rows)); } catch (e) {}
+        renderToolbarContent();
+        requestAnimationFrame(fitAndResize);
+        break;
+    }
+  }
+
+  var toolbarEl = null;
+  var toolbarVisible = isMobile;
+  var TOOLBAR_STORAGE_KEY = 'nodexia.terminal.keyboardToolbar';
+  var TOOLBAR_ROWS_KEY = 'nodexia.terminal.toolbar2Rows';
+  var toolbar2Rows = false;
+  try {
+    var storedTB = window.localStorage.getItem(TOOLBAR_STORAGE_KEY);
+    if (storedTB !== null) {
+      toolbarVisible = (storedTB === 'true');
+    }
+    var storedRows = window.localStorage.getItem(TOOLBAR_ROWS_KEY);
+    if (storedRows !== null) {
+      toolbar2Rows = (storedRows === 'true');
+    }
+  } catch (e) {}
+
+  function updateKeyboardBtnState() {
+    var kbBtn = byId('term-tool-keyboard');
+    if (kbBtn) {
+      kbBtn.classList.toggle('is-active', toolbarVisible);
+      kbBtn.setAttribute('aria-pressed', toolbarVisible ? 'true' : 'false');
+    }
+  }
+
+  function renderToolbarContent() {
+    if (!toolbarEl) return;
+    toolbarEl.innerHTML = '';
+    toolbarEl.classList.toggle('terminal-toolbar--two-rows', toolbar2Rows);
+
+    var row1El = document.createElement('div');
+    row1El.className = 'terminal-toolbar__row terminal-toolbar__row--primary';
+    row1El.setAttribute('role', 'toolbar');
+
+    var row2El = null;
+    if (toolbar2Rows) {
+      row2El = document.createElement('div');
+      row2El.className = 'terminal-toolbar__row terminal-toolbar__row--secondary';
+      row2El.setAttribute('role', 'toolbar');
+    }
+
+    var keysRow1 = toolbar2Rows ? BUTTONS_ROW1 : BUTTONS_SINGLE;
+    var keysRow2 = toolbar2Rows ? BUTTONS_ROW2 : [];
+
+    function populateRow(rowContainer, buttonDefs) {
+      buttonDefs.forEach(function (def) {
+        if (def.kind === 'sep') {
+          var sep = document.createElement('span');
+          sep.className = 'terminal-key-sep';
+          sep.setAttribute('aria-hidden', 'true');
+          rowContainer.appendChild(sep);
+          return;
+        }
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'terminal-key';
+        btn.textContent = def.label;
+        btn.tabIndex = -1;
+        btn.setAttribute('data-label', def.label);
+        btn.setAttribute('aria-label', def.aria || def.label);
+
+        if (def.kind === 'ctrl') {
+          btn.classList.add('terminal-key--ctrl');
+          btn.classList.toggle('is-active', ctrlPending);
+          btn.setAttribute('aria-pressed', ctrlPending ? 'true' : 'false');
+          ctrlBtn = btn;
+        }
+        if (def.kind === 'alt') {
+          btn.classList.add('terminal-key--alt');
+          btn.classList.toggle('is-active', altPending);
+          btn.setAttribute('aria-pressed', altPending ? 'true' : 'false');
+          altBtn = btn;
+        }
+        if (def.kind === 'select') {
+          btn.classList.add('terminal-key--select');
+          btn.classList.toggle('is-active', selecting);
+          btn.setAttribute('aria-pressed', selecting ? 'true' : 'false');
+          btn.textContent = selecting ? T('js.terminal.done') : T('js.terminal.select');
+          selectBtn = btn;
+        }
+        if (def.kind === 'togglerows') {
+          btn.classList.add('terminal-key--togglerows');
+          btn.classList.toggle('is-active', toolbar2Rows);
+          btn.setAttribute('title', toolbar2Rows ? T('js.terminal.toolbar_collapse') : T('js.terminal.toolbar_expand'));
+          btn.setAttribute('aria-label', toolbar2Rows ? T('js.terminal.toolbar_collapse') : T('js.terminal.toolbar_expand'));
+          btn.textContent = toolbar2Rows ? '1-Row ▴' : '2-Row ▾';
+        }
+        if (def.highlight === 'crit') {
+          btn.classList.add('terminal-key--crit');
+        }
+        if (def.kind === 'upload') {
+          btn.classList.add('terminal-key--upload');
+        }
+
+        btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          handleKey(def, btn);
+          if (!NO_REFOCUS[def.kind]) term.focus();
+        });
+        rowContainer.appendChild(btn);
+      });
+    }
+
+    populateRow(row1El, keysRow1);
+    toolbarEl.appendChild(row1El);
+
+    if (row2El) {
+      populateRow(row2El, keysRow2);
+      toolbarEl.appendChild(row2El);
     }
   }
 
   function buildToolbar() {
+    if (toolbarEl) return toolbarEl;
     var bar = document.createElement('div');
     bar.className = 'terminal-toolbar';
     bar.setAttribute('role', 'toolbar');
     bar.setAttribute('aria-label', T('js.terminal.keys_label'));
 
-    BUTTONS.forEach(function (def) {
-      if (def.kind === 'sep') {
-        var sep = document.createElement('span');
-        sep.className = 'terminal-key-sep';
-        sep.setAttribute('aria-hidden', 'true');
-        bar.appendChild(sep);
-        return;
-      }
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'terminal-key';
-      btn.textContent = def.label;
-      btn.tabIndex = -1;
-      btn.setAttribute('data-label', def.label);
-      btn.setAttribute('aria-label', def.aria || def.label);
+    toolbarEl = bar;
+    renderToolbarContent();
 
-      if (def.kind === 'ctrl') { btn.classList.add('terminal-key--ctrl'); btn.setAttribute('aria-pressed', 'false'); ctrlBtn = btn; }
-      if (def.kind === 'alt')  { btn.classList.add('terminal-key--alt');  btn.setAttribute('aria-pressed', 'false'); altBtn = btn; }
-      if (def.kind === 'select') { btn.classList.add('terminal-key--select'); btn.setAttribute('aria-pressed', 'false'); selectBtn = btn; }
+    var statusbar = byId('terminal-statusbar');
+    if (statusbar && statusbar.parentNode === card) {
+      card.insertBefore(bar, statusbar);
+    } else {
+      card.appendChild(bar);
+    }
+    setShown(toolbarEl, toolbarVisible, 'flex');
+    updateKeyboardBtnState();
+    return bar;
+  }
 
-      btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        handleKey(def, btn);
-        if (!NO_REFOCUS[def.kind]) term.focus();
-      });
-      bar.appendChild(btn);
-    });
-
-    card.appendChild(bar);
+  function toggleToolbar(force) {
+    if (!toolbarEl) buildToolbar();
+    toolbarVisible = (typeof force === 'boolean') ? force : !toolbarVisible;
+    try { window.localStorage.setItem(TOOLBAR_STORAGE_KEY, String(toolbarVisible)); } catch (e) {}
+    setShown(toolbarEl, toolbarVisible, 'flex');
+    updateKeyboardBtnState();
+    requestAnimationFrame(fitAndResize);
+    term.focus();
   }
 
   /* ── Mobile full-screen layout + keyboard reflow ──────── */
@@ -1109,7 +1826,9 @@
     resizeTimer = setTimeout(fitAndResize, 80);
   });
 
+  buildToolbar();
   if (isMobile) enableMobile();
+  updateKeyboardBtnState();
 
   /* ── Connect + initial fit ────────────────────────────── */
   connect();
@@ -1152,6 +1871,9 @@
       clearReconnectTimer();
       if (resumeProbeTimer) { clearTimeout(resumeProbeTimer); resumeProbeTimer = null; }
       if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+      if (outputRaf) { cancelAnimationFrame(outputRaf); outputRaf = null; }
+      if (uploadToastTimer) { clearTimeout(uploadToastTimer); uploadToastTimer = null; }
+      outputBuffer = '';
       stopHeartbeat();
       clearTimeout(resizeTimer);
       removeGlobalListeners();

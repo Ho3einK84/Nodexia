@@ -424,6 +424,92 @@ body {
   font-size: 0.9rem;
 }
 
+/* ── Collapsible cards (<details class="card card--collapsible">) ── */
+
+details.card--collapsible {
+  padding: 16px 22px;
+  transition: padding 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+details.card--collapsible[open] {
+  padding: 24px 28px;
+}
+
+summary.card__header--collapsible {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  outline: none;
+  border-radius: 8px;
+  transition: color 0.15s ease;
+}
+
+summary.card__header--collapsible::-webkit-details-marker {
+  display: none;
+}
+
+summary.card__header--collapsible:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 4px;
+}
+
+details.card--collapsible[open] > summary.card__header--collapsible {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.card__title-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.card__collapse-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s ease;
+  flex-shrink: 0;
+  margin-inline-start: auto;
+}
+
+.card__collapse-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+details.card--collapsible:hover .card__collapse-icon {
+  color: var(--text);
+}
+
+details.card--collapsible[open] .card__collapse-icon {
+  transform: rotate(180deg);
+  color: var(--accent-bright);
+}
+
+.card__collapsible-body {
+  animation: card-collapsible-in 0.2s ease-out;
+}
+
+@keyframes card-collapsible-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ── Server list ────────────────────────────────────── */
 
 .server-list {

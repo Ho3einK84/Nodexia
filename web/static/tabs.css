@@ -538,8 +538,13 @@ body.tab-switcher-open {
   line-height: 1;
 }
 
+.tab-switcher button {
+  font-family: inherit;
+}
+
 .tab-switcher__new,
 .tab-switcher__close-all {
+  font-family: inherit;
   display: inline-flex;
   align-items: center;
   gap: 6px;

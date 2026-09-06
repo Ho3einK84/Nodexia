@@ -33,10 +33,13 @@ func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	}
 
 	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
+	sessions := newTerminalSessionHub(deps.SSH, deps.TerminalTickets)
 	pageHandler := newPageHandler(deps, serverRepo)
-	wsHandler := newWSHandler(deps, newTerminalSessionHub(deps.SSH, deps.TerminalTickets))
+	wsHandler := newWSHandler(deps, sessions)
+	uploadH := newUploadHandler(deps, serverRepo, sessions)
 
 	mux.Handle("GET /servers/{id}/terminal", pageHandler)
 	mux.Handle("POST /servers/{id}/terminal", newPostHandler(deps, serverRepo))
 	mux.Handle("GET /servers/{id}/terminal/ws", wsHandler)
+	mux.Handle("POST /servers/{id}/terminal/upload", uploadH)
 }

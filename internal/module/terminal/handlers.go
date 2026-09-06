@@ -76,7 +76,7 @@ const (
 	wsWriteTimeout = 5 * time.Second
 
 	// maxInputFrameBytes caps the size of a single client→server input frame.
-	maxInputFrameBytes = 16 * 1024
+	maxInputFrameBytes = 64 * 1024
 
 	// wsOutputChunkBytes is the maximum number of bytes forwarded per WS frame.
 	wsOutputChunkBytes = 32 * 1024
@@ -391,10 +391,19 @@ func (h wsHandler) runReadLoop(
 
 		switch msg.Type {
 		case "input":
-			if len(msg.Data) > maxInputFrameBytes {
-				continue // reject oversized frame
+			data := []byte(msg.Data)
+			if len(data) > maxInputFrameBytes {
+				for len(data) > 0 {
+					chunk := data
+					if len(chunk) > maxInputFrameBytes {
+						chunk = data[:maxInputFrameBytes]
+					}
+					_, _ = stdinW.Write(chunk)
+					data = data[len(chunk):]
+				}
+				continue
 			}
-			_, _ = stdinW.Write([]byte(msg.Data))
+			_, _ = stdinW.Write(data)
 		case "resize":
 			if msg.Cols > 0 && msg.Rows > 0 {
 				select {
@@ -467,6 +476,7 @@ func renderTerminalPage(
 		staticURL("xterm-addon-webgl.min.js"),
 		staticURL("xterm-addon-canvas.min.js"),
 		staticURL("xterm-themes.js"),
+		staticURL("terminal-persian.js"),
 		staticURL("terminal-keybindings.js"),
 		staticURL("terminal.js"),
 		staticURL("terminal-tab-adapter.js"),

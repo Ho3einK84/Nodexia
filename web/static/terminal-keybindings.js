@@ -104,6 +104,12 @@
         return true; // nothing selected → ^C
       }
 
+      /* ── Plain Ctrl+V: cross-platform fast clipboard paste ─────────── */
+      if (ctrl && !meta && !shift && !alt && key === 'v') {
+        actions.paste();
+        return stop(ev);
+      }
+
       // Everything else (Ctrl+D/Z/U/W/L, arrows, plain typing, …) falls through
       // to xterm, which encodes it for the PTY exactly as before.
       return true;

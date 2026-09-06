@@ -153,84 +153,99 @@
 
   <p class="dash-section"><i data-lucide="settings"></i> {{ t "home.section.runtime_config" }}</p>
   <div class="dashboard-meta">
-    <article class="card">
-      <div class="card__header">
-        <h3><i data-lucide="server-cog"></i> {{ t "home.card.runtime" }}</h3>
+    <details class="card card--collapsible">
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <h3><i data-lucide="server-cog"></i> {{ t "home.card.runtime" }}</h3>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
+      <div class="card__collapsible-body">
+        <ul class="fact-list">
+          <li>
+            <span class="fact-list__key"><i data-lucide="globe" class="icon-in-button"></i> {{ t "home.runtime.http_address" }}</span>
+            <code>{{ .HTTPAddress }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="settings" class="icon-in-button"></i> {{ t "home.runtime.environment" }}</span>
+            <code>{{ .Environment }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="tag" class="icon-in-button"></i> {{ t "home.runtime.version" }}</span>
+            <code>{{ .Version }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="database" class="icon-in-button"></i> {{ t "home.runtime.driver" }}</span>
+            <code>{{ .DatabaseDriver }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="hard-drive" class="icon-in-button"></i> {{ t "home.runtime.db_target" }}</span>
+            <code>{{ .DatabaseTarget }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="list" class="icon-in-button"></i> {{ t "home.runtime.migrations" }}</span>
+            <code>{{ .MigrationCount }}</code>
+          </li>
+        </ul>
       </div>
-      <ul class="fact-list">
-        <li>
-          <span class="fact-list__key"><i data-lucide="globe" class="icon-in-button"></i> {{ t "home.runtime.http_address" }}</span>
-          <code>{{ .HTTPAddress }}</code>
-        </li>
-        <li>
-          <span class="fact-list__key"><i data-lucide="settings" class="icon-in-button"></i> {{ t "home.runtime.environment" }}</span>
-          <code>{{ .Environment }}</code>
-        </li>
-        <li>
-          <span class="fact-list__key"><i data-lucide="tag" class="icon-in-button"></i> {{ t "home.runtime.version" }}</span>
-          <code>{{ .Version }}</code>
-        </li>
-        <li>
-          <span class="fact-list__key"><i data-lucide="database" class="icon-in-button"></i> {{ t "home.runtime.driver" }}</span>
-          <code>{{ .DatabaseDriver }}</code>
-        </li>
-        <li>
-          <span class="fact-list__key"><i data-lucide="hard-drive" class="icon-in-button"></i> {{ t "home.runtime.db_target" }}</span>
-          <code>{{ .DatabaseTarget }}</code>
-        </li>
-        <li>
-          <span class="fact-list__key"><i data-lucide="list" class="icon-in-button"></i> {{ t "home.runtime.migrations" }}</span>
-          <code>{{ .MigrationCount }}</code>
-        </li>
-      </ul>
-    </article>
+    </details>
 
-    <article class="card">
-      <div class="card__header">
-        <h3><i data-lucide="clock"></i> {{ t "home.card.collection_scheduler" }}</h3>
-        {{ if .SchedulerOverview.Enabled }}
-        <span class="status-pill status-pill--ok">{{ t "home.scheduler.active" }}</span>
-        {{ else }}
-        <span class="status-pill status-pill--idle">{{ t "home.scheduler.off" }}</span>
-        {{ end }}
+    <details class="card card--collapsible">
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <h3><i data-lucide="clock"></i> {{ t "home.card.collection_scheduler" }}</h3>
+          {{ if .SchedulerOverview.Enabled }}
+          <span class="status-pill status-pill--ok">{{ t "home.scheduler.active" }}</span>
+          {{ else }}
+          <span class="status-pill status-pill--idle">{{ t "home.scheduler.off" }}</span>
+          {{ end }}
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
+      <div class="card__collapsible-body">
+        <ul class="fact-list">
+          <li>
+            <span class="fact-list__key"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "home.scheduler.monitoring_every" }}</span>
+            <code>{{ .SchedulerOverview.MonitoringInterval }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "home.scheduler.node_scan_every" }}</span>
+            <code>{{ .SchedulerOverview.NodesInterval }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="repeat" class="icon-in-button"></i> {{ t "home.scheduler.sweep_interval" }}</span>
+            <code>{{ .SchedulerOverview.SweepInterval }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="circle-check" class="icon-in-button"></i> {{ t "home.scheduler.eligible_jobs" }}</span>
+            <code>{{ .SchedulerOverview.EligibleJobs }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="circle-alert" class="icon-in-button"></i> {{ t "home.scheduler.blocked_jobs" }}</span>
+            <code>{{ .SchedulerOverview.BlockedJobs }}</code>
+          </li>
+        </ul>
+        <p class="field-hint" style="margin-top: 14px">{{ t "home.scheduler.credentials_note" }}</p>
       </div>
-      <ul class="fact-list">
-        <li>
-          <span class="fact-list__key"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "home.scheduler.monitoring_every" }}</span>
-          <code>{{ .SchedulerOverview.MonitoringInterval }}</code>
-        </li>
-        <li>
-          <span class="fact-list__key"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "home.scheduler.node_scan_every" }}</span>
-          <code>{{ .SchedulerOverview.NodesInterval }}</code>
-        </li>
-        <li>
-          <span class="fact-list__key"><i data-lucide="repeat" class="icon-in-button"></i> {{ t "home.scheduler.sweep_interval" }}</span>
-          <code>{{ .SchedulerOverview.SweepInterval }}</code>
-        </li>
-        <li>
-          <span class="fact-list__key"><i data-lucide="circle-check" class="icon-in-button"></i> {{ t "home.scheduler.eligible_jobs" }}</span>
-          <code>{{ .SchedulerOverview.EligibleJobs }}</code>
-        </li>
-        <li>
-          <span class="fact-list__key"><i data-lucide="circle-alert" class="icon-in-button"></i> {{ t "home.scheduler.blocked_jobs" }}</span>
-          <code>{{ .SchedulerOverview.BlockedJobs }}</code>
-        </li>
-      </ul>
-      <p class="field-hint" style="margin-top: 14px">{{ t "home.scheduler.credentials_note" }}</p>
-    </article>
+    </details>
 
-    <article class="card">
-      <div class="card__header">
-        <h3><i data-lucide="route"></i> {{ t "home.card.route_groups" }}</h3>
-        <span class="badge badge--id">{{ len .RouteGroups }}</span>
+    <details class="card card--collapsible">
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <h3><i data-lucide="route"></i> {{ t "home.card.route_groups" }}</h3>
+          <span class="badge badge--id">{{ len .RouteGroups }}</span>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
+      <div class="card__collapsible-body">
+        <p class="field-hint">{{ t "home.route_groups.note" }}</p>
+        <div class="token-list">
+          {{ range .RouteGroups }}
+          <code>{{ . }}</code>
+          {{ end }}
+        </div>
       </div>
-      <p class="field-hint">{{ t "home.route_groups.note" }}</p>
-      <div class="token-list">
-        {{ range .RouteGroups }}
-        <code>{{ . }}</code>
-        {{ end }}
-      </div>
-    </article>
+    </details>
   </div>
 </section>
 {{ end }}

@@ -1054,28 +1054,64 @@
     if (idx === -1) idx = 0;
     activate(list[(idx + delta + list.length) % list.length].id);
   }
+  function isHorizontalScrollableTarget(target) {
+    if (!target) return false;
+    if (target.closest) {
+      if (target.closest('.terminal-toolbar')) return true;
+      if (target.closest('.terminal-container, .terminal-card, .analytics-table-wrap, .data-table-wrap, .table-wrap, .table-responsive, .chart-card, .chart-container, .chart-wrap, .analytics-range-tabs, .tab-bar, .tab-switcher, pre, code, canvas, svg, input, textarea, select, button, [role="slider"], [role="tablist"], [data-horizontal-scroll]')) {
+        return true;
+      }
+    }
+    var el = target;
+    while (el && el !== contentEl && el !== document.body && el !== document.documentElement) {
+      try {
+        var style = window.getComputedStyle(el);
+        var ox = style ? (style.overflowX || '') : '';
+        if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth + 2) {
+          return true;
+        }
+      } catch (_) {}
+      el = el.parentElement;
+    }
+    return false;
+  }
   function initContentSwipe() {
     if (!contentEl) return;
-    var sx = 0, sy = 0, tracking = false, intent = null;
+    var sx = 0, sy = 0, st = 0, tracking = false, intent = null;
     contentEl.addEventListener('touchstart', function (e) {
       if (e.target.closest && e.target.closest('.terminal-toolbar')) { tracking = false; return; }
+      if (isHorizontalScrollableTarget(e.target)) { tracking = false; return; }
       if (window.innerWidth >= MOBILE_BREAKPOINT || e.touches.length !== 1) { tracking = false; return; }
       sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+      st = Date.now();
       tracking = true; intent = null;
     }, { passive: true });
     contentEl.addEventListener('touchmove', function (e) {
       if (!tracking) return;
       var dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
-      if (intent === null && (Math.abs(dx) > LONG_PRESS_TOLERANCE_PX || Math.abs(dy) > LONG_PRESS_TOLERANCE_PX)) {
-        intent = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+      if (Math.abs(dy) > 60) { tracking = false; return; }
+      if (intent === null && (Math.abs(dx) > 20 || Math.abs(dy) > 15)) {
+        if (Math.abs(dx) >= Math.abs(dy) * 2.5) {
+          intent = 'h';
+        } else {
+          intent = 'v';
+          tracking = false;
+          return;
+        }
       }
       if (intent === 'v') tracking = false;
     }, { passive: true });
     contentEl.addEventListener('touchend', function (e) {
       if (!tracking || intent !== 'h') { tracking = false; return; }
       tracking = false;
+      var dt = Date.now() - st;
+      if (dt > 800) return;
       var dx = e.changedTouches[0].clientX - sx;
-      if (Math.abs(dx) < SWIPE_MIN_PX) return;
+      var dy = e.changedTouches[0].clientY - sy;
+      if (Math.abs(dy) > 80) return;
+      var requiredMin = Math.max(160, Math.round(window.innerWidth * 0.40));
+      if (Math.abs(dx) < requiredMin) return;
+      if (isHorizontalScrollableTarget(e.target)) return;
       var rtl = document.documentElement.getAttribute('dir') === 'rtl';
       var forward = rtl ? dx > 0 : dx < 0;
       stepTab(forward ? 1 : -1);

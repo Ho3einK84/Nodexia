@@ -156,6 +156,18 @@ var clientI18nKeys = []string{
 	"js.terminal.ctx_select_all",
 	"js.terminal.ctx_search",
 	"js.terminal.ctx_clear",
+	"js.terminal.snippets",
+	"js.terminal.persian",
+	"js.terminal.run",
+	"js.terminal.insert",
+	"js.terminal.clear",
+	"js.terminal.copied",
+	"js.terminal.toolbar_expand",
+	"js.terminal.toolbar_collapse",
+	"js.terminal.upload",
+	"js.terminal.uploading",
+	"js.terminal.uploaded",
+	"js.terminal.upload_failed",
 
 	// Multi-tab workspace (tab-manager.js, terminal-tab-adapter.js)
 	"js.tabs.new_tab",
