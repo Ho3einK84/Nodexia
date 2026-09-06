@@ -1,19 +1,7 @@
 {{ define "content-files" }}
 <section class="hero">
 
-  <div class="info-strip">
-    <i data-lucide="server" class="info-strip__icon"></i>
-    <span class="info-strip__name">{{ .FileTarget.Name }}</span>
-    {{ if .PageFlag }}<span class="info-strip__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}
-    <span class="info-strip__addr">{{ .FileTarget.Username }}@{{ .FileTarget.Host }}:{{ .FileTarget.Port }}</span>
-    <span class="badge badge--auth-{{ .FileTarget.AuthMode }}">{{ .FileTarget.AuthMode }}</span>
-    {{ range .FileTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
-    <div class="info-strip__actions">
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .FileTarget.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .FileTarget.ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> {{ t "common.edit" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nav.servers" }}</a>
-    </div>
-  </div>
+  {{ template "server-header" . }}
 
   {{ if .FlashMessage }}
   <div class="flash-banner flash-banner--{{ .FlashKind }}">

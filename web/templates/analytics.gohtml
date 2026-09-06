@@ -1,19 +1,7 @@
 {{ define "content-analytics" }}
 <section class="hero">
 
-  <div class="info-strip">
-    <i data-lucide="bar-chart-2" class="info-strip__icon"></i>
-    <span class="info-strip__name">{{ .AnalyticsTarget.Name }}</span>
-    {{ if .PageFlag }}<span class="info-strip__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}
-    <span class="info-strip__addr">{{ .AnalyticsTarget.Username }}@{{ .AnalyticsTarget.Host }}:{{ .AnalyticsTarget.Port }}</span>
-    <span class="badge badge--auth-{{ .AnalyticsTarget.AuthMode }}">{{ .AnalyticsTarget.AuthMode }}</span>
-    {{ range .AnalyticsTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
-    <div class="info-strip__actions">
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .AnalyticsTarget.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "common.monitoring" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .AnalyticsTarget.ID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "common.nodes" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nav.servers" }}</a>
-    </div>
-  </div>
+  {{ template "server-header" . }}
 
   <div class="analytics-range-tabs" id="globalRangeTabs" role="tablist" aria-label="{{ t "analytics.time_range" }}">
     <button class="range-tab" data-range="1h" role="tab">1H</button>

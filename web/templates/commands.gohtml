@@ -1,20 +1,7 @@
 {{ define "content-commands" }}
 <section class="hero">
 
-  <div class="info-strip">
-    <i data-lucide="server" class="info-strip__icon"></i>
-    <span class="info-strip__name">{{ .CommandTarget.Name }}</span>
-    {{ if .PageFlag }}<span class="info-strip__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}
-    <span class="info-strip__addr">{{ .CommandTarget.Username }}@{{ .CommandTarget.Host }}:{{ .CommandTarget.Port }}</span>
-    <span class="badge badge--auth-{{ .CommandTarget.AuthMode }}">{{ .CommandTarget.AuthMode }}</span>
-    {{ range .CommandTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
-    <div class="info-strip__actions">
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/terminal"><i data-lucide="terminal-square" class="icon-in-button"></i> {{ t "common.terminal" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .CommandTarget.ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> {{ t "common.edit" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nav.servers" }}</a>
-    </div>
-  </div>
+  {{ template "server-header" . }}
 
   {{ if .FlashMessage }}
   <div class="flash-banner flash-banner--{{ .FlashKind }}">

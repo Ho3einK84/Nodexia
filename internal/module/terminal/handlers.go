@@ -449,6 +449,7 @@ func renderTerminalPage(
 		Port:               server.Port,
 		Username:           server.Username,
 		AuthMode:           server.AuthMode,
+		Tags:               server.Tags,
 		CredentialStrategy: server.CredentialStrategy,
 		WSURL:              wsURL(server.ID),
 		InitCommand:        initCommand,

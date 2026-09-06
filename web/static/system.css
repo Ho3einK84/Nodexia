@@ -5,6 +5,32 @@
   overflow: hidden;
 }
 
+.sys-facts-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sys-facts-header .live-head__title h3 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+}
+
+.sys-facts-header .live-head__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-inline-start: auto;
+}
+
 .sys-facts-primary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));

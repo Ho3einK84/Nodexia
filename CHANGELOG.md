@@ -7,6 +7,27 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project does not follow strict SemVer pre-1.0, but version tags are
 still `vMAJOR.MINOR.PATCH`.
 
+## v0.7.5 — Unified server management design language, monitoring overhaul & sub-navigation
+
+- **Unified Server Sub-Navigation & Identity Header (`server-header`)**:
+  - Harmonized all 7 server management views (`Monitoring`, `System`, `Nodes`, `Terminal`, `Commands`, `Files`, `Analytics`) under a single, unified design language and sub-navigation bar (`.server-subnav`).
+  - Integrated persistent server identity and connection metadata into a standardized card header: server flag, server name, connection endpoint (`user@host:port`), authentication mode badge, tags, edit modal trigger, and parent navigation.
+  - Replaced disparate `.info-strip` and `.page-header` bars across server views with responsive sub-navigation tabs featuring smooth active state transitions, hover effects, and complete Persian (RTL) / English (LTR) layout stability.
+- **Monitoring Live Health & Resource Toolbar Overhaul**:
+  - Re-anchored workspace action controls directly into the Live Resource Health card header: Quick Refresh button (`data-refresh-now`), Auto-Refresh interval selector (`#auto-refresh-select`), and Silence Alerts dropdown menu.
+  - Removed top identity strip clutter and eliminated duplicate `#auto-refresh-select` DOM element collisions between monitoring workspace and bottom fallback form.
+  - Modernized resource gauges (CPU, RAM, Disk, Swap) with luminous glow styling, improved tabular typography (`1.65rem`), and clean fallback details during snapshot mode.
+  - Redesigned the telemetry metrics strip (`.metric-strip`) into structured, hoverable KPI cards with clear labels, icon accents, and tabular uptime, load average, and process statistics.
+- **vnStat 2.0 Traffic & Interactive Interface Switching**:
+  - Replaced static interface labels with interactive network interface selection chips (`eth0`, `docker0`, etc.) in the traffic card header.
+  - Added click-to-fill interface helper (`data-iface-fill`) to interface hints for seamless interface switching without manual typing.
+  - Revamped bandwidth summary (`.traffic-bw`) and daily/monthly transfer history with proportional gradient progress bars.
+- **System Facts Header Harmonization**:
+  - Standardized the System Facts page header (`.sys-facts-header`) with quick refresh and auto-refresh controls mirroring the monitoring header, eliminating duplicate DOM IDs.
+- **Localization Parity & Architecture**:
+  - Added synchronized translation catalog keys across English and Persian (`en.json` and `fa.json`) with 100% test parity (`TestCatalogKeyParity`).
+  - Added `ServerHeader ServerHeaderView` to `PageData` with automatic fallback population in `normalizePageData` ensuring complete backward compatibility across all modules and tests.
+
 ## v0.7.4 — Terminal modernization, Persian text support, collapsible cards & UI refinement
 
 - **Terminal Monospace Spacing & Mobile Typography Fix**: Fixed abnormal character spacing and line wrapping caused by proportional fonts in the xterm font stack. Enforced clean system monospace fonts (`ui-monospace`, `SF Mono`, `Cascadia Code`, `Roboto Mono`, `DejaVu Sans Mono`, `Liberation Mono`, `monospace`) with explicit `letter-spacing: 0` and normal letter spacing css guards. Reduced default mobile terminal font size to 11px for crisp, high-density terminal readability (~55-60 columns on mobile).

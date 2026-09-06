@@ -118,6 +118,9 @@ type PageData struct {
 
 	// Interactive SSH terminal.
 	TerminalTarget TerminalTargetView
+
+	// ServerHeader represents the unified identity & sub-navigation for server-scoped pages.
+	ServerHeader ServerHeaderView
 	TerminalTicket string
 	TerminalForm   TerminalFormView
 
@@ -498,6 +501,19 @@ type SystemCollectionResultView struct {
 	Stdout      string
 	Stderr      string
 	Error       string
+}
+
+type ServerHeaderView struct {
+	ID        int64
+	Name      string
+	Host      string
+	Port      int
+	AuthMode  string
+	Username  string
+	Tags      []string
+	Flag      string
+	FlagTitle string
+	ActiveTab string
 }
 
 type MonitoringTargetView struct {
@@ -997,6 +1013,7 @@ type TerminalTargetView struct {
 	Port               int
 	Username           string
 	AuthMode           string
+	Tags               []string
 	CredentialStrategy string
 	WSURL              string
 	// InitCommand is an optional command auto-run once the shell connects
@@ -1250,6 +1267,106 @@ func normalizePageData(data PageData) PageData {
 
 	for index := range data.NavigationItems {
 		data.NavigationItems[index].Active = data.NavigationItems[index].Href == data.ActiveNav
+	}
+
+	if data.ServerHeader.ID == 0 {
+		switch {
+		case data.MonitoringTarget.ID != 0:
+			data.ServerHeader = ServerHeaderView{
+				ID:        data.MonitoringTarget.ID,
+				Name:      data.MonitoringTarget.Name,
+				Host:      data.MonitoringTarget.Host,
+				Port:      data.MonitoringTarget.Port,
+				AuthMode:  data.MonitoringTarget.AuthMode,
+				Username:  data.MonitoringTarget.Username,
+				Tags:      data.MonitoringTarget.Tags,
+				Flag:      data.PageFlag,
+				FlagTitle: data.PageFlagTitle,
+				ActiveTab: "monitoring",
+			}
+		case data.SystemTarget.ID != 0:
+			data.ServerHeader = ServerHeaderView{
+				ID:        data.SystemTarget.ID,
+				Name:      data.SystemTarget.Name,
+				Host:      data.SystemTarget.Host,
+				Port:      data.SystemTarget.Port,
+				AuthMode:  data.SystemTarget.AuthMode,
+				Username:  data.SystemTarget.Username,
+				Tags:      data.SystemTarget.Tags,
+				Flag:      data.PageFlag,
+				FlagTitle: data.PageFlagTitle,
+				ActiveTab: "system",
+			}
+		case data.NodeTarget.ID != 0:
+			data.ServerHeader = ServerHeaderView{
+				ID:        data.NodeTarget.ID,
+				Name:      data.NodeTarget.Name,
+				Host:      data.NodeTarget.Host,
+				Port:      data.NodeTarget.Port,
+				AuthMode:  data.NodeTarget.AuthMode,
+				Username:  data.NodeTarget.Username,
+				Tags:      data.NodeTarget.Tags,
+				Flag:      data.PageFlag,
+				FlagTitle: data.PageFlagTitle,
+				ActiveTab: "nodes",
+			}
+		case data.TerminalTarget.ID != 0:
+			data.ServerHeader = ServerHeaderView{
+				ID:        data.TerminalTarget.ID,
+				Name:      data.TerminalTarget.Name,
+				Host:      data.TerminalTarget.Host,
+				Port:      data.TerminalTarget.Port,
+				AuthMode:  data.TerminalTarget.AuthMode,
+				Username:  data.TerminalTarget.Username,
+				Tags:      data.TerminalTarget.Tags,
+				Flag:      data.PageFlag,
+				FlagTitle: data.PageFlagTitle,
+				ActiveTab: "terminal",
+			}
+		case data.CommandTarget.ID != 0:
+			data.ServerHeader = ServerHeaderView{
+				ID:        data.CommandTarget.ID,
+				Name:      data.CommandTarget.Name,
+				Host:      data.CommandTarget.Host,
+				Port:      data.CommandTarget.Port,
+				AuthMode:  data.CommandTarget.AuthMode,
+				Username:  data.CommandTarget.Username,
+				Tags:      data.CommandTarget.Tags,
+				Flag:      data.PageFlag,
+				FlagTitle: data.PageFlagTitle,
+				ActiveTab: "commands",
+			}
+		case data.FileTarget.ID != 0:
+			data.ServerHeader = ServerHeaderView{
+				ID:        data.FileTarget.ID,
+				Name:      data.FileTarget.Name,
+				Host:      data.FileTarget.Host,
+				Port:      data.FileTarget.Port,
+				AuthMode:  data.FileTarget.AuthMode,
+				Username:  data.FileTarget.Username,
+				Tags:      data.FileTarget.Tags,
+				Flag:      data.PageFlag,
+				FlagTitle: data.PageFlagTitle,
+				ActiveTab: "files",
+			}
+		case data.AnalyticsTarget.ID != 0:
+			data.ServerHeader = ServerHeaderView{
+				ID:        data.AnalyticsTarget.ID,
+				Name:      data.AnalyticsTarget.Name,
+				Host:      data.AnalyticsTarget.Host,
+				Port:      data.AnalyticsTarget.Port,
+				AuthMode:  data.AnalyticsTarget.AuthMode,
+				Username:  data.AnalyticsTarget.Username,
+				Tags:      data.AnalyticsTarget.Tags,
+				Flag:      data.PageFlag,
+				FlagTitle: data.PageFlagTitle,
+				ActiveTab: "analytics",
+			}
+		}
+	}
+	if data.ServerHeader.ID != 0 && data.ServerHeader.Flag == "" && data.PageFlag != "" {
+		data.ServerHeader.Flag = data.PageFlag
+		data.ServerHeader.FlagTitle = data.PageFlagTitle
 	}
 
 	return data

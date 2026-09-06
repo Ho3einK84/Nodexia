@@ -1,35 +1,7 @@
 {{ define "content-monitoring" }}
 <section class="hero">
 
-  <div class="info-strip">
-    <i data-lucide="server" class="info-strip__icon"></i>
-    <span class="info-strip__name">{{ .MonitoringTarget.Name }}</span>
-    {{ if .PageFlag }}<span class="info-strip__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}
-    <span class="info-strip__addr">{{ .MonitoringTarget.Username }}@{{ .MonitoringTarget.Host }}:{{ .MonitoringTarget.Port }}</span>
-    <span class="badge badge--auth-{{ .MonitoringTarget.AuthMode }}">{{ .MonitoringTarget.AuthMode }}</span>
-    {{ range .MonitoringTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
-    <div class="info-strip__actions">
-      <form method="post" action="/servers/{{ .MonitoringTarget.ID }}/alerts/silence" class="inline-form silence-quick" title="{{ t "monitoring.silence_title" }}">
-        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-        <select name="metric" aria-label="{{ t "monitoring.metric_aria" }}">
-          <option value="all">{{ t "monitoring.metric_all" }}</option>
-          <option value="cpu">{{ t "home.metric.cpu" }}</option>
-          <option value="ram">{{ t "home.metric.ram" }}</option>
-          <option value="disk">{{ t "home.metric.disk" }}</option>
-          <option value="load1">{{ t "monitoring.load_1m" }}</option>
-          <option value="load5">{{ t "monitoring.load_5m" }}</option>
-          <option value="load15">{{ t "monitoring.load_15m" }}</option>
-          <option value="traffic_total">{{ t "monitoring.traffic_total" }}</option>
-          <option value="bandwidth_mbps">{{ t "monitoring.download_bandwidth" }}</option>
-        </select>
-        <button type="submit" class="btn btn--ghost btn--sm"><i data-lucide="bell-off" class="icon-in-button"></i> {{ t "monitoring.silence" }}</button>
-      </form>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .MonitoringTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nav.servers" }}</a>
-    </div>
-  </div>
+  {{ template "server-header" . }}
 
   {{ if .FlashMessage }}
   <div class="flash-banner flash-banner--{{ .FlashKind }}">
@@ -43,16 +15,64 @@
   <article class="card live-card{{ if not .MonitoringLive.Enabled }} live-card--static{{ end }}"
     {{ if .MonitoringLive.Enabled }}data-live-url="{{ .MonitoringLive.WSURL }}" data-live-interval="{{ .MonitoringLive.IntervalSeconds }}"{{ end }}>
     <div class="live-head">
-      <h3><i data-lucide="gauge"></i> {{ t "monitoring.resource_health" }}</h3>
-      {{ if .MonitoringLive.Enabled }}
-      <span class="live-status live-status--connecting" data-live-status title="{{ t "monitoring.live_title" "interval" .MonitoringLive.IntervalSeconds }}">
-        <span class="live-status__dot"></span><span data-live-status-text>{{ t "monitoring.connecting" }}</span>
-      </span>
-      {{ else }}
-      <span class="live-status live-status--idle" title="{{ t "monitoring.snapshot_title" }}">
-        <span class="live-status__dot"></span>{{ t "monitoring.snapshot" }}
-      </span>
-      {{ end }}
+      <div class="live-head__title">
+        <h3><i data-lucide="gauge"></i> {{ t "monitoring.resource_health" }}</h3>
+        {{ if .MonitoringLive.Enabled }}
+        <span class="live-status live-status--connecting" data-live-status title="{{ t "monitoring.live_title" "interval" .MonitoringLive.IntervalSeconds }}">
+          <span class="live-status__dot"></span><span data-live-status-text>{{ t "monitoring.connecting" }}</span>
+        </span>
+        {{ else }}
+        <span class="live-status live-status--idle" title="{{ t "monitoring.snapshot_title" }}">
+          <span class="live-status__dot"></span>{{ t "monitoring.snapshot" }}
+        </span>
+        {{ end }}
+      </div>
+
+      <div class="live-head__actions">
+        {{ if .MonitoringForm.StoredCredentialsAvailable }}
+        <button type="button" class="btn btn--ghost btn--sm" data-refresh-now="{{ .MonitoringForm.RefreshURL }}?refresh=1" title="{{ t "system.quick_refresh" }}">
+          <i data-lucide="zap" class="icon-in-button"></i> <span class="btn-label">{{ t "system.quick_refresh" }}</span>
+        </button>
+        <label class="auto-refresh-toggle">
+          <span>{{ t "common.auto_label" }}</span>
+          <select id="auto-refresh-select" data-refresh-url="{{ .MonitoringForm.RefreshURL }}" data-refresh-key="mon_{{ .MonitoringTarget.ID }}">
+            <option value="0">{{ t "common.off" }}</option>
+            <option value="5000">5s</option>
+            <option value="10000">10s</option>
+            <option value="30000">30s</option>
+            <option value="60000">1m</option>
+          </select>
+        </label>
+        {{ end }}
+
+        <div class="action-menu action-menu--below" data-action-menu>
+          <button type="button" class="btn btn--ghost btn--sm action-menu__toggle" title="{{ t "monitoring.silence_title" }}">
+            <i data-lucide="bell-off" class="icon-in-button"></i><span class="btn-label"> {{ t "monitoring.silence" }}</span>
+          </button>
+          <div class="action-menu__panel silence-panel" role="menu">
+            <span class="action-menu__caption"><i data-lucide="bell-off"></i> {{ t "monitoring.silence_title" }}</span>
+            <div class="action-menu__divider" role="separator"></div>
+            <form method="post" action="/servers/{{ .MonitoringTarget.ID }}/alerts/silence" class="silence-dropdown-form">
+              <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+              <label class="form-field">
+                <span>{{ t "monitoring.metric_aria" }}</span>
+                <select name="metric" class="form-select">
+                  <option value="all">{{ t "monitoring.metric_all" }}</option>
+                  <option value="cpu">{{ t "home.metric.cpu" }}</option>
+                  <option value="ram">{{ t "home.metric.ram" }}</option>
+                  <option value="disk">{{ t "home.metric.disk" }}</option>
+                  <option value="load1">{{ t "monitoring.load_1m" }}</option>
+                  <option value="load5">{{ t "monitoring.load_5m" }}</option>
+                  <option value="load15">{{ t "monitoring.load_15m" }}</option>
+                  <option value="traffic_total">{{ t "monitoring.traffic_total" }}</option>
+                  <option value="bandwidth_mbps">{{ t "monitoring.download_bandwidth" }}</option>
+                </select>
+              </label>
+              <button type="submit" class="btn btn--secondary btn--sm w-full"><i data-lucide="check" class="icon-in-button"></i> {{ t "monitoring.silence" }}</button>
+            </form>
+          </div>
+        </div>
+      </div>
     </div>
 
     {{ if or .MonitoringSnapshot.Available .MonitoringLive.Enabled }}
@@ -136,11 +156,19 @@
 
     <div class="traffic-header">
       <div class="traffic-iface">
-        <span class="traffic-iface__label"><i data-lucide="activity"></i> {{ t "monitoring.traffic" }}</span>
-        <span class="traffic-iface__name">{{ .MonitoringTraffic.InterfaceName }}</span>
+        <span class="traffic-iface__label"><i data-lucide="activity"></i> {{ t "monitoring.traffic_title" }}</span>
+        <span class="traffic-iface__name"><span class="iface-chip iface-chip--active">{{ .MonitoringTraffic.InterfaceName }}</span></span>
         {{ if gt (len .MonitoringTraffic.AvailableInterfaces) 1 }}
         <div class="traffic-iface__others">
-          {{ range .MonitoringTraffic.AvailableInterfaces }}{{ if ne . $.MonitoringTraffic.InterfaceName }}<code class="iface-chip">{{ . }}</code>{{ end }}{{ end }}
+          {{ range .MonitoringTraffic.AvailableInterfaces }}
+          {{ if ne . $.MonitoringTraffic.InterfaceName }}
+          <form method="post" action="{{ $.MonitoringForm.Action }}" class="inline-form">
+            <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+            <input type="hidden" name="traffic_interface" value="{{ . }}">
+            <button type="submit" class="iface-chip" title="{{ t "monitoring.vnstat_interface" }}: {{ . }}">{{ . }}</button>
+          </form>
+          {{ end }}
+          {{ end }}
         </div>
         {{ end }}
       </div>
@@ -274,7 +302,9 @@
           {{ with index .MonitoringForm.Errors "traffic_interface" }}<small class="field-error">{{ . }}</small>{{ end }}
           {{ if .MonitoringTraffic.AvailableInterfaces }}
           <div class="iface-hints">
-            {{ range .MonitoringTraffic.AvailableInterfaces }}<code class="iface-chip{{ if eq . $.MonitoringTraffic.InterfaceName }} iface-chip--active{{ end }}">{{ . }}</code>{{ end }}
+            {{ range .MonitoringTraffic.AvailableInterfaces }}
+            <button type="button" class="iface-chip{{ if eq . $.MonitoringTraffic.InterfaceName }} iface-chip--active{{ end }}" data-iface-fill="{{ . }}" title="{{ . }}">{{ . }}</button>
+            {{ end }}
           </div>
           {{ end }}
         </label>
@@ -322,16 +352,6 @@
           <button type="button" class="btn btn--ghost" data-refresh-now="{{ .MonitoringForm.RefreshURL }}?refresh=1">
             <i data-lucide="zap" class="icon-in-button"></i> {{ t "system.quick_refresh" }}
           </button>
-          <label class="auto-refresh-toggle">
-            <span>{{ t "common.auto_label" }}</span>
-            <select id="auto-refresh-select" data-refresh-url="{{ .MonitoringForm.RefreshURL }}" data-refresh-key="mon_{{ .MonitoringTarget.ID }}">
-              <option value="0">{{ t "common.off" }}</option>
-              <option value="5000">5s</option>
-              <option value="10000">10s</option>
-              <option value="30000">30s</option>
-              <option value="60000">1m</option>
-            </select>
-          </label>
           <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="mon-advanced" aria-expanded="false">
             <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
           </button>

@@ -38,8 +38,22 @@
     });
   }
 
+  function initInterfaceHints() {
+    document.querySelectorAll('[data-iface-fill]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var iface = this.getAttribute('data-iface-fill');
+        var input = document.querySelector('input[name="traffic_interface"]');
+        if (input && iface) {
+          input.value = iface;
+          input.focus();
+        }
+      });
+    });
+  }
+
   function boot() {
     initGauges();
+    initInterfaceHints();
   }
 
   if (document.readyState === 'loading') {

@@ -1,21 +1,7 @@
 {{ define "content-nodes" }}
 <section class="hero">
 
-  <div class="info-strip">
-    <i data-lucide="server" class="info-strip__icon"></i>
-    <span class="info-strip__name">{{ .NodeTarget.Name }}</span>
-    {{ if .PageFlag }}<span class="info-strip__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}
-    <span class="info-strip__addr">{{ .NodeTarget.Username }}@{{ .NodeTarget.Host }}:{{ .NodeTarget.Port }}</span>
-    <span class="badge badge--auth-{{ .NodeTarget.AuthMode }}">{{ .NodeTarget.AuthMode }}</span>
-    {{ range .NodeTarget.Tags }}<span class="tag">{{ . }}</span>{{ end }}
-    <div class="info-strip__actions">
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "common.monitoring" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers/{{ .NodeTarget.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
-      <a class="btn btn--ghost btn--sm" href="/servers"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nav.servers" }}</a>
-    </div>
-  </div>
+  {{ template "server-header" . }}
 
   {{ if .FlashMessage }}
   <div class="flash-banner flash-banner--{{ .FlashKind }}">
@@ -567,15 +553,7 @@
 {{ define "content-node-install" }}
 <section class="hero">
 
-  <div class="info-strip">
-    <i data-lucide="server" class="info-strip__icon"></i>
-    <span class="info-strip__name">{{ .NodeTarget.Name }}</span>
-    {{ if .PageFlag }}<span class="info-strip__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}
-    <span class="info-strip__addr">{{ .NodeTarget.Username }}@{{ .NodeTarget.Host }}:{{ .NodeTarget.Port }}</span>
-    <div class="info-strip__actions">
-      <a class="btn btn--ghost btn--sm" href="{{ .NodeInstall.NodesURL }}"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nodes.back_to_nodes" }}</a>
-    </div>
-  </div>
+  {{ template "server-header" . }}
 
   <article class="card cmd-result-card stream-card{{ if .NodeInstall.IsRunning }} cmd-result-card--live{{ else if .NodeInstall.Error }} cmd-result-card--error{{ end }}"
     {{ if .NodeInstall.IsRunning }}data-stream-sse-url="/servers/{{ .NodeTarget.ID }}/nodes/install/{{ .NodeInstall.JobID }}/events" data-stream-page-url="{{ .NodeInstall.RefreshURL }}" data-stream-reload{{ end }}
