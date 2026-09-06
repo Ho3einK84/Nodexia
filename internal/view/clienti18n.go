@@ -122,6 +122,8 @@ var clientI18nKeys = []string{
 	"js.live.reconnecting",
 	"js.live.swap",
 	"monitoring.connecting",
+	"monitoring.show_more",
+	"monitoring.show_less",
 
 	// Interactive terminal (terminal.js)
 	"js.terminal.connected",

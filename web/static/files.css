@@ -202,7 +202,8 @@
   transition: background 0.1s ease, border-color 0.1s ease;
 }
 
-.file-row--dir {
+.file-row--dir,
+.file-row--file {
   cursor: pointer;
 }
 
@@ -267,6 +268,10 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.file-row__meta {
+  display: contents;
 }
 
 .file-row__actions {
@@ -624,9 +629,10 @@
     width: 100%;
   }
 
-  /* New folder / Upload fill the row for comfortable taps. */
+  /* New folder / Upload / Refresh fill the row for comfortable taps. */
   #file-mkdir-btn,
-  #file-upload-btn {
+  #file-upload-btn,
+  #file-refresh-btn {
     flex: 1 1 auto;
     justify-content: center;
   }
@@ -643,28 +649,36 @@
     display: none;
   }
 
-  /* Two-line card: name across the top, size + date beneath, kebab at right. */
+  /* Two-line card: name across top, size + date beneath, kebab at end. */
   .file-row {
-    grid-template-columns: max-content 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
-      "name name actions"
-      "size date actions";
-    gap: 2px 10px;
-    padding: 10px 10px;
+      "name actions"
+      "meta actions";
+    gap: 4px 10px;
+    padding: 10px 12px;
   }
 
-  .file-row__name { grid-area: name; }
+  .file-row__name {
+    grid-area: name;
+    min-width: 0;
+  }
 
   .file-row__mode { display: none; }
 
-  .file-row__size {
-    grid-area: size;
-    align-self: start;
+  .file-row__meta {
+    grid-area: meta;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    overflow: hidden;
   }
 
+  .file-row__size,
   .file-row__date {
-    grid-area: date;
-    align-self: start;
+    display: inline-flex;
+    align-items: center;
   }
 
   .file-row__name-text {

@@ -96,6 +96,9 @@
             <button type="button" class="file-sort__dir" id="file-sort-dir" data-dir="asc" aria-label="{{ t "files.sort_dir_aria" }}" title="{{ t "files.ascending" }}">
               <i data-lucide="arrow-up-narrow-wide"></i>
             </button>
+            <button type="button" class="btn btn--ghost btn--sm" id="file-refresh-btn" title="{{ t "common.refresh" }}">
+              <i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "common.refresh" }}
+            </button>
             <button type="button" class="btn btn--ghost btn--sm" id="file-mkdir-btn">
               <i data-lucide="folder-plus" class="icon-in-button"></i> {{ t "files.new_folder" }}
             </button>
@@ -125,9 +128,11 @@
                 <i data-lucide="arrow-up" class="file-row__icon"></i>
                 <span class="file-row__name-text">..</span>
               </div>
-              <span class="file-row__mode"></span>
-              <span class="file-row__size">—</span>
-              <span class="file-row__date">—</span>
+              <div class="file-row__meta">
+                <span class="file-row__mode"></span>
+                <span class="file-row__size">—</span>
+                <span class="file-row__date">—</span>
+              </div>
               <div class="file-row__actions"></div>
             </div>
             {{ end }}
@@ -141,9 +146,11 @@
                 <i data-lucide="folder" class="file-row__icon"></i>
                 <span class="file-row__name-text">{{ .Name }}</span>
               </div>
-              <span class="file-row__mode">{{ .Mode }}</span>
-              <span class="file-row__size">—</span>
-              <span class="file-row__date">{{ .ModifiedAt }}</span>
+              <div class="file-row__meta">
+                <span class="file-row__mode">{{ .Mode }}</span>
+                <span class="file-row__size">—</span>
+                <span class="file-row__date">{{ .ModifiedAt }}</span>
+              </div>
               <div class="file-row__actions">
                 <button type="button" class="file-row__menu-btn" data-menu-trigger
                   aria-label="{{ t "files.actions_aria" "name" .Name }}" aria-haspopup="true" aria-expanded="false">
@@ -159,9 +166,11 @@
                 <i data-lucide="{{ if hasSuffix .Name ".log" }}scroll-text{{ else if hasSuffix .Name ".conf" }}settings{{ else if hasSuffix .Name ".sh" }}terminal{{ else if hasSuffix .Name ".json" }}braces{{ else if hasSuffix .Name ".yaml" }}file-code{{ else if hasSuffix .Name ".yml" }}file-code{{ else if or (hasSuffix .Name ".gz") (hasSuffix .Name ".zip") (hasSuffix .Name ".tar") }}archive{{ else }}file{{ end }}" class="file-row__icon"></i>
                 <span class="file-row__name-text" title="{{ .Name }}">{{ .Name }}</span>
               </div>
-              <span class="file-row__mode">{{ .Mode }}</span>
-              <span class="file-row__size">{{ .Size }}</span>
-              <span class="file-row__date">{{ .ModifiedAt }}</span>
+              <div class="file-row__meta">
+                <span class="file-row__mode">{{ .Mode }}</span>
+                <span class="file-row__size">{{ .Size }}</span>
+                <span class="file-row__date">{{ .ModifiedAt }}</span>
+              </div>
               <div class="file-row__actions">
                 <button type="button" class="file-row__menu-btn" data-menu-trigger
                   aria-label="{{ t "files.actions_aria" "name" .Name }}" aria-haspopup="true" aria-expanded="false">

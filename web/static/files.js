@@ -48,8 +48,13 @@
     rootSeg.textContent = '/';
     rootSeg.setAttribute('data-crumb-path', '/');
     container.appendChild(rootSeg);
+    var filtered = parts.filter(function (p) { return p !== ''; });
+    if (pathValue === '/' || filtered.length === 0) {
+      rootSeg.classList.add('breadcrumb__seg--current');
+      return;
+    }
     var accumulated = '';
-    parts.filter(function (p) { return p !== ''; }).forEach(function (part, i, arr) {
+    filtered.forEach(function (part, i, arr) {
       accumulated += '/' + part;
       var sep = document.createElement('span');
       sep.className = 'breadcrumb__sep';
@@ -313,14 +318,20 @@
 
   function positionMenu(m, trigger) {
     var r = trigger.getBoundingClientRect();
+    var isRTL = document.documentElement.dir === 'rtl' || document.body.dir === 'rtl';
     // Render off-screen first to measure.
     m.style.left = '0px';
     m.style.top = '0px';
     var mw = m.offsetWidth;
     var mh = m.offsetHeight;
     var gap = 6;
-    var left = Math.min(r.right - mw, window.innerWidth - mw - 8);
-    if (left < 8) left = 8;
+    var left;
+    if (isRTL) {
+      left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8));
+    } else {
+      left = Math.min(r.right - mw, window.innerWidth - mw - 8);
+      if (left < 8) left = 8;
+    }
     var top = r.bottom + gap;
     if (top + mh > window.innerHeight - 8) {
       top = r.top - mh - gap;          // flip above when it would overflow
@@ -513,6 +524,14 @@
         submitBrowse(form);
       });
     });
+
+    document.querySelectorAll('.file-row--file[data-file-path]').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('[data-menu-trigger]')) return; // let the menu handle it
+        var filePath = row.getAttribute('data-file-path');
+        if (filePath) triggerDownload(filePath);
+      });
+    });
   }
 
   function initMenus() {
@@ -540,6 +559,15 @@
   }
 
   function initToolbar() {
+    var refreshBtn = document.getElementById('file-refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', function () {
+        var spinIcon = refreshBtn.querySelector('i, svg');
+        if (spinIcon) spinIcon.classList.add('is-spinning');
+        reloadCurrent();
+      });
+    }
+
     var mkdirBtn = document.getElementById('file-mkdir-btn');
     if (mkdirBtn) mkdirBtn.addEventListener('click', promptMkdir);
 

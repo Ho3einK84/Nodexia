@@ -583,14 +583,23 @@
         try { localStorage.setItem(key, select.value); } catch (e) {}
         start(ms);
       } else {
-        try { localStorage.removeItem(key); } catch (e) {}
+        try { localStorage.setItem(key, '0'); } catch (e) {}
         stop();
       }
     }
 
     var saved = null;
     try { saved = localStorage.getItem(key); } catch (e) {}
-    if (saved) { select.value = saved; }
+    if (saved !== null) {
+      select.value = saved;
+    } else {
+      var selectedOpt = select.querySelector('option[selected]');
+      if (selectedOpt) {
+        select.value = selectedOpt.value;
+      } else if (select.querySelector('option[value="10000"]')) {
+        select.value = '10000';
+      }
+    }
     select.addEventListener('change', apply);
     apply();
     registerCleanup(root, stop);

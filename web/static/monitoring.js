@@ -51,9 +51,32 @@
     });
   }
 
+  function initTrafficDailyToggle() {
+    var btn = document.getElementById('traffic-more-daily');
+    var rows = document.getElementById('traffic-daily-rows');
+    if (!btn || !rows) return;
+    btn.addEventListener('click', function () {
+      var isExpanded = rows.classList.toggle('is-expanded');
+      var icon = btn.querySelector('i, svg');
+      var text = btn.querySelector('.traffic-more-text');
+      if (icon) {
+        icon.setAttribute('data-lucide', isExpanded ? 'chevron-up' : 'chevron-down');
+      }
+      if (text) {
+        var moreLabel = window.nxT ? window.nxT('monitoring.show_more') : 'Show more';
+        var lessLabel = window.nxT ? window.nxT('monitoring.show_less') : 'Show less';
+        text.textContent = isExpanded ? lessLabel : moreLabel;
+      }
+      if (typeof lucide !== 'undefined' && lucide.createIcons) {
+        try { lucide.createIcons(); } catch (e) {}
+      }
+    });
+  }
+
   function boot() {
     initGauges();
     initInterfaceHints();
+    initTrafficDailyToggle();
   }
 
   if (document.readyState === 'loading') {

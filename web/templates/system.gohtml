@@ -24,6 +24,7 @@
           <span>{{ t "common.auto_label" }}</span>
           <select id="auto-refresh-select" data-refresh-url="{{ .SystemForm.RefreshURL }}" data-refresh-key="sys_{{ .SystemTarget.ID }}">
             <option value="0">{{ t "common.off" }}</option>
+            <option value="10000" selected>10s</option>
             <option value="30000">30s</option>
             <option value="60000">1m</option>
             <option value="300000">5m</option>
@@ -87,72 +88,76 @@
 
   <div class="sys-workspace">
 
-    <article class="card">
-      <div class="card__header">
-        <h3><i data-lucide="refresh-cw"></i> {{ t "system.collect_title" }}</h3>
-      </div>
+    {{- $sysAdvErr := or (index .SystemForm.Errors "password") (index .SystemForm.Errors "private_key") (index .SystemForm.Errors "connect_timeout") (index .SystemForm.Errors "command_timeout") -}}
+    <details class="card card--collapsible" {{ if or $sysAdvErr .SystemForm.Errors }}open{{ end }}>
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <h3><i data-lucide="refresh-cw"></i> {{ t "system.collect_title" }}</h3>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
 
-      <form method="post" action="{{ .SystemForm.Action }}" id="sys-form">
-        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+      <div class="card__collapsible-body">
+        <form method="post" action="{{ .SystemForm.Action }}" id="sys-form">
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
 
-        {{- $sysAdvErr := or (index .SystemForm.Errors "password") (index .SystemForm.Errors "private_key") (index .SystemForm.Errors "connect_timeout") (index .SystemForm.Errors "command_timeout") -}}
+          {{ if .SystemForm.StoredCredentialsAvailable }}
+          <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> {{ t "system.stored_note" }}</p>
+          {{ end }}
 
-        {{ if .SystemForm.StoredCredentialsAvailable }}
-        <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> {{ t "system.stored_note" }}</p>
-        {{ end }}
+          <div
+            id="sys-advanced"
+            class="sys-advanced"
+            {{ if and (not $sysAdvErr) .SystemForm.StoredCredentialsAvailable }}hidden{{ end }}
+          >
+            <div class="form-grid">
+              <label class="form-field">
+                <span>{{ t "common.connect_timeout" }}</span>
+                <input type="text" name="connect_timeout" value="{{ .SystemForm.ConnectTimeout }}" placeholder="10s">
+                {{ with index .SystemForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+              <label class="form-field">
+                <span>{{ t "common.command_timeout" }}</span>
+                <input type="text" name="command_timeout" value="{{ .SystemForm.CommandTimeout }}" placeholder="20s">
+                {{ with index .SystemForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+            </div>
 
-        <div
-          id="sys-advanced"
-          class="sys-advanced"
-          {{ if and (not $sysAdvErr) .SystemForm.StoredCredentialsAvailable }}hidden{{ end }}
-        >
-          <div class="form-grid">
+            {{ if not .SystemForm.StoredCredentialsAvailable }}
             <label class="form-field">
-              <span>{{ t "common.connect_timeout" }}</span>
-              <input type="text" name="connect_timeout" value="{{ .SystemForm.ConnectTimeout }}" placeholder="10s">
-              {{ with index .SystemForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              <span>{{ t "system.ssh_password" }}</span>
+              <input type="password" name="password" placeholder="{{ t "system.password_placeholder" }}" autocomplete="current-password">
+              {{ with index .SystemForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
             </label>
             <label class="form-field">
-              <span>{{ t "common.command_timeout" }}</span>
-              <input type="text" name="command_timeout" value="{{ .SystemForm.CommandTimeout }}" placeholder="20s">
-              {{ with index .SystemForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              <span>{{ t "system.private_key" }}</span>
+              <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+              {{ with index .SystemForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
             </label>
+            <label class="form-field">
+              <span>{{ t "system.passphrase" }}</span>
+              <input type="password" name="key_passphrase" placeholder="{{ t "system.optional_placeholder" }}">
+            </label>
+            {{ end }}
           </div>
 
-          {{ if not .SystemForm.StoredCredentialsAvailable }}
-          <label class="form-field">
-            <span>{{ t "system.ssh_password" }}</span>
-            <input type="password" name="password" placeholder="{{ t "system.password_placeholder" }}" autocomplete="current-password">
-            {{ with index .SystemForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-          <label class="form-field">
-            <span>{{ t "system.private_key" }}</span>
-            <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
-            {{ with index .SystemForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-          <label class="form-field">
-            <span>{{ t "system.passphrase" }}</span>
-            <input type="password" name="key_passphrase" placeholder="{{ t "system.optional_placeholder" }}">
-          </label>
-          {{ end }}
-        </div>
+          <div class="sys-form__actions">
+            <button type="submit" class="btn btn--primary">
+              <i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "system.collect_now" }}
+            </button>
+            {{ if .SystemForm.StoredCredentialsAvailable }}
+            <button type="button" class="btn btn--ghost" data-refresh-now="{{ .SystemForm.RefreshURL }}?refresh=1">
+              <i data-lucide="zap" class="icon-in-button"></i> {{ t "system.quick_refresh" }}
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="sys-advanced" aria-expanded="false">
+              <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
+            </button>
+            {{ end }}
+          </div>
 
-        <div class="sys-form__actions">
-          <button type="submit" class="btn btn--primary">
-            <i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "system.collect_now" }}
-          </button>
-          {{ if .SystemForm.StoredCredentialsAvailable }}
-          <button type="button" class="btn btn--ghost" data-refresh-now="{{ .SystemForm.RefreshURL }}?refresh=1">
-            <i data-lucide="zap" class="icon-in-button"></i> {{ t "system.quick_refresh" }}
-          </button>
-          <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="sys-advanced" aria-expanded="false">
-            <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
-          </button>
-          {{ end }}
-        </div>
-
-      </form>
-    </article>
+        </form>
+      </div>
+    </details>
 
     {{ if .SystemCollection.Available }}
     <article class="card sys-result-card{{ if .SystemCollection.Error }} sys-result-card--error{{ else }} sys-result-card--ok{{ end }}">

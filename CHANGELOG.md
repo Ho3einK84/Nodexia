@@ -24,6 +24,18 @@ still `vMAJOR.MINOR.PATCH`.
   - Revamped bandwidth summary (`.traffic-bw`) and daily/monthly transfer history with proportional gradient progress bars.
 - **System Facts Header Harmonization**:
   - Standardized the System Facts page header (`.sys-facts-header`) with quick refresh and auto-refresh controls mirroring the monitoring header, eliminating duplicate DOM IDs.
+- **Collapsible Refresh & Collection Accordions**:
+  - Converted manual snapshot, system facts collection, and node discovery cards across `Monitoring`, `System`, and `Nodes` views into smooth `<details class="card card--collapsible">` accordions defaulting to closed state to prevent cluttering the views.
+- **Default Automatic Refresh**:
+  - Enabled automatic background refresh (10s live countdown) by default across server management views (`Monitoring`, `System`, and `Nodes`), keeping user overrides in `localStorage`.
+- **Traffic Recent Days Limiting & More Toggle**:
+  - Limited `Recent days` in the Traffic & Bandwidth card to the 7 most recent days by default, adding a smooth toggle button ("Show more" / "Show less") to expand the full history without pushing the page down on mobile devices.
+- **File Browser Modernization & Bug Fixes**:
+  - Added a dedicated Quick Refresh button (`#file-refresh-btn`) to the file toolbar for immediate directory reloads without editing the path input.
+  - Enabled tap-to-download on file rows so users can tap anywhere on a file to download it directly.
+  - Fixed kebab dropdown menu positioning in Persian RTL mode to prevent off-screen or misplaced popups.
+  - Rebuilt mobile card grid layout with `minmax(0, 1fr)` and subline metadata grouping, eliminating horizontal scrolling and layout overflow on mobile screens.
+  - Fixed root breadcrumb active segment highlight when navigating `/`.
 - **Localization Parity & Architecture**:
   - Added synchronized translation catalog keys across English and Persian (`en.json` and `fa.json`) with 100% test parity (`TestCatalogKeyParity`).
   - Added `ServerHeader ServerHeaderView` to `PageData` with automatic fallback population in `normalizePageData` ensuring complete backward compatibility across all modules and tests.

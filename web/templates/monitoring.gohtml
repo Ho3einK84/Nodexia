@@ -38,7 +38,7 @@
           <select id="auto-refresh-select" data-refresh-url="{{ .MonitoringForm.RefreshURL }}" data-refresh-key="mon_{{ .MonitoringTarget.ID }}">
             <option value="0">{{ t "common.off" }}</option>
             <option value="5000">5s</option>
-            <option value="10000">10s</option>
+            <option value="10000" selected>10s</option>
             <option value="30000">30s</option>
             <option value="60000">1m</option>
           </select>
@@ -198,9 +198,9 @@
           {{ if .MonitoringTraffic.DailyRows }}<span class="traffic-section__count">{{ t "monitoring.days_count" "count" (len .MonitoringTraffic.DailyRows) }}</span>{{ end }}
         </div>
         {{ if .MonitoringTraffic.DailyRows }}
-        <div class="traffic-rows">
-          {{ range .MonitoringTraffic.DailyRows }}
-          <div class="traffic-row{{ if .IsLatest }} traffic-row--latest{{ end }}">
+        <div class="traffic-rows" id="traffic-daily-rows">
+          {{ range $idx, $row := .MonitoringTraffic.DailyRows }}
+          <div class="traffic-row{{ if .IsLatest }} traffic-row--latest{{ end }}{{ if ge $idx 7 }} traffic-row--extra{{ end }}">
             <span class="traffic-row__label">{{ .Label }}</span>
             <div class="traffic-row__data">
               <span class="traffic-row__rx"><i data-lucide="arrow-down"></i>{{ .RX }}</span>
@@ -211,6 +211,14 @@
           </div>
           {{ end }}
         </div>
+        {{ if gt (len .MonitoringTraffic.DailyRows) 7 }}
+        <div class="traffic-more-wrap">
+          <button type="button" class="btn btn--ghost btn--xs traffic-more-btn" id="traffic-more-daily" data-toggle-daily="true">
+            <i data-lucide="chevron-down" class="icon-in-button"></i>
+            <span class="traffic-more-text">{{ t "monitoring.show_more" }}</span>
+          </button>
+        </div>
+        {{ end }}
         {{ else }}
         <p class="empty-state">{{ t "monitoring.no_daily" }}</p>
         {{ end }}
@@ -282,84 +290,88 @@
 
   <div class="sys-workspace">
 
-    <article class="card">
-      <div class="card__header">
-        <h3><i data-lucide="refresh-cw"></i> {{ t "monitoring.refresh_snapshot" }}</h3>
-      </div>
+    {{- $monAdvErr := or (index .MonitoringForm.Errors "password") (index .MonitoringForm.Errors "private_key") (index .MonitoringForm.Errors "connect_timeout") (index .MonitoringForm.Errors "command_timeout") -}}
+    <details class="card card--collapsible" {{ if or $monAdvErr .MonitoringForm.Errors }}open{{ end }}>
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <h3><i data-lucide="refresh-cw"></i> {{ t "monitoring.refresh_snapshot" }}</h3>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
 
-      <form method="post" action="{{ .MonitoringForm.Action }}" id="mon-form">
-        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+      <div class="card__collapsible-body">
+        <form method="post" action="{{ .MonitoringForm.Action }}" id="mon-form">
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
 
-        {{- $monAdvErr := or (index .MonitoringForm.Errors "password") (index .MonitoringForm.Errors "private_key") (index .MonitoringForm.Errors "connect_timeout") (index .MonitoringForm.Errors "command_timeout") -}}
+          {{ if .MonitoringForm.StoredCredentialsAvailable }}
+          <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> {{ t "system.stored_note" }}</p>
+          {{ end }}
 
-        {{ if .MonitoringForm.StoredCredentialsAvailable }}
-        <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> {{ t "system.stored_note" }}</p>
-        {{ end }}
+          <label class="form-field">
+            <span><i data-lucide="wifi" class="icon-in-button"></i> {{ t "monitoring.vnstat_interface" }}</span>
+            <input type="text" name="traffic_interface" value="{{ .MonitoringForm.TrafficInterface }}" placeholder="{{ t "monitoring.autodetect" }}">
+            {{ with index .MonitoringForm.Errors "traffic_interface" }}<small class="field-error">{{ . }}</small>{{ end }}
+            {{ if .MonitoringTraffic.AvailableInterfaces }}
+            <div class="iface-hints">
+              {{ range .MonitoringTraffic.AvailableInterfaces }}
+              <button type="button" class="iface-chip{{ if eq . $.MonitoringTraffic.InterfaceName }} iface-chip--active{{ end }}" data-iface-fill="{{ . }}" title="{{ . }}">{{ . }}</button>
+              {{ end }}
+            </div>
+            {{ end }}
+          </label>
 
-        <label class="form-field">
-          <span><i data-lucide="wifi" class="icon-in-button"></i> {{ t "monitoring.vnstat_interface" }}</span>
-          <input type="text" name="traffic_interface" value="{{ .MonitoringForm.TrafficInterface }}" placeholder="{{ t "monitoring.autodetect" }}">
-          {{ with index .MonitoringForm.Errors "traffic_interface" }}<small class="field-error">{{ . }}</small>{{ end }}
-          {{ if .MonitoringTraffic.AvailableInterfaces }}
-          <div class="iface-hints">
-            {{ range .MonitoringTraffic.AvailableInterfaces }}
-            <button type="button" class="iface-chip{{ if eq . $.MonitoringTraffic.InterfaceName }} iface-chip--active{{ end }}" data-iface-fill="{{ . }}" title="{{ . }}">{{ . }}</button>
+          <div
+            id="mon-advanced"
+            class="sys-advanced"
+            {{ if and (not $monAdvErr) .MonitoringForm.StoredCredentialsAvailable }}hidden{{ end }}
+          >
+            <div class="form-grid">
+              <label class="form-field">
+                <span>{{ t "common.connect_timeout" }}</span>
+                <input type="text" name="connect_timeout" value="{{ .MonitoringForm.ConnectTimeout }}" placeholder="10s">
+                {{ with index .MonitoringForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+              <label class="form-field">
+                <span>{{ t "common.command_timeout" }}</span>
+                <input type="text" name="command_timeout" value="{{ .MonitoringForm.CommandTimeout }}" placeholder="20s">
+                {{ with index .MonitoringForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+            </div>
+            {{ if not .MonitoringForm.StoredCredentialsAvailable }}
+            <label class="form-field">
+              <span>{{ t "monitoring.ssh_password" }}</span>
+              <input type="password" name="password" placeholder="{{ t "monitoring.password_placeholder" }}" autocomplete="current-password">
+              {{ with index .MonitoringForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>{{ t "monitoring.private_key" }}</span>
+              <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+              {{ with index .MonitoringForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>{{ t "monitoring.passphrase" }}</span>
+              <input type="password" name="key_passphrase" placeholder="{{ t "monitoring.optional_placeholder" }}">
+            </label>
             {{ end }}
           </div>
-          {{ end }}
-        </label>
 
-        <div
-          id="mon-advanced"
-          class="sys-advanced"
-          {{ if and (not $monAdvErr) .MonitoringForm.StoredCredentialsAvailable }}hidden{{ end }}
-        >
-          <div class="form-grid">
-            <label class="form-field">
-              <span>{{ t "common.connect_timeout" }}</span>
-              <input type="text" name="connect_timeout" value="{{ .MonitoringForm.ConnectTimeout }}" placeholder="10s">
-              {{ with index .MonitoringForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </label>
-            <label class="form-field">
-              <span>{{ t "common.command_timeout" }}</span>
-              <input type="text" name="command_timeout" value="{{ .MonitoringForm.CommandTimeout }}" placeholder="20s">
-              {{ with index .MonitoringForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </label>
+          <div class="sys-form__actions">
+            <button type="submit" class="btn btn--primary">
+              <i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "monitoring.refresh_now" }}
+            </button>
+            {{ if .MonitoringForm.StoredCredentialsAvailable }}
+            <button type="button" class="btn btn--ghost" data-refresh-now="{{ .MonitoringForm.RefreshURL }}?refresh=1">
+              <i data-lucide="zap" class="icon-in-button"></i> {{ t "system.quick_refresh" }}
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="mon-advanced" aria-expanded="false">
+              <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
+            </button>
+            {{ end }}
           </div>
-          {{ if not .MonitoringForm.StoredCredentialsAvailable }}
-          <label class="form-field">
-            <span>{{ t "monitoring.ssh_password" }}</span>
-            <input type="password" name="password" placeholder="{{ t "monitoring.password_placeholder" }}" autocomplete="current-password">
-            {{ with index .MonitoringForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-          <label class="form-field">
-            <span>{{ t "monitoring.private_key" }}</span>
-            <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
-            {{ with index .MonitoringForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-          <label class="form-field">
-            <span>{{ t "monitoring.passphrase" }}</span>
-            <input type="password" name="key_passphrase" placeholder="{{ t "monitoring.optional_placeholder" }}">
-          </label>
-          {{ end }}
-        </div>
 
-        <div class="sys-form__actions">
-          <button type="submit" class="btn btn--primary">
-            <i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "monitoring.refresh_now" }}
-          </button>
-          {{ if .MonitoringForm.StoredCredentialsAvailable }}
-          <button type="button" class="btn btn--ghost" data-refresh-now="{{ .MonitoringForm.RefreshURL }}?refresh=1">
-            <i data-lucide="zap" class="icon-in-button"></i> {{ t "system.quick_refresh" }}
-          </button>
-          <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="mon-advanced" aria-expanded="false">
-            <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
-          </button>
-          {{ end }}
-        </div>
-
-      </form>
-    </article>
+        </form>
+      </div>
+    </details>
 
     {{ if .MonitoringCollection.Available }}
     <article class="card sys-result-card{{ if .MonitoringCollection.Error }} sys-result-card--error{{ else }} sys-result-card--ok{{ end }}">

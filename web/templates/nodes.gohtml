@@ -53,6 +53,29 @@
   {{ $noneOnly := and (eq (len .NodeSnapshots) 1) (eq (index .NodeSnapshots 0).NodeType "none") }}
 
   {{ if and .NodeSnapshots (not $noneOnly) }}
+  <div class="sys-facts-header">
+    <div class="sys-facts-header__title">
+      <i data-lucide="cpu"></i>
+      <span>{{ t "nodes.title" }}</span>
+    </div>
+    {{ if .NodeForm.StoredCredentialsAvailable }}
+    <div class="sys-facts-header__actions">
+      <button type="button" class="btn btn--ghost btn--sm" data-refresh-now="{{ .NodeForm.RefreshURL }}?refresh=1" title="{{ t "nodes.quick_scan" }}">
+        <i data-lucide="zap" class="icon-in-button"></i> <span class="btn-label">{{ t "nodes.quick_scan" }}</span>
+      </button>
+      <label class="auto-refresh-toggle">
+        <span>{{ t "common.auto_label" }}</span>
+        <select id="auto-refresh-select" data-refresh-url="{{ .NodeForm.RefreshURL }}" data-refresh-key="node_{{ .NodeTarget.ID }}">
+          <option value="0">{{ t "common.off" }}</option>
+          <option value="10000" selected>10s</option>
+          <option value="30000">30s</option>
+          <option value="60000">1m</option>
+        </select>
+      </label>
+    </div>
+    {{ end }}
+  </div>
+
   <div class="node-grid">
     {{ range .NodeSnapshots }}
     {{ if ne .NodeType "none" }}
@@ -258,72 +281,76 @@
   {{/* ── Workspace: discovery + install ────────────────── */}}
   <div class="sys-workspace">
 
-    <article class="card">
-      <div class="card__header">
-        <h3><i data-lucide="radar"></i> {{ t "nodes.run_discovery" }}</h3>
-      </div>
+    {{- $nodeAdvErr := or (index .NodeForm.Errors "password") (index .NodeForm.Errors "private_key") (index .NodeForm.Errors "connect_timeout") (index .NodeForm.Errors "command_timeout") -}}
+    <details class="card card--collapsible" {{ if or $nodeAdvErr .NodeForm.Errors }}open{{ end }}>
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <h3><i data-lucide="radar"></i> {{ t "nodes.run_discovery" }}</h3>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
 
-      <form method="post" action="{{ .NodeForm.Action }}" id="node-form">
-        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+      <div class="card__collapsible-body">
+        <form method="post" action="{{ .NodeForm.Action }}" id="node-form">
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
 
-        {{- $nodeAdvErr := or (index .NodeForm.Errors "password") (index .NodeForm.Errors "private_key") (index .NodeForm.Errors "connect_timeout") (index .NodeForm.Errors "command_timeout") -}}
+          {{ if .NodeForm.StoredCredentialsAvailable }}
+          <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> {{ t "system.stored_note" }}</p>
+          {{ end }}
 
-        {{ if .NodeForm.StoredCredentialsAvailable }}
-        <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> {{ t "system.stored_note" }}</p>
-        {{ end }}
+          <div
+            id="node-advanced"
+            class="sys-advanced"
+            {{ if and (not $nodeAdvErr) .NodeForm.StoredCredentialsAvailable }}hidden{{ end }}
+          >
+            <div class="form-grid">
+              <label class="form-field">
+                <span>{{ t "common.connect_timeout" }}</span>
+                <input type="text" name="connect_timeout" value="{{ .NodeForm.ConnectTimeout }}" placeholder="10s">
+                {{ with index .NodeForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+              <label class="form-field">
+                <span>{{ t "common.command_timeout" }}</span>
+                <input type="text" name="command_timeout" value="{{ .NodeForm.CommandTimeout }}" placeholder="20s">
+                {{ with index .NodeForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+            </div>
 
-        <div
-          id="node-advanced"
-          class="sys-advanced"
-          {{ if and (not $nodeAdvErr) .NodeForm.StoredCredentialsAvailable }}hidden{{ end }}
-        >
-          <div class="form-grid">
+            {{ if not .NodeForm.StoredCredentialsAvailable }}
             <label class="form-field">
-              <span>{{ t "common.connect_timeout" }}</span>
-              <input type="text" name="connect_timeout" value="{{ .NodeForm.ConnectTimeout }}" placeholder="10s">
-              {{ with index .NodeForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              <span>{{ t "nodes.ssh_password" }}</span>
+              <input type="password" name="password" placeholder="{{ t "nodes.password_placeholder" }}" autocomplete="current-password">
+              {{ with index .NodeForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
             </label>
             <label class="form-field">
-              <span>{{ t "common.command_timeout" }}</span>
-              <input type="text" name="command_timeout" value="{{ .NodeForm.CommandTimeout }}" placeholder="20s">
-              {{ with index .NodeForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              <span>{{ t "nodes.private_key" }}</span>
+              <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+              {{ with index .NodeForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
             </label>
+            <label class="form-field">
+              <span>{{ t "nodes.passphrase" }}</span>
+              <input type="password" name="key_passphrase" placeholder="{{ t "nodes.optional_placeholder" }}">
+            </label>
+            {{ end }}
           </div>
 
-          {{ if not .NodeForm.StoredCredentialsAvailable }}
-          <label class="form-field">
-            <span>{{ t "nodes.ssh_password" }}</span>
-            <input type="password" name="password" placeholder="{{ t "nodes.password_placeholder" }}" autocomplete="current-password">
-            {{ with index .NodeForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-          <label class="form-field">
-            <span>{{ t "nodes.private_key" }}</span>
-            <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
-            {{ with index .NodeForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-          <label class="form-field">
-            <span>{{ t "nodes.passphrase" }}</span>
-            <input type="password" name="key_passphrase" placeholder="{{ t "nodes.optional_placeholder" }}">
-          </label>
-          {{ end }}
-        </div>
+          <div class="sys-form__actions">
+            <button type="submit" class="btn btn--primary">
+              <i data-lucide="radar" class="icon-in-button"></i> {{ t "nodes.run_discovery" }}
+            </button>
+            {{ if .NodeForm.StoredCredentialsAvailable }}
+            <button type="button" class="btn btn--ghost" data-refresh-now="{{ .NodeForm.RefreshURL }}?refresh=1">
+              <i data-lucide="zap" class="icon-in-button"></i> {{ t "nodes.quick_scan" }}
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="node-advanced" aria-expanded="false">
+              <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
+            </button>
+            {{ end }}
+          </div>
 
-        <div class="sys-form__actions">
-          <button type="submit" class="btn btn--primary">
-            <i data-lucide="radar" class="icon-in-button"></i> {{ t "nodes.run_discovery" }}
-          </button>
-          {{ if .NodeForm.StoredCredentialsAvailable }}
-          <button type="button" class="btn btn--ghost" data-refresh-now="{{ .NodeForm.RefreshURL }}?refresh=1">
-            <i data-lucide="zap" class="icon-in-button"></i> {{ t "nodes.quick_scan" }}
-          </button>
-          <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="node-advanced" aria-expanded="false">
-            <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
-          </button>
-          {{ end }}
-        </div>
-
-      </form>
-    </article>
+        </form>
+      </div>
+    </details>
 
     <article class="card node-install-launch">
       <div class="card__header">
