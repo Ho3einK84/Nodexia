@@ -58,13 +58,13 @@
   font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: #475569;
+  color: var(--text-muted, #94a3b8);
 }
 
 .sys-fact-hero__label svg {
   width: 12px;
   height: 12px;
-  color: #3b82f6;
+  color: var(--accent, #38bdf8);
   flex-shrink: 0;
 }
 
@@ -73,14 +73,14 @@
   font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
   font-size: 0.95rem;
   font-weight: var(--fw-semibold);
-  color: #e2e8f0;
+  color: var(--text, #f1f5f9);
   line-height: 1.3;
   word-break: break-word;
 }
 
 .sys-fact-version {
   font-weight: var(--fw-regular);
-  color: #64748b;
+  color: var(--text-dim, #64748b);
   font-size: 0.82rem;
 }
 
@@ -118,20 +118,21 @@
   font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: #475569;
+  color: var(--text-muted, #94a3b8);
 }
 
 .sys-fact-item__label svg {
   width: 12px;
   height: 12px;
   flex-shrink: 0;
+  color: var(--accent-soft, #7dd3fc);
 }
 
 .sys-fact-item__value {
   font-variant-numeric: var(--num);
   font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
-  font-size: 0.82rem;
-  color: #94a3b8;
+  font-size: 0.85rem;
+  color: var(--text, #e2e8f0);
   word-break: break-word;
 }
 

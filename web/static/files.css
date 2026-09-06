@@ -22,7 +22,7 @@
 .file-nav__icon {
   width: 16px;
   height: 16px;
-  color: #475569;
+  color: var(--text-muted, #94a3b8);
   flex-shrink: 0;
 }
 
@@ -39,7 +39,7 @@
 }
 
 .breadcrumb__seg {
-  color: #475569;
+  color: var(--text-muted, #94a3b8);
   cursor: pointer;
   padding: 2px 5px;
   border-radius: 4px;
@@ -68,7 +68,7 @@
 }
 
 .breadcrumb__sep {
-  color: #1e293b;
+  color: var(--text-dim, #64748b);
   user-select: none;
   padding: 0 1px;
 }
@@ -130,7 +130,7 @@
 
 .file-creds__hint {
   font-size: 0.75rem;
-  color: #334155;
+  color: var(--text-muted, #94a3b8);
 }
 
 /* ── File result banner ──────────────────────────────────────────────────── */
@@ -183,7 +183,7 @@
   gap: 8px;
   padding: 6px 10px;
   font-size: 0.7rem;
-  color: #1e293b;
+  color: var(--text-muted, #94a3b8);
   font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -228,7 +228,7 @@
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  color: #334155;
+  color: var(--text-dim, #64748b);
 }
 
 .file-row--dir .file-row__icon {
@@ -251,20 +251,20 @@
 .file-row__mode {
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   font-size: 0.72rem;
-  color: #334155;
+  color: var(--text-dim, #64748b);
   letter-spacing: -0.02em;
 }
 
 .file-row__size {
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   font-size: 0.78rem;
-  color: #475569;
+  color: var(--text-muted, #94a3b8);
   font-variant-numeric: var(--num);
 }
 
 .file-row__date {
   font-size: 0.72rem;
-  color: #334155;
+  color: var(--text-dim, #64748b);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -405,7 +405,7 @@
   transform: translateY(-50%);
   width: 15px;
   height: 15px;
-  color: #475569;
+  color: var(--text-muted, #94a3b8);
   pointer-events: none;
 }
 
@@ -444,7 +444,7 @@
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #475569;
+  color: var(--text-muted, #94a3b8);
   font-weight: var(--fw-semibold);
 }
 
@@ -570,7 +570,7 @@
 
 .file-no-match {
   padding: 18px 10px;
-  color: #475569;
+  color: var(--text-muted, #94a3b8);
   font-size: 0.85rem;
   text-align: center;
 }

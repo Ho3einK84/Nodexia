@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	assets "github.com/Ho3einK84/Nodexia"
 	"github.com/Ho3einK84/Nodexia/internal/config"
 )
 
@@ -163,6 +164,14 @@ func NewServiceWorkerHandler(staticFiles fs.FS) ServiceWorkerHandler {
 		// Missing worker is non-fatal: serve an empty script so registration
 		// fails quietly on the client instead of taking the server down.
 		body = []byte("/* service worker unavailable */\n")
+	} else {
+		// Stamp the worker's CACHE_VERSION with the static assets content digest.
+		// When static files change or when a new version is released, the SW script
+		// body changes, prompting the browser to install the updated worker. On activation,
+		// the new worker clears out all prior cache versions so the client never gets stuck
+		// with stale CSS/JS assets.
+		digest := assets.StaticAssetsDigest()
+		body = bytes.Replace(body, []byte("var CACHE_VERSION = 'v7';"), []byte("var CACHE_VERSION = 'nodexia-"+digest+"';"), 1)
 	}
 	return ServiceWorkerHandler{body: body, modTime: time.Now()}
 }

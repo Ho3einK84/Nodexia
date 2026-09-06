@@ -105,7 +105,7 @@ nodexia uninstall [--purge] [--yes]       # remove stack + CLI; --purge also wip
 
 ## 📸 Screenshots
 
-> From **v0.5.0**, with demo data shown purely to illustrate the interface.
+> From **v0.7.6**, with demo data shown purely to illustrate the interface.
 
 | | |
 |---|---|

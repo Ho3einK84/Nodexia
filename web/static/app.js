@@ -1419,6 +1419,102 @@
         }
       });
     });
+  /* ── Collapsible server cards & expand all ─────────────── */
+  function initServerCards(root) {
+    root = root || document;
+    var cards = root.querySelectorAll('[data-server-card]');
+    if (!cards.length) return;
+
+    var toggleAllBtn = root.getElementById ? root.getElementById('server-toggle-all') : document.getElementById('server-toggle-all');
+    var toggleAllLabel = root.getElementById ? root.getElementById('server-toggle-all-label') : document.getElementById('server-toggle-all-label');
+
+    function updateCard(card, open, persist) {
+      var body = card.querySelector('[data-server-body]');
+      var toggleBtn = card.querySelector('[data-server-toggle-btn]');
+      var serverId = card.getAttribute('data-server-id');
+
+      if (open) {
+        card.classList.add('server-card--expanded');
+        if (body) body.removeAttribute('hidden');
+        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+        if (persist && serverId) {
+          try { localStorage.setItem('server_card_' + serverId, 'open'); } catch (e) {}
+        }
+      } else {
+        card.classList.remove('server-card--expanded');
+        if (body) body.setAttribute('hidden', '');
+        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+        if (persist && serverId) {
+          try { localStorage.setItem('server_card_' + serverId, 'closed'); } catch (e) {}
+        }
+      }
+    }
+
+    cards.forEach(function (card) {
+      if (card.dataset.serverCardReady === '1') return;
+      card.dataset.serverCardReady = '1';
+
+      var serverId = card.getAttribute('data-server-id');
+      var stored = null;
+      if (serverId) {
+        try { stored = localStorage.getItem('server_card_' + serverId); } catch (e) {}
+      }
+      // Default to closed so the server list is compact and space-efficient.
+      var isOpen = stored === 'open';
+      updateCard(card, isOpen, false);
+
+      var header = card.querySelector('[data-server-toggle]');
+      if (header) {
+        header.addEventListener('click', function (e) {
+          if (e.target.closest('a, button, input, select, textarea, .action-menu, .server-card__checkbox-wrap, .server-card__quick-actions')) {
+            return;
+          }
+          var currentlyOpen = card.classList.contains('server-card--expanded');
+          updateCard(card, !currentlyOpen, true);
+          checkAllState();
+        });
+      }
+
+      var toggleBtn = card.querySelector('[data-server-toggle-btn]');
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var currentlyOpen = card.classList.contains('server-card--expanded');
+          updateCard(card, !currentlyOpen, true);
+          checkAllState();
+        });
+      }
+    });
+
+    function checkAllState() {
+      if (!toggleAllBtn) return;
+      var allExpanded = true;
+      cards.forEach(function (card) {
+        if (!card.classList.contains('server-card--expanded')) allExpanded = false;
+      });
+      var collapseLabel = toggleAllBtn.getAttribute('data-collapse-label') || 'Collapse all';
+      var expandLabel = toggleAllBtn.getAttribute('data-expand-label') || 'Expand all';
+      if (toggleAllLabel) {
+        toggleAllLabel.textContent = allExpanded ? collapseLabel : expandLabel;
+      }
+      toggleAllBtn.setAttribute('title', allExpanded ? collapseLabel : expandLabel);
+      toggleAllBtn.setAttribute('aria-label', allExpanded ? collapseLabel : expandLabel);
+    }
+
+    if (toggleAllBtn && toggleAllBtn.dataset.toggleAllReady !== '1') {
+      toggleAllBtn.dataset.toggleAllReady = '1';
+      toggleAllBtn.addEventListener('click', function () {
+        var anyClosed = false;
+        cards.forEach(function (card) {
+          if (!card.classList.contains('server-card--expanded')) anyClosed = true;
+        });
+        cards.forEach(function (card) {
+          updateCard(card, anyClosed, true);
+        });
+        checkAllState();
+      });
+      checkAllState();
+    }
   }
 
   /* ── Service worker registration (PWA) ──────────────────────
@@ -1429,7 +1525,11 @@
   function initServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function (reg) {
+        if (reg && typeof reg.update === 'function') {
+          reg.update().catch(function () {});
+        }
+      }).catch(function () {
         /* registration failure must never break the page */
       });
     });
@@ -1484,6 +1584,7 @@
     initShortcuts();
     initCollapsibles();
     initAdvancedToggle();
+    initServerCards();
     initServiceWorker();
     initOrientationLock();
     renderIcons(); // pick up icons injected by the steps above
@@ -1510,6 +1611,7 @@
       initCopyTargets(root);
       initModals(root);
       initCollapsibles(root);
+      initServerCards(root);
       initStream(root);
       initBulkStream(root);
       initNodeCredentials(root);

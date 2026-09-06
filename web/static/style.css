@@ -522,9 +522,9 @@ details.card--collapsible[open] .card__collapse-icon {
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 14px;
-  padding: 20px 24px;
+  padding: 16px 20px;
   overflow: visible;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .server-card::before {
@@ -537,8 +537,25 @@ details.card--collapsible[open] .card__collapse-icon {
 }
 
 .server-card:hover {
-  border-color: rgba(148, 163, 184, 0.2);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  border-color: rgba(148, 163, 184, 0.25);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.server-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 8px;
+  transition: opacity 0.15s ease;
+}
+
+.server-card--expanded .server-card__header {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
 }
 
 .server-card__top {
@@ -553,7 +570,7 @@ details.card--collapsible[open] .card__collapse-icon {
    badges stay pinned to the right (space-between sees only two children). */
 .server-card__lead {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   min-width: 0;
   flex: 1 1 auto;
@@ -562,7 +579,7 @@ details.card--collapsible[open] .card__collapse-icon {
 .server-card__identity {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -572,10 +589,14 @@ details.card--collapsible[open] .card__collapse-icon {
   font-weight: var(--fw-semibold);
   color: #f1f5f9;
   word-break: break-word;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.25;
 }
 
 .server-card__host {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: #64748b;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   word-break: break-all;
@@ -592,6 +613,107 @@ details.card--collapsible[open] .card__collapse-icon {
   cursor: default;
 }
 
+.server-card__header-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-inline-start: auto;
+}
+
+.server-card__quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.server-card__quick-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--text-muted);
+}
+
+.server-card__quick-btn:hover {
+  color: var(--accent-bright);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.server-card__quick-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.server-card__toggle-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--text-muted);
+  transition: transform 0.2s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.server-card__toggle-btn:hover {
+  background: rgba(148, 163, 184, 0.12);
+  color: #f1f5f9;
+}
+
+.server-card__toggle-icon {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.2s ease;
+}
+
+.server-card--expanded .server-card__toggle-icon {
+  transform: rotate(180deg);
+}
+
+.server-card__collapsible-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: serverCardSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.server-card__collapsible-body[hidden] {
+  display: none !important;
+}
+
+@keyframes serverCardSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.server-toggle-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  color: var(--text-muted);
+}
+
+.server-toggle-all-btn:hover {
+  background: rgba(148, 163, 184, 0.16);
+  color: #f1f5f9;
+}
+
 .server-card__badges {
   display: flex;
   gap: 6px;
@@ -600,7 +722,7 @@ details.card--collapsible[open] .card__collapse-icon {
 }
 
 .server-card__note {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 0.88rem;
   color: #94a3b8;
   line-height: 1.5;
@@ -611,7 +733,7 @@ details.card--collapsible[open] .card__collapse-icon {
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
-  padding-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid rgba(148, 163, 184, 0.08);
 }
 

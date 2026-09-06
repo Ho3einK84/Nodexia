@@ -132,6 +132,8 @@ func staticAssetHandler(staticFiles fs.FS) http.Handler {
 		}
 		if strings.HasPrefix(r.URL.Path, "/static/fonts/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else if r.URL.Query().Get("v") != "" {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
 			w.Header().Set("Cache-Control", "public, max-age=3600")
 		}

@@ -1,5 +1,145 @@
 /* ── Node discovery ──────────────────────────────────────────────────────── */
 
+/* ── Nodes Fleet Overview Card ───────────────────────────────────────────── */
+
+.nodes-overview-card {
+  padding: 0;
+  overflow: hidden;
+  margin-bottom: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.nodes-overview-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.nodes-overview__pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--ok);
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-weight: var(--fw-medium);
+}
+
+.nodes-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  background: rgba(2, 6, 23, 0.25);
+}
+
+.nodes-kpi-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 20px;
+  border-inline-end: 1px solid var(--border);
+  transition: background 0.15s ease;
+}
+
+.nodes-kpi-item:last-child {
+  border-inline-end: none;
+}
+
+.nodes-kpi-item:hover {
+  background: rgba(148, 163, 184, 0.03);
+}
+
+.nodes-kpi-item__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #64748b;
+}
+
+.nodes-kpi-item__label svg {
+  width: 13px;
+  height: 13px;
+  color: var(--accent);
+}
+
+.nodes-kpi-item__value {
+  font-variant-numeric: var(--num);
+  font-size: 1.1rem;
+  font-weight: var(--fw-bold);
+  color: #f1f5f9;
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.nodes-kpi-item__value--ok {
+  color: var(--ok);
+  font-size: 0.95rem;
+}
+
+.nodes-kpi-item__value--ports {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+  font-size: 0.85rem;
+  font-weight: var(--fw-semibold);
+}
+
+.nodes-kpi-item__sub {
+  font-size: 0.8rem;
+  font-weight: var(--fw-regular);
+  color: var(--text-dim);
+}
+
+.nodes-port-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: var(--accent-bright);
+  font-size: 0.8rem;
+}
+
+.node-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.node-card__port-tag {
+  display: inline-flex;
+  align-items: center;
+  font-family: "SF Mono", "Cascadia Code", monospace;
+  font-size: 0.75rem;
+  font-weight: var(--fw-semibold);
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #38bdf8;
+}
+
+.node-card--rebecca-node .node-card__port-tag {
+  background: rgba(167, 139, 250, 0.12);
+  border-color: rgba(167, 139, 250, 0.25);
+  color: #a78bfa;
+}
+
 .node-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
@@ -10,16 +150,20 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 13px;
-  padding: 16px 20px;
+  gap: 14px;
+  padding: 18px 20px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.6), rgba(2, 6, 23, 0.35));
-  /* visible so the header action menu can overflow the card edge; the accent
-     strip below rounds its own left corners to compensate. */
+    linear-gradient(180deg, rgba(15, 23, 42, 0.65), rgba(2, 6, 23, 0.4));
   overflow: visible;
   min-width: 0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.node-card:hover {
+  border-color: rgba(148, 163, 184, 0.25);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
 }
 
 .node-card::before {
@@ -815,6 +959,104 @@
   font-size: 0.86rem;
   line-height: 1.5;
   color: var(--text-muted, #94a3b8);
+}
+
+.node-install-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.node-install-card {
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+}
+
+.node-install-card:hover {
+  border-color: rgba(148, 163, 184, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.node-install-card--pasarguard {
+  border-inline-start: 3px solid #38bdf8;
+}
+
+.node-install-card--rebecca {
+  border-inline-start: 3px solid #a78bfa;
+}
+
+.node-install-card--soon {
+  border-inline-start: 3px solid var(--text-dim, #64748b);
+  opacity: 0.88;
+}
+
+.node-install-card__badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.node-install-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--accent-soft);
+}
+
+.node-install-card__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.node-install-card--pasarguard .node-install-card__icon {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+}
+
+.node-install-card--rebecca .node-install-card__icon {
+  background: rgba(167, 139, 250, 0.12);
+  color: #a78bfa;
+}
+
+.node-install-card--soon .node-install-card__icon {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text-muted);
+}
+
+.node-install-card__title {
+  font-size: 0.98rem;
+  font-weight: var(--fw-semibold);
+  color: #f1f5f9;
+  margin: 0 0 6px 0;
+  line-height: 1.3;
+}
+
+.node-install-card__desc {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-muted, #94a3b8);
+  margin: 0 0 16px 0;
+  flex: 1;
+}
+
+.node-install-card__btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: auto;
 }
 
 .node-install-launch__actions {

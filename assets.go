@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"io"
 	"io/fs"
+	"sort"
+	"strings"
 	"sync"
 )
 
@@ -71,4 +73,43 @@ func StaticAssetVersion(name string) string {
 		})
 	})
 	return staticVersions[name]
+}
+
+// StaticAssetURL returns the root-relative URL for an embedded static asset,
+// appending ?v=<fingerprint> if the asset exists. Accepts paths like "style.css",
+// "/static/style.css", or "fonts/exo2-latin.woff2".
+func StaticAssetURL(name string) string {
+	clean := strings.TrimPrefix(name, "/static/")
+	clean = strings.TrimPrefix(clean, "/")
+	// Strip existing query string if any was provided
+	if idx := strings.Index(clean, "?"); idx != -1 {
+		clean = clean[:idx]
+	}
+	v := StaticAssetVersion(clean)
+	if v != "" {
+		return "/static/" + clean + "?v=" + v
+	}
+	if strings.HasPrefix(name, "/") {
+		return name
+	}
+	return "/static/" + name
+}
+
+// StaticAssetsDigest returns an aggregate fingerprint (12 hex characters)
+// representing the content of all embedded static assets. It changes whenever
+// any static file is modified, and can be used to version service worker caches.
+func StaticAssetsDigest() string {
+	// ensure staticVersions is computed
+	_ = StaticAssetVersion("style.css")
+	h := sha256.New()
+	keys := make([]string, 0, len(staticVersions))
+	for k := range staticVersions {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		h.Write([]byte(k))
+		h.Write([]byte(staticVersions[k]))
+	}
+	return hex.EncodeToString(h.Sum(nil)[:6])
 }

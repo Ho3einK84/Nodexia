@@ -30,20 +30,20 @@
   font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: #475569;
+  color: var(--text-muted, #94a3b8);
 }
 
 .traffic-iface__label svg {
   width: 13px;
   height: 13px;
-  color: #3b82f6;
+  color: var(--accent, #38bdf8);
 }
 
 .traffic-iface__name {
   font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
   font-size: 0.9rem;
   font-weight: var(--fw-semibold);
-  color: #e2e8f0;
+  color: var(--text, #f1f5f9);
 }
 
 .traffic-iface__others {
@@ -57,7 +57,7 @@
   align-items: center;
   gap: 5px;
   font-size: 0.78rem;
-  color: #475569;
+  color: var(--text-muted, #94a3b8);
   white-space: nowrap;
 }
 
@@ -133,7 +133,7 @@
   font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: #475569;
+  color: var(--text-muted, #94a3b8);
 }
 
 .traffic-bw__label svg {
@@ -158,7 +158,7 @@
 
 .traffic-bw__sub {
   font-size: 0.68rem;
-  color: #334155;
+  color: var(--text-dim, #64748b);
 }
 
 @media (max-width: 480px) {
@@ -206,7 +206,7 @@
   font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: #475569;
+  color: var(--text-muted, #94a3b8);
   border-bottom: 1px solid rgba(148, 163, 184, 0.07);
 }
 
@@ -218,7 +218,7 @@
 .traffic-section__count {
   font-variant-numeric: var(--num);
   font-size: 0.68rem;
-  color: #334155;
+  color: var(--text-dim, #64748b);
 }
 
 /* ── Traffic rows ────────────────────────────────────────────────────────── */
@@ -335,11 +335,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #334155;
+  color: var(--text-muted, #94a3b8);
 }
 
 .traffic-collector .collapsible__toggle:hover {
-  color: #64748b;
+  color: var(--text, #f1f5f9);
 }
 
 /* ── Traffic responsive ──────────────────────────────────────────────────── */

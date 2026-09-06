@@ -229,4 +229,12 @@ func TestStaticAssetCaching(t *testing.T) {
 			t.Fatalf("font Cache-Control = %q, want immutable", cc)
 		}
 	})
+
+	t.Run("fingerprinted assets are immutable", func(t *testing.T) {
+		resp := mustGet(t, server.URL+"/static/style.css?v=abc123")
+		defer closeResponseBody(resp)
+		if cc := resp.Header.Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+			t.Fatalf("fingerprinted Cache-Control = %q, want immutable", cc)
+		}
+	})
 }

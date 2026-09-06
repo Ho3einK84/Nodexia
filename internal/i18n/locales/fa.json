@@ -111,6 +111,9 @@
     "other": "{count} نود"
   },
   "servers.add": "افزودن سرور",
+  "servers.expand_all": "باز کردن همه",
+  "servers.collapse_all": "بستن همه",
+  "servers.card.toggle_aria": "تغییر وضعیت جزئیات {name}",
   "servers.result_note": {
     "one": "نمایش {from}–{to} از {count} نتیجه برای «{query}»",
     "other": "نمایش {from}–{to} از {count} نتیجه برای «{query}»"
@@ -833,6 +836,14 @@
   "alerts.flash.silenced": "معیار برای سرور مورد نظر بی‌صدا شد.",
   "alerts.flash.silence_removed": "بی‌صدا حذف شد.",
   "nodes.title": "نودها",
+  "nodes.overview_active": "{count} فعال",
+  "nodes.overview_stopped": "{count} متوقف",
+  "nodes.overview_total": "{count} نود",
+  "nodes.overview_ports": "{count} پورت",
+  "nodes.overview_summary": "نودها و سرویس های فعال",
+  "nodes.pasarguard_desc": "نود کانتینری داکر با پشتیبانی از پروتکل های gRPC و REST.",
+  "nodes.rebecca_desc": "نود باینری بومی با احراز هویت گواهی پنل ربکا.",
+  "nodes.rebecca_stable_desc": "کانال انتشار پایدار نودهای ربکا.",
   "nodes.page_title": "نودهای {server}",
   "nodes.page_description": "شناسایی و مدیریت نودهای PasarGuard و Rebecca و نصب نودهای جدید.",
   "nodes.install_title": "نصب نود",

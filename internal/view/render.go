@@ -1172,6 +1172,7 @@ func NewRenderer() (*Renderer, error) {
 		// clientI18nJSON ships the client-needed strings to the browser; rebound
 		// per render to the active language (placeholder emits an empty object).
 		"clientI18nJSON": func() template.JS { return template.JS("{}") },
+		"asset":          assets.StaticAssetURL,
 	}
 	templates, err := template.New("").Funcs(funcMap).ParseFS(assets.Templates(), "web/templates/*.gohtml")
 	if err != nil {
@@ -1208,6 +1209,7 @@ func (r *Renderer) Render(w http.ResponseWriter, statusCode int, data PageData) 
 		"tn":             loc.Tn,
 		"tsafe":          func(key string, args ...any) template.HTML { return template.HTML(loc.Tsafe(key, args...)) },
 		"clientI18nJSON": func() template.JS { return clientI18nJSON(loc) },
+		"asset":          assets.StaticAssetURL,
 	})
 
 	var content bytes.Buffer

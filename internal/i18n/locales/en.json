@@ -111,6 +111,9 @@
     "other": "{count} nodes"
   },
   "servers.add": "Add server",
+  "servers.expand_all": "Expand all",
+  "servers.collapse_all": "Collapse all",
+  "servers.card.toggle_aria": "Toggle details for {name}",
   "servers.result_note": {
     "one": "Showing {from}–{to} of {count} match for \"{query}\"",
     "other": "Showing {from}–{to} of {count} matches for \"{query}\""
@@ -833,6 +836,14 @@
   "alerts.flash.silenced": "Metric silenced for the selected server.",
   "alerts.flash.silence_removed": "Silence removed.",
   "nodes.title": "Nodes",
+  "nodes.overview_active": "{count} active",
+  "nodes.overview_stopped": "{count} stopped",
+  "nodes.overview_total": "{count} total",
+  "nodes.overview_ports": "{count} ports",
+  "nodes.overview_summary": "Active node instances & services",
+  "nodes.pasarguard_desc": "Docker containerized node with gRPC and REST support.",
+  "nodes.rebecca_desc": "Native binary service node with panel certificate authentication.",
+  "nodes.rebecca_stable_desc": "Production stable release channel for Rebecca nodes.",
   "nodes.page_title": "Nodes on {server}",
   "nodes.page_description": "Discover PasarGuard and Rebecca node installations over SSH, manage them through their official CLIs, and install new PasarGuard nodes.",
   "nodes.install_title": "Install node",

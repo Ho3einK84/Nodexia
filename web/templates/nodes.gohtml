@@ -53,28 +53,54 @@
   {{ $noneOnly := and (eq (len .NodeSnapshots) 1) (eq (index .NodeSnapshots 0).NodeType "none") }}
 
   {{ if and .NodeSnapshots (not $noneOnly) }}
-  <div class="sys-facts-header">
-    <div class="sys-facts-header__title">
-      <i data-lucide="boxes"></i>
-      <span>{{ t "nodes.title" }}</span>
+  <article class="card nodes-overview-card">
+    <div class="card__header nodes-overview-header">
+      <div class="live-head__title">
+        <h3><i data-lucide="boxes"></i> {{ t "nodes.title" }}</h3>
+        <span class="nodes-overview__pulse"><span class="status-pulse"></span>{{ t "nodes.overview_summary" }}</span>
+      </div>
+      <div class="live-head__actions">
+        {{ if .NodeForm.StoredCredentialsAvailable }}
+        <button type="button" class="btn btn--ghost btn--sm" data-refresh-now="{{ .NodeForm.RefreshURL }}?refresh=1" title="{{ t "nodes.quick_scan" }}">
+          <i data-lucide="zap" class="icon-in-button"></i> <span class="btn-label">{{ t "nodes.quick_scan" }}</span>
+        </button>
+        <label class="auto-refresh-toggle">
+          <span>{{ t "common.auto_label" }}</span>
+          <select id="auto-refresh-select" data-refresh-url="{{ .NodeForm.RefreshURL }}" data-refresh-key="node_{{ .NodeTarget.ID }}">
+            <option value="0" selected>{{ t "common.off" }}</option>
+            <option value="10000">10s</option>
+            <option value="30000">30s</option>
+            <option value="60000">1m</option>
+          </select>
+        </label>
+        {{ end }}
+        <button type="button" class="btn btn--primary btn--sm" data-modal-open="install-node-modal">
+          <i data-lucide="plus" class="icon-in-button"></i> <span class="btn-label">{{ t "nodes.install_node_title" }}</span>
+        </button>
+      </div>
     </div>
-    {{ if .NodeForm.StoredCredentialsAvailable }}
-    <div class="sys-facts-header__actions">
-      <button type="button" class="btn btn--ghost btn--sm" data-refresh-now="{{ .NodeForm.RefreshURL }}?refresh=1" title="{{ t "nodes.quick_scan" }}">
-        <i data-lucide="zap" class="icon-in-button"></i> <span class="btn-label">{{ t "nodes.quick_scan" }}</span>
-      </button>
-      <label class="auto-refresh-toggle">
-        <span>{{ t "common.auto_label" }}</span>
-        <select id="auto-refresh-select" data-refresh-url="{{ .NodeForm.RefreshURL }}" data-refresh-key="node_{{ .NodeTarget.ID }}">
-          <option value="0" selected>{{ t "common.off" }}</option>
-          <option value="10000">10s</option>
-          <option value="30000">30s</option>
-          <option value="60000">1m</option>
-        </select>
-      </label>
+
+    <div class="nodes-kpi-strip">
+      <div class="nodes-kpi-item">
+        <span class="nodes-kpi-item__label"><i data-lucide="layers"></i> {{ t "nodes.title" }}</span>
+        <span class="nodes-kpi-item__value">{{ len .NodeSnapshots }} <span class="nodes-kpi-item__sub">{{ t "nodes.overview_total" "count" (len .NodeSnapshots) }}</span></span>
+      </div>
+      <div class="nodes-kpi-item">
+        <span class="nodes-kpi-item__label"><i data-lucide="activity"></i> {{ t "common.status" }}</span>
+        <span class="nodes-kpi-item__value nodes-kpi-item__value--ok"><span class="status-pulse"></span>{{ t "nodes.health_running" }}</span>
+      </div>
+      <div class="nodes-kpi-item">
+        <span class="nodes-kpi-item__label"><i data-lucide="network"></i> {{ t "nodes.service_port" }}</span>
+        <span class="nodes-kpi-item__value nodes-kpi-item__value--ports">
+          {{ range .NodeSnapshots }}{{ if and (ne .ServicePort "-") (ne .ServicePort "") }}<code class="nodes-port-badge">:{{ .ServicePort }}</code> {{ end }}{{ end }}
+        </span>
+      </div>
+      <div class="nodes-kpi-item">
+        <span class="nodes-kpi-item__label"><i data-lucide="server"></i> {{ t "common.server" }}</span>
+        <span class="nodes-kpi-item__value">{{ .NodeTarget.Name }}</span>
+      </div>
     </div>
-    {{ end }}
-  </div>
+  </article>
 
   <div class="node-grid">
     {{ range .NodeSnapshots }}
@@ -86,7 +112,12 @@
           <i data-lucide="{{ template "node-icon" .NodeType }}"></i>
         </span>
         <div class="node-card__title">
-          <span class="node-card__name">{{ .Name }}</span>
+          <div class="node-card__title-row">
+            <span class="node-card__name">{{ .Name }}</span>
+            {{ if and (ne .ServicePort "-") (ne .ServicePort "") }}
+            <code class="node-card__port-tag">:{{ .ServicePort }}</code>
+            {{ end }}
+          </div>
           <code class="node-card__type">{{ .TypeLabel }}</code>
         </div>
         <div class="node-card__head-end">
@@ -354,23 +385,49 @@
 
     <article class="card node-install-launch">
       <div class="card__header">
-        <h3><i data-lucide="plus-circle"></i> {{ t "nodes.install_node_title" }}</h3>
+        <div class="live-head__title">
+          <h3><i data-lucide="plus-circle"></i> {{ t "nodes.install_node_title" }}</h3>
+        </div>
       </div>
 
       <p class="node-install-launch__lead">{{ tsafe "nodes.install_lead" "server" .NodeTarget.Name }}</p>
 
-      <div class="node-install-launch__actions">
-        <button type="button" class="btn btn--primary node-install-launch__btn" data-modal-open="install-node-modal">
-          <i data-lucide="container" class="icon-in-button"></i> {{ t "nodes.install_pasarguard" }}
-        </button>
-        <button type="button" class="btn node-install-launch__btn" data-modal-open="install-rebecca-modal">
-          <i data-lucide="package" class="icon-in-button"></i> {{ t "nodes.install_rebecca_dev" }}
-          <span class="beta-badge">{{ t "nodes.beta" }}</span>
-        </button>
-        <button type="button" class="btn node-install-launch__btn node-install-soon" data-tooltip="{{ t "nodes.rebecca_stable_soon_tooltip" }}" aria-disabled="true" aria-label="{{ t "nodes.rebecca_stable_soon_aria" }}">
-          <i data-lucide="package" class="icon-in-button"></i> {{ t "nodes.install_rebecca_stable" }}
-          <span class="coming-soon-badge">{{ t "nodes.soon" }}</span>
-        </button>
+      <div class="node-install-grid">
+        <div class="node-install-card node-install-card--pasarguard">
+          <div class="node-install-card__badge-row">
+            <span class="node-install-card__icon"><i data-lucide="container"></i></span>
+            <span class="badge badge--ok">{{ t "nodes.recommended" }}</span>
+          </div>
+          <h4 class="node-install-card__title">{{ t "nodes.install_pasarguard" }}</h4>
+          <p class="node-install-card__desc">{{ t "nodes.pasarguard_desc" }}</p>
+          <button type="button" class="btn btn--primary btn--sm node-install-card__btn" data-modal-open="install-node-modal">
+            <i data-lucide="plus" class="icon-in-button"></i> {{ t "nodes.install_pasarguard" }}
+          </button>
+        </div>
+
+        <div class="node-install-card node-install-card--rebecca">
+          <div class="node-install-card__badge-row">
+            <span class="node-install-card__icon"><i data-lucide="package"></i></span>
+            <span class="badge badge--strat-key">{{ t "nodes.beta" }}</span>
+          </div>
+          <h4 class="node-install-card__title">{{ t "nodes.install_rebecca_dev" }}</h4>
+          <p class="node-install-card__desc">{{ t "nodes.rebecca_desc" }}</p>
+          <button type="button" class="btn btn--secondary btn--sm node-install-card__btn" data-modal-open="install-rebecca-modal">
+            <i data-lucide="plus" class="icon-in-button"></i> {{ t "nodes.install_rebecca_dev" }}
+          </button>
+        </div>
+
+        <div class="node-install-card node-install-card--soon">
+          <div class="node-install-card__badge-row">
+            <span class="node-install-card__icon"><i data-lucide="shield-check"></i></span>
+            <span class="badge badge--id">{{ t "nodes.soon" }}</span>
+          </div>
+          <h4 class="node-install-card__title">{{ t "nodes.install_rebecca_stable" }}</h4>
+          <p class="node-install-card__desc">{{ t "nodes.rebecca_stable_desc" }}</p>
+          <button type="button" class="btn btn--ghost btn--sm node-install-card__btn node-install-soon" aria-disabled="true" data-tooltip="{{ t "nodes.rebecca_stable_soon_tooltip" }}">
+            <i data-lucide="clock" class="icon-in-button"></i> {{ t "nodes.soon" }}
+          </button>
+        </div>
       </div>
     </article>
 
