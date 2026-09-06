@@ -38,4 +38,4 @@ jobs:
         run: govulncheck ./...
 
       - name: Build binary
-        run: go build -trimpath -ldflags="-s -w -X main.version=v0.7.6" -o nodexia ./cmd/nodexia
+        run: go build -trimpath -ldflags="-s -w -X main.version=v0.7.7" -o nodexia ./cmd/nodexia
