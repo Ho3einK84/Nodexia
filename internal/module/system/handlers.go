@@ -58,8 +58,8 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	shouldCollect := hasStoredCreds && wantRefresh
 
 	if hasStoredCreds && !wantRefresh && refreshParam != "0" {
-		latest, err := h.factRepo.GetLatestByServer(r.Context(), server.ID)
-		if err != nil || time.Since(latest.CollectedAt) > 5*time.Minute {
+		_, err := h.factRepo.GetLatestByServer(r.Context(), server.ID)
+		if err != nil && errors.Is(err, ErrNotFound) {
 			shouldCollect = true
 		}
 	}

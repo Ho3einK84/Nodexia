@@ -218,15 +218,15 @@
   </div>
 
   <nav class="server-subnav" aria-label="{{ t "servers.subnav_label" }}">
-    <a href="/servers/{{ .ServerHeader.ID }}/monitoring?refresh=1" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "monitoring" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "monitoring" }} aria-current="page"{{ end }}>
+    <a href="/servers/{{ .ServerHeader.ID }}/monitoring" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "monitoring" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "monitoring" }} aria-current="page"{{ end }}>
       <i data-lucide="gauge" class="server-subnav__icon"></i>
       <span>{{ t "common.monitoring" }}</span>
     </a>
-    <a href="/servers/{{ .ServerHeader.ID }}/system?refresh=1" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "system" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "system" }} aria-current="page"{{ end }}>
+    <a href="/servers/{{ .ServerHeader.ID }}/system" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "system" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "system" }} aria-current="page"{{ end }}>
       <i data-lucide="info" class="server-subnav__icon"></i>
       <span>{{ t "common.system" }}</span>
     </a>
-    <a href="/servers/{{ .ServerHeader.ID }}/nodes?refresh=1" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "nodes" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "nodes" }} aria-current="page"{{ end }}>
+    <a href="/servers/{{ .ServerHeader.ID }}/nodes" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "nodes" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "nodes" }} aria-current="page"{{ end }}>
       <i data-lucide="boxes" class="server-subnav__icon"></i>
       <span>{{ t "common.nodes" }}</span>
     </a>

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Ho3einK84/Nodexia/internal/http/httperrors"
@@ -64,8 +65,8 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	shouldCollect := hasStoredCreds && wantRefresh
 
 	if hasStoredCreds && !wantRefresh && refreshParam != "0" {
-		latest, err := h.snapshotRepo.GetLatestByServer(r.Context(), server.ID)
-		if err != nil || time.Since(latest.CreatedAt) > 2*time.Minute {
+		_, err := h.snapshotRepo.GetLatestByServer(r.Context(), server.ID)
+		if err != nil && errors.Is(err, ErrNotFound) {
 			shouldCollect = true
 		}
 	}
@@ -117,10 +118,41 @@ func (h PageHandler) collectAndRender(w http.ResponseWriter, r *http.Request, se
 	collectCtx, cancelCollect := boundedCollectionContext(r.Context(), h.deps)
 	defer cancelCollect()
 
-	snapshot, result, err := Collect(collectCtx, h.deps.SSH, sshclient.CommandRequest{
-		ConnectionRequest: connReq,
-		CommandTimeout:    commandTimeout,
-	})
+	// Use the previously stored interface as a hint; selectTrafficInterface will
+	// fall back to the busiest interface if the hint has zero accumulated traffic.
+	trafficInterface := ""
+	if latestTraffic, trafficErr := h.trafficRepo.GetLatestTrafficByServer(r.Context(), server.ID); trafficErr == nil {
+		trafficInterface = latestTraffic.InterfaceName
+	}
+
+	var (
+		snapshot        Snapshot
+		result          sshclient.CommandResult
+		err             error
+		trafficSnapshot TrafficSnapshot
+		trafficResult   sshclient.CommandResult
+		trafficErr      error
+		wg              sync.WaitGroup
+	)
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		snapshot, result, err = Collect(collectCtx, h.deps.SSH, sshclient.CommandRequest{
+			ConnectionRequest: connReq,
+			CommandTimeout:    commandTimeout,
+		})
+	}()
+
+	go func() {
+		defer wg.Done()
+		trafficSnapshot, trafficResult, trafficErr = CollectTraffic(collectCtx, h.deps.SSH, sshclient.CommandRequest{
+			ConnectionRequest: connReq,
+			CommandTimeout:    commandTimeout,
+		}, trafficInterface)
+	}()
+
+	wg.Wait()
 
 	collectionResult := view.MonitoringCollectionResultView{
 		Available:   true,
@@ -145,18 +177,6 @@ func (h PageHandler) collectAndRender(w http.ResponseWriter, r *http.Request, se
 		httperrors.RenderPage(w, r, h.deps, storeErr, "/servers", "Could not persist monitoring snapshot", "Monitoring data was collected but could not be stored.")
 		return
 	}
-
-	// Use the previously stored interface as a hint; selectTrafficInterface will
-	// fall back to the busiest interface if the hint has zero accumulated traffic.
-	trafficInterface := ""
-	if latestTraffic, trafficErr := h.trafficRepo.GetLatestTrafficByServer(r.Context(), server.ID); trafficErr == nil {
-		trafficInterface = latestTraffic.InterfaceName
-	}
-
-	trafficSnapshot, trafficResult, trafficErr := CollectTraffic(collectCtx, h.deps.SSH, sshclient.CommandRequest{
-		ConnectionRequest: connReq,
-		CommandTimeout:    commandTimeout,
-	}, trafficInterface)
 
 	trafficCollection := view.MonitoringTrafficCollectionResultView{
 		Available:   true,

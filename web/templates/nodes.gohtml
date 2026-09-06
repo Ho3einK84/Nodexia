@@ -83,7 +83,7 @@
     <div class="nodes-kpi-strip">
       <div class="nodes-kpi-item">
         <span class="nodes-kpi-item__label"><i data-lucide="layers"></i> {{ t "nodes.title" }}</span>
-        <span class="nodes-kpi-item__value">{{ len .NodeSnapshots }} <span class="nodes-kpi-item__sub">{{ t "nodes.overview_total" "count" (len .NodeSnapshots) }}</span></span>
+        <span class="nodes-kpi-item__value">{{ len .NodeSnapshots }} <span class="nodes-kpi-item__sub">{{ t "nodes.overview_total" }}</span></span>
       </div>
       <div class="nodes-kpi-item">
         <span class="nodes-kpi-item__label"><i data-lucide="activity"></i> {{ t "common.status" }}</span>
@@ -484,7 +484,7 @@
     <div class="modal__backdrop" data-modal-close></div>
     <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="install-node-modal-title">
       <header class="modal__header">
-        <h3 class="modal__title" id="install-node-modal-title"><i data-lucide="container"></i> Install PasarGuard node</h3>
+        <h3 class="modal__title" id="install-node-modal-title"><i data-lucide="container"></i> {{ t "nodes.install_pasarguard" }}</h3>
         <button type="button" class="modal__close" data-modal-close aria-label="{{ t "nodes.close_install" }}">
           <i data-lucide="x"></i>
         </button>

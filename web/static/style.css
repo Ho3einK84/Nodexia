@@ -655,30 +655,38 @@ details.card--collapsible[open] .card__collapse-icon {
 }
 
 .server-card__toggle-btn {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--text-muted);
-  transition: transform 0.2s ease, background 0.15s ease, color 0.15s ease;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .server-card__toggle-btn:hover {
-  background: rgba(148, 163, 184, 0.12);
-  color: #f1f5f9;
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #fff;
 }
 
+.server-card__toggle-btn svg,
 .server-card__toggle-icon {
-  width: 18px;
-  height: 18px;
-  transition: transform 0.2s ease;
+  width: 24px !important;
+  height: 24px !important;
+  stroke-width: 2.25px;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s ease;
 }
 
-.server-card--expanded .server-card__toggle-icon {
+.server-card--expanded .server-card__toggle-icon,
+.server-card--expanded .server-card__toggle-btn svg {
   transform: rotate(180deg);
+  color: var(--accent-bright, #38bdf8);
 }
 
 .server-card__collapsible-body {
@@ -1766,13 +1774,14 @@ code {
   }
 
   .server-card__toggle-btn {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
   }
 
   .server-card__toggle-icon {
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
   }
 }
 

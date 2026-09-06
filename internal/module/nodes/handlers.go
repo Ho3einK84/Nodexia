@@ -93,7 +93,7 @@ func (h *Handlers) Page(w http.ResponseWriter, r *http.Request) {
 	shouldCollect := hasStoredCreds && wantRefresh && streamID == ""
 	if hasStoredCreds && !wantRefresh && streamID == "" && refreshParam != "0" {
 		latest, err := h.repo.GetLatestByServer(r.Context(), server.ID)
-		if err != nil || len(latest) == 0 || time.Since(latest[0].CollectedAt) > 5*time.Minute {
+		if err != nil || len(latest) == 0 {
 			shouldCollect = true
 		}
 	}
