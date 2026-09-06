@@ -1419,6 +1419,8 @@
         }
       });
     });
+  }
+
   /* ── Collapsible server cards & expand all ─────────────── */
   function initServerCards(root) {
     root = root || document;

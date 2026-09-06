@@ -525,6 +525,7 @@ details.card--collapsible[open] .card__collapse-icon {
   padding: 16px 20px;
   overflow: visible;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  min-width: 0;
 }
 
 .server-card::before {
@@ -545,11 +546,12 @@ details.card--collapsible[open] .card__collapse-icon {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   cursor: pointer;
   user-select: none;
   border-radius: 8px;
   transition: opacity 0.15s ease;
+  min-width: 0;
 }
 
 .server-card--expanded .server-card__header {
@@ -589,10 +591,13 @@ details.card--collapsible[open] .card__collapse-icon {
   font-weight: var(--fw-semibold);
   color: #f1f5f9;
   word-break: break-word;
+  overflow-wrap: anywhere;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   line-height: 1.25;
+  min-width: 0;
 }
 
 .server-card__host {
@@ -600,6 +605,7 @@ details.card--collapsible[open] .card__collapse-icon {
   color: #64748b;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 /* Country flag badge next to the server name. The glyph is a regional-indicator
@@ -951,8 +957,8 @@ details.card--collapsible[open] .card__collapse-icon {
 .server-toolbar__aside {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .server-toolbar__count {
@@ -1617,7 +1623,11 @@ code {
   }
 
   .server-card {
-    padding: 16px 18px;
+    padding: 14px 16px;
+  }
+
+  .server-card__header {
+    gap: 10px;
   }
 
   .server-card__top {
@@ -1684,6 +1694,8 @@ code {
   /* Toolbar stacks: search on top, count + add button below */
   .server-toolbar__aside {
     flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: 8px;
     justify-content: space-between;
   }
 
@@ -1723,6 +1735,44 @@ code {
   .shell-nav a {
     font-size: 0.82rem;
     padding: 6px 10px;
+  }
+}
+
+@media (max-width: 520px) {
+  .server-card {
+    padding: 12px 14px;
+  }
+
+  .server-card__header {
+    gap: 8px;
+  }
+
+  .server-card__lead {
+    gap: 8px;
+  }
+
+  .server-card__header-end {
+    gap: 4px;
+  }
+
+  .server-card__quick-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .server-card__quick-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .server-card__toggle-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .server-card__toggle-icon {
+    width: 16px;
+    height: 16px;
   }
 }
 
