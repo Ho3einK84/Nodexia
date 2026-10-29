@@ -56,7 +56,7 @@
   <article class="card nodes-overview-card">
     <div class="card__header nodes-overview-header">
       <div class="live-head__title">
-        <h3><i data-lucide="boxes"></i> {{ t "nodes.title" }}</h3>
+        <h3><i data-lucide="boxes"></i> {{ t "nodes.command_center" }}</h3>
         <span class="nodes-overview__pulse"><span class="status-pulse"></span>{{ t "nodes.overview_summary" }}</span>
       </div>
       <div class="live-head__actions">
@@ -74,30 +74,52 @@
           </select>
         </label>
         {{ end }}
-        <button type="button" class="btn btn--primary btn--sm" data-modal-open="install-node-modal">
-          <i data-lucide="plus" class="icon-in-button"></i> <span class="btn-label">{{ t "nodes.install_node_title" }}</span>
+        {{ if .NodeStream.Available }}
+        <button type="button" class="btn btn--ghost btn--sm" data-log-drawer-open="{{ .NodeStream.ID }}"
+                data-log-sse-url="/servers/{{ .NodeTarget.ID }}/nodes/stream/{{ .NodeStream.ID }}/events"
+                data-log-running="{{ if .NodeStream.IsRunning }}1{{ else }}0{{ end }}">
+          <i data-lucide="terminal" class="icon-in-button"></i> <span class="btn-label">{{ t "nodes.card_quick_logs" }}</span>
+        </button>
+        {{ end }}
+        <button type="button" class="btn btn--primary btn--sm" data-modal-open="deploy-node-modal">
+          <i data-lucide="plus" class="icon-in-button"></i> <span class="btn-label">{{ t "nodes.deploy_title" }}</span>
         </button>
       </div>
     </div>
 
-    <div class="nodes-kpi-strip">
-      <div class="nodes-kpi-item">
-        <span class="nodes-kpi-item__label"><i data-lucide="layers"></i> {{ t "nodes.title" }}</span>
-        <span class="nodes-kpi-item__value">{{ len .NodeSnapshots }} <span class="nodes-kpi-item__sub">{{ t "nodes.overview_total" }}</span></span>
+    {{/* Fleet status header — driven by .NodeFleet, never recomputed in JS. */}}
+    <div class="nodes-fleet" data-node-fleet data-total="{{ .NodeFleet.Total }}">
+      <div class="nodes-fleet__stat nodes-fleet__stat--ok">
+        <span class="nodes-fleet__label"><i data-lucide="activity"></i> {{ t "nodes.fleet_active" }}</span>
+        <span class="nodes-fleet__value">{{ .NodeFleet.Running }}</span>
       </div>
-      <div class="nodes-kpi-item">
-        <span class="nodes-kpi-item__label"><i data-lucide="activity"></i> {{ t "common.status" }}</span>
-        <span class="nodes-kpi-item__value nodes-kpi-item__value--ok"><span class="status-pulse"></span>{{ t "nodes.health_running" }}</span>
+      <div class="nodes-fleet__stat nodes-fleet__stat--down">
+        <span class="nodes-fleet__label"><i data-lucide="power-off"></i> {{ t "nodes.fleet_stopped" }}</span>
+        <span class="nodes-fleet__value">{{ .NodeFleet.Stopped }}</span>
       </div>
-      <div class="nodes-kpi-item">
-        <span class="nodes-kpi-item__label"><i data-lucide="network"></i> {{ t "nodes.service_port" }}</span>
-        <span class="nodes-kpi-item__value nodes-kpi-item__value--ports">
-          {{ range .NodeSnapshots }}{{ if and (ne .ServicePort "-") (ne .ServicePort "") }}<code class="nodes-port-badge">:{{ .ServicePort }}</code> {{ end }}{{ end }}
+      <div class="nodes-fleet__stat nodes-fleet__stat--ports">
+        <span class="nodes-fleet__label"><i data-lucide="network"></i> {{ t "nodes.fleet_ports" }}</span>
+        <span class="nodes-fleet__value">
+          {{ .NodeFleet.Ports }}
+          {{ if .NodeFleet.PortList }}
+          <span class="nodes-fleet__ports">
+            {{ range .NodeFleet.PortList }}<code class="nodes-port-badge">:{{ . }}</code>{{ end }}
+          </span>
+          {{ end }}
         </span>
       </div>
-      <div class="nodes-kpi-item">
-        <span class="nodes-kpi-item__label"><i data-lucide="server"></i> {{ t "common.server" }}</span>
-        <span class="nodes-kpi-item__value">{{ .NodeTarget.Name }}</span>
+      <div class="nodes-fleet__stat nodes-fleet__stat--health" title="{{ t "nodes.fleet_health_title" }}">
+        <span class="nodes-fleet__label"><i data-lucide="heart-pulse"></i> {{ t "nodes.fleet_health" }}</span>
+        <span class="nodes-fleet__value">
+          {{ if .NodeFleet.HealthKnown }}{{ .NodeFleet.HealthPct }}%{{ else }}—{{ end }}
+          <span class="nodes-fleet__meter" aria-hidden="true">
+            <span class="nodes-fleet__meter-fill" style="inline-size: {{ if .NodeFleet.HealthKnown }}{{ .NodeFleet.HealthPct }}{{ else }}0{{ end }}%"></span>
+          </span>
+        </span>
+      </div>
+      <div class="nodes-fleet__stat nodes-fleet__stat--total">
+        <span class="nodes-fleet__label"><i data-lucide="server"></i> {{ t "nodes.overview_total" }}</span>
+        <span class="nodes-fleet__value">{{ .NodeFleet.Total }}</span>
       </div>
     </div>
   </article>
@@ -297,7 +319,7 @@
     <span class="empty-state-icon"><i data-lucide="search-x"></i></span>
     <p class="empty-state-title">{{ t "nodes.empty_none_title" }}</p>
     <p class="empty-state-desc">{{ t "nodes.empty_none_desc" }}</p>
-    <button type="button" class="btn btn--primary" data-modal-open="install-node-modal">
+    <button type="button" class="btn btn--primary" data-modal-open="deploy-node-modal">
       <i data-lucide="container" class="icon-in-button"></i> {{ t "nodes.install_pasarguard" }}
     </button>
   </div>
@@ -392,42 +414,25 @@
 
       <p class="node-install-launch__lead">{{ tsafe "nodes.install_lead" "server" .NodeTarget.Name }}</p>
 
-      <div class="node-install-grid">
-        <div class="node-install-card node-install-card--pasarguard">
+      <div class="node-install-grid" data-engine-launcher>
+        {{ range .NodeDeployForm.Engines }}
+        <div class="node-install-card node-install-card--{{ if eq .Kind "binary" }}rebecca{{ else }}pasarguard{{ end }}">
           <div class="node-install-card__badge-row">
-            <span class="node-install-card__icon"><i data-lucide="container"></i></span>
+            <span class="node-install-card__icon"><i data-lucide="{{ .Icon }}"></i></span>
+            {{ if .Recommended }}
             <span class="badge badge--ok">{{ t "nodes.recommended" }}</span>
+            {{ else }}
+            <span class="badge badge--strat-key">{{ .Kind }}</span>
+            {{ end }}
           </div>
-          <h4 class="node-install-card__title">{{ t "nodes.install_pasarguard" }}</h4>
-          <p class="node-install-card__desc">{{ t "nodes.pasarguard_desc" }}</p>
-          <button type="button" class="btn btn--primary btn--sm node-install-card__btn" data-modal-open="install-node-modal">
-            <i data-lucide="plus" class="icon-in-button"></i> {{ t "nodes.install_pasarguard" }}
+          <h4 class="node-install-card__title">{{ .Label }}</h4>
+          <p class="node-install-card__desc">{{ .Description }}</p>
+          <button type="button" class="btn {{ if .Recommended }}btn--primary{{ else }}btn--secondary{{ end }} btn--sm node-install-card__btn"
+                  data-modal-open="deploy-node-modal" data-engine-preselect="{{ .Key }}">
+            <i data-lucide="plus" class="icon-in-button"></i> {{ t "nodes.deploy_title" }}
           </button>
         </div>
-
-        <div class="node-install-card node-install-card--rebecca">
-          <div class="node-install-card__badge-row">
-            <span class="node-install-card__icon"><i data-lucide="package"></i></span>
-            <span class="badge badge--strat-key">{{ t "nodes.beta" }}</span>
-          </div>
-          <h4 class="node-install-card__title">{{ t "nodes.install_rebecca_dev" }}</h4>
-          <p class="node-install-card__desc">{{ t "nodes.rebecca_desc" }}</p>
-          <button type="button" class="btn btn--secondary btn--sm node-install-card__btn" data-modal-open="install-rebecca-modal">
-            <i data-lucide="plus" class="icon-in-button"></i> {{ t "nodes.install_rebecca_dev" }}
-          </button>
-        </div>
-
-        <div class="node-install-card node-install-card--soon">
-          <div class="node-install-card__badge-row">
-            <span class="node-install-card__icon"><i data-lucide="shield-check"></i></span>
-            <span class="badge badge--id">{{ t "nodes.soon" }}</span>
-          </div>
-          <h4 class="node-install-card__title">{{ t "nodes.install_rebecca_stable" }}</h4>
-          <p class="node-install-card__desc">{{ t "nodes.rebecca_stable_desc" }}</p>
-          <button type="button" class="btn btn--ghost btn--sm node-install-card__btn node-install-soon" aria-disabled="true" data-tooltip="{{ t "nodes.rebecca_stable_soon_tooltip" }}">
-            <i data-lucide="clock" class="icon-in-button"></i> {{ t "nodes.soon" }}
-          </button>
-        </div>
+        {{ end }}
       </div>
     </article>
 
@@ -479,136 +484,210 @@
 
   </div>
 
-  {{/* ── Install PasarGuard node modal ─────────────────── */}}
-  <div class="modal" id="install-node-modal" data-modal hidden {{ if .NodeInstallForm.Errors }}data-modal-open-initial{{ end }}>
+  {{/* ── Unified deploy modal: one wizard, engine-agnostic ──
+       Every field either engine can need is rendered once; the engine step
+       toggles which group is visible via data-engine-group. The server reads
+       only the fields belonging to the posted node_type. */}}
+  {{ $form := .NodeDeployForm }}
+  <div class="modal modal--deploy" id="deploy-node-modal" data-modal data-deploy-modal
+       data-selected-engine="{{ $form.NodeType }}" hidden
+       {{ if or $form.Errors .NodeDeployOpen }}data-modal-open-initial{{ end }}>
     <div class="modal__backdrop" data-modal-close></div>
-    <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="install-node-modal-title">
+    <div class="modal__dialog modal__dialog--wide" role="dialog" aria-modal="true" aria-labelledby="deploy-node-modal-title">
       <header class="modal__header">
-        <h3 class="modal__title" id="install-node-modal-title"><i data-lucide="container"></i> {{ t "nodes.install_pasarguard" }}</h3>
+        <div class="deploy-modal__heading">
+          <h3 class="modal__title" id="deploy-node-modal-title"><i data-lucide="rocket"></i> {{ t "nodes.deploy_title" }}</h3>
+          <p class="deploy-modal__subtitle">{{ t "nodes.deploy_subtitle" "server" .NodeTarget.Name }}</p>
+        </div>
         <button type="button" class="modal__close" data-modal-close aria-label="{{ t "nodes.close_install" }}">
           <i data-lucide="x"></i>
         </button>
       </header>
+
       <div class="modal__body">
-        {{ if .NodeInstallForm.Enabled }}
-        <form method="post" action="{{ .NodeInstallForm.Action }}">
+        {{ if not $form.Enabled }}
+        <p class="empty-state">{{ t "nodes.install_needs_creds" }}</p>
+        {{ else }}
+
+        {{/* Wizard progress: engine → config → credentials → review */}}
+        <ol class="deploy-steps" data-deploy-steps aria-hidden="true">
+          <li class="deploy-step is-active" data-step-indicator="0"><span class="deploy-step__num">1</span> {{ t "nodes.deploy_step_engine" }}</li>
+          <li class="deploy-step" data-step-indicator="1"><span class="deploy-step__num">2</span> {{ t "nodes.deploy_step_config" }}</li>
+          <li class="deploy-step" data-step-indicator="2"><span class="deploy-step__num">3</span> {{ t "nodes.deploy_step_review" }}</li>
+        </ol>
+
+        <form method="post" action="{{ $form.Action }}" data-deploy-form novalidate>
           <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-          <label class="form-field">
-            <span>{{ t "nodes.node_name" }}</span>
-            <input type="text" name="node_name" value="{{ .NodeInstallForm.NodeName }}" placeholder="node" maxlength="64" required data-modal-autofocus>
-            {{ with index .NodeInstallForm.Errors "node_name" }}<small class="field-error">{{ . }}</small>{{ end }}
-            <small class="field-hint">{{ tsafe "nodes.node_name_hint" }}</small>
-          </label>
 
-          <div class="form-grid">
-            <label class="form-field">
-              <span>{{ t "nodes.service_port" }}</span>
-              <input type="number" name="service_port" value="{{ .NodeInstallForm.ServicePort }}" placeholder="62050" min="1" max="65535">
-              {{ with index .NodeInstallForm.Errors "service_port" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </label>
-            <label class="form-field">
-              <span>{{ t "nodes.api_port" }} <small class="field-optional">{{ t "nodes.optional_paren" }}</small></span>
-              <input type="number" name="api_port" value="{{ .NodeInstallForm.APIPort }}" placeholder="62051" min="1" max="65535">
-              {{ with index .NodeInstallForm.Errors "api_port" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </label>
-          </div>
+          {{/* ── Step 1: engine ───────────────────────────── */}}
+          <section class="deploy-pane is-active" data-deploy-pane="0">
+            <fieldset class="form-field deploy-engines-field">
+              <legend>{{ t "nodes.engine" }}</legend>
+              <div class="deploy-engines" data-deploy-engines>
+                {{ range $form.Engines }}
+                <label class="deploy-engine" data-engine-card="{{ .Key }}">
+                  <input type="radio" name="node_type" value="{{ .Key }}"
+                         {{ if eq .Key $form.NodeType }}checked{{ end }} required>
+                  <span class="deploy-engine__icon"><i data-lucide="{{ .Icon }}"></i></span>
+                  <span class="deploy-engine__body">
+                    <span class="deploy-engine__head">
+                      <span class="deploy-engine__label">{{ .Label }}</span>
+                      <span class="deploy-engine__kind deploy-engine__kind--{{ .Kind }}">{{ .Kind }}</span>
+                      {{ if .Recommended }}<span class="badge badge--ok">{{ t "nodes.recommended" }}</span>{{ end }}
+                    </span>
+                    <span class="deploy-engine__desc">{{ .Description }}</span>
+                    {{ if .Features }}
+                    <span class="deploy-engine__features">
+                      {{ range .Features }}<span class="deploy-engine__feature"><i data-lucide="check"></i>{{ . }}</span>{{ end }}
+                    </span>
+                    {{ end }}
+                  </span>
+                </label>
+                {{ end }}
+              </div>
+              {{ with index $form.Errors "node_type" }}<small class="field-error">{{ . }}</small>{{ end }}
+              {{ with index $form.Errors "engine" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </fieldset>
+          </section>
 
-          <fieldset class="form-field node-proto-choice">
-            <span>{{ t "nodes.connection_type" }}</span>
-            <div class="node-proto-options">
-              <label class="node-proto-option">
-                <input type="radio" name="protocol" value="grpc" {{ if ne .NodeInstallForm.Protocol "rest" }}checked{{ end }}>
-                <span><i data-lucide="layers" class="icon-in-button"></i> gRPC <small>{{ t "nodes.recommended" }}</small></span>
+          {{/* ── Step 2: configuration (per engine) ───────── */}}
+          <section class="deploy-pane" data-deploy-pane="1" hidden>
+            <label class="form-field">
+              <span>{{ t "nodes.node_name" }}</span>
+              <input type="text" name="node_name" value="{{ $form.NodeName }}" placeholder="node" maxlength="64" required
+                     data-modal-autofocus spellcheck="false" autocomplete="off">
+              {{ with index $form.Errors "node_name" }}<small class="field-error">{{ . }}</small>{{ end }}
+              <small class="field-hint">{{ tsafe "nodes.node_name_hint" }}</small>
+            </label>
+
+            <div class="form-grid">
+              <label class="form-field">
+                <span>{{ t "nodes.service_port" }}</span>
+                <input type="number" name="service_port" value="{{ $form.ServicePort }}" placeholder="62050" min="1" max="65535">
+                {{ with index $form.Errors "service_port" }}<small class="field-error">{{ . }}</small>{{ end }}
               </label>
-              <label class="node-proto-option">
-                <input type="radio" name="protocol" value="rest" {{ if eq .NodeInstallForm.Protocol "rest" }}checked{{ end }}>
-                <span><i data-lucide="globe" class="icon-in-button"></i> REST</span>
+              <label class="form-field">
+                <span>{{ t "nodes.api_port" }} <small class="field-optional">{{ t "nodes.optional_paren" }}</small></span>
+                <input type="number" name="api_port" value="{{ $form.APIPort }}" placeholder="62051" min="1" max="65535">
+                {{ with index $form.Errors "api_port" }}<small class="field-error">{{ . }}</small>{{ end }}
               </label>
             </div>
-            {{ with index .NodeInstallForm.Errors "protocol" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </fieldset>
 
-          <label class="form-field">
-            <span>{{ t "nodes.api_key" }} <small class="field-optional">{{ t "nodes.optional_paren" }}</small></span>
-            <input type="text" name="api_key" value="{{ .NodeInstallForm.APIKey }}" placeholder="{{ t "nodes.api_key_placeholder" }}" autocomplete="off" spellcheck="false">
-            {{ with index .NodeInstallForm.Errors "api_key" }}<small class="field-error">{{ . }}</small>{{ end }}
-            <small class="field-hint">{{ t "nodes.api_key_hint" }}</small>
-          </label>
+            <fieldset class="form-field deploy-channel-field">
+              <legend>{{ t "nodes.channel" }}</legend>
+              <div class="deploy-channels">
+                {{ range $form.Channels }}
+                <label class="deploy-channel{{ if not .Enabled }} is-disabled{{ end }}">
+                  <input type="radio" name="channel" value="{{ .Key }}"
+                         {{ if and (eq .Key $form.Channel) .Enabled }}checked{{ end }}
+                         {{ if not .Enabled }}disabled{{ end }}>
+                  <span>{{ t .Label }}{{ if not .Enabled }} <small>{{ t "nodes.channel_disabled" }}</small>{{ end }}</span>
+                </label>
+                {{ end }}
+              </div>
+              {{ with index $form.Errors "channel" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </fieldset>
 
-          <div class="sys-form__actions">
-            <button type="submit" class="btn btn--primary" data-confirm="{{ t "nodes.install_confirm" }}">
-              <i data-lucide="download" class="icon-in-button"></i> {{ t "nodes.install_node_btn" }}
+            {{/* PasarGuard-only configuration. */}}
+            <div class="deploy-engine-group" data-engine-group="docker">
+              <fieldset class="form-field node-proto-choice">
+                <legend>{{ t "nodes.connection_type" }}</legend>
+                <div class="node-proto-options">
+                  <label class="node-proto-option">
+                    <input type="radio" name="protocol" value="grpc" data-engine-field {{ if ne $form.Protocol "rest" }}checked{{ end }}>
+                    <span><i data-lucide="layers" class="icon-in-button"></i> gRPC <small>{{ t "nodes.recommended" }}</small></span>
+                  </label>
+                  <label class="node-proto-option">
+                    <input type="radio" name="protocol" value="rest" data-engine-field {{ if eq $form.Protocol "rest" }}checked{{ end }}>
+                    <span><i data-lucide="globe" class="icon-in-button"></i> REST</span>
+                  </label>
+                </div>
+                {{ with index $form.Errors "protocol" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </fieldset>
+
+              <label class="form-field">
+                <span>{{ t "nodes.api_key" }} <small class="field-optional">{{ t "nodes.optional_paren" }}</small></span>
+                <input type="text" name="api_key" value="{{ $form.APIKey }}" placeholder="{{ t "nodes.api_key_placeholder" }}"
+                       autocomplete="off" spellcheck="false">
+                {{ with index $form.Errors "api_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+                <small class="field-hint">{{ t "nodes.api_key_hint" }}</small>
+              </label>
+
+              <label class="form-field">
+                <span>{{ t "nodes.san_entries" }} <small class="field-optional">{{ t "nodes.optional_paren" }}</small></span>
+                <input type="text" name="san_entries" value="{{ $form.SANEntries }}" placeholder="node.example.com, 192.0.2.10"
+                       autocomplete="off" spellcheck="false">
+                {{ with index $form.Errors "san_entries" }}<small class="field-error">{{ . }}</small>{{ end }}
+                <small class="field-hint">{{ tsafe "nodes.san_entries_hint" }}</small>
+              </label>
+            </div>
+
+            {{/* Rebecca-only configuration (native binary). */}}
+            <div class="deploy-engine-group" data-engine-group="binary">
+              <label class="form-field">
+                <span>{{ t "nodes.bundle" }}</span>
+                <textarea name="bundle" rows="8" class="cmd-textarea" placeholder="{{ t "nodes.bundle_placeholder" }}"
+                          spellcheck="false" autocomplete="off" data-bundle-input data-engine-field>{{ $form.Bundle }}</textarea>
+                {{ with index $form.Errors "bundle" }}<small class="field-error">{{ . }}</small>{{ end }}
+                <small class="field-hint">{{ tsafe "nodes.bundle_hint" }}</small>
+                <small class="field-hint deploy-bundle-state" data-bundle-state hidden></small>
+              </label>
+            </div>
+          </section>
+
+          {{/* ── Step 3: review ──────────────────────────── */}}
+          <section class="deploy-pane" data-deploy-pane="2" hidden>
+            <div class="deploy-review" data-deploy-review>
+              <div class="deploy-review__row"><span>{{ t "nodes.engine" }}</span><strong data-review="engine">—</strong></div>
+              <div class="deploy-review__row"><span>{{ t "nodes.node_name" }}</span><strong data-review="node_name">—</strong></div>
+              <div class="deploy-review__row"><span>{{ t "nodes.service_port" }}</span><strong data-review="service_port">—</strong></div>
+              <div class="deploy-review__row"><span>{{ t "nodes.api_port" }}</span><strong data-review="api_port">—</strong></div>
+              <div class="deploy-review__row"><span>{{ t "nodes.channel" }}</span><strong data-review="channel">—</strong></div>
+              <div class="deploy-review__row" data-review-row="protocol"><span>{{ t "nodes.protocol" }}</span><strong data-review="protocol">—</strong></div>
+            </div>
+            <p class="node-install-note">{{ tsafe "nodes.install_note" }}</p>
+          </section>
+
+          <div class="sys-form__actions deploy-actions">
+            <button type="button" class="btn btn--ghost" data-deploy-back hidden>
+              <i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nodes.deploy_back" }}
+            </button>
+            <button type="button" class="btn btn--primary" data-deploy-next>
+              {{ t "nodes.deploy_next" }} <i data-lucide="arrow-right" class="icon-in-button"></i>
+            </button>
+            <button type="submit" class="btn btn--primary" data-deploy-submit hidden data-confirm="">
+              <i data-lucide="download" class="icon-in-button"></i> {{ t "nodes.deploy_submit" }}
             </button>
           </div>
-          <p class="node-install-note">{{ tsafe "nodes.install_note" }}</p>
         </form>
-        {{ else }}
-        <p class="empty-state">{{ t "nodes.install_needs_creds" }}</p>
         {{ end }}
       </div>
     </div>
   </div>
 
-  {{/* ── Install Rebecca node (dev / beta) modal ───────── */}}
-  <div class="modal" id="install-rebecca-modal" data-modal hidden {{ if .NodeRebeccaInstallForm.OpenInitial }}data-modal-open-initial{{ end }}>
-    <div class="modal__backdrop" data-modal-close></div>
-    <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="install-rebecca-modal-title">
-      <header class="modal__header">
-        <h3 class="modal__title" id="install-rebecca-modal-title">
-          <i data-lucide="package"></i> {{ t "nodes.install_rebecca_title" }}
-          <span class="beta-badge">{{ t "nodes.beta" }}</span>
-        </h3>
-        <button type="button" class="modal__close" data-modal-close aria-label="{{ t "nodes.close_rebecca_install" }}">
-          <i data-lucide="x"></i>
-        </button>
+  {{/* ── Live log drawer ──
+       Slides in from the inline-end edge, subscribes to the same SSE feed the
+       inline result card uses, and stays put while the job runs. */}}
+  <div class="log-drawer" id="node-log-drawer" data-log-drawer hidden>
+    <div class="log-drawer__backdrop" data-log-drawer-close></div>
+    <aside class="log-drawer__panel" role="dialog" aria-modal="true" aria-labelledby="node-log-drawer-title">
+      <header class="log-drawer__head">
+        <span class="log-drawer__title" id="node-log-drawer-title">
+          <i data-lucide="terminal"></i> {{ t "nodes.card_quick_logs" }}
+        </span>
+        <div class="log-drawer__tools">
+          <label class="log-drawer__autoscroll">
+            <input type="checkbox" data-log-autoscroll checked> {{ t "nodes.runner_autoscroll" }}
+          </label>
+          <button type="button" class="btn btn--ghost btn--sm" data-log-copy><i data-lucide="copy" class="icon-in-button"></i> {{ t "nodes.runner_copy_log" }}</button>
+          <button type="button" class="btn btn--ghost btn--sm log-drawer__close" data-log-drawer-close aria-label="{{ t "nodes.close_install" }}"><i data-lucide="x"></i></button>
+        </div>
       </header>
-      <div class="modal__body">
-        {{ if .NodeRebeccaInstallForm.Enabled }}
-        <p class="node-install-note">{{ tsafe "nodes.rebecca_install_lead" }}</p>
-        <form method="post" action="{{ .NodeRebeccaInstallForm.Action }}">
-          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-          <input type="hidden" name="channel" value="dev">
-
-          <label class="form-field">
-            <span>{{ t "nodes.node_name" }}</span>
-            <input type="text" name="node_name" value="{{ .NodeRebeccaInstallForm.NodeName }}" placeholder="rebecca-node" maxlength="64" required data-modal-autofocus>
-            {{ with index .NodeRebeccaInstallForm.Errors "node_name" }}<small class="field-error">{{ . }}</small>{{ end }}
-            <small class="field-hint">{{ tsafe "nodes.node_name_hint" }}</small>
-          </label>
-
-          <label class="form-field">
-            <span>{{ t "nodes.bundle" }}</span>
-            <textarea name="bundle" rows="10" class="cmd-textarea" placeholder="{{ t "nodes.bundle_placeholder" }}" spellcheck="false" autocomplete="off" required></textarea>
-            {{ with index .NodeRebeccaInstallForm.Errors "bundle" }}<small class="field-error">{{ . }}</small>{{ end }}
-            <small class="field-hint">{{ tsafe "nodes.bundle_hint" }}</small>
-          </label>
-
-          <div class="form-grid">
-            <label class="form-field">
-              <span>{{ t "nodes.service_port" }}</span>
-              <input type="number" name="service_port" value="{{ .NodeRebeccaInstallForm.ServicePort }}" placeholder="62050" min="1" max="65535">
-              {{ with index .NodeRebeccaInstallForm.Errors "service_port" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </label>
-            <label class="form-field">
-              <span>{{ t "nodes.api_port" }}</span>
-              <input type="number" name="api_port" value="{{ .NodeRebeccaInstallForm.APIPort }}" placeholder="62051" min="1" max="65535">
-              {{ with index .NodeRebeccaInstallForm.Errors "api_port" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </label>
-          </div>
-          {{ with index .NodeRebeccaInstallForm.Errors "channel" }}<small class="field-error">{{ . }}</small>{{ end }}
-
-          <div class="sys-form__actions">
-            <button type="submit" class="btn btn--primary" data-confirm="{{ t "nodes.rebecca_install_confirm" }}">
-              <i data-lucide="download" class="icon-in-button"></i> {{ t "nodes.rebecca_install_btn" }}
-            </button>
-          </div>
-          <p class="node-install-note">{{ tsafe "nodes.rebecca_install_note" }}</p>
-        </form>
-        {{ else }}
-        <p class="empty-state">{{ t "nodes.install_needs_creds" }}</p>
-        {{ end }}
-      </div>
-    </div>
+      <div class="log-drawer__cmd"><code data-log-command>—</code></div>
+      <pre class="output-block scrollable log-drawer__out" data-log-output data-log-stdout></pre>
+      <pre class="output-block output-block--error scrollable log-drawer__err" data-log-stderr hidden></pre>
+      <footer class="log-drawer__foot" data-log-status><span class="live-dot"></span> {{ t "nodes.runner_conn_wait" }}</footer>
+    </aside>
   </div>
 
   {{/* ── How node management works ─────────────────────── */}}

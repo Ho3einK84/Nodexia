@@ -180,13 +180,18 @@ func TestRebeccaActionCommand(t *testing.T) {
 	if !strings.Contains(command, "rebecca-node logs --no-follow") {
 		t.Errorf("logs command = %q, want non-following logs", command)
 	}
+	// The instance must always be pinned: without the env var the CLI drives
+	// whichever instance it discovers first, or blocks on a picker.
+	if !strings.Contains(command, "REBECCA_NODE_APP_NAME=rebecca-node") {
+		t.Errorf("logs command = %q, want REBECCA_NODE_APP_NAME to pin the instance", command)
+	}
 
 	command, _, err = provider.ActionCommand("rebecca-node", "uninstall")
 	if err != nil {
 		t.Fatalf("ActionCommand uninstall: %v", err)
 	}
-	if !strings.Contains(command, "yes | $SUDO rebecca-node uninstall") {
-		t.Errorf("uninstall command = %q, want auto-confirmed uninstall", command)
+	if !strings.Contains(command, "yes | $SUDO env REBECCA_NODE_APP_NAME=rebecca-node rebecca-node uninstall") {
+		t.Errorf("uninstall command = %q, want auto-confirmed, instance-pinned uninstall", command)
 	}
 
 	if _, _, err := provider.ActionCommand("rebecca-node", "install"); err == nil {

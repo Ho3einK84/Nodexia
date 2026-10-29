@@ -102,10 +102,11 @@ type PageData struct {
 	NodeTarget             NodeTargetView
 	NodeForm               NodeFormView
 	NodeSnapshots          []NodeSnapshotView
+	NodeFleet              NodeFleetView
 	NodeCollection         NodeCollectionResultView
 	NodeStream             CommandStreamView
-	NodeInstallForm        NodeInstallFormView
-	NodeRebeccaInstallForm NodeRebeccaInstallFormView
+	NodeDeployForm         NodeDeployFormView
+	NodeDeployOpen         bool
 	NodeInstall            NodeInstallView
 	AlertsOverview         AlertsOverviewView
 	AlertRuleForm          AlertRuleFormView
@@ -732,27 +733,52 @@ type NodeInstallFormView struct {
 	Errors      map[string]string
 }
 
-// NodeInstallChannelView is one release channel offered in the Rebecca install
-// UI. Enabled=false renders as a disabled "coming soon" option.
+// NodeInstallChannelView is one release channel offered in the deploy modal.
+// Enabled=false renders as a disabled "coming soon" option.
 type NodeInstallChannelView struct {
 	Key     string
+	Label   string
 	Enabled bool
 }
 
-// NodeRebeccaInstallFormView powers the "Install Rebecca node (dev/beta)" form.
-// Rebecca's model is the inverse of PasarGuard's: the user supplies the
-// certificate (from their Rebecca panel) plus the two ports, and nothing is
-// read back. The certificate is intentionally never echoed back into the form.
-type NodeRebeccaInstallFormView struct {
-	Action      string
-	NodeName    string
+// NodeDeployEngineView is one selectable node engine in the deploy wizard's
+// first step (PasarGuard container vs Rebecca native binary).
+type NodeDeployEngineView struct {
+	Key         string // provider type, posted as node_type
+	Label       string
+	Description string
+	Icon        string
+	Recommended bool
+	// Kind is the install footprint shown on the card ("docker" / "binary").
+	Kind string
+	// Features are short bullet strings rendered under the description.
+	Features []string
+}
+
+// NodeDeployFormView powers the single unified deploy modal. It carries every
+// field either engine can need; the client shows only the fields belonging to
+// the selected engine, and the server reads only those.
+type NodeDeployFormView struct {
+	Action  string
+	Engines []NodeDeployEngineView
+
+	// Selected engine (provider type) and the restore-on-error values.
+	NodeType string
+	NodeName string
+	// PasarGuard fields.
 	ServicePort string
 	APIPort     string
-	Channel     string // selected channel: "dev"
-	Channels    []NodeInstallChannelView
-	Enabled     bool
-	OpenInitial bool // reopen the modal after a validation error
-	Errors      map[string]string
+	Protocol    string // "rest" | "grpc"
+	APIKey      string
+	SANEntries  string
+	// Rebecca fields.
+	Bundle string
+	// Shared: release channel (both engines offer one).
+	Channel  string
+	Channels []NodeInstallChannelView
+
+	Enabled bool
+	Errors  map[string]string
 }
 
 // NodeInstallView backs the live install job page.  While IsRunning the page
@@ -761,6 +787,7 @@ type NodeRebeccaInstallFormView struct {
 type NodeInstallView struct {
 	Available     bool
 	JobID         string
+	NodeType      string
 	NodeName      string
 	Status        string
 	IsRunning     bool
@@ -773,6 +800,18 @@ type NodeInstallView struct {
 	RefreshMillis int
 	NodesURL      string
 	Info          NodeRegistrationView
+	// Stages is the ordered progress pipeline with per-stage state, driving the
+	// progress pills in the live log drawer.
+	Stages      []NodeInstallStageView
+	ActiveStage string
+}
+
+// NodeInstallStageView is one progress pill on the install runner.
+type NodeInstallStageView struct {
+	Key    string // initializing | downloading | deploying | verifying | ready
+	Label  string // translated label
+	State  string // pending | active | done
+	Detail string // optional per-stage duration
 }
 
 // NodeRegistrationView holds the panel registration values shown after a
@@ -783,8 +822,24 @@ type NodeRegistrationView struct {
 	NodeIP      string
 	ServicePort string
 	Protocol    string
+	APIPort     string
 	APIKey      string
 	Certificate string
+}
+
+// NodeFleetView is the command header's aggregate: how many nodes are running,
+// stopped, and how many listening ports the fleet currently owns.
+type NodeFleetView struct {
+	Total      int
+	Running    int
+	Stopped    int
+	Unknown    int
+	Ports      int
+	PortList   []string
+	// HealthPct is the aggregate 30-day uptime across every node that has
+	// observations; HealthKnown is false when nothing has been recorded yet.
+	HealthPct   int
+	HealthKnown bool
 }
 
 type NodeCollectionResultView struct {

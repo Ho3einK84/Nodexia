@@ -1,9 +1,6 @@
 package nodes
 
 import (
-	"errors"
-	"os"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -459,8 +456,9 @@ func TestPasarGuardActionCommand(t *testing.T) {
 }
 
 func TestPasarGuardInstallCommand(t *testing.T) {
-	cfg := InstallConfig{ServicePort: "62011", Protocol: "grpc"}
-	command, err := PasarGuardProvider{}.InstallCommand("node3", cfg)
+	command, err := PasarGuardProvider{}.InstallCommand(InstallConfig{
+		NodeName: "node3", ServicePort: "62011", Protocol: "grpc",
+	})
 	if err != nil {
 		t.Fatalf("InstallCommand: %v", err)
 	}
@@ -469,82 +467,95 @@ func TestPasarGuardInstallCommand(t *testing.T) {
 			t.Errorf("install command missing %q:\n%s", want, command)
 		}
 	}
-	if strings.Contains(command, "--yes") {
-		t.Errorf("install command must not pass --yes (it locks port to 62050):\n%s", command)
+	// Every choice must be a native CLI flag: no positional stdin answers remain.
+	if strings.Contains(command, `printf "\n\n`) {
+		t.Errorf("install command must not feed positional stdin answers anymore:\n%s", command)
 	}
-	guardAt := strings.Index(command, "PROMPT_RE=")
-	answersAt := strings.Index(command, `printf "\n\n\n\n62011\nn\n"`)
-	if guardAt < 0 || answersAt < 0 || guardAt >= answersAt {
-		t.Errorf("install command must validate the prompt contract before sending answers:\n%s", command)
+	for _, want := range []string{"-y", "--override", "--self-signed", "--use-grpc"} {
+		if !strings.Contains(command, want) {
+			t.Errorf("install command missing native flag %q:\n%s", want, command)
+		}
+	}
+	if !strings.Contains(command, "sh -n") && strings.Contains(command, "PROMPT_RE=") {
+		t.Errorf("prompt contract guard must be gone:\n%s", command)
 	}
 
-	if _, err := (PasarGuardProvider{}).InstallCommand("$(reboot)", cfg); err == nil {
+	if _, err := (PasarGuardProvider{}).InstallCommand(InstallConfig{NodeName: "$(reboot)"}); err == nil {
 		t.Fatalf("InstallCommand must reject unsafe node names")
 	}
 }
 
-func TestPasarGuardPromptContractGuard(t *testing.T) {
-	const expected = `gen_self_signed_cert() {
-    read -rp "Enter additional SAN entries (comma separated): " extra_san
-}
-install_node() {
-    read -r -p "Do you want to use your own public certificate instead? (Y/n): " use_public_cert
-    gen_self_signed_cert
-    read -p "Enter your API Key (leave blank): " -r API_KEY
-    read -p "Do you want to use REST protocol instead? (y/N): " -r use_rest
-    read -p "Enter the SERVICE_PORT (default 62050): " -r SERVICE_PORT
-}
-install_command() {
-    read -p "Do you want to override the previous installation? (y/n) "
-    install_node "$node_version"
-    read -p "Do you want to install and start the systemd service? (Y/n): " install_service_choice
-}
-`
-
-	runGuard := func(t *testing.T, script string) (string, error) {
-		t.Helper()
-		path := t.TempDir() + "/pg-node.sh"
-		if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
-			t.Fatalf("write prompt fixture: %v", err)
-		}
-		cmd := exec.Command("sh", "-c", pasarguardPromptContractGuard())
-		cmd.Env = append(os.Environ(), "SCRIPT="+path)
-		output, err := cmd.CombinedOutput()
-		return string(output), err
+// TestPasarGuardInstallFlags pins the flag mapping, including the API-port rule:
+// upstream only reads API_PORT on the systemd service path, so asking for one
+// must also install the service unit, and asking for none must skip it.
+func TestPasarGuardInstallFlags(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     InstallConfig
+		want    []string
+		notWant []string
+	}{
+		{
+			name: "api port installs the service",
+			cfg:  InstallConfig{NodeName: "n", ServicePort: "62050", APIPort: "62051"},
+			want: []string{"--install-service", "--api-port 62051"},
+			notWant: []string{"--no-install-service"},
+		},
+		{
+			name: "no api port skips the service",
+			cfg:  InstallConfig{NodeName: "n", ServicePort: "62050"},
+			want: []string{"--no-install-service"},
+			notWant: []string{"--api-port", "--install-service"},
+		},
+		{
+			name: "rest protocol",
+			cfg:  InstallConfig{NodeName: "n", ServicePort: "62050", Protocol: "rest"},
+			want: []string{"--use-rest"},
+			notWant: []string{"--use-grpc"},
+		},
+		{
+			name: "dev channel",
+			cfg:  InstallConfig{NodeName: "n", ServicePort: "62050", Channel: channelDev},
+			want: []string{"--dev"},
+		},
+		{
+			name: "pinned api key and sans",
+			cfg: InstallConfig{
+				NodeName: "n", ServicePort: "62050",
+				APIKey: "11111111-2222-3333-4444-555555555555", SANEntries: "a.example.com,1.2.3.4",
+			},
+			want: []string{"--api-key 11111111-2222-3333-4444-555555555555", "--san-entries a.example.com,1.2.3.4"},
+		},
 	}
-
-	if output, err := runGuard(t, expected); err != nil {
-		t.Fatalf("expected prompt contract rejected: %v\n%s", err, output)
-	}
-
-	tests := map[string]string{
-		"unexpected prompt": strings.Replace(
-			expected,
-			`    read -p "Enter your API Key (leave blank): " -r API_KEY`,
-			"    read -p \"New upstream question: \" answer\n    read -p \"Enter your API Key (leave blank): \" -r API_KEY",
-			1,
-		),
-		"runtime order changed": strings.Replace(
-			expected,
-			"    gen_self_signed_cert\n    read -p \"Enter your API Key",
-			"    read -p \"Enter your API Key",
-			1,
-		),
-	}
-	for name, fixture := range tests {
-		t.Run(name, func(t *testing.T) {
-			output, err := runGuard(t, fixture)
-			if err == nil {
-				t.Fatalf("changed prompt contract unexpectedly passed")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			command, err := PasarGuardProvider{}.InstallCommand(tc.cfg)
+			if err != nil {
+				t.Fatalf("InstallCommand: %v", err)
 			}
-			var exitErr *exec.ExitError
-			if !errors.As(err, &exitErr) || exitErr.ExitCode() != exitPromptContractChange {
-				t.Fatalf("guard error = %v, want exit %d\n%s", err, exitPromptContractChange, output)
+			for _, want := range tc.want {
+				if !strings.Contains(command, want) {
+					t.Errorf("missing %q in:\n%s", want, command)
+				}
 			}
-			if !strings.Contains(output, "prompt sequence changed") || !strings.Contains(output, "no answers were sent") {
-				t.Fatalf("guard output is not actionable: %q", output)
+			for _, notWant := range tc.notWant {
+				if strings.Contains(command, notWant) {
+					t.Errorf("unexpected %q in:\n%s", notWant, command)
+				}
 			}
 		})
+	}
+}
+
+// TestPasarGuardInstallStableChannel asserts the stable channel adds no flag
+// (a pinned release is the script default).
+func TestPasarGuardInstallStableChannel(t *testing.T) {
+	command, err := PasarGuardProvider{}.InstallCommand(InstallConfig{NodeName: "n", ServicePort: "62050", Channel: channelStable})
+	if err != nil {
+		t.Fatalf("InstallCommand: %v", err)
+	}
+	if strings.Contains(command, "--dev") {
+		t.Errorf("stable channel must not pass --dev:\n%s", command)
 	}
 }
 
@@ -606,48 +617,10 @@ func TestInstallConfigNormalize(t *testing.T) {
 	}
 }
 
-func TestPasarGuardConfigureCommand(t *testing.T) {
-	provider := PasarGuardProvider{}
-	cfg := InstallConfig{ServicePort: "62055", APIPort: "62056", Protocol: "rest", APIKey: "11111111-2222-3333-4444-555555555555"}
-
-	command, timeout, err := provider.ConfigureCommand("node2", cfg)
-	if err != nil {
-		t.Fatalf("ConfigureCommand: %v", err)
-	}
-	if timeout <= 0 {
-		t.Errorf("timeout = %v, want > 0", timeout)
-	}
-	for _, want := range []string{
-		"/opt/node2/.env",
-		"SERVICE_PORT= 62055",
-		`SERVICE_PROTOCOL= \"rest\"`,
-		"API_PORT= 62056",
-		"API_KEY= 11111111-2222-3333-4444-555555555555",
-		"--name node2 restart -n",
-	} {
-		if !strings.Contains(command, want) {
-			t.Errorf("configure command missing %q:\n%s", want, command)
-		}
-	}
-
-	// Optional fields omitted when empty.
-	command, _, err = provider.ConfigureCommand("node", InstallConfig{ServicePort: "62050", Protocol: "grpc"})
-	if err != nil {
-		t.Fatalf("ConfigureCommand minimal: %v", err)
-	}
-	if strings.Contains(command, "API_PORT=") || strings.Contains(command, "API_KEY=") {
-		t.Errorf("empty optional fields must not be written:\n%s", command)
-	}
-
-	if _, _, err := provider.ConfigureCommand("node; rm -rf /", cfg); err == nil {
-		t.Errorf("ConfigureCommand must reject unsafe node names")
-	}
-}
-
 func TestNormalizeInstallInput(t *testing.T) {
 	provider := PasarGuardProvider{}
 
-	cfg, errs := provider.normalizeInstallInput(installFormInput{
+	cfg, errs := provider.normalizeInstallInput(InstallFormInput{
 		NodeName: "node2", ServicePort: "62055", Protocol: "rest",
 	})
 	if errs.HasAny() {
@@ -657,7 +630,7 @@ func TestNormalizeInstallInput(t *testing.T) {
 		t.Errorf("cfg = %+v", cfg)
 	}
 
-	_, errs = provider.normalizeInstallInput(installFormInput{
+	_, errs = provider.normalizeInstallInput(InstallFormInput{
 		ServicePort: "abc", APIPort: "99999", Protocol: "udp", APIKey: "x",
 	})
 	for _, field := range []string{"service_port", "api_port", "protocol", "api_key"} {

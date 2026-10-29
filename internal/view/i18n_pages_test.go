@@ -54,11 +54,15 @@ func translatedPages() map[string]func(p *PageData) {
 		"content-alert-channel-form": func(p *PageData) { p.AlertChannelForm = AlertChannelFormView{Errors: map[string]string{}} },
 		"content-nodes": func(p *PageData) {
 			p.NodeForm = NodeFormView{Errors: map[string]string{}}
-			p.NodeInstallForm = NodeInstallFormView{Enabled: true, Errors: map[string]string{}}
-			p.NodeRebeccaInstallForm = NodeRebeccaInstallFormView{
-				Enabled:  true,
-				Channels: []NodeInstallChannelView{{Key: "dev", Enabled: true}, {Key: "stable", Enabled: false}},
-				Errors:   map[string]string{},
+			p.NodeDeployForm = NodeDeployFormView{
+				Engines: []NodeDeployEngineView{
+					{Key: "pasarguard-node", Label: "PasarGuard", Description: "d", Icon: "container", Recommended: true, Kind: "docker"},
+					{Key: "rebecca-node", Label: "Rebecca", Description: "d", Icon: "package", Kind: "binary"},
+				},
+				NodeType:    "pasarguard-node",
+				Channels:    []NodeInstallChannelView{{Key: "stable", Label: "nodes.channel_stable", Enabled: true}, {Key: "dev", Label: "nodes.channel_dev", Enabled: true}},
+				Enabled:     true,
+				Errors:      map[string]string{},
 			}
 		},
 		"content-node-install": func(p *PageData) { p.NodeInstall = NodeInstallView{Available: true} },

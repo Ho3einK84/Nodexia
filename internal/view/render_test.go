@@ -35,8 +35,17 @@ func TestRenderNodesPage(t *testing.T) {
 			StoredCredentialsAvailable: true,
 			Errors:                     map[string]string{},
 		},
-		NodeInstallForm: NodeInstallFormView{
-			Action:  "/servers/1/nodes/install",
+		NodeDeployForm: NodeDeployFormView{
+			Action:      "/servers/1/nodes/install",
+			NodeType:    "pasarguard-node",
+			ServicePort: "62050",
+			Protocol:    "grpc",
+			Channel:     "stable",
+			Channels:    []NodeInstallChannelView{{Key: "stable", Label: "nodes.channel_stable", Enabled: true}},
+			Engines: []NodeDeployEngineView{
+				{Key: "pasarguard-node", Label: "PasarGuard", Description: "Containerized node", Icon: "container", Recommended: true, Kind: "docker"},
+				{Key: "rebecca-node", Label: "Rebecca", Description: "Native binary node", Icon: "package", Kind: "binary"},
+			},
 			Enabled: true,
 			Errors:  map[string]string{},
 		},

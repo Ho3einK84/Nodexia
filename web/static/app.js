@@ -1154,6 +1154,267 @@
     if (initial) openModal(initial);
   }
 
+  /* ── Unified Deploy Node Wizard ───────────────────────────── */
+  function initDeployModal(root) {
+    root = root || document;
+    var modal = root.querySelector('[data-deploy-modal]');
+    if (!modal || modal.dataset.deployWizardReady === '1') return;
+    modal.dataset.deployWizardReady = '1';
+
+    var form = modal.querySelector('[data-deploy-form]');
+    var steps = modal.querySelectorAll('[data-step-indicator]');
+    var panes = modal.querySelectorAll('[data-deploy-pane]');
+    var btnBack = modal.querySelector('[data-deploy-back]');
+    var btnNext = modal.querySelector('[data-deploy-next]');
+    var btnSubmit = modal.querySelector('[data-deploy-submit]');
+    var bundleInput = modal.querySelector('[data-bundle-input]');
+    var bundleState = modal.querySelector('[data-bundle-state]');
+    var engineCards = modal.querySelectorAll('[data-engine-card]');
+    var currentStep = 0;
+
+    function getSelectedEngine() {
+      var checked = modal.querySelector('input[name="node_type"]:checked');
+      return checked ? checked.value : 'pasarguard';
+    }
+
+    function syncEngineUI() {
+      var engine = getSelectedEngine();
+      var kind = (engine === 'rebecca') ? 'binary' : 'docker';
+      modal.setAttribute('data-selected-engine', engine);
+      engineCards.forEach(function (card) {
+        var radio = card.querySelector('input[type="radio"]');
+        card.classList.toggle('is-selected', radio && radio.checked);
+      });
+      modal.querySelectorAll('[data-engine-group]').forEach(function (grp) {
+        grp.hidden = (grp.getAttribute('data-engine-group') !== kind);
+      });
+      var protoRow = modal.querySelector('[data-review-row="protocol"]');
+      if (protoRow) protoRow.hidden = (kind !== 'docker');
+    }
+
+    function updateReview() {
+      var engine = getSelectedEngine();
+      var name = (form && form.elements['node_name'] ? form.elements['node_name'].value : '').trim();
+      var sPort = (form && form.elements['service_port'] ? form.elements['service_port'].value : '').trim();
+      var aPort = (form && form.elements['api_port'] ? form.elements['api_port'].value : '').trim();
+      var channel = modal.querySelector('input[name="channel"]:checked');
+      var proto = modal.querySelector('input[name="protocol"]:checked');
+
+      var setReview = function (key, val) {
+        var el = modal.querySelector('[data-review="' + key + '"]');
+        if (el) el.textContent = val || '—';
+      };
+
+      setReview('engine', engine === 'rebecca' ? 'Rebecca (Native)' : 'PasarGuard (Docker)');
+      setReview('node_name', name);
+      setReview('service_port', sPort ? ':' + sPort : '—');
+      setReview('api_port', aPort ? ':' + aPort : '—');
+      setReview('channel', channel ? channel.value : 'stable');
+      setReview('protocol', proto ? proto.value.toUpperCase() : 'gRPC');
+    }
+
+    function setStep(idx) {
+      currentStep = Math.max(0, Math.min(2, idx));
+      steps.forEach(function (s, i) {
+        s.classList.toggle('is-active', i === currentStep);
+        s.classList.toggle('is-done', i < currentStep);
+      });
+      panes.forEach(function (p, i) {
+        p.hidden = (i !== currentStep);
+        p.classList.toggle('is-active', i === currentStep);
+      });
+      if (btnBack) btnBack.hidden = (currentStep === 0);
+      if (btnNext) btnNext.hidden = (currentStep === 2);
+      if (btnSubmit) btnSubmit.hidden = (currentStep !== 2);
+
+      if (currentStep === 1) {
+        var focus = panes[1] ? panes[1].querySelector('input[name="node_name"]') : null;
+        if (focus) setTimeout(function () { focus.focus(); }, 50);
+      } else if (currentStep === 2) {
+        updateReview();
+      }
+    }
+
+    engineCards.forEach(function (card) {
+      card.addEventListener('click', function () {
+        var radio = card.querySelector('input[type="radio"]');
+        if (radio) {
+          radio.checked = true;
+          syncEngineUI();
+        }
+      });
+    });
+
+    if (btnNext) {
+      btnNext.addEventListener('click', function (e) {
+        e.preventDefault();
+        setStep(currentStep + 1);
+      });
+    }
+
+    if (btnBack) {
+      btnBack.addEventListener('click', function (e) {
+        e.preventDefault();
+        setStep(currentStep - 1);
+      });
+    }
+
+    if (bundleInput && bundleState) {
+      bundleInput.addEventListener('input', function () {
+        var val = bundleInput.value.trim();
+        if (!val) {
+          bundleState.hidden = true;
+          return;
+        }
+        var hasCert = val.indexOf('-----BEGIN CERTIFICATE-----') !== -1;
+        var hasKey = val.indexOf('KEY-----') !== -1;
+        bundleState.hidden = false;
+        if (hasCert && hasKey) {
+          bundleState.className = 'field-hint deploy-bundle-state is-ok';
+          bundleState.textContent = '✓ ' + (I18N.t('nodes.bundle_valid') || 'Certificate and private key detected.');
+        } else if (hasCert) {
+          bundleState.className = 'field-hint deploy-bundle-state is-bad';
+          bundleState.textContent = '⚠ ' + (I18N.t('nodes.bundle_invalid') || 'Paste the certificate and its private key.');
+        } else {
+          bundleState.className = 'field-hint deploy-bundle-state is-bad';
+          bundleState.textContent = '⚠ ' + (I18N.t('nodes.bundle_invalid') || 'Paste the certificate and its private key.');
+        }
+      });
+    }
+
+    document.querySelectorAll('[data-engine-preselect]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var eng = btn.getAttribute('data-engine-preselect');
+        var r = modal.querySelector('input[name="node_type"][value="' + eng + '"]');
+        if (r) {
+          r.checked = true;
+          syncEngineUI();
+          setStep(1);
+        }
+      });
+    });
+
+    if (modal.classList.contains('is-open') || modal.hasAttribute('data-modal-open-initial')) {
+      syncEngineUI();
+      setStep(1);
+    } else {
+      syncEngineUI();
+      setStep(0);
+    }
+  }
+
+  /* ── Live Log Drawer (Slide-over) ─────────────────────────── */
+  function initLogDrawer(root) {
+    root = root || document;
+    var drawer = document.getElementById('node-log-drawer');
+    if (!drawer || drawer.dataset.drawerReady === '1') return;
+    drawer.dataset.drawerReady = '1';
+
+    var cmdEl = drawer.querySelector('[data-log-command]');
+    var outEl = drawer.querySelector('[data-log-stdout]');
+    var errEl = drawer.querySelector('[data-log-stderr]');
+    var statusEl = drawer.querySelector('[data-log-status]');
+    var autoScrollCb = drawer.querySelector('[data-log-autoscroll]');
+    var copyBtn = drawer.querySelector('[data-log-copy]');
+    var activeES = null;
+
+    function openDrawer(sseUrl, isRunning) {
+      drawer.hidden = false;
+      void drawer.offsetWidth;
+      drawer.classList.add('is-open');
+      document.body.classList.add('modal-open');
+
+      if (!sseUrl) return;
+      if (activeES) activeES.close();
+
+      if (outEl) outEl.textContent = '';
+      if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
+      if (statusEl) {
+        statusEl.className = 'log-drawer__foot is-live';
+        statusEl.innerHTML = '<span class="live-dot"></span> ' + (I18N.t('nodes.runner_conn_wait') || 'Connecting to live stream…');
+      }
+
+      activeES = new EventSource(sseUrl);
+      activeES.addEventListener('chunk', function (e) {
+        try {
+          var payload = JSON.parse(e.data);
+          if (payload.stdout && outEl) {
+            outEl.textContent += payload.stdout;
+            if (!autoScrollCb || autoScrollCb.checked) outEl.scrollTop = outEl.scrollHeight;
+          }
+          if (payload.stderr && errEl) {
+            errEl.hidden = false;
+            errEl.textContent += payload.stderr;
+            if (!autoScrollCb || autoScrollCb.checked) errEl.scrollTop = errEl.scrollHeight;
+          }
+          if (payload.command && cmdEl) {
+            cmdEl.textContent = payload.command;
+          }
+        } catch (err) {}
+      });
+
+      activeES.addEventListener('done', function () {
+        if (activeES) { activeES.close(); activeES = null; }
+        if (statusEl) {
+          statusEl.className = 'log-drawer__foot';
+          statusEl.innerHTML = '<i data-lucide="check-circle"></i> ' + (I18N.t('nodes.stage_ready') || 'Ready');
+          renderIcons();
+        }
+      });
+
+      activeES.onerror = function () {
+        if (activeES) { activeES.close(); activeES = null; }
+        if (statusEl) {
+          statusEl.className = 'log-drawer__foot';
+          statusEl.innerHTML = '<i data-lucide="info"></i> ' + (I18N.t('nodes.stage_ready') || 'Completed');
+          renderIcons();
+        }
+      };
+    }
+
+    function closeDrawer() {
+      if (!drawer.classList.contains('is-open')) return;
+      drawer.classList.remove('is-open');
+      document.body.classList.remove('modal-open');
+      if (activeES) { activeES.close(); activeES = null; }
+      setTimeout(function () {
+        if (!drawer.classList.contains('is-open')) drawer.hidden = true;
+      }, 240);
+    }
+
+    drawer.querySelectorAll('[data-log-drawer-close]').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        e.preventDefault();
+        closeDrawer();
+      });
+    });
+
+    document.querySelectorAll('[data-log-drawer-open]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        var sseUrl = btn.getAttribute('data-log-sse-url');
+        var isRunning = btn.getAttribute('data-log-running') === '1';
+        openDrawer(sseUrl, isRunning);
+      });
+    });
+
+    if (copyBtn) {
+      copyBtn.addEventListener('click', function () {
+        var text = (outEl ? outEl.textContent : '') + (errEl && !errEl.hidden ? '\n' + errEl.textContent : '');
+        copyText(text).then(function (ok) {
+          copyBtn.innerHTML = ok
+            ? '<i data-lucide="check"></i> ' + (I18N.t('nodes.copy_toast') || 'Copied')
+            : '<i data-lucide="x"></i> ' + (I18N.t('js.failed') || 'Failed');
+          renderIcons();
+          setTimeout(function () {
+            copyBtn.innerHTML = '<i data-lucide="copy" class="icon-in-button"></i> ' + (I18N.t('nodes.runner_copy_log') || 'Copy log');
+            renderIcons();
+          }, 1500);
+        });
+      });
+    }
+  }
+
   /* ── Mobile drawer (hamburger menu) ─────────────────────── */
   function initDrawer() {
     var drawer = document.getElementById('mobile-drawer');
@@ -1581,6 +1842,8 @@
     initManualRefresh();
     initActionMenus();
     initModals();
+    initDeployModal();
+    initLogDrawer();
     initDrawer();
     initBackToTop();
     initShortcuts();
@@ -1612,6 +1875,8 @@
       initCopyButtons(root);
       initCopyTargets(root);
       initModals(root);
+      initDeployModal(root);
+      initLogDrawer(root);
       initCollapsibles(root);
       initServerCards(root);
       initStream(root);

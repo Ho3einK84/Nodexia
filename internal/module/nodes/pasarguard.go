@@ -28,17 +28,47 @@ const (
 	pasarguardUnresolvedVersion = "unknown"
 	// pasarguardDefaultProtocol matches the install script default (gRPC).
 	pasarguardDefaultProtocol = "grpc"
+
+	// pasarguardInstallScriptTimeout bounds the install script remotely: after a
+	// successful install the script tails container logs with no opt-out, so GNU
+	// timeout cuts it off; 124 is therefore tolerated and the readback that
+	// follows decides success.
+	pasarguardInstallScriptTimeout = "600"
+
+	// pasarguardDefaultName is the upstream default instance name, used when the
+	// form leaves the name blank — the same value the script would prompt with.
+	pasarguardDefaultName = "pg-node"
 )
 
 var (
 	pasarguardStartupVersionPattern = regexp.MustCompile(`^Starting Node: v([0-9]+(?:\.[0-9]+)*)$`)
 	pasarguardImageTagPattern       = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
+	uuidPattern                     = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 )
 
 func (PasarGuardProvider) Type() string        { return pasarguardType }
 func (PasarGuardProvider) DisplayName() string { return "PasarGuard" }
 
 func (PasarGuardProvider) SupportsInstall() bool { return true }
+
+// InstallChannels: the upstream script installs a pinned release by default and
+// can be pointed at the moving dev image with --dev, so both are selectable.
+func (PasarGuardProvider) InstallChannels() []InstallChannel {
+	return []InstallChannel{
+		{Key: channelStable, Label: "nodes.channel_stable", Enabled: true},
+		{Key: channelDev, Label: "nodes.channel_dev", Enabled: true},
+	}
+}
+
+// InstallDefaults is the pre-filled deploy form state for this provider.
+func (PasarGuardProvider) InstallDefaults() InstallDefaults {
+	return InstallDefaults{
+		NodeName:    pasarguardDefaultName,
+		ServicePort: pasarguardDefaultPort,
+		Protocol:    pasarguardDefaultProtocol,
+		Channel:     channelStable,
+	}
+}
 
 // DiscoveryCommand enumerates every PasarGuard instance:
 //   - a "=DOCKER=" section lists all containers (name, image, status, ports);
@@ -563,8 +593,12 @@ func (PasarGuardProvider) Actions() []Action {
 }
 
 // pasarguardOps maps action keys to pg-node CLI operations.  Flags keep every
-// operation non-interactive: -n stops up/restart/logs from tailing forever,
-// --yes auto-confirms destructive prompts.
+// operation non-interactive: -n stops up/restart/logs from tailing forever.
+//
+// uninstall runs without --yes and is answered explicitly instead (see
+// ActionCommand): the script asks two questions — "uninstall node?" and "remove
+// data files?" — so a literal answer sequence is deterministic where --yes
+// depends on the script having pre-seeded REPLY itself.
 var pasarguardOps = map[string]string{
 	"start":       "up -n",
 	"stop":        "down",
@@ -574,10 +608,7 @@ var pasarguardOps = map[string]string{
 	"update":      "update --yes",
 	"core-update": "core-update --yes",
 	"renew-cert":  "renew-cert --yes",
-	// uninstall runs WITHOUT --yes: the script's uninstall confirm is broken
-	// under --yes (it sets REPLY="" then requires ^[Yy]$, so --yes always prints
-	// "Aborted" and exits 1). ActionCommand pipes "y" to its prompts instead.
-	"uninstall": "uninstall",
+	"uninstall":   "uninstall",
 }
 
 // ActionCommand builds `pg-node --name <node> <op>`.  The install script
@@ -595,9 +626,7 @@ func (p PasarGuardProvider) ActionCommand(nodeName, actionKey string) (string, t
 	op := pasarguardOps[action.Key]
 
 	// Most actions take no input, so stdin is /dev/null. uninstall is the
-	// exception: it runs without --yes (see pasarguardOps) and the script asks
-	// two questions — "uninstall node?" and "remove data files?" — so pipe "y"
-	// to both for a clean, complete removal.
+	// exception: it answers both prompts explicitly for a complete removal.
 	invocation := `$SUDO "$PG_CLI" --name ` + nodeName + ` ` + op
 	if action.Key == "uninstall" {
 		invocation = `printf "y\ny\n" | ` + invocation
@@ -615,129 +644,38 @@ func (p PasarGuardProvider) ActionCommand(nodeName, actionKey string) (string, t
 
 // ── Installation ──────────────────────────────────────────────────────────────
 
-// pasarguardInstallScriptTimeout bounds the install script on the remote side:
-// after a successful install the script tails container logs with no opt-out,
-// so GNU timeout cuts it off and the runner verifies the result by reading the
-// installed configuration (RegistrationInfoCommand).
-const pasarguardInstallScriptTimeout = "600"
-
-// InstallCommand downloads and runs the official PasarGuard install script for
-// a new instance named nodeName, feeding cfg.ServicePort to the port prompt.
-//
-// We do NOT pass --yes to the script: --yes locks the port to 62050 regardless
-// of what is free and fails with "Port 62050 is already in use" when another
-// node instance already occupies that port. Without --yes the script reads its
-// prompts from stdin, and because the script runs under `set -e`, a `read` that
-// hits EOF returns non-zero and aborts the whole install with no error message.
-// So stdin MUST answer every prompt, in the script's exact order, each newline
-// terminated — otherwise the install dies silently right after the prompt we
-// stop short of (historically: right after "No API Key provided…").
-//
-// The official install_command / install_node prompt order (AUTO_CONFIRM off):
-//  1. "use your own public certificate?"  -> "" (default: self-signed cert)
-//  2. "add additional SAN entries?"       -> "" (default: keep current SANs;
-//     prompted by gen_self_signed_cert on the self-signed path)
-//  3. "enter your API Key"                -> "" (default: auto-generated UUID)
-//  4. "use REST protocol instead?"        -> "" (default: gRPC)
-//  5. "enter the SERVICE_PORT"            -> cfg.ServicePort
-//  6. "install the systemd service?"      -> "n" (Nodexia drives the node via
-//     the pg-node CLI / docker-compose, never systemd; answering "n" also
-//     avoids the service's own API_PORT prompt and the require_systemd exit on
-//     hosts without systemd)
-//
-// Protocol, API key and API port are deliberately left at their script defaults
-// here and overwritten afterwards by ConfigureCommand patching /opt/<name>/.env.
-func (PasarGuardProvider) InstallCommand(nodeName string, cfg InstallConfig) (string, error) {
-	if err := ValidateNodeName(nodeName); err != nil {
-		return "", err
-	}
-	normalized, err := cfg.Normalize()
-	if err != nil {
-		return "", err
-	}
-	servicePort := normalized.ServicePort
-	command := `sh -c '` + sudoPreamble +
-		`SCRIPT="$(mktemp /tmp/nodexia-pg-node.XXXXXX)" || exit 1; ` +
-		`if command -v curl >/dev/null 2>&1; then curl -fsSL ` + pasarguardScriptURL + ` -o "$SCRIPT" || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
-		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + pasarguardScriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
-		`else echo "curl or wget is required to install" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
-		pasarguardPromptContractGuard() +
-		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + pasarguardInstallScriptTimeout + `"; fi; ` +
-		`printf "\n\n\n\n` + servicePort + `\nn\n" | $TMO $SUDO bash "$SCRIPT" install --name ` + nodeName + `; ` +
-		`STATUS=$?; rm -f "$SCRIPT"; ` +
-		// The script runs under `set -e` and dies without a message on the
-		// first failed command; emit the exact exit code so the stream never
-		// ends silently. 124 is GNU timeout cutting off the post-install log
-		// tail and is treated as success by the runner, so it is not flagged.
-		`if [ "$STATUS" -ne 0 ] && [ "$STATUS" -ne 124 ]; then echo "[pg-node install script exited with status $STATUS]" >&2; fi; ` +
-		`exit $STATUS'`
-	return command, nil
-}
-
-// pasarguardPromptContractGuard returns a remote-shell preflight that inspects
-// the freshly downloaded upstream script before Nodexia sends positional stdin.
-// It deliberately validates both the expected prompt text and the structure of
-// the three functions on Nodexia's install path:
-//
-//   - gen_self_signed_cert must contain exactly the SAN prompt;
-//   - install_node must contain exactly four direct prompts, ordered around the
-//     self-signed-certificate call as public cert → SAN → API key → protocol →
-//     service port at runtime;
-//   - install_command must retain its existing override/systemd prompts and
-//     call install_node before asking the systemd question.
-//
-// This is intentionally stricter than merely grepping for six phrases. A new
-// prompt inserted into one of these functions changes the count and stops the
-// install before an answer can be applied to the wrong question. The error is
-// actionable, and the dedicated exit code is translated by runInstall.
-//
-// The fragment contains no single quotes because it is embedded in the outer
-// sh -c '...' command (guarded by TestGeneratedShellSyntax).
-func pasarguardPromptContractGuard() string {
-	return `SAN_BLOCK="$(sed -n "/^gen_self_signed_cert() {$/,/^}$/p" "$SCRIPT")"; ` +
-		`NODE_BLOCK="$(sed -n "/^install_node() {$/,/^}$/p" "$SCRIPT")"; ` +
-		`COMMAND_BLOCK="$(sed -n "/^install_command() {$/,/^}$/p" "$SCRIPT")"; ` +
-		`PROMPT_RE="^[[:space:]]*read[[:space:]].*(-p|-[[:alnum:]]*p)"; ` +
-		`SAN_COUNT="$(printf "%s\n" "$SAN_BLOCK" | grep -Ec "$PROMPT_RE" || true)"; ` +
-		`NODE_COUNT="$(printf "%s\n" "$NODE_BLOCK" | grep -Ec "$PROMPT_RE" || true)"; ` +
-		`COMMAND_COUNT="$(printf "%s\n" "$COMMAND_BLOCK" | grep -Ec "$PROMPT_RE" || true)"; ` +
-		`CONTRACT_BAD=0; ` +
-		`[ "$SAN_COUNT" = 1 ] && [ "$NODE_COUNT" = 4 ] && [ "$COMMAND_COUNT" = 2 ] || CONTRACT_BAD=1; ` +
-		`printf "%s\n" "$SAN_BLOCK" | grep -Fq "Enter additional SAN entries" || CONTRACT_BAD=1; ` +
-		`printf "%s\n" "$COMMAND_BLOCK" | grep -Fq "override the previous installation" || CONTRACT_BAD=1; ` +
-		`CERT_LINE="$(printf "%s\n" "$NODE_BLOCK" | grep -nF "use your own public certificate instead?" | head -n 1 | cut -d: -f1)"; ` +
-		`SAN_CALL_LINE="$(printf "%s\n" "$NODE_BLOCK" | grep -nE "^[[:space:]]+gen_self_signed_cert([[:space:]]|$)" | head -n 1 | cut -d: -f1)"; ` +
-		`KEY_LINE="$(printf "%s\n" "$NODE_BLOCK" | grep -nF "Enter your API Key" | head -n 1 | cut -d: -f1)"; ` +
-		`PROTOCOL_LINE="$(printf "%s\n" "$NODE_BLOCK" | grep -nF "use REST protocol instead?" | head -n 1 | cut -d: -f1)"; ` +
-		`PORT_LINE="$(printf "%s\n" "$NODE_BLOCK" | grep -nF "Enter the SERVICE_PORT" | head -n 1 | cut -d: -f1)"; ` +
-		`INSTALL_CALL_LINE="$(printf "%s\n" "$COMMAND_BLOCK" | grep -nF "install_node " | head -n 1 | cut -d: -f1)"; ` +
-		`SYSTEMD_LINE="$(printf "%s\n" "$COMMAND_BLOCK" | grep -nF "install and start the systemd service" | head -n 1 | cut -d: -f1)"; ` +
-		`if [ -z "$CERT_LINE" ] || [ -z "$SAN_CALL_LINE" ] || [ -z "$KEY_LINE" ] || [ -z "$PROTOCOL_LINE" ] || [ -z "$PORT_LINE" ] || [ -z "$INSTALL_CALL_LINE" ] || [ -z "$SYSTEMD_LINE" ]; then CONTRACT_BAD=1; ` +
-		`elif [ "$CERT_LINE" -ge "$SAN_CALL_LINE" ] || [ "$SAN_CALL_LINE" -ge "$KEY_LINE" ] || [ "$KEY_LINE" -ge "$PROTOCOL_LINE" ] || [ "$PROTOCOL_LINE" -ge "$PORT_LINE" ] || [ "$INSTALL_CALL_LINE" -ge "$SYSTEMD_LINE" ]; then CONTRACT_BAD=1; fi; ` +
-		`if [ "$CONTRACT_BAD" -ne 0 ]; then echo "[nodexia] Upstream PasarGuard installer prompt sequence changed; no answers were sent. Update Nodexia prompt mapping before retrying." >&2; rm -f "$SCRIPT"; exit 87; fi; `
-}
-
-// InstallConfig carries the pre-install choices the panel collects.
-// ServicePort is piped to the script's interactive port prompt so the node
-// binds the correct port from the first start. Protocol and APIKey are applied
-// after install via ConfigureCommand (the script's interactive defaults — grpc
-// and auto-generated key — are used during the install run itself).
+// InstallConfig carries the pre-install choices the panel collects. Every field
+// maps to a native flag of the upstream `install` subcommand, so the installer
+// never has to be answered through positional stdin.
 type InstallConfig struct {
+	NodeName    string
+	Channel     string // "stable" | "dev"
 	ServicePort string // numeric, defaults to 62050 when empty
 	APIPort     string // numeric, optional
 	Protocol    string // "rest" or "grpc"
 	APIKey      string // optional UUID; auto-generated by the script when empty
+	SANEntries  string // optional comma separated extra certificate SANs
 }
-
-var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // Normalize fills defaults and validates each field, returning a cleaned copy.
 func (c InstallConfig) Normalize() (InstallConfig, error) {
 	out := InstallConfig{
+		NodeName:    strings.TrimSpace(c.NodeName),
+		Channel:     strings.ToLower(strings.TrimSpace(c.Channel)),
 		ServicePort: strings.TrimSpace(c.ServicePort),
 		APIPort:     strings.TrimSpace(c.APIPort),
 		Protocol:    strings.ToLower(strings.TrimSpace(c.Protocol)),
 		APIKey:      strings.TrimSpace(c.APIKey),
+		SANEntries:  strings.TrimSpace(c.SANEntries),
+	}
+	if out.NodeName == "" {
+		out.NodeName = pasarguardDefaultName
+	}
+	if err := ValidateNodeName(out.NodeName); err != nil {
+		return InstallConfig{}, err
+	}
+	if out.Channel == "" {
+		out.Channel = channelStable
 	}
 	if out.ServicePort == "" {
 		out.ServicePort = pasarguardDefaultPort
@@ -745,11 +683,14 @@ func (c InstallConfig) Normalize() (InstallConfig, error) {
 	if out.Protocol == "" {
 		out.Protocol = pasarguardDefaultProtocol
 	}
-	if validPort(out.ServicePort) == "" {
+	if !isValidPort(out.ServicePort) {
 		return InstallConfig{}, fmt.Errorf("nodes: invalid service port %q", c.ServicePort)
 	}
-	if out.APIPort != "" && validPort(out.APIPort) == "" {
+	if out.APIPort != "" && !isValidPort(out.APIPort) {
 		return InstallConfig{}, fmt.Errorf("nodes: invalid API port %q", c.APIPort)
+	}
+	if out.APIPort != "" && out.APIPort == out.ServicePort {
+		return InstallConfig{}, fmt.Errorf("nodes: service and API ports must differ")
 	}
 	if out.Protocol != "rest" && out.Protocol != "grpc" {
 		return InstallConfig{}, fmt.Errorf("nodes: invalid protocol %q (use rest or grpc)", c.Protocol)
@@ -757,138 +698,174 @@ func (c InstallConfig) Normalize() (InstallConfig, error) {
 	if out.APIKey != "" && !uuidPattern.MatchString(out.APIKey) {
 		return InstallConfig{}, fmt.Errorf("nodes: API key must be a valid UUID")
 	}
+	if out.SANEntries != "" && !sanEntriesPattern.MatchString(out.SANEntries) {
+		return InstallConfig{}, fmt.Errorf("nodes: invalid SAN entries %q", c.SANEntries)
+	}
 	return out, nil
 }
 
-// validPort returns the canonical port string if value is a port in 1..65535,
-// otherwise "".
-func validPort(value string) string {
-	return parsePortFromEnv(map[string]string{"p": value}, "p")
-}
-
 // normalizeInstallInput validates the raw install form fields and returns the
-// resolved InstallConfig plus field-keyed validation errors (empty when valid).
-func (PasarGuardProvider) normalizeInstallInput(in installFormInput) (InstallConfig, ValidationErrors) {
+// resolved InstallConfig plus field-keyed validation errors (i18n keys).
+func (PasarGuardProvider) normalizeInstallInput(in InstallFormInput) (InstallConfig, ValidationErrors) {
 	errs := ValidationErrors{}
 
-	if port := strings.TrimSpace(in.ServicePort); port != "" && validPort(port) == "" {
-		errs["service_port"] = "Enter a port between 1 and 65535."
+	if name := strings.TrimSpace(in.NodeName); name != "" {
+		if err := ValidateNodeName(name); err != nil {
+			errs["node_name"] = "nodes.err_node_name"
+		}
 	}
-	if port := strings.TrimSpace(in.APIPort); port != "" && validPort(port) == "" {
-		errs["api_port"] = "Enter a port between 1 and 65535, or leave blank."
+	if port := strings.TrimSpace(in.ServicePort); port != "" && !isValidPort(port) {
+		errs["service_port"] = "nodes.err_port_range"
+	}
+	if port := strings.TrimSpace(in.APIPort); port != "" {
+		if !isValidPort(port) {
+			errs["api_port"] = "nodes.err_port_range"
+		} else if port == strings.TrimSpace(in.ServicePort) {
+			errs["api_port"] = "nodes.err_ports_equal"
+		}
 	}
 	if proto := strings.ToLower(strings.TrimSpace(in.Protocol)); proto != "" && proto != "rest" && proto != "grpc" {
-		errs["protocol"] = "Choose REST or gRPC."
+		errs["protocol"] = "nodes.err_protocol"
 	}
 	if key := strings.TrimSpace(in.APIKey); key != "" && !uuidPattern.MatchString(key) {
-		errs["api_key"] = "Provide a valid UUID, or leave blank to auto-generate."
+		errs["api_key"] = "nodes.err_api_key"
+	}
+	if san := strings.TrimSpace(in.SANEntries); san != "" && !sanEntriesPattern.MatchString(san) {
+		errs["san_entries"] = "nodes.err_san_entries"
 	}
 	if errs.HasAny() {
 		return InstallConfig{}, errs
 	}
 
 	config, err := InstallConfig{
+		NodeName:    in.NodeName,
+		Channel:     in.Channel,
 		ServicePort: in.ServicePort,
 		APIPort:     in.APIPort,
 		Protocol:    in.Protocol,
 		APIKey:      in.APIKey,
+		SANEntries:  in.SANEntries,
 	}.Normalize()
 	if err != nil {
-		errs["service_port"] = err.Error()
+		errs["service_port"] = "nodes.err_port_range"
 		return InstallConfig{}, errs
 	}
 	return config, errs
 }
 
-// BuildInstallPlan assembles the PasarGuard install procedure from its existing
-// (unchanged) command builders: run the official script (tolerating the 124
-// log-tail timeout), patch /opt/<name>/.env, then read the API key + cert back.
-// This is the seam that lets runInstall drive PasarGuard through the generic
-// InstallPlan without changing any of the fragile prompt-order stdin logic.
-func (p PasarGuardProvider) BuildInstallPlan(nodeName string, in installFormInput) (InstallPlan, ValidationErrors) {
+// InstallCommand downloads and runs the official PasarGuard install script for
+// a new instance named nodeName.
+//
+// The upstream `install` subcommand accepts every choice as a native flag, so
+// the old positional-stdin contract — and the prompt-counting guard that
+// policed it — is gone:
+//
+//	-y                     non-interactive; auto-confirms the override prompt and
+//	                       answers every remaining prompt with its default
+//	--override             reinstall over an existing /opt/<name>
+//	--self-signed          generate the TLS certificate instead of prompting
+//	--service-port <p>     pin the node service port
+//	--no-install-service   skip the systemd unit; Nodexia drives docker/compose
+//	--install-service      install the unit (required for --api-port)
+//	--use-rest|--use-grpc  protocol selection (flag presence, no value)
+//	--api-key <uuid>       pin the API key instead of auto-generating one
+//	--api-port <p>         pin the service API port
+//	--san-entries <list>   extra certificate SANs
+//	--dev                  install the moving dev image instead of a release
+//
+// The API port is only read by the node's systemd service install path, so
+// requesting one implies the service unit; without an API port the service is
+// skipped and the node runs purely from compose, which is what Nodexia's own
+// actions drive.
+func (PasarGuardProvider) InstallCommand(cfg InstallConfig) (string, error) {
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		return "", err
+	}
+
+	var flags strings.Builder
+	flags.WriteString(` --name ` + normalized.NodeName)
+	flags.WriteString(` -y --override --self-signed`)
+	flags.WriteString(` --service-port ` + normalized.ServicePort)
+	if normalized.APIPort != "" {
+		flags.WriteString(` --install-service --api-port ` + normalized.APIPort)
+	} else {
+		flags.WriteString(` --no-install-service`)
+	}
+	if normalized.Protocol == "rest" {
+		flags.WriteString(` --use-rest`)
+	} else {
+		flags.WriteString(` --use-grpc`)
+	}
+	if normalized.APIKey != "" {
+		flags.WriteString(` --api-key ` + normalized.APIKey)
+	}
+	if normalized.SANEntries != "" {
+		flags.WriteString(` --san-entries ` + normalized.SANEntries)
+	}
+	if normalized.Channel == channelDev {
+		flags.WriteString(` --dev`)
+	}
+
+	command := `sh -c '` + sudoPreamble +
+		stageMarker(stageInitializing) +
+		strings.ReplaceAll(downloadPreamble, "URL", pasarguardScriptURL) +
+		// The script's own dependency bootstrap (docker, compose, yq, jq) runs
+		// between the download and the deploy, so the marker names that phase.
+		stageMarker(stageDownloading) +
+		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + pasarguardInstallScriptTimeout + `"; fi; ` +
+		// The install is the deploy phase. The script announces the node and then
+		// tails container logs with no opt-out, so the tail lives under this
+		// marker and the runner verifies the result afterwards.
+		stageMarker(stageDeploying) +
+		`$TMO $SUDO bash "$SCRIPT" install` + flags.String() + ` </dev/null; ` +
+		`STATUS=$?; rm -f "$SCRIPT"; ` +
+		// The script runs under `set -e` and dies without a message on the first
+		// failed command; emit the exact exit code so the stream never ends
+		// silently. 124 is GNU timeout cutting off the post-install log tail and
+		// is treated as success by the runner, so it is not flagged.
+		`if [ "$STATUS" -ne 0 ] && [ "$STATUS" -ne 124 ]; then echo "[pg-node install script exited with status $STATUS]" >&2; fi; ` +
+		`exit $STATUS'`
+	return command, nil
+}
+
+// BuildInstallPlan assembles the PasarGuard install procedure: one streamed
+// stage running the official script, then a readback of the API key and
+// certificate the panel needs for registration.
+func (p PasarGuardProvider) BuildInstallPlan(in InstallFormInput) (InstallPlan, ValidationErrors) {
 	config, errs := p.normalizeInstallInput(in)
 	if errs.HasAny() {
 		return InstallPlan{}, errs
 	}
 
-	installCmd, err := p.InstallCommand(nodeName, config)
+	installCmd, err := p.InstallCommand(config)
 	if err != nil {
-		errs["node_name"] = err.Error()
-		return InstallPlan{}, errs
+		return InstallPlan{}, ValidationErrors{"node_name": "nodes.err_node_name"}
 	}
-	configureCmd, configTimeout, err := p.ConfigureCommand(nodeName, config)
+	infoCmd, err := p.RegistrationInfoCommand(config.NodeName)
 	if err != nil {
-		errs["node_name"] = err.Error()
-		return InstallPlan{}, errs
-	}
-	infoCmd, err := p.RegistrationInfoCommand(nodeName)
-	if err != nil {
-		errs["node_name"] = err.Error()
-		return InstallPlan{}, errs
+		return InstallPlan{}, ValidationErrors{"node_name": "nodes.err_node_name"}
 	}
 
 	plan := InstallPlan{
-		Steps: []InstallStep{
-			{Command: installCmd, Timeout: installCommandTimeout, TolerateTimeout: true},
+		Stages: []InstallStage{
 			{
-				StartLog: fmt.Sprintf("\n[configuring node: service port %s, protocol %s]\n", config.ServicePort, config.Protocol),
-				Command:  configureCmd,
-				Timeout:  configTimeout,
+				Key:             stageDownloading,
+				StartLog:        fmt.Sprintf("\n[deploying PasarGuard node %q — channel %s, service port %s, protocol %s]\n", config.NodeName, config.Channel, config.ServicePort, config.Protocol),
+				Command:         installCmd,
+				Timeout:         installCommandTimeout,
+				TolerateTimeout: true,
 			},
 		},
 		Readback: InstallReadback{
 			Command: infoCmd,
 			Parse: func(stdout string) (RegistrationInfo, bool) {
-				return ParseRegistrationInfo(nodeName, stdout)
+				return ParseRegistrationInfo(config.NodeName, stdout)
 			},
-			NotFoundMessage: fmt.Sprintf("Install did not produce /opt/%s/.env — inspect the output above for the script error.", nodeName),
+			NotFoundMessage: fmt.Sprintf("Install did not produce /opt/%s/.env — inspect the output above for the script error.", config.NodeName),
 		},
 	}
-	return plan, errs
-}
-
-// ConfigureCommand patches /opt/<name>/.env with the chosen ports/protocol/key
-// (deleting any prior commented or active line for each key, then appending the
-// desired value — mirroring the install script's own .env handling) and
-// restarts the node through the official CLI so the changes take effect.
-// Every interpolated value is validated, so the command is injection-safe.
-func (p PasarGuardProvider) ConfigureCommand(nodeName string, cfg InstallConfig) (string, time.Duration, error) {
-	if err := ValidateNodeName(nodeName); err != nil {
-		return "", 0, err
-	}
-	normalized, err := cfg.Normalize()
-	if err != nil {
-		return "", 0, err
-	}
-
-	var sets strings.Builder
-	// writeKey drops any existing line (commented "# KEY =" or active "KEY =")
-	// then appends the canonical assignment. value is wrapped in escaped double
-	// quotes so no single quote ever appears inside the outer sh -c '...' — all
-	// values are validated (numeric / rest|grpc / UUID), so this is safe.
-	writeKey := func(key, value string) {
-		sets.WriteString(`sed -i "/^# *` + key + ` *=/d; /^` + key + ` *=/d" "$ENV"; `)
-		sets.WriteString(`printf "%s\n" "` + key + `= ` + value + `" >>"$ENV"; `)
-	}
-	writeKey("SERVICE_PORT", normalized.ServicePort)
-	// The .env stores the protocol quoted: SERVICE_PROTOCOL= "grpc".
-	writeKey("SERVICE_PROTOCOL", `\"`+normalized.Protocol+`\"`)
-	if normalized.APIPort != "" {
-		writeKey("API_PORT", normalized.APIPort)
-	}
-	if normalized.APIKey != "" {
-		writeKey("API_KEY", normalized.APIKey)
-	}
-
-	command := `sh -c '` + sudoPreamble +
-		`ENV=/opt/` + nodeName + `/.env; ` +
-		`if [ ! -f "$ENV" ]; then echo "/opt/` + nodeName + `/.env not found" >&2; exit 86; fi; ` +
-		sets.String() +
-		`if command -v pg-node >/dev/null 2>&1; then PG_CLI="pg-node"; ` +
-		`elif command -v ` + nodeName + ` >/dev/null 2>&1; then PG_CLI="` + nodeName + `"; ` +
-		`else echo "pg-node CLI not found on this server" >&2; exit 86; fi; ` +
-		`$SUDO "$PG_CLI" --name ` + nodeName + ` restart -n </dev/null'`
-	return command, 5 * time.Minute, nil
+	return plan, nil
 }
 
 // RegistrationInfoCommand reads the values the PasarGuard panel needs to
@@ -913,6 +890,7 @@ type RegistrationInfo struct {
 	NodeIP      string
 	ServicePort string
 	Protocol    string
+	APIPort     string
 	APIKey      string
 	Certificate string
 }
@@ -930,6 +908,7 @@ func ParseRegistrationInfo(nodeName, output string) (RegistrationInfo, bool) {
 	if info.ServicePort == "" {
 		info.ServicePort = pasarguardDefaultPort
 	}
+	info.APIPort = parsePortFromEnv(env, "API_PORT")
 	info.Protocol = cleanEnvValue(env["SERVICE_PROTOCOL"])
 	if info.Protocol == "" {
 		info.Protocol = pasarguardDefaultProtocol

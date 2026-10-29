@@ -46,6 +46,72 @@ type Provider interface {
 	SupportsInstall() bool
 }
 
+// InstallFormInput is the provider-agnostic install form payload. It is the
+// single shape every provider's BuildInstallPlan consumes, so the HTTP layer
+// never needs to know which provider it is talking to: each provider reads the
+// fields it cares about and ignores the rest. Field values are named exactly
+// after the form inputs, which keeps validation-error keys, i18n keys and HTML
+// field names aligned by construction.
+type InstallFormInput struct {
+	NodeType    string // provider selector ("pasarguard-node" | "rebecca-node")
+	NodeName    string
+	ServicePort string
+	APIPort     string
+	Protocol    string // "rest" | "grpc" (PasarGuard)
+	APIKey      string // optional UUID (PasarGuard)
+	Bundle      string // PEM certificate+key bundle (Rebecca)
+	Channel     string // release channel: "stable" | "dev"
+	SANEntries  string // optional extra certificate SANs (PasarGuard, comma separated)
+}
+
+// ValidationErrors maps a form field name to a message. Providers return i18n
+// keys here; the HTTP layer translates them before rendering, so every provider
+// produces identically localized errors.
+type ValidationErrors map[string]string
+
+func (v ValidationErrors) HasAny() bool { return len(v) > 0 }
+
+// InstallChannel is one release channel a provider can install from.
+// Enabled=false renders as "coming soon" and is rejected server-side, so
+// turning a channel on later is a one-line flip plus its plan branch.
+type InstallChannel struct {
+	Key     string // stable, dev
+	Label   string // i18n key for the human label
+	Enabled bool
+}
+
+// InstallDefaults is the pre-filled state of the deploy form for a provider.
+// It lives on the provider so the form, the modal and the validation all agree
+// on defaults without the HTTP layer hardcoding provider knowledge.
+type InstallDefaults struct {
+	NodeName    string
+	ServicePort string
+	APIPort     string
+	Protocol    string
+	Channel     string
+}
+
+// InstallableProvider is implemented by every provider that can be installed
+// from the panel. It is the one seam installation goes through:
+// BuildInstallPlan turns raw form input into an InstallPlan (validating as it
+// goes), so adding a provider never touches the install runner, the job store,
+// or the SSE streamer.
+type InstallableProvider interface {
+	Provider
+
+	// BuildInstallPlan validates the raw install form and assembles the
+	// provider-agnostic recipe runInstall executes. Field-keyed i18n keys are
+	// returned when the input is invalid.
+	BuildInstallPlan(in InstallFormInput) (InstallPlan, ValidationErrors)
+
+	// InstallChannels lists the release channels this provider can install
+	// from, in display order. Providers with a single channel return one entry.
+	InstallChannels() []InstallChannel
+
+	// InstallDefaults is the form's pre-filled state.
+	InstallDefaults() InstallDefaults
+}
+
 func DefaultProviders() []Provider {
 	return []Provider{
 		PasarGuardProvider{},
@@ -53,8 +119,32 @@ func DefaultProviders() []Provider {
 	}
 }
 
+// DefaultInstallableProviders returns the install-capable providers.
+func DefaultInstallableProviders() []InstallableProvider {
+	return []InstallableProvider{
+		PasarGuardProvider{},
+		RebeccaProvider{},
+	}
+}
+
 func ProviderByType(providers []Provider, nodeType string) (Provider, bool) {
 	nodeType = strings.TrimSpace(nodeType)
+	for _, provider := range providers {
+		if provider.Type() == nodeType {
+			return provider, true
+		}
+	}
+	return nil, false
+}
+
+// InstallableProviderByType resolves the install-capable provider for a node
+// type. When nodeType is blank the first provider is used, which lets the
+// unified install endpoint default to the recommended engine.
+func InstallableProviderByType(providers []InstallableProvider, nodeType string) (InstallableProvider, bool) {
+	nodeType = strings.TrimSpace(nodeType)
+	if nodeType == "" && len(providers) > 0 {
+		return providers[0], true
+	}
 	for _, provider := range providers {
 		if provider.Type() == nodeType {
 			return provider, true
@@ -80,9 +170,10 @@ const (
 	exitPromptContractChange = 87
 	exitMissingCLI           = 86
 	exitNoDownloader         = 85
-	// exitRemoteTimeout is GNU timeout's exit code; the PasarGuard install
-	// script tails container logs forever after installing, so the install
-	// command is bounded remotely and 124 does NOT mean the install failed.
+	// exitRemoteTimeout is GNU timeout's exit code. A provider stage that is
+	// cut off remotely may still have succeeded (the upstream script tails
+	// container logs on some paths), so only stages that opt in treat 124 as
+	// non-fatal; the install readback is the authority on success.
 	exitRemoteTimeout = 124
 )
 
@@ -91,10 +182,24 @@ const (
 // password" from a real failure.
 const sudoPreamble = `if [ "$(id -u)" -eq 0 ]; then SUDO=""; elif sudo -n true 2>/dev/null; then SUDO="sudo -n"; else echo "this action requires root or passwordless sudo" >&2; exit 88; fi; `
 
+// downloadPreamble downloads $1 to a temp file in $SCRIPT, preferring curl and
+// falling back to wget, exiting 85 when neither is present. It is shared by
+// every provider install so the download contract (and its failure mode) is
+// identical everywhere.
+const downloadPreamble = `SCRIPT="$(mktemp "${TMPDIR:-/tmp}/nodexia-install.XXXXXX")" || exit 1; ` +
+	`if command -v curl >/dev/null 2>&1; then curl -fsSL URL -o "$SCRIPT" || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
+	`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" URL || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
+	`else echo "curl or wget is required to install" >&2; rm -f "$SCRIPT"; exit 85; fi; `
+
 // nodeNamePattern guards every node name interpolated into a shell command.
 // The charset is intentionally strict: it covers real pg-node instance names
 // ("node", "node2", "pg-node") while making injection impossible.
 var nodeNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+// sanEntriesPattern validates the optional comma separated SAN list passed to
+// the PasarGuard installer. Any character outside this set is rejected rather
+// than escaped, because the value is interpolated into an outer sh -c '...'.
+var sanEntriesPattern = regexp.MustCompile(`^[A-Za-z0-9.,*:_-]+$`)
 
 func ValidateNodeName(name string) error {
 	name = strings.TrimSpace(name)
@@ -150,6 +255,14 @@ func parsePortFromEnv(env map[string]string, key string) string {
 func cleanEnvValue(value string) string {
 	return strings.TrimSpace(strings.Trim(strings.TrimSpace(value), `"'`))
 }
+
+// validPort returns the canonical port string if value is a port in 1..65535,
+// otherwise "". isValidPort is the boolean form used by plan builders.
+func validPort(value string) string {
+	return parsePortFromEnv(map[string]string{"p": value}, "p")
+}
+
+func isValidPort(value string) bool { return validPort(value) != "" }
 
 // extractImageTag returns the tag portion of "repo/image:tag", e.g. "latest".
 func extractImageTag(image string) string {

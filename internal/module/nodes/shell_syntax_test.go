@@ -7,7 +7,8 @@ import (
 )
 
 // TestGeneratedShellSyntax pipes every generated command through `sh -n` to
-// catch quoting mistakes.
+// catch quoting mistakes, and asserts the inner script carries no single quote
+// (every command is wrapped in sh -c '...' and cannot escape one).
 func TestGeneratedShellSyntax(t *testing.T) {
 	commands := []string{
 		PasarGuardProvider{}.DiscoveryCommand(),
@@ -23,36 +24,44 @@ func TestGeneratedShellSyntax(t *testing.T) {
 			commands = append(commands, cmd)
 		}
 	}
-	install, err := PasarGuardProvider{}.InstallCommand("node2", InstallConfig{ServicePort: "62011", Protocol: "grpc"})
+
+	pgInstall, err := PasarGuardProvider{}.InstallCommand(InstallConfig{
+		NodeName: "node2", ServicePort: "62011", APIPort: "62012",
+		Protocol: "rest", Channel: channelDev,
+		APIKey: "11111111-2222-3333-4444-555555555555", SANEntries: "node2.example.com",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	commands = append(commands, install)
+	commands = append(commands, pgInstall)
+
+	pgInstallNoAPI, err := PasarGuardProvider{}.InstallCommand(InstallConfig{
+		NodeName: "node3", ServicePort: "62013", Protocol: "grpc",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commands = append(commands, pgInstallNoAPI)
+
 	info, err := PasarGuardProvider{}.RegistrationInfoCommand("node2")
 	if err != nil {
 		t.Fatal(err)
 	}
 	commands = append(commands, info)
 
-	configure, _, err := PasarGuardProvider{}.ConfigureCommand("node2", InstallConfig{
-		ServicePort: "62055", APIPort: "62056", Protocol: "rest",
-		APIKey: "11111111-2222-3333-4444-555555555555",
-	})
-	if err != nil {
-		t.Fatal(err)
+	for _, channel := range []string{channelStable, channelDev} {
+		rebeccaInstall, err := RebeccaProvider{}.InstallCommand(RebeccaInstallConfig{
+			NodeName:    "rnode",
+			Channel:     channel,
+			ServicePort: "62050",
+			APIPort:     "62051",
+			Bundle:      testRebeccaBundle,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		commands = append(commands, rebeccaInstall)
 	}
-	commands = append(commands, configure)
-
-	rebeccaInstall, err := RebeccaProvider{}.InstallCommand(RebeccaInstallConfig{
-		Channel:     "dev",
-		ServicePort: "62050",
-		APIPort:     "62051",
-		Bundle:      testRebeccaBundle,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	commands = append(commands, rebeccaInstall)
 
 	for _, command := range commands {
 		// Each command is "sh -c '<script>'" — extract the script and syntax-check it.

@@ -30,20 +30,23 @@ type Handlers struct {
 	deps       module.Dependencies
 	serverRepo servers.Repository
 	repo       Repository
-	providers  []Provider
-	installs   *installStore
+	providers            []Provider
+	installableProviders []InstallableProvider
+	installs             *installStore
 }
 
 func NewHandlers(deps module.Dependencies, serverRepo servers.Repository, repo Repository, providers []Provider) *Handlers {
 	if len(providers) == 0 {
 		providers = DefaultProviders()
 	}
+	installable := DefaultInstallableProviders()
 	return &Handlers{
-		deps:       deps,
-		serverRepo: serverRepo,
-		repo:       repo,
-		providers:  providers,
-		installs:   newInstallStore(),
+		deps:                 deps,
+		serverRepo:           serverRepo,
+		repo:                 repo,
+		providers:            providers,
+		installableProviders: installable,
+		installs:             newInstallStore(),
 	}
 }
 
@@ -55,12 +58,6 @@ type FormInput struct {
 	CommandTimeout string
 }
 
-type ValidationErrors map[string]string
-
-func (v ValidationErrors) HasAny() bool {
-	return len(v) > 0
-}
-
 // pageView bundles everything the nodes page template renders.
 type pageView struct {
 	status           int
@@ -68,9 +65,8 @@ type pageView struct {
 	snapshots        []view.NodeSnapshotView
 	collection       view.NodeCollectionResultView
 	stream           view.CommandStreamView
-	installForm      view.NodeInstallFormView
-	rebeccaForm      view.NodeRebeccaInstallFormView
-	openRebeccaModal bool
+	deployForm       view.NodeDeployFormView
+	openDeployModal  bool
 	flashKind        string
 	flashMessage     string
 }
@@ -113,7 +109,7 @@ func (h *Handlers) Page(w http.ResponseWriter, r *http.Request) {
 		status:      http.StatusOK,
 		form:        h.defaultFormView(server, hasStoredCreds),
 		snapshots:   snapshots,
-		installForm: h.installFormView(server, hasStoredCreds),
+		deployForm: h.deployFormView(r, server, hasStoredCreds),
 	}
 	page.stream, page.flashKind, page.flashMessage = h.loadStreamView(streamID, server.ID)
 	if page.flashKind == "" {
@@ -162,7 +158,7 @@ func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
 		h.renderPage(w, r, server, pageView{
 			status:       http.StatusUnprocessableEntity,
 			form:         formViewFromInput(form, validationErrors, server.ID),
-			installForm:  h.installFormView(server, false),
+			deployForm:  h.deployFormView(r, server, false),
 			flashKind:    "error",
 			flashMessage: "Please fix the highlighted fields before refreshing node discovery.",
 		})
@@ -196,7 +192,7 @@ func (h *Handlers) collectWith(w http.ResponseWriter, r *http.Request, server se
 		h.renderPage(w, r, server, pageView{
 			status:      http.StatusBadGateway,
 			form:        h.defaultFormView(server, hasStoredCreds),
-			installForm: h.installFormView(server, hasStoredCreds),
+			deployForm: h.deployFormView(r, server, hasStoredCreds),
 			collection: view.NodeCollectionResultView{
 				Available: true,
 				Error:     err.Error(),
@@ -229,7 +225,7 @@ func (h *Handlers) collectWith(w http.ResponseWriter, r *http.Request, server se
 		form:         h.defaultFormView(server, hasStoredCreds),
 		snapshots:    snapshotViews,
 		collection:   collectionViewFromProbes(probes, collectedAt),
-		installForm:  h.installFormView(server, hasStoredCreds),
+		deployForm:  h.deployFormView(r, server, hasStoredCreds),
 		flashKind:    "success",
 		flashMessage: flashMessage,
 	})
@@ -448,7 +444,11 @@ func writeNodeJSONError(w http.ResponseWriter, status int, msg string) {
 
 // ── POST /servers/{id}/nodes/install ──────────────────────────────────────────
 
-func (h *Handlers) InstallStart(w http.ResponseWriter, r *http.Request) {
+// DeployStart handles the unified deploy form. One endpoint serves every engine:
+// the posted node_type selects the provider, and the provider's own
+// BuildInstallPlan validates and assembles the recipe. Adding an engine is
+// therefore a provider + a form section, never a new route.
+func (h *Handlers) DeployStart(w http.ResponseWriter, r *http.Request) {
 	server, ok := h.loadServer(w, r)
 	if !ok {
 		return
@@ -464,87 +464,32 @@ func (h *Handlers) InstallStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nodeName := strings.TrimSpace(r.FormValue("node_name"))
-	input := installFormInput{
-		NodeName:    nodeName,
+	nodeType := strings.TrimSpace(r.FormValue("node_type"))
+	provider, ok := InstallableProviderByType(h.installableProviders, nodeType)
+	if !ok {
+		h.renderDeployForm(w, r, server, http.StatusUnprocessableEntity, InstallFormInput{},
+			ValidationErrors{"node_type": "nodes.err_engine"})
+		return
+	}
+
+	input := InstallFormInput{
+		NodeType:    provider.Type(),
+		NodeName:    strings.TrimSpace(r.FormValue("node_name")),
 		ServicePort: strings.TrimSpace(r.FormValue("service_port")),
 		APIPort:     strings.TrimSpace(r.FormValue("api_port")),
 		Protocol:    strings.TrimSpace(r.FormValue("protocol")),
 		APIKey:      strings.TrimSpace(r.FormValue("api_key")),
-	}
-
-	installErrors := ValidationErrors{}
-	if err := ValidateNodeName(nodeName); err != nil {
-		installErrors["node_name"] = "Use letters, digits, dot, dash, or underscore (max 64 characters)."
-	} else if h.nodeNameTaken(r.Context(), server.ID, nodeName) {
-		installErrors["node_name"] = "A node with this name already exists on this server — pick another name."
-	}
-
-	plan, cfgErr := PasarGuardProvider{}.BuildInstallPlan(nodeName, input)
-	for field, message := range cfgErr {
-		installErrors[field] = message
-	}
-
-	if installErrors.HasAny() {
-		snapshots, err := h.storedSnapshotViews(r.Context(), server, true)
-		if err != nil {
-			httperrors.RenderPage(w, r, h.deps, err, "/servers", "Could not load node snapshots", "The latest node discovery snapshot could not be loaded.")
-			return
-		}
-		h.renderPage(w, r, server, pageView{
-			status:       http.StatusUnprocessableEntity,
-			form:         h.defaultFormView(server, true),
-			snapshots:    snapshots,
-			installForm:  h.installFormViewFromInput(server, true, input, installErrors),
-			flashKind:    "error",
-			flashMessage: "Please fix the install form before starting the installation.",
-		})
-		return
-	}
-
-	connReq := h.runtimeConnRequest(server)
-	job := h.installs.create(server.ID, nodeName, plan)
-	go runInstall(job, h.deps.SSH, connReq, server.Host, func() { h.discoverAfterInstall(server, connReq) })
-
-	http.Redirect(w, r, installJobURL(server.ID, job.id), http.StatusSeeOther)
-}
-
-// RebeccaInstallStart handles POST /servers/{id}/nodes/install/rebecca — the
-// dev/beta Rebecca install. Unlike PasarGuard, the user supplies the
-// certificate (from their Rebecca panel) plus the two ports; nothing is read
-// back. The node is pinned to the fixed instance name "rebecca-node" so
-// discovery picks it up.
-func (h *Handlers) RebeccaInstallStart(w http.ResponseWriter, r *http.Request) {
-	server, ok := h.loadServer(w, r)
-	if !ok {
-		return
-	}
-
-	if !servers.HasStoredCredentials(server) {
-		http.Redirect(w, r, nodesURL(server.ID)+"?flash=nodes-no-credentials", http.StatusSeeOther)
-		return
-	}
-
-	if err := r.ParseForm(); err != nil {
-		httperrors.RenderPage(w, r, h.deps, err, "/servers", "Invalid install request", "The submitted node install request could not be parsed.")
-		return
-	}
-
-	// A blank name installs the primary instance (rebecca-node); a custom name
-	// lets several Rebecca nodes coexist under /opt/<name>, like PasarGuard.
-	nodeName := strings.TrimSpace(r.FormValue("node_name"))
-	if nodeName == "" {
-		nodeName = rebeccaInstallName
-	}
-	input := installFormInput{
-		NodeName:    nodeName,
-		ServicePort: strings.TrimSpace(r.FormValue("service_port")),
-		APIPort:     strings.TrimSpace(r.FormValue("api_port")),
+		SANEntries:  strings.TrimSpace(r.FormValue("san_entries")),
 		Bundle:      r.FormValue("bundle"),
 		Channel:     strings.TrimSpace(r.FormValue("channel")),
 	}
-	if input.Channel == "" {
-		input.Channel = channelDev
+
+	// A blank name means "the provider's default instance"; resolve it here so
+	// the collision check and the job both use the real name.
+	defaults := provider.InstallDefaults()
+	nodeName := input.NodeName
+	if nodeName == "" {
+		nodeName = defaults.NodeName
 	}
 
 	installErrors := ValidationErrors{}
@@ -554,36 +499,43 @@ func (h *Handlers) RebeccaInstallStart(w http.ResponseWriter, r *http.Request) {
 		installErrors["node_name"] = h.t(r, "nodes.err_node_name_taken")
 	}
 
-	plan, cfgErr := RebeccaProvider{}.BuildInstallPlan(input)
+	plan, cfgErr := provider.BuildInstallPlan(input)
 	for field, key := range cfgErr {
-		// Rebecca validation returns i18n keys; translate for display.
-		installErrors[field] = h.t(r, key)
+		// Providers return i18n keys; translate for display.
+		if _, taken := installErrors[field]; !taken {
+			installErrors[field] = h.t(r, key)
+		}
 	}
 
 	if installErrors.HasAny() {
-		snapshots, err := h.storedSnapshotViews(r.Context(), server, true)
-		if err != nil {
-			httperrors.RenderPage(w, r, h.deps, err, "/servers", "Could not load node snapshots", "The latest node discovery snapshot could not be loaded.")
-			return
-		}
-		h.renderPage(w, r, server, pageView{
-			status:           http.StatusUnprocessableEntity,
-			form:             h.defaultFormView(server, true),
-			snapshots:        snapshots,
-			installForm:      h.installFormView(server, true),
-			rebeccaForm:      h.rebeccaInstallFormViewFromInput(server, true, input, installErrors),
-			flashKind:        "error",
-			flashMessage:     "Please fix the Rebecca install form before starting the installation.",
-			openRebeccaModal: true,
-		})
+		h.renderDeployForm(w, r, server, http.StatusUnprocessableEntity, input, installErrors)
 		return
 	}
 
 	connReq := h.runtimeConnRequest(server)
-	job := h.installs.create(server.ID, nodeName, plan)
+	job := h.installs.create(server.ID, provider.Type(), nodeName, plan)
 	go runInstall(job, h.deps.SSH, connReq, server.Host, func() { h.discoverAfterInstall(server, connReq) })
 
 	http.Redirect(w, r, installJobURL(server.ID, job.id), http.StatusSeeOther)
+}
+
+// renderDeployForm re-renders the nodes page with the deploy modal open,
+// preserving the user's entries and surfacing field errors.
+func (h *Handlers) renderDeployForm(w http.ResponseWriter, r *http.Request, server servers.Server, status int, input InstallFormInput, formErrors ValidationErrors) {
+	snapshots, err := h.storedSnapshotViews(r.Context(), server, true)
+	if err != nil {
+		httperrors.RenderPage(w, r, h.deps, err, "/servers", "Could not load node snapshots", "The latest node discovery snapshot could not be loaded.")
+		return
+	}
+	h.renderPage(w, r, server, pageView{
+		status:          status,
+		form:            h.defaultFormView(server, true),
+		snapshots:       snapshots,
+		deployForm:      h.deployFormViewFromInput(r, server, true, input, formErrors),
+		openDeployModal: true,
+		flashKind:       "error",
+		flashMessage:    "Please fix the deploy form before starting the installation.",
+	})
 }
 
 // runtimeConnRequest builds the request-scoped SSH connection from a server's
@@ -648,6 +600,7 @@ func (h *Handlers) InstallJob(w http.ResponseWriter, r *http.Request) {
 	installView := view.NodeInstallView{
 		Available:     true,
 		JobID:         snap.ID,
+		NodeType:      snap.NodeType,
 		NodeName:      snap.NodeName,
 		Status:        snap.Status,
 		IsRunning:     snap.Status == installStatusRunning,
@@ -658,6 +611,8 @@ func (h *Handlers) InstallJob(w http.ResponseWriter, r *http.Request) {
 		RefreshURL:    installJobURL(server.ID, snap.ID),
 		RefreshMillis: streamRefreshMillis,
 		NodesURL:      nodesURL(server.ID),
+		ActiveStage:   snap.Stage,
+		Stages:        h.installStageViews(r, snap),
 	}
 	durationEnd := snap.FinishedAt
 	if durationEnd.IsZero() {
@@ -671,6 +626,7 @@ func (h *Handlers) InstallJob(w http.ResponseWriter, r *http.Request) {
 			NodeIP:      snap.Info.NodeIP,
 			ServicePort: snap.Info.ServicePort,
 			Protocol:    snap.Info.Protocol,
+			APIPort:     snap.Info.APIPort,
 			APIKey:      snap.Info.APIKey,
 			Certificate: snap.Info.Certificate,
 		}
@@ -835,13 +791,12 @@ func (h *Handlers) renderPage(w http.ResponseWriter, r *http.Request, server ser
 	page.NodeSnapshots = state.snapshots
 	page.NodeCollection = state.collection
 	page.NodeStream = state.stream
-	page.NodeInstallForm = state.installForm
-	rebeccaForm := state.rebeccaForm
-	if rebeccaForm.Action == "" {
-		rebeccaForm = h.rebeccaInstallFormView(server, servers.HasStoredCredentials(server))
+	deployForm := state.deployForm
+	if deployForm.Action == "" {
+		deployForm = h.deployFormView(r, server, servers.HasStoredCredentials(server))
 	}
-	rebeccaForm.OpenInitial = state.openRebeccaModal
-	page.NodeRebeccaInstallForm = rebeccaForm
+	page.NodeDeployForm = deployForm
+	page.NodeDeployOpen = state.openDeployModal
 	page.FlashKind = state.flashKind
 	page.FlashMessage = state.flashMessage
 	page.PageStyles = []string{"/static/nodes.css"}
@@ -881,91 +836,129 @@ func (h *Handlers) defaultFormView(server servers.Server, hasStoredCreds bool) v
 	}
 }
 
-// installFormInput is the raw pre-install configuration submitted by the user.
-// It is shared across providers: PasarGuard uses Protocol/APIKey; Rebecca uses
-// Certificate/Channel. Each provider reads only the fields it needs.
-type installFormInput struct {
-	NodeName    string
-	ServicePort string
-	APIPort     string
-	Protocol    string
-	APIKey      string
-	Bundle      string // Rebecca: node install bundle (certificate + private key) from the panel
-	Channel     string // Rebecca: install channel (dev/stable)
+// deployEngines describes the selectable engines for the wizard's first step.
+// It is derived from the registered installable providers so the UI can never
+// advertise an engine the backend cannot install.
+func (h *Handlers) deployEngines(r *http.Request) []view.NodeDeployEngineView {
+	engines := make([]view.NodeDeployEngineView, 0, len(h.installableProviders))
+	for i, provider := range h.installableProviders {
+		meta := enginePresentation(provider.Type())
+		engines = append(engines, view.NodeDeployEngineView{
+			Key:         provider.Type(),
+			Label:       h.t(r, meta.labelKey),
+			Description: h.t(r, meta.descriptionKey),
+			Icon:        meta.icon,
+			Kind:        meta.kind,
+			Recommended: i == 0,
+			Features:    []string{h.t(r, meta.featureOneKey), h.t(r, meta.featureTwoKey)},
+		})
+	}
+	return engines
 }
 
-// installFormView returns the default install form (fresh page load).
-func (h *Handlers) installFormView(server servers.Server, enabled bool) view.NodeInstallFormView {
-	return h.installFormViewFromInput(server, enabled, installFormInput{
-		ServicePort: pasarguardDefaultPort,
-		Protocol:    pasarguardDefaultProtocol,
+// enginePresentation is the static, non-translatable presentation of an engine.
+// Labels/descriptions are i18n keys so both locales stay in parity.
+type enginePresentationMeta struct {
+	labelKey       string
+	descriptionKey string
+	icon           string
+	kind           string
+	featureOneKey  string
+	featureTwoKey  string
+}
+
+func enginePresentation(nodeType string) enginePresentationMeta {
+	if nodeType == rebeccaType {
+		return enginePresentationMeta{
+			labelKey:       "nodes.engine_rebecca",
+			descriptionKey: "nodes.engine_rebecca_desc",
+			icon:           "package",
+			kind:           "binary",
+			featureOneKey:  "nodes.engine_rebecca_feature_1",
+			featureTwoKey:  "nodes.engine_rebecca_feature_2",
+		}
+	}
+	return enginePresentationMeta{
+		labelKey:       "nodes.engine_pasarguard",
+		descriptionKey: "nodes.engine_pasarguard_desc",
+		icon:           "container",
+		kind:           "docker",
+		featureOneKey:  "nodes.engine_pasarguard_feature_1",
+		featureTwoKey:  "nodes.engine_pasarguard_feature_2",
+	}
+}
+
+// deployFormView returns the default deploy form (fresh page load), pre-filled
+// from the recommended engine's defaults.
+func (h *Handlers) deployFormView(r *http.Request, server servers.Server, enabled bool) view.NodeDeployFormView {
+	provider := h.installableProviders[0]
+	defaults := provider.InstallDefaults()
+	return h.deployFormViewFromInput(r, server, enabled, InstallFormInput{
+		NodeType:    provider.Type(),
+		NodeName:    defaults.NodeName,
+		ServicePort: defaults.ServicePort,
+		APIPort:     defaults.APIPort,
+		Protocol:    defaults.Protocol,
+		Channel:     defaults.Channel,
 	}, nil)
 }
 
-// installFormViewFromInput re-renders the install form preserving the user's
-// entries and surfacing field errors.
-func (h *Handlers) installFormViewFromInput(server servers.Server, enabled bool, input installFormInput, formErrors ValidationErrors) view.NodeInstallFormView {
+// deployFormViewFromInput re-renders the deploy modal preserving the user's
+// entries. The certificate is never echoed back into the form (it is sensitive
+// and should be re-pasted).
+func (h *Handlers) deployFormViewFromInput(r *http.Request, server servers.Server, enabled bool, input InstallFormInput, formErrors ValidationErrors) view.NodeDeployFormView {
 	if formErrors == nil {
 		formErrors = ValidationErrors{}
 	}
-	protocol := strings.ToLower(strings.TrimSpace(input.Protocol))
-	if protocol == "" {
-		protocol = pasarguardDefaultProtocol
-	}
-	return view.NodeInstallFormView{
-		Action:      nodesURL(server.ID) + "/install",
-		NodeName:    input.NodeName,
-		ServicePort: input.ServicePort,
-		APIPort:     input.APIPort,
-		Protocol:    protocol,
-		APIKey:      input.APIKey,
-		Enabled:     enabled,
-		Errors:      formErrors,
-	}
-}
 
-// rebeccaInstallFormView returns the default Rebecca install form (fresh load),
-// pre-filling the default ports and the enabled channels.
-func (h *Handlers) rebeccaInstallFormView(server servers.Server, enabled bool) view.NodeRebeccaInstallFormView {
-	return h.rebeccaInstallFormViewFromInput(server, enabled, installFormInput{
-		ServicePort: rebeccaDefaultServicePort,
-		APIPort:     rebeccaDefaultAPIPort,
-		Channel:     channelDev,
-	}, nil)
-}
-
-// rebeccaInstallFormViewFromInput re-renders the Rebecca install form preserving
-// the user's port entries and surfacing field errors. The certificate is never
-// echoed back into the form (it is sensitive and should be re-pasted).
-func (h *Handlers) rebeccaInstallFormViewFromInput(server servers.Server, enabled bool, input installFormInput, formErrors ValidationErrors) view.NodeRebeccaInstallFormView {
-	if formErrors == nil {
-		formErrors = ValidationErrors{}
+	nodeType := strings.TrimSpace(input.NodeType)
+	if nodeType == "" {
+		nodeType = h.installableProviders[0].Type()
 	}
-	servicePort := input.ServicePort
-	if servicePort == "" {
-		servicePort = rebeccaDefaultServicePort
+	provider, ok := InstallableProviderByType(h.installableProviders, nodeType)
+	if !ok {
+		provider = h.installableProviders[0]
+		nodeType = provider.Type()
 	}
-	apiPort := input.APIPort
-	if apiPort == "" {
-		apiPort = rebeccaDefaultAPIPort
-	}
-
-	channels := make([]view.NodeInstallChannelView, 0, 2)
-	for _, c := range (RebeccaProvider{}).InstallChannels() {
-		channels = append(channels, view.NodeInstallChannelView{Key: c.Key, Enabled: c.Enabled})
-	}
+	defaults := provider.InstallDefaults()
 
 	nodeName := strings.TrimSpace(input.NodeName)
 	if nodeName == "" {
-		nodeName = rebeccaInstallName
+		nodeName = defaults.NodeName
+	}
+	servicePort := strings.TrimSpace(input.ServicePort)
+	if servicePort == "" {
+		servicePort = defaults.ServicePort
+	}
+	apiPort := strings.TrimSpace(input.APIPort)
+	if apiPort == "" {
+		apiPort = defaults.APIPort
+	}
+	protocol := strings.ToLower(strings.TrimSpace(input.Protocol))
+	if protocol == "" {
+		protocol = defaults.Protocol
+	}
+	channel := strings.ToLower(strings.TrimSpace(input.Channel))
+	if channel == "" {
+		channel = defaults.Channel
 	}
 
-	return view.NodeRebeccaInstallFormView{
-		Action:      nodesURL(server.ID) + "/install/rebecca",
+	channels := make([]view.NodeInstallChannelView, 0, 2)
+	for _, c := range provider.InstallChannels() {
+		channels = append(channels, view.NodeInstallChannelView{Key: c.Key, Label: c.Label, Enabled: c.Enabled})
+	}
+
+	return view.NodeDeployFormView{
+		Action:      nodesURL(server.ID) + "/install",
+		Engines:     h.deployEngines(r),
+		NodeType:    nodeType,
 		NodeName:    nodeName,
 		ServicePort: servicePort,
 		APIPort:     apiPort,
-		Channel:     channelDev,
+		Protocol:    protocol,
+		APIKey:      strings.TrimSpace(input.APIKey),
+		SANEntries:  strings.TrimSpace(input.SANEntries),
+		Channel:     channel,
 		Channels:    channels,
 		Enabled:     enabled,
 		Errors:      formErrors,
@@ -1175,4 +1168,80 @@ func fallbackDisplay(value string) string {
 
 func formatID(id int64) string {
 	return strconv.FormatInt(id, 10)
+}
+
+// installStageViews renders the ordered progress pipeline for the live install
+// runner. Every stage is always present so the pills never shift position; the
+// state marks which have completed, which is active, and which are still ahead.
+// Per-stage durations come from the job's real stage timestamps.
+func (h *Handlers) installStageViews(r *http.Request, snap installSnapshot) []view.NodeInstallStageView {
+	views := make([]view.NodeInstallStageView, 0, len(InstallStageOrder))
+	activeIndex := -1
+	for i, stage := range InstallStageOrder {
+		if stage == snap.Stage {
+			activeIndex = i
+			break
+		}
+	}
+	settled := snap.Status != installStatusRunning
+
+	for i, stage := range InstallStageOrder {
+		state := "pending"
+		switch {
+		case activeIndex < 0:
+			// No remote marker seen yet (or the job already finished): fall back
+			// to the job status so a finished install never shows a live stage.
+			if settled && stage == stageReady {
+				state = "done"
+			}
+		case i < activeIndex:
+			state = "done"
+		case i == activeIndex:
+			if settled {
+				state = "done"
+			} else {
+				state = "active"
+			}
+		}
+		if settled && stage == stageReady {
+			state = "done"
+		}
+
+		detail := ""
+		if startedAt, ok := snap.StageTimes[stage]; ok {
+			end := snap.FinishedAt
+			if nextStageAt, ok := nextStageTime(snap, stage); ok {
+				end = nextStageAt
+			}
+			if end.IsZero() {
+				end = time.Now().UTC()
+			}
+			detail = formatDuration(end.Sub(startedAt))
+		}
+
+		views = append(views, view.NodeInstallStageView{
+			Key:    stage,
+			Label:  h.t(r, stageLabelKey(stage)),
+			State:  state,
+			Detail: detail,
+		})
+	}
+	return views
+}
+
+// nextStageTime returns when the pipeline moved past stage, so a stage's own
+// duration can be measured. ok=false when there is no later stage yet.
+func nextStageTime(snap installSnapshot, stage string) (time.Time, bool) {
+	for i, candidate := range InstallStageOrder {
+		if candidate != stage {
+			continue
+		}
+		for _, later := range InstallStageOrder[i+1:] {
+			if at, ok := snap.StageTimes[later]; ok {
+				return at, true
+			}
+		}
+		return time.Time{}, false
+	}
+	return time.Time{}, false
 }

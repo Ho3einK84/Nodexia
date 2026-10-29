@@ -13,9 +13,14 @@ import (
 //
 // A single instance lives under /opt/rebecca-node (configuration in .env,
 // version metadata in .binary-release.json) with data under /var/lib/rebecca-node.
-// Management goes through the official `rebecca-node` CLI. Nodexia can install
-// the dev/beta channel from the panel (binary mode); the stable channel is
-// declared but not yet enabled. See the Installation section below.
+// Management goes through the official `rebecca-node` CLI. Installs run in
+// binary mode (native systemd service) on either the stable or dev channel.
+//
+// The CLI is registered under the INSTANCE name (/usr/local/bin/<name>) by the
+// install script, so a host can run several nodes side by side. Upstream reads
+// REBECCA_NODE_APP_NAME to pick the target instance, so every action passes it
+// explicitly — without it, `rebecca-node <op>` silently drives whichever
+// instance it discovers first (or prompts when several exist).
 type RebeccaProvider struct{}
 
 const (
@@ -25,60 +30,52 @@ const (
 	rebeccaDefaultAPIPort     = "62051"
 	rebeccaDefaultProtocol    = "rest"
 
-	// rebeccaInstallName is the default instance name (used when the install form
-	// leaves the name blank). A custom --name installs under /opt/<name> so a host
-	// can run several Rebecca nodes side by side; discovery scans /opt for them.
+	// rebeccaInstallName is the default instance name (used when the install
+	// form leaves the name blank).
 	rebeccaInstallName = "rebecca-node"
 
-	// rebeccaDevScriptURL is the dev/beta install script. We deliberately use the
-	// BINARY-flavored script (rebecca-node-binary.sh), not the docker one: the
+	// rebeccaScriptURLStable / rebeccaScriptURLDev are the binary-flavored
+	// install scripts, one per channel. The BINARY script is deliberate: the
 	// script installs the `rebecca-node` management CLI as a copy of itself, so
-	// running the docker script would leave a docker-flavored CLI on a
-	// binary-mode install — every later `rebecca-node update`/action then aborts
-	// with "installation is in binary mode, but rebecca-node is the docker
-	// script". The binary script installs a binary-flavored CLI that matches.
-	// The stable script lives on a different ref; wiring stable on later means
-	// adding its URL and flipping channelStable's Enabled flag (see InstallChannels).
-	rebeccaDevScriptURL = "https://raw.githubusercontent.com/rebeccapanel/Rebecca/dev/scripts/rebecca/rebecca-node-binary.sh"
+	// running a docker-flavored script would leave a docker-flavored CLI behind
+	// and every later `rebecca-node update`/action would abort with
+	// "installation is in binary mode, but rebecca-node is the docker script".
+	rebeccaScriptURLStable = "https://raw.githubusercontent.com/rebeccapanel/Rebecca/master/scripts/rebecca/rebecca-node-binary.sh"
+	rebeccaScriptURLDev    = "https://raw.githubusercontent.com/rebeccapanel/Rebecca/dev/scripts/rebecca/rebecca-node-binary.sh"
 
-	// rebeccaInstallScriptTimeout bounds the install script remotely. The
-	// docker dev install runs `compose up -d` (detached, no log tail), so a
-	// clean run exits 0 well within this; the bound just backstops a hung pull.
+	// rebeccaInstallScriptTimeout bounds the install script remotely. The binary
+	// install downloads a binary and installs xray, so it has no infinite log
+	// tail; the bound just backstops a hung download.
 	rebeccaInstallScriptTimeout = "600"
 )
 
-// Install channel keys. The "channel" concept (stable vs dev/beta) is modeled
-// as data so it can apply to other providers later, and so enabling a channel
-// is a one-line flip rather than a rewrite.
+// Install channel keys. The channel is data so enabling one is a one-line flip
+// in InstallChannels plus its script URL, not a rewrite.
 const (
 	channelStable = "stable"
 	channelDev    = "dev"
 )
 
-// InstallChannel is one release channel a provider can install from the panel.
-// Enabled=false renders as "coming soon" in the UI and is rejected server-side,
-// so turning a channel on later is a one-line flip here plus its plan branch.
-type InstallChannel struct {
-	Key     string
-	Enabled bool
-}
-
 func (RebeccaProvider) Type() string        { return rebeccaType }
 func (RebeccaProvider) DisplayName() string { return "Rebecca" }
 
-// SupportsInstall is true now that the dev/beta channel installs from the panel.
-// The stable channel is declared but disabled (see InstallChannels).
 func (RebeccaProvider) SupportsInstall() bool { return true }
 
-// InstallChannels lists Rebecca's release channels. Only dev (beta) installs
-// today; stable is present-but-disabled ("coming soon"). To enable stable:
-// flip Enabled here, add its script URL, and add a stable branch to
-// BuildInstallPlan — no other wiring changes.
+// InstallChannels lists Rebecca's release channels. Both are installable: each
+// maps to its own binary-flavored script on the matching git ref.
 func (RebeccaProvider) InstallChannels() []InstallChannel {
 	return []InstallChannel{
-		{Key: channelDev, Enabled: true},
-		{Key: channelStable, Enabled: false},
+		{Key: channelStable, Label: "nodes.channel_stable", Enabled: true},
+		{Key: channelDev, Label: "nodes.channel_dev", Enabled: true},
 	}
+}
+
+// rebeccaScriptURL resolves the download URL for a channel.
+func rebeccaScriptURL(channel string) string {
+	if channel == channelDev {
+		return rebeccaScriptURLDev
+	}
+	return rebeccaScriptURLStable
 }
 
 // rebeccaChannelEnabled reports whether the named channel currently installs.
@@ -89,6 +86,16 @@ func rebeccaChannelEnabled(channel string) bool {
 		}
 	}
 	return false
+}
+
+// InstallDefaults is the pre-filled deploy form state for this provider.
+func (RebeccaProvider) InstallDefaults() InstallDefaults {
+	return InstallDefaults{
+		NodeName:    rebeccaInstallName,
+		ServicePort: rebeccaDefaultServicePort,
+		APIPort:     rebeccaDefaultAPIPort,
+		Channel:     channelStable,
+	}
 }
 
 // DiscoveryCommand scans /opt for every Rebecca-node install and reads each
@@ -354,6 +361,16 @@ var rebeccaOps = map[string]struct {
 	"uninstall": {op: "uninstall", confirm: true},
 }
 
+// ActionCommand builds `REBECCA_NODE_APP_NAME=<name> rebecca-node <op>`.
+//
+// The env var is the whole point: upstream resolves the target instance from
+// REBECCA_NODE_APP_NAME (or the CLI's own filename). Invoking the bare
+// `rebecca-node <op>` on a host with several instances drives whichever one it
+// happens to discover — or blocks on an interactive picker when stdin is a
+// terminal. Passing the var pins the instance for every operation.
+//
+// `env` is used rather than a leading VAR=... assignment because the CLI may be
+// run through sudo, which would otherwise drop the variable.
 func (p RebeccaProvider) ActionCommand(nodeName, actionKey string) (string, time.Duration, error) {
 	if err := ValidateNodeName(nodeName); err != nil {
 		return "", 0, err
@@ -371,9 +388,9 @@ func (p RebeccaProvider) ActionCommand(nodeName, actionKey string) (string, time
 
 	spec := rebeccaOps[action.Key]
 
-	invocation := `$SUDO rebecca-node ` + spec.op + ` </dev/null`
+	invocation := `$SUDO env REBECCA_NODE_APP_NAME=` + nodeName + ` rebecca-node ` + spec.op + ` </dev/null`
 	if spec.confirm {
-		invocation = `yes | $SUDO rebecca-node ` + spec.op
+		invocation = `yes | ` + invocation
 	}
 	command := `sh -c '` + sudoPreamble +
 		`if ! command -v rebecca-node >/dev/null 2>&1; then echo "rebecca-node CLI not found on this server" >&2; exit 86; fi; ` +
@@ -383,25 +400,22 @@ func (p RebeccaProvider) ActionCommand(nodeName, actionKey string) (string, time
 
 // reinstallScriptCommand repairs the rebecca-node management CLI by downloading
 // the binary install script and running its `script-install`, which rewrites
-// /usr/local/bin/rebecca-node with the binary-flavored copy. This fixes installs
+// /usr/local/bin/<name> with the binary-flavored copy. This fixes installs
 // whose CLI was left docker-flavored (so `rebecca-node update`/actions aborted
 // with the binary/docker mode mismatch). Only the CLI script is reinstalled —
 // the node's .env, data, and systemd service are untouched, so no bundle is
-// needed. Running the binary script directly means script_install_mode() resolves
-// to binary, matching the install, so the mode guard passes.
+// needed. Running the binary script directly means script_install_mode()
+// resolves to binary, matching the install, so the mode guard passes.
 func (RebeccaProvider) reinstallScriptCommand(nodeName string) string {
 	return `sh -c '` + sudoPreamble +
-		`SCRIPT="$(mktemp /tmp/nodexia-rebecca-node.XXXXXX)" || exit 1; ` +
-		`if command -v curl >/dev/null 2>&1; then curl -fsSL ` + rebeccaDevScriptURL + ` -o "$SCRIPT" || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
-		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + rebeccaDevScriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
-		`else echo "curl or wget is required to reinstall" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
+		strings.ReplaceAll(downloadPreamble, "URL", rebeccaScriptURLDev) +
 		`$SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" script-install --name ` + nodeName + ` </dev/null; ` +
 		`STATUS=$?; rm -f "$SCRIPT"; ` +
 		`if [ "$STATUS" -ne 0 ]; then echo "[rebecca-node script reinstall exited with status $STATUS]" >&2; fi; ` +
 		`exit $STATUS'`
 }
 
-// ── Installation (dev/beta channel) ────────────────────────────────────────────
+// ── Installation (stable / dev channels, binary mode) ─────────────────────────
 //
 // Rebecca's install model is the OPPOSITE of PasarGuard's. PasarGuard generates
 // an API key + self-signed cert on the node and the panel reads them back.
@@ -412,34 +426,26 @@ func (RebeccaProvider) reinstallScriptCommand(nodeName string) string {
 // We install Rebecca-node in BINARY mode (native systemd service, no Docker) —
 // that is the supported footprint and it is what discovery reads (.env,
 // .binary-release.json, .install-mode=binary, the rebecca-node systemd unit).
-// We run the binary-flavored script (rebecca-node-binary.sh, see
-// rebeccaDevScriptURL) so the `rebecca-node` CLI it installs is also binary
-// flavored and later update/actions work. REBECCA_NODE_SCRIPT_FLAVOR=binary is
-// passed via `env` (surviving sudo) to make the binary mode explicit.
+// The binary-flavored script is fetched from the channel's git ref, so stable
+// and dev are the same code path with a different URL.
 //
-// How rebecca-node.sh consumes its inputs in binary mode (verified against the
-// script's read_node_certificate_bundle + configure_binary_node_env): the cert
-// and key files are pre-written by InstallCommand to /var/lib/<name>/cert.pem
-// and cert.key before the install script runs. configure_binary_node_env checks
-// for existing non-empty cert files and skips read_node_certificate_bundle when
-// they are present. This avoids the interactive PTY stdin prompt entirely,
-// preventing timing races where backgrounded package installs (apt-get via
-// ui_spinner_run) consumed the PTY stdin buffer before the cert reader ran.
+// How the script consumes its inputs in binary mode (verified against
+// configure_binary_node_env + read_node_certificate_bundle): the cert and key
+// files are pre-written to /var/lib/<name>/cert.pem and cert.key before the
+// script runs. configure_binary_node_env checks for existing non-empty cert
+// files and skips the interactive bundle reader entirely. Ports are then read
+// by prompt_node_port_setting, which defaults from the already-present .env and
+// only blocks when stdin is a terminal.
 //
-// With cert files pre-written, stdin only needs to carry:
-//  1. the SERVICE_PORT;
-//  2. the XRAY_API_PORT (must differ from SERVICE_PORT).
-//
-// The upstream install dispatcher redirects install_command to /dev/tty when
-// stdin is not a terminal. Rebecca install steps therefore allocate a PTY and
-// keep it as process stdin while Nodexia writes the port answers.
-// sshclient disables terminal echo before sending anything.
-//
-// The private key is embedded in the install command's heredoc and written
-// directly to the cert.key file on the remote host. It is not persisted by
-// Nodexia (not stored in the database or logs) and is request-scoped only.
+// Release channel and install mode are passed as native flags (--dev/--stable,
+// --binary) so no interactive branch is reachable. The install is invoked with
+// stdin NOT a terminal: the script dispatcher redirects `install_command` to
+// /dev/tty whenever stdin is not a tty AND /dev/tty is readable, so an SSH
+// session WITH a controlling terminal would still leave port prompts waiting.
+// Closing stdin on the command therefore makes every prompt fall back to its
+// default, which the pre-written .env supplies.
 
-// RebeccaInstallConfig carries the pre-install choices for a Rebecca dev install.
+// RebeccaInstallConfig carries the pre-install choices for a Rebecca install.
 // Bundle is the node install bundle from the Rebecca panel: the client
 // certificate PEM followed by its private key PEM.
 type RebeccaInstallConfig struct {
@@ -452,9 +458,7 @@ type RebeccaInstallConfig struct {
 
 // Normalize fills port defaults and validates each field, returning a cleaned
 // copy whose Bundle is re-assembled as certificate-then-key (the order the
-// script's bundle reader requires). Field-keyed validation lives in
-// normalizeInstallInput; this guards the command builder so a malformed config
-// can never reach the shell.
+// script's bundle reader requires).
 func (c RebeccaInstallConfig) Normalize() (RebeccaInstallConfig, error) {
 	out := RebeccaInstallConfig{
 		NodeName:    strings.TrimSpace(c.NodeName),
@@ -470,7 +474,7 @@ func (c RebeccaInstallConfig) Normalize() (RebeccaInstallConfig, error) {
 		return RebeccaInstallConfig{}, fmt.Errorf("nodes: rebecca: %w", err)
 	}
 	if out.Channel == "" {
-		out.Channel = channelDev
+		out.Channel = channelStable
 	}
 	if out.ServicePort == "" {
 		out.ServicePort = rebeccaDefaultServicePort
@@ -478,10 +482,10 @@ func (c RebeccaInstallConfig) Normalize() (RebeccaInstallConfig, error) {
 	if out.APIPort == "" {
 		out.APIPort = rebeccaDefaultAPIPort
 	}
-	if validPort(out.ServicePort) == "" {
+	if !isValidPort(out.ServicePort) {
 		return RebeccaInstallConfig{}, fmt.Errorf("nodes: rebecca: invalid service port %q", c.ServicePort)
 	}
-	if validPort(out.APIPort) == "" {
+	if !isValidPort(out.APIPort) {
 		return RebeccaInstallConfig{}, fmt.Errorf("nodes: rebecca: invalid API port %q", c.APIPort)
 	}
 	if out.ServicePort == out.APIPort {
@@ -532,8 +536,8 @@ func splitRebeccaBundle(s string) (cert, key string, ok bool) {
 
 // normalizeInstallInput validates the raw install form fields for a Rebecca
 // install and returns the resolved config plus field-keyed validation errors
-// (the values are i18n keys the handler translates). Empty errors means valid.
-func (RebeccaProvider) normalizeInstallInput(in installFormInput) (RebeccaInstallConfig, ValidationErrors) {
+// (the values are i18n keys, `nodes.err_*`).
+func (RebeccaProvider) normalizeInstallInput(in InstallFormInput) (RebeccaInstallConfig, ValidationErrors) {
 	errs := ValidationErrors{}
 
 	cfg := RebeccaInstallConfig{
@@ -544,7 +548,7 @@ func (RebeccaProvider) normalizeInstallInput(in installFormInput) (RebeccaInstal
 		Bundle:      strings.TrimSpace(in.Bundle),
 	}
 	if cfg.Channel == "" {
-		cfg.Channel = channelDev
+		cfg.Channel = channelStable
 	}
 	// A blank name defaults to the primary instance; a non-blank one must be valid.
 	if cfg.NodeName != "" {
@@ -561,12 +565,12 @@ func (RebeccaProvider) normalizeInstallInput(in installFormInput) (RebeccaInstal
 		apiPort = rebeccaDefaultAPIPort
 	}
 
-	if validPort(servicePort) == "" {
+	if !isValidPort(servicePort) {
 		errs["service_port"] = "nodes.err_port_range"
 	}
-	if validPort(apiPort) == "" {
+	if !isValidPort(apiPort) {
 		errs["api_port"] = "nodes.err_port_range"
-	} else if validPort(servicePort) != "" && servicePort == apiPort {
+	} else if isValidPort(servicePort) && servicePort == apiPort {
 		errs["api_port"] = "nodes.err_ports_equal"
 	}
 	if cfg.Bundle == "" {
@@ -589,27 +593,22 @@ func (RebeccaProvider) normalizeInstallInput(in installFormInput) (RebeccaInstal
 	return normalized, errs
 }
 
-// InstallCommand downloads and runs the official rebecca-node dev install
-// script in BINARY mode. BuildInstallPlan pairs it with a PTY and the managed
-// input returned by rebeccaInstallAnswers; running this command without that
-// PTY/input contract is intentionally unsupported.
+// InstallCommand downloads and runs the official rebecca-node install script in
+// BINARY mode for the requested channel.
 //
-// Pre-writing strategy: the upstream install script runs several interactive
-// prompts that read from stdin (PTT). However, backgrounded processes
-// (package installs via ui_spinner_run) inherit the PTY slave and can consume
-// the stdin data before the prompts reach it. To prevent stalls, we pre-write
-// ALL config files that the upstream script would create interactively:
+// Pre-writing strategy: the upstream script has several prompts that read from
+// stdin. Rather than patching the script with sed (which breaks whenever
+// upstream renames a function or reflows a prompt), we pre-create every file
+// the prompts would otherwise have to collect:
 //
-//  1. /opt/<name>/.env — port values, cert paths, protocol (prompt_node_port_setting
-//     reads defaults from here via get_env_value; if stdin data was consumed
-//     by a backgrounded process, read gets EOF and falls back to the .env value)
-//  2. /var/lib/<name>/cert.pem and cert.key — certificate and private key
-//     (configure_binary_node_env checks for existing cert files and skips
-//     the interactive read_node_certificate_bundle prompt)
+//  1. /opt/<name>/.env — ports, cert paths, protocol. prompt_node_port_setting
+//     reads a default from here via get_env_value, so the prompt resolves itself.
+//  2. /var/lib/<name>/cert.pem and cert.key — the certificate and private key.
+//     configure_binary_node_env skips read_node_certificate_bundle when both
+//     files already exist and are non-empty.
 //
-// We still send "y\n" + port data through stdin as a safety net for the
-// override prompt (reinstall case) and as a belt-and-suspenders fallback,
-// but the install does NOT depend on the data arriving intact.
+// With those in place, every remaining prompt has a working default, so closing
+// stdin (`</dev/null`) is enough for a fully non-interactive install.
 func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) {
 	normalized, err := cfg.Normalize()
 	if err != nil {
@@ -621,77 +620,60 @@ func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) 
 		return "", fmt.Errorf("nodes: rebecca: bundle must contain a certificate and a private key")
 	}
 
-	scriptURL := rebeccaDevScriptURL // only dev wired today; stable adds its URL here
+	scriptURL := rebeccaScriptURL(normalized.Channel)
 	dataDir := "/var/lib/" + normalized.NodeName
 	appDir := "/opt/" + normalized.NodeName
 
-	// Base64-encode the cert and key PEM content so it can be embedded in the
-	// shell command without any quoting issues (the command is wrapped in sh -c '...').
+	// Base64-encode the PEM files so they survive the outer sh -c '...' wrapper
+	// without any quoting concerns.
 	certB64 := base64.StdEncoding.EncodeToString([]byte(certPEM))
 	keyB64 := base64.StdEncoding.EncodeToString([]byte(keyPEM))
 
-	// Pre-write the .env file in the same format as set_env_value():
-	// KEY = "VALUE". This lets prompt_node_port_setting read defaults via
-	// get_env_value(), so read can fall back to correct values even if stdin
-	// data was consumed by backgrounded package installs.
+	// Pre-write .env in the script's own set_env_value format (KEY = "VALUE") so
+	// get_env_value finds a default for every port prompt.
 	envContent := fmt.Sprintf(
 		"SERVICE_PORT = \"%s\"\nXRAY_API_PORT = \"%s\"\nREBECCA_DATA_DIR = \"%s\"\n"+
 			"SSL_CLIENT_CERT_FILE = \"%s/cert.pem\"\nSSL_CERT_FILE = \"%s/cert.pem\"\n"+
 			"SSL_KEY_FILE = \"%s/cert.key\"\nXRAY_EXECUTABLE_PATH = \"%s/xray-core/xray\"\n"+
-			"XRAY_ASSETS_PATH = \"%s/xray-core\"\nSERVICE_PROTOCOL = \"rest\"\n",
+			"XRAY_ASSETS_PATH = \"%s/xray-core\"\nSERVICE_PROTOCOL = \"%s\"\n",
 		normalized.ServicePort, normalized.APIPort,
-		dataDir, dataDir, dataDir, dataDir, dataDir, dataDir)
+		dataDir, dataDir, dataDir, dataDir, dataDir, dataDir,
+		rebeccaDefaultProtocol)
 	envB64 := base64.StdEncoding.EncodeToString([]byte(envContent))
 
+	channelFlag := ` --stable`
+	if normalized.Channel == channelDev {
+		channelFlag = ` --dev`
+	}
+
 	command := `sh -c '` + sudoPreamble +
-		// Pre-write .env with port values and config so prompt_node_port_setting
-		// reads defaults from get_env_value() and never blocks on empty stdin.
+		stageMarker(stageInitializing) +
+		// Pre-create the directories and the three config files the script would
+		// otherwise prompt for.
 		`$SUDO mkdir -p ` + appDir + ` ` + dataDir + `; ` +
 		`echo ` + envB64 + ` | base64 -d | $SUDO tee ` + appDir + `/.env >/dev/null; ` +
-		// Pre-write cert and key so configure_binary_node_env skips the
-		// interactive read_node_certificate_bundle prompt.
 		`echo ` + certB64 + ` | base64 -d | $SUDO tee ` + dataDir + `/cert.pem >/dev/null; ` +
 		`echo ` + keyB64 + ` | base64 -d | $SUDO tee ` + dataDir + `/cert.key >/dev/null; ` +
 		`$SUDO chmod 600 ` + dataDir + `/cert.key; ` +
-		`SCRIPT="$(mktemp /tmp/nodexia-rebecca-node.XXXXXX)" || exit 1; ` +
-		`if command -v curl >/dev/null 2>&1; then curl -fsSL ` + scriptURL + ` -o "$SCRIPT" || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
-		`elif command -v wget >/dev/null 2>&1; then wget -qO "$SCRIPT" ` + scriptURL + ` || { echo "download failed" >&2; rm -f "$SCRIPT"; exit 85; }; ` +
-		`else echo "curl or wget is required to install" >&2; rm -f "$SCRIPT"; exit 85; fi; ` +
-		// Apply non-interactive patches to the downloaded installer script so it
-		// never stalls on PTY stdin or /dev/tty reads:
-		// 1. Bypass the override prompt when /opt/<name> already exists
-		`sed -i "s|if is_rebecca_node_installed; then|if false; then|g" "$SCRIPT"; ` +
-		// 2. Remove broken </dev/tty redirection in dispatch_command
-		`sed -i "s|install_command </dev/tty|install_command|g" "$SCRIPT"; ` +
-		// 3. Bypass interactive port prompts so prompt_node_port_setting uses .env fallback without blocking
-		`sed -i "s|IFS= read -r value|value=\"\"|g" "$SCRIPT"; ` +
+		stageMarker(stageDownloading) +
+		strings.ReplaceAll(downloadPreamble, "URL", scriptURL) +
+		stageMarker(stageDeploying) +
 		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + rebeccaInstallScriptTimeout + `"; fi; ` +
-		// Run the binary-flavored script in binary mode. We still send data
-		// through PTY stdin as a safety net, but the install does NOT depend on
-		// it arriving intact — the pre-written .env and cert files provide all
-		// values via fallback defaults.
-		`$TMO $SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" install --name ` + normalized.NodeName + ` --binary --dev; ` +
+		// stdin is closed so no prompt can block; the pre-written files supply
+		// every default. REBECCA_NODE_SCRIPT_FLAVOR is belt-and-braces for the
+		// script's own mode detection (it already defaults to binary here).
+		`$TMO $SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" install --name ` + normalized.NodeName +
+		` --binary` + channelFlag + ` </dev/null; ` +
 		`STATUS=$?; rm -f "$SCRIPT"; ` +
 		`if [ "$STATUS" -ne 0 ]; then echo "[rebecca-node install script exited with status $STATUS]" >&2; fi; ` +
 		`exit $STATUS'`
 	return command, nil
 }
 
-// rebeccaInstallAnswers returns the input sequence sent through PTY stdin as
-// a safety net. The leading "y" answers the override prompt when /opt/<name>
-// already exists (reinstall); on a fresh install it is harmlessly rejected as
-// an invalid port. Empty newlines follow so that read() returns immediately
-// with empty value, which prompt_node_port_setting defaults to the values from
-// the pre-written .env file. This data is NOT required for correctness — the
-// pre-written .env provides all values via the get_env_value fallback.
-func rebeccaInstallAnswers(cfg RebeccaInstallConfig) string {
-	return "y\n" + cfg.ServicePort + "\n" + cfg.APIPort + "\n"
-}
-
-// BuildInstallPlan assembles the Rebecca dev install procedure: a single
-// streamed step that runs the official script. There is no configure step and
-// no readback — the bundle came from the user, not the node.
-func (p RebeccaProvider) BuildInstallPlan(in installFormInput) (InstallPlan, ValidationErrors) {
+// BuildInstallPlan assembles the Rebecca install procedure: one streamed stage
+// that runs the official script. There is no configure step, and no readback —
+// the bundle came from the user, not the node.
+func (p RebeccaProvider) BuildInstallPlan(in InstallFormInput) (InstallPlan, ValidationErrors) {
 	cfg, errs := p.normalizeInstallInput(in)
 	if errs.HasAny() {
 		return InstallPlan{}, errs
@@ -702,12 +684,12 @@ func (p RebeccaProvider) BuildInstallPlan(in installFormInput) (InstallPlan, Val
 		return InstallPlan{}, errs
 	}
 	plan := InstallPlan{
-		Steps: []InstallStep{
+		Stages: []InstallStage{
 			{
-				Command:     installCmd,
-				Input:       rebeccaInstallAnswers(cfg),
-				AllocatePTY: true,
-				Timeout:     installCommandTimeout,
+				Key:      stageInitializing,
+				StartLog: fmt.Sprintf("\n[deploying Rebecca node %q — channel %s, binary mode, service port %s]\n", cfg.NodeName, cfg.Channel, cfg.ServicePort),
+				Command:  installCmd,
+				Timeout:  installCommandTimeout,
 			},
 		},
 	}

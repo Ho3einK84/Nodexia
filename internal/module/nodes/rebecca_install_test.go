@@ -1,6 +1,8 @@
 package nodes
 
 import (
+	"encoding/base64"
+	"regexp"
 	"os"
 	"os/exec"
 	"strings"
@@ -71,14 +73,14 @@ func TestRebeccaInstallChannels(t *testing.T) {
 	if enabled, ok := got[channelDev]; !ok || !enabled {
 		t.Errorf("dev channel = (%v,%v), want enabled", enabled, ok)
 	}
-	if enabled, ok := got[channelStable]; !ok || enabled {
-		t.Errorf("stable channel = (%v,%v), want present but disabled (coming soon)", enabled, ok)
+	if enabled, ok := got[channelStable]; !ok || !enabled {
+		t.Errorf("stable channel = (%v,%v), want present and enabled", enabled, ok)
 	}
 	if !rebeccaChannelEnabled(channelDev) {
 		t.Errorf("rebeccaChannelEnabled(dev) = false, want true")
 	}
-	if rebeccaChannelEnabled(channelStable) {
-		t.Errorf("rebeccaChannelEnabled(stable) = true, want false (coming soon)")
+	if !rebeccaChannelEnabled(channelStable) {
+		t.Errorf("rebeccaChannelEnabled(stable) = false, want true")
 	}
 }
 
@@ -117,7 +119,7 @@ func TestNormalizeRebeccaBundle(t *testing.T) {
 }
 
 func TestRebeccaNormalizeInstallInputValid(t *testing.T) {
-	cfg, errs := RebeccaProvider{}.normalizeInstallInput(installFormInput{
+	cfg, errs := RebeccaProvider{}.normalizeInstallInput(InstallFormInput{
 		Bundle:  testRebeccaBundle,
 		Channel: "dev",
 	})
@@ -139,7 +141,7 @@ func TestRebeccaNormalizeInstallInputValid(t *testing.T) {
 		t.Errorf("normalized bundle missing a block: %q", cfg.Bundle)
 	}
 
-	cfg, errs = RebeccaProvider{}.normalizeInstallInput(installFormInput{
+	cfg, errs = RebeccaProvider{}.normalizeInstallInput(InstallFormInput{
 		Bundle:      testRebeccaBundle,
 		ServicePort: "70", APIPort: "80",
 	})
@@ -153,7 +155,7 @@ func TestRebeccaNormalizeInstallInputValid(t *testing.T) {
 
 func TestRebeccaNormalizeInstallInputErrors(t *testing.T) {
 	// Out-of-range ports and a non-PEM bundle.
-	_, errs := RebeccaProvider{}.normalizeInstallInput(installFormInput{
+	_, errs := RebeccaProvider{}.normalizeInstallInput(InstallFormInput{
 		Bundle:      "not a bundle",
 		ServicePort: "0", APIPort: "99999",
 	})
@@ -164,7 +166,7 @@ func TestRebeccaNormalizeInstallInputErrors(t *testing.T) {
 	}
 
 	// Equal ports: api must differ from service.
-	_, errs = RebeccaProvider{}.normalizeInstallInput(installFormInput{
+	_, errs = RebeccaProvider{}.normalizeInstallInput(InstallFormInput{
 		Bundle:      testRebeccaBundle,
 		ServicePort: "62050", APIPort: "62050",
 	})
@@ -173,24 +175,24 @@ func TestRebeccaNormalizeInstallInputErrors(t *testing.T) {
 	}
 
 	// Empty bundle is a distinct, required error.
-	_, errs = RebeccaProvider{}.normalizeInstallInput(installFormInput{Channel: "dev"})
+	_, errs = RebeccaProvider{}.normalizeInstallInput(InstallFormInput{Channel: "dev"})
 	if errs["bundle"] != "nodes.err_bundle_required" {
 		t.Errorf("empty bundle error = %q, want nodes.err_bundle_required", errs["bundle"])
 	}
 
 	// A certificate without a private key is rejected as a bad bundle.
-	_, errs = RebeccaProvider{}.normalizeInstallInput(installFormInput{Bundle: testRebeccaCertPEM})
+	_, errs = RebeccaProvider{}.normalizeInstallInput(InstallFormInput{Bundle: testRebeccaCertPEM})
 	if errs["bundle"] != "nodes.err_bundle_pem" {
 		t.Errorf("cert-only bundle error = %q, want nodes.err_bundle_pem", errs["bundle"])
 	}
 
-	// A disabled channel (stable) is rejected.
-	_, errs = RebeccaProvider{}.normalizeInstallInput(installFormInput{
+	// An unknown channel is rejected.
+	_, errs = RebeccaProvider{}.normalizeInstallInput(InstallFormInput{
 		Bundle:  testRebeccaBundle,
-		Channel: "stable",
+		Channel: "beta",
 	})
 	if _, ok := errs["channel"]; !ok {
-		t.Errorf("expected channel error for disabled stable channel, got %v", errs)
+		t.Errorf("expected channel error for unknown channel, got %v", errs)
 	}
 }
 
@@ -209,17 +211,17 @@ func TestRebeccaInstallCommand(t *testing.T) {
 	// The dev script URL and the binary/dev/name flags must be present, and the
 	// flavor must be forced to binary.
 	for _, want := range []string{
-		rebeccaDevScriptURL,
+		rebeccaScriptURLDev,
 		"REBECCA_NODE_SCRIPT_FLAVOR=binary",
 		"install --name rebecca-node --binary --dev",
 		"timeout",
+		// stdin closed so the upstream /dev/tty redirect and every prompt fall
+		// through to the pre-written defaults instead of blocking.
+		"</dev/null",
 	} {
 		if !strings.Contains(command, want) {
 			t.Errorf("install command missing %q:\n%s", want, command)
 		}
-	}
-	if strings.Contains(command, "</dev/null") {
-		t.Errorf("install command must keep the allocated PTY as stdin:\n%s", command)
 	}
 
 	// The cert, key, and .env are pre-written via base64 in the install command.
@@ -229,8 +231,6 @@ func TestRebeccaInstallCommand(t *testing.T) {
 		"/var/lib/rebecca-node/cert.pem",
 		"/var/lib/rebecca-node/cert.key",
 		"/opt/rebecca-node/.env",
-		"is_rebecca_node_installed",
-		"install_command </dev/tty",
 	} {
 		if !strings.Contains(command, want) {
 			t.Errorf("install command missing marker %q:\n%s", want, command)
@@ -247,45 +247,37 @@ func TestRebeccaInstallCommand(t *testing.T) {
 }
 
 func TestRebeccaBuildInstallPlan(t *testing.T) {
-	plan, errs := RebeccaProvider{}.BuildInstallPlan(installFormInput{
+	plan, errs := RebeccaProvider{}.BuildInstallPlan(InstallFormInput{
 		Bundle:  testRebeccaBundle,
 		Channel: "dev",
 	})
 	if errs.HasAny() {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
-	if len(plan.Steps) != 1 {
-		t.Fatalf("len(plan.Steps) = %d, want 1 (no configure step)", len(plan.Steps))
+	if len(plan.Stages) != 1 {
+		t.Fatalf("len(plan.Stages) = %d, want 1 (no configure step)", len(plan.Stages))
 	}
-	if plan.Steps[0].TolerateTimeout {
-		t.Errorf("Rebecca install step must not tolerate the remote timeout (it detaches)")
+	if plan.Stages[0].TolerateTimeout {
+		t.Errorf("Rebecca install stage must not tolerate the remote timeout (it detaches)")
 	}
-	if !plan.Steps[0].AllocatePTY {
-		t.Errorf("Rebecca install step must allocate a PTY for managed installer input")
+	// No PTY: stdin is closed so every prompt falls back to the pre-written .env.
+	if plan.Stages[0].AllocatePTY || plan.Stages[0].Input != "" {
+		t.Errorf("Rebecca install stage must not manage stdin (got PTY=%v input=%q)",
+			plan.Stages[0].AllocatePTY, plan.Stages[0].Input)
 	}
-	normalized, err := (RebeccaInstallConfig{
-		Channel: "dev",
-		Bundle:  testRebeccaBundle,
-	}).Normalize()
-	if err != nil {
-		t.Fatalf("Normalize: %v", err)
+	if !strings.Contains(plan.Stages[0].Command, "</dev/null") {
+		t.Errorf("Rebecca install command must close stdin so prompts cannot block")
 	}
-	if got, want := plan.Steps[0].Input, rebeccaInstallAnswers(normalized); got != want {
-		t.Fatalf("managed install input does not contain the ports")
-	}
-	for _, want := range []string{"y\n62050\n62051\n"} {
-		if !strings.Contains(plan.Steps[0].Input, want) {
-			t.Errorf("managed install input missing %q", want)
+	// Ports and PEM both travel base64-encoded inside the command, never via
+	// stdin. Decode every embedded payload and assert the values are really there.
+	decoded := decodeInstallPayloads(t, plan.Stages[0].Command)
+	for _, want := range []string{`SERVICE_PORT = "62050"`, `XRAY_API_PORT = "62051"`, "BEGIN CERTIFICATE", "BEGIN RSA PRIVATE KEY"} {
+		if !strings.Contains(decoded, want) {
+			t.Errorf("decoded install payload missing %q\n--- decoded ---\n%s", want, decoded)
 		}
 	}
-	// The bundle is pre-written via base64 in the command, NOT sent through
-	// stdin. Only ports should flow through the PTY input.
-	if strings.Contains(plan.Steps[0].Command, plan.Steps[0].Input) {
-		t.Errorf("port-only input must not appear in the install command")
-	}
-	if strings.Contains(plan.Steps[0].Input, "BEGIN CERTIFICATE") ||
-		strings.Contains(plan.Steps[0].Input, "BEGIN RSA PRIVATE KEY") {
-		t.Errorf("managed install input must not contain PEM data (cert is pre-written via base64)")
+	if strings.Contains(plan.Stages[0].Command, "BEGIN CERTIFICATE") {
+		t.Errorf("PEM must be embedded base64, not raw")
 	}
 	// No readback: the user supplied the bundle, nothing is read back.
 	if plan.Readback.Command != "" {
@@ -293,74 +285,116 @@ func TestRebeccaBuildInstallPlan(t *testing.T) {
 	}
 
 	// Validation errors propagate as field-keyed i18n keys.
-	_, errs = RebeccaProvider{}.BuildInstallPlan(installFormInput{Bundle: "bad"})
+	_, errs = RebeccaProvider{}.BuildInstallPlan(InstallFormInput{Bundle: "bad"})
 	if _, ok := errs["bundle"]; !ok {
 		t.Errorf("expected bundle error from BuildInstallPlan, got %v", errs)
 	}
 }
 
-// TestRebeccaPreparedAnswersReachPTYStdin exercises the upstream dispatch shape
-// used by Nodexia's managed install:
+// TestRebeccaInstallRunsWithoutBlockingStdin pins the non-interactive install
+// contract against a faithful mini-fixture of the upstream code path:
 //
-//	if [ -t 0 ]; then install_command
+//   - configure_binary_node_env skips read_node_certificate_bundle while the
+//     cert files exist and are non-empty;
+//   - prompt_node_port_setting defaults from the pre-written .env via
+//     get_env_value, and only reads stdin when the value is missing.
 //
-// util-linux `script` supplies a real controlling PTY as process stdin.
-// Since the cert and key are pre-written via base64 in the install command,
-// only the override answer and port values flow through PTY stdin. The fixture
-// consumes the leading "y" as the override answer (mimicking a reinstall where
-// /opt/<name> already exists), then verifies both ports arrive.
-func TestRebeccaPreparedAnswersReachPTYStdin(t *testing.T) {
-	scriptTool, err := exec.LookPath("script")
-	if err != nil {
-		t.Skip("util-linux script is unavailable; cannot exercise managed PTY input")
-	}
-
+// The fixture reads stdin with no PTY and no piped answers. If the pre-written
+// .env were not honoured, the reads would hit EOF and the ports would be empty.
+func TestRebeccaInstallRunsWithoutBlockingStdin(t *testing.T) {
 	const fixture = `#!/usr/bin/env bash
 set -e
-install_command() {
-    # Override prompt: consumes the first line ("y") when /opt/<name> exists.
-    read -r override_answer
-    if [ "$override_answer" != "y" ]; then
-        echo "override answer was not delivered to install_command" >&2
-        exit 44
-    fi
-    IFS= read -r service_port
-    IFS= read -r api_port
-    if [ "$service_port" != "62050" ] || [ "$api_port" != "62051" ]; then
-        echo "prepared port answers were not delivered to install_command" >&2
-        exit 42
-    fi
-    echo "tty-fallback-answers-ok"
+ENV_FILE="$1"; CERT_FILE="$2"; CERT_KEY_FILE="$3"
+
+get_env_value() {
+    local key="$1"
+    sed -n "s/^[[:space:]]*$key[[:space:]]*=[[:space:]]*\"\{0,1\}\([^\"]*\)\"\{0,1\}.*$/\1/p" "$ENV_FILE" | head -n 1
 }
-if [ -t 0 ]; then
-    install_command
-else
-    echo "fixture did not receive a PTY on stdin" >&2
-    exit 43
-fi
+prompt_node_port_setting() {
+    local key="$1" fallback="$2"
+    local current_port value
+    current_port=$(get_env_value "$key")
+    fallback="${current_port:-$fallback}"
+    IFS= read -r value
+    echo "${value:-$fallback}"
+}
+read_node_certificate_bundle() { echo "CERT_PROMPT_RAN" >&2; }
+configure_binary_node_env() {
+    if [ ! -s "$CERT_FILE" ] || [ ! -s "$CERT_KEY_FILE" ]; then
+        read_node_certificate_bundle
+    fi
+    SERVICE_PORT=$(prompt_node_port_setting SERVICE_PORT 62050)
+    XRAY_API_PORT=$(prompt_node_port_setting XRAY_API_PORT 62051)
+    echo "ports=$SERVICE_PORT/$XRAY_API_PORT"
+}
+
+SERVICE_PORT=$(prompt_node_port_setting SERVICE_PORT 62050)
+XRAY_API_PORT=$(prompt_node_port_setting XRAY_API_PORT 62051)
+echo "first-pass=$SERVICE_PORT/$XRAY_API_PORT"
+configure_binary_node_env
 `
-	fixturePath := t.TempDir() + "/rebecca-tty-fixture.sh"
-	if err := os.WriteFile(fixturePath, []byte(fixture), 0o700); err != nil {
+	dir := t.TempDir()
+	envPath := dir + "/.env"
+	certPath := dir + "/cert.pem"
+	keyPath := dir + "/cert.key"
+	script := "SERVICE_PORT = \"62990\"\nXRAY_API_PORT = \"62991\"\n"
+	if err := os.WriteFile(envPath, []byte(script), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	if err := os.WriteFile(certPath, []byte("cert"), 0o600); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	if err := os.WriteFile(keyPath, []byte("key"), 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+
+	path := dir + "/fixture.sh"
+	if err := os.WriteFile(path, []byte(fixture), 0o700); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 
-	cfg, err := (RebeccaInstallConfig{
-		Channel:     "dev",
-		ServicePort: "62050",
-		APIPort:     "62051",
-		Bundle:      testRebeccaBundle,
-	}).Normalize()
+	// stdin is /dev/null: exactly what the generated install command does.
+	cmd := exec.Command("bash", path, envPath, certPath, keyPath)
+	devNull, err := os.Open(os.DevNull)
 	if err != nil {
-		t.Fatalf("Normalize: %v", err)
+		t.Fatalf("open /dev/null: %v", err)
 	}
+	defer devNull.Close()
+	cmd.Stdin = devNull
 
-	cmd := exec.Command(scriptTool, "-qec", "bash "+fixturePath, "/dev/null")
-	cmd.Stdin = strings.NewReader(rebeccaInstallAnswers(cfg))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("PTY stdin fixture failed: %v\n%s", err, output)
+		t.Fatalf("fixture failed (install would block or error): %v\n%s", err, output)
 	}
-	if !strings.Contains(string(output), "tty-fallback-answers-ok") {
-		t.Fatalf("fixture did not confirm answer delivery:\n%s", output)
+	text := string(output)
+	if strings.Contains(text, "CERT_PROMPT_RAN") {
+		t.Errorf("cert prompt ran even though the cert files were pre-written:\n%s", text)
 	}
+	for _, want := range []string{"first-pass=62990/62991", "ports=62990/62991"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("expected %q (ports must come from the pre-written .env):\n%s", want, text)
+		}
+	}
+}
+
+// decodeInstallPayloads base64-decodes every "echo <b64> | base64 -d" payload in
+// a generated install command, so tests can assert on the real file contents
+// without caring which payload is which.
+func decodeInstallPayloads(t *testing.T, command string) string {
+	t.Helper()
+	pattern := regexp.MustCompile(`echo ([A-Za-z0-9+/=]+) \| base64 -d`)
+	matches := pattern.FindAllStringSubmatch(command, -1)
+	if len(matches) == 0 {
+		t.Fatalf("install command embeds no base64 payloads:\n%s", command)
+	}
+	var out strings.Builder
+	for _, match := range matches {
+		raw, err := base64.StdEncoding.DecodeString(match[1])
+		if err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		out.Write(raw)
+		out.WriteString("\n")
+	}
+	return out.String()
 }
