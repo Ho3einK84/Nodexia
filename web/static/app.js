@@ -1266,6 +1266,9 @@
 
     function setStep(idx) {
       currentStep = Math.max(0, Math.min(2, idx));
+      var modalBody = modal.querySelector('.modal__body');
+      if (modalBody) modalBody.scrollTop = 0;
+
       steps.forEach(function (s, i) {
         s.classList.toggle('is-active', i === currentStep);
         s.classList.toggle('is-done', i < currentStep);
@@ -1285,6 +1288,14 @@
         updateReview();
       }
     }
+
+    steps.forEach(function (stepEl, idx) {
+      stepEl.addEventListener('click', function () {
+        if (idx < currentStep) {
+          setStep(idx);
+        }
+      });
+    });
 
     engineCards.forEach(function (card) {
       card.addEventListener('click', function () {

@@ -927,19 +927,17 @@
 }
 
 .node-proto-option {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  gap: 10px;
   padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 9px;
   font-size: 0.84rem;
   cursor: pointer;
   background: rgba(2, 6, 23, 0.4);
-  white-space: nowrap;
   min-inline-size: 0;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .node-proto-option:hover {
@@ -949,6 +947,7 @@
 .node-proto-option:has(input:checked) {
   border-color: var(--accent, #38bdf8);
   background: rgba(56, 189, 248, 0.08);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.2);
 }
 
 .node-proto-option input {
@@ -957,7 +956,7 @@
   flex-shrink: 0;
 }
 
-.node-proto-option span {
+.node-proto-option__label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -965,13 +964,18 @@
   white-space: nowrap;
 }
 
-.node-proto-option small {
-  color: var(--text-muted, #94a3b8);
-  font-size: 0.72rem;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(148, 163, 184, 0.12);
-  margin-inline-start: 2px;
+.node-proto-option__badge {
+  color: var(--accent, #38bdf8);
+  font-size: 0.68rem;
+  font-weight: var(--fw-semibold, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  margin-inline-start: auto;
+  white-space: nowrap;
 }
 
 /* ── Install launcher (opens the install modal) ──────────────────────────── */
@@ -1417,9 +1421,9 @@
 }
 
 .deploy-channel {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 10px 14px;
   border: 1px solid var(--border);
@@ -1429,21 +1433,39 @@
   background: rgba(2, 6, 23, 0.4);
   white-space: nowrap;
   min-inline-size: 0;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-/* The radio and its label share the button's two tracks; the label keeps its
-   text on one line so "Dev / Beta" never wraps into two rows. */
+.deploy-channel:hover {
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+.deploy-channel:has(input:checked) {
+  border-color: rgba(56, 189, 248, 0.6);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.modal[data-selected-engine="rebecca-node"] .deploy-channel:has(input:checked) {
+  border-color: rgba(167, 139, 250, 0.7);
+  background: rgba(167, 139, 250, 0.08);
+}
+
+.modal[data-selected-engine="rebecca-node"] .deploy-channel input {
+  accent-color: #a78bfa;
+}
+
+.deploy-channel input {
+  accent-color: var(--accent, #38bdf8);
+  margin: 0;
+  flex-shrink: 0;
+}
+
 .deploy-channel span {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   white-space: nowrap;
   min-inline-size: 0;
-}
-
-.deploy-channel:has(input:checked) {
-  border-color: rgba(56, 189, 248, 0.6);
-  background: rgba(56, 189, 248, 0.08);
 }
 
 .deploy-channel.is-disabled { opacity: 0.55; cursor: not-allowed; }
@@ -1505,12 +1527,11 @@
   gap: 10px;
   position: sticky;
   bottom: 0;
-  background: linear-gradient(180deg, rgba(11, 17, 32, 0.92) 0%, #0b1120 100%);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: #0b1120;
   padding: 12px 18px calc(14px + env(safe-area-inset-bottom, 0px));
   margin: 16px -18px 0 -18px;
   border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.45);
   z-index: 10;
 }
 
@@ -1524,6 +1545,10 @@
 [dir="rtl"] .deploy-actions [data-deploy-back] svg,
 [dir="rtl"] .deploy-actions [data-deploy-next] svg {
   transform: scaleX(-1);
+}
+
+.node-scope {
+  margin-block-end: 44px;
 }
 
 /* ══ Live log drawer ═══════════════════════════════════════════════════════ */
@@ -1619,21 +1644,31 @@
 @media (max-width: 640px) {
   .modal--deploy .modal__dialog--wide { inline-size: 100vw; max-inline-size: 100vw; }
   .deploy-step { font-size: 0.68rem; padding: 5px 7px; }
-  .deploy-actions { padding: 10px 14px calc(14px + env(safe-area-inset-bottom, 0px)); margin: 14px -14px 0 -14px; }
+  .deploy-actions {
+    padding: 12px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+    margin: 14px -14px 0 -14px;
+    background: #0b1120;
+    box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.45);
+  }
   .modal--deploy .modal__body { padding-inline: 14px; }
   .log-drawer__panel { inline-size: 100vw; }
+}
+
+@media (max-width: 560px) {
+  .node-proto-options {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 
 @media (max-width: 480px) {
   .node-proto-option,
   .deploy-channel {
-    padding: 8px 10px;
-    font-size: 0.8rem;
-    gap: 6px;
+    padding: 9px 12px;
+    font-size: 0.82rem;
+    gap: 8px;
   }
-  .node-proto-option span,
   .deploy-channel span {
-    font-size: 0.8rem;
-    gap: 4px;
+    font-size: 0.82rem;
   }
 }

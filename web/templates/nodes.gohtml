@@ -595,11 +595,12 @@
                 <div class="node-proto-options">
                   <label class="node-proto-option">
                     <input type="radio" name="protocol" value="grpc" data-engine-field {{ if ne $form.Protocol "rest" }}checked{{ end }}>
-                    <span><i data-lucide="layers" class="icon-in-button"></i> gRPC <small>{{ t "nodes.recommended" }}</small></span>
+                    <span class="node-proto-option__label"><i data-lucide="layers" class="icon-in-button"></i> gRPC</span>
+                    <small class="node-proto-option__badge">{{ t "nodes.recommended" }}</small>
                   </label>
                   <label class="node-proto-option">
                     <input type="radio" name="protocol" value="rest" data-engine-field {{ if eq $form.Protocol "rest" }}checked{{ end }}>
-                    <span><i data-lucide="globe" class="icon-in-button"></i> REST</span>
+                    <span class="node-proto-option__label"><i data-lucide="globe" class="icon-in-button"></i> REST</span>
                   </label>
                 </div>
                 {{ with index $form.Errors "protocol" }}<small class="field-error">{{ . }}</small>{{ end }}
