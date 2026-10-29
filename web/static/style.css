@@ -2204,7 +2204,7 @@ h4 svg {
   position: fixed;
   inset-inline-end: 20px;
   bottom: 20px;
-  z-index: 9000;
+  z-index: 100;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2221,6 +2221,10 @@ h4 svg {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(6px);
   transition: opacity 0.25s ease, transform 0.25s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+body.modal-open .back-to-top {
+  display: none !important;
 }
 
 .back-to-top.is-visible {

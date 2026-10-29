@@ -909,21 +909,23 @@
 }
 
 .node-proto-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
   margin-top: 4px;
 }
 
 .node-proto-option {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 9px 14px;
+  padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
   cursor: pointer;
   background: rgba(2, 6, 23, 0.4);
+  white-space: nowrap;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
@@ -945,6 +947,7 @@
   align-items: center;
   gap: 6px;
   font-size: 0.88rem;
+  white-space: nowrap;
 }
 
 .node-proto-option small {
@@ -1362,18 +1365,45 @@
 
 .deploy-engine__feature svg { width: 11px; height: 11px; color: #4ade80; }
 
-.deploy-channels { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 4px; }
+.deploy-channel-field {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.deploy-channel-field legend {
+  margin-block-end: 8px;
+  font-size: 0.85rem;
+  font-weight: var(--fw-medium, 500);
+  color: var(--text-muted, #94a3b8);
+}
+
+.deploy-channels {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-block-start: 4px;
+}
 
 .deploy-channel {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 13px;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 9px;
   font-size: 0.84rem;
   cursor: pointer;
   background: rgba(2, 6, 23, 0.4);
+  white-space: nowrap;
+}
+
+.deploy-channel span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .deploy-channel:has(input:checked) {
@@ -1416,7 +1446,20 @@
 .deploy-review__row > strong { color: #f1f5f9; font-weight: var(--fw-medium); text-align: end; word-break: break-all; }
 .deploy-review__row[hidden] { display: none; }
 
-.deploy-actions { justify-content: flex-end; gap: 8px; }
+.deploy-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(11, 17, 32, 0.85) 0%, rgba(11, 17, 32, 0.98) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 12px 0 2px;
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  z-index: 10;
+}
 .deploy-actions [hidden] { display: none; }
 
 /* ══ Live log drawer ═══════════════════════════════════════════════════════ */
