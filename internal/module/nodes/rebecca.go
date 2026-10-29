@@ -388,11 +388,16 @@ func (p RebeccaProvider) ActionCommand(nodeName, actionKey string) (string, time
 
 	spec := rebeccaOps[action.Key]
 
-	invocation := `$SUDO env REBECCA_NODE_APP_NAME=` + nodeName + ` rebecca-node ` + spec.op + ` </dev/null`
+	invocation := `$SUDO env REBECCA_NODE_APP_NAME=` + nodeName + ` rebecca-node ` + spec.op
 	if spec.confirm {
 		invocation = `yes | ` + invocation
+	} else {
+		invocation += ` </dev/null`
 	}
 	command := `sh -c '` + sudoPreamble +
+		`if ! command -v rebecca-node >/dev/null 2>&1; then ` +
+		`if command -v ` + nodeName + ` >/dev/null 2>&1; then ln -s "$(command -v ` + nodeName + `)" /usr/local/bin/rebecca-node 2>/dev/null || true; fi; ` +
+		`fi; ` +
 		`if ! command -v rebecca-node >/dev/null 2>&1; then echo "rebecca-node CLI not found on this server" >&2; exit 86; fi; ` +
 		invocation + `'`
 	return command, action.Timeout, nil
