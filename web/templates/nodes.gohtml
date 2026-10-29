@@ -419,15 +419,11 @@
         <div class="node-install-card node-install-card--{{ if eq .Kind "binary" }}rebecca{{ else }}pasarguard{{ end }}">
           <div class="node-install-card__badge-row">
             <span class="node-install-card__icon"><i data-lucide="{{ .Icon }}"></i></span>
-            {{ if .Recommended }}
-            <span class="badge badge--ok">{{ t "nodes.recommended" }}</span>
-            {{ else }}
             <span class="badge badge--strat-key">{{ .Kind }}</span>
-            {{ end }}
           </div>
           <h4 class="node-install-card__title">{{ .Label }}</h4>
           <p class="node-install-card__desc">{{ .Description }}</p>
-          <button type="button" class="btn {{ if .Recommended }}btn--primary{{ else }}btn--secondary{{ end }} btn--sm node-install-card__btn"
+          <button type="button" class="btn btn--secondary btn--sm node-install-card__btn"
                   data-modal-open="deploy-node-modal" data-engine-preselect="{{ .Key }}">
             <i data-lucide="plus" class="icon-in-button"></i> {{ t "nodes.deploy_title" }}
           </button>
@@ -534,7 +530,6 @@
                       <span class="deploy-engine__title-wrap">
                         <span class="deploy-engine__label">{{ .Label }}</span>
                         <span class="deploy-engine__kind deploy-engine__kind--{{ .Kind }}">{{ .Kind }}</span>
-                        {{ if .Recommended }}<span class="badge badge--ok">{{ t "nodes.recommended" }}</span>{{ end }}
                       </span>
                       <span class="deploy-engine__radio" aria-hidden="true"></span>
                     </span>
@@ -605,7 +600,6 @@
                   <label class="node-proto-option">
                     <input type="radio" name="protocol" value="grpc" data-engine-field {{ if ne $form.Protocol "rest" }}checked{{ end }}>
                     <span class="node-proto-option__label"><i data-lucide="layers" class="icon-in-button"></i> gRPC</span>
-                    <small class="node-proto-option__badge">{{ t "nodes.recommended" }}</small>
                   </label>
                   <label class="node-proto-option">
                     <input type="radio" name="protocol" value="rest" data-engine-field {{ if eq $form.Protocol "rest" }}checked{{ end }}>
