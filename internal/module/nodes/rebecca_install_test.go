@@ -218,6 +218,8 @@ func TestRebeccaInstallCommand(t *testing.T) {
 		// Stdin provides 'y' so the upstream directory override prompt proceeds,
 		// and falls through to EOF for port prompts to honor pre-written .env values.
 		`printf "y\n" | `,
+		// Neutralize upstream's broken </dev/tty redirection in non-interactive sessions
+		`sed -i "s|</dev/tty||g; s|\\[ -r /dev/tty \\]|false|g" "$SCRIPT"`,
 	} {
 		if !strings.Contains(command, want) {
 			t.Errorf("install command missing %q:\n%s", want, command)

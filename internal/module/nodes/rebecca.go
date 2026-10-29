@@ -657,6 +657,7 @@ func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) 
 		`$SUDO chmod 600 ` + dataDir + `/cert.key; ` +
 		stageMarker(stageDownloading) +
 		strings.ReplaceAll(downloadPreamble, "URL", scriptURL) +
+		`$SUDO sed -i "s|</dev/tty||g; s|\\[ -r /dev/tty \\]|false|g" "$SCRIPT"; ` +
 		stageMarker(stageDeploying) +
 		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + rebeccaInstallScriptTimeout + `"; fi; ` +
 		// Stdin provides 'y' to confirm the directory override prompt (since appDir was pre-created
