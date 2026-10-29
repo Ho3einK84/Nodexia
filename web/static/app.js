@@ -1238,8 +1238,7 @@
         } else {
           if (apiPortInput.value === '62051') apiPortInput.value = '';
           apiPortInput.required = false;
-          var optText = (I18N && I18N.t ? I18N.t('nodes.optional_placeholder') : '') || 'Optional';
-          apiPortInput.placeholder = '62051 (' + optText + ')';
+          apiPortInput.placeholder = '62051';
           if (optBadge) optBadge.hidden = false;
           if (bundleInput) bundleInput.required = false;
         }
@@ -1295,7 +1294,10 @@
     function setStep(idx) {
       currentStep = Math.max(0, Math.min(2, idx));
       var modalBody = modal.querySelector('.modal__body');
-      if (modalBody) modalBody.scrollTop = 0;
+      if (modalBody) {
+        modalBody.scrollTop = 0;
+        modalBody.scrollLeft = 0;
+      }
 
       steps.forEach(function (s, i) {
         s.classList.toggle('is-active', i === currentStep);

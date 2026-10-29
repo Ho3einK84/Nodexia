@@ -531,9 +531,12 @@
                   <span class="deploy-engine__icon"><i data-lucide="{{ .Icon }}"></i></span>
                   <span class="deploy-engine__body">
                     <span class="deploy-engine__head">
-                      <span class="deploy-engine__label">{{ .Label }}</span>
-                      <span class="deploy-engine__kind deploy-engine__kind--{{ .Kind }}">{{ .Kind }}</span>
-                      {{ if .Recommended }}<span class="badge badge--ok">{{ t "nodes.recommended" }}</span>{{ end }}
+                      <span class="deploy-engine__title-wrap">
+                        <span class="deploy-engine__label">{{ .Label }}</span>
+                        <span class="deploy-engine__kind deploy-engine__kind--{{ .Kind }}">{{ .Kind }}</span>
+                        {{ if .Recommended }}<span class="badge badge--ok">{{ t "nodes.recommended" }}</span>{{ end }}
+                      </span>
+                      <span class="deploy-engine__radio" aria-hidden="true"></span>
                     </span>
                     <span class="deploy-engine__desc">{{ .Description }}</span>
                     {{ if .Features }}
@@ -542,7 +545,6 @@
                     </span>
                     {{ end }}
                   </span>
-                  <span class="deploy-engine__radio" aria-hidden="true"></span>
                 </label>
                 {{ end }}
               </div>
@@ -573,14 +575,14 @@
                   <small class="field-optional" data-api-port-optional {{ if eq $form.NodeType "rebecca-node" }}hidden{{ end }}>{{ t "nodes.optional_paren" }}</small>
                 </span>
                 <input type="number" name="api_port" value="{{ $form.APIPort }}"
-                       placeholder="{{ if eq $form.NodeType "rebecca-node" }}62051{{ else }}62051 ({{ t "nodes.optional_placeholder" }}){{ end }}"
+                       placeholder="62051"
                        min="1" max="65535" inputmode="numeric"
                        {{ if eq $form.NodeType "rebecca-node" }}required{{ end }}>
                 {{ with index $form.Errors "api_port" }}<small class="field-error">{{ . }}</small>{{ end }}
               </label>
             </div>
 
-            <fieldset class="form-field deploy-channel-field">
+            <fieldset class="deploy-channel-field">
               <legend>{{ t "nodes.channel" }}</legend>
               <div class="deploy-channels">
                 {{ range $form.Channels }}
@@ -597,7 +599,7 @@
 
             {{/* PasarGuard-only configuration. */}}
             <div class="deploy-engine-group" data-engine-group="docker">
-              <fieldset class="form-field node-proto-choice">
+              <fieldset class="node-proto-choice">
                 <legend>{{ t "nodes.connection_type" }}</legend>
                 <div class="node-proto-options">
                   <label class="node-proto-option">
