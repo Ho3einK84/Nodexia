@@ -359,7 +359,7 @@ configure_binary_node_env
 	if err != nil {
 		t.Fatalf("open /dev/null: %v", err)
 	}
-	defer devNull.Close()
+	defer func() { _ = devNull.Close() }()
 	cmd.Stdin = devNull
 
 	output, err := cmd.CombinedOutput()

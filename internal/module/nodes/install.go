@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,12 +34,6 @@ const (
 	installStaleTTL    = 2 * time.Hour
 
 	maxInstallOutputBytes = 1 << 20 // 1 MiB of streamed script output
-
-	// installPendingFlushBytes bounds the partial-line buffer used for remote
-	// stage markers. Progress output (spinners) writes without trailing
-	// newlines, so a partial line is flushed once it grows past this size
-	// instead of being held until the next newline.
-	installPendingFlushBytes = 512
 )
 
 // Install progress stages. They form the ordered pipeline the UI renders as
@@ -65,8 +58,6 @@ var InstallStageOrder = []string{
 	stageReady,
 }
 
-// installStagePattern matches a stage marker emitted by a provider command.
-var installStagePattern = regexp.MustCompile(`\[NODEXIA:stage:([a-z]+)\]`)
 var installStagePartial = "[NODEXIA"
 
 // stageMarker is the remote-shell fragment a provider emits to advance the
@@ -290,9 +281,7 @@ func (j *installJob) appendStream(chunk string) {
 // a marker does not duplicate the line break the previous output already made.
 // Caller holds j.mu.
 func (j *installJob) trimTrailingNewlineLocked() {
-	if strings.HasSuffix(j.output, "\n") {
-		j.output = j.output[:len(j.output)-1]
-	}
+	j.output = strings.TrimSuffix(j.output, "\n")
 }
 
 // flushPending emits any buffered partial line. Called when a stage session
