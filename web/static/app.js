@@ -1225,6 +1225,25 @@
         }
         nameInput.placeholder = targetDefaultName;
       }
+
+      var apiPortInput = form ? form.elements['api_port'] : null;
+      var optBadge = modal.querySelector('[data-api-port-optional]');
+      if (apiPortInput) {
+        if (rebecca) {
+          if (!apiPortInput.value.trim()) apiPortInput.value = '62051';
+          apiPortInput.required = true;
+          apiPortInput.placeholder = '62051';
+          if (optBadge) optBadge.hidden = true;
+          if (bundleInput) bundleInput.required = true;
+        } else {
+          if (apiPortInput.value === '62051') apiPortInput.value = '';
+          apiPortInput.required = false;
+          var optText = (I18N && I18N.t ? I18N.t('nodes.optional_placeholder') : '') || 'Optional';
+          apiPortInput.placeholder = '62051 (' + optText + ')';
+          if (optBadge) optBadge.hidden = false;
+          if (bundleInput) bundleInput.required = false;
+        }
+      }
     }
 
     function updateReview() {
@@ -1246,11 +1265,15 @@
       var engineKind = selectedCard ? (selectedCard.querySelector('.deploy-engine__kind') || {}).textContent : '';
       var displayEngine = engineLabel ? (engineLabel + ' (' + engineKind + ')') : (rebecca ? 'Rebecca (Native)' : 'PasarGuard (Docker)');
 
+      var channelLabel = (channel && channel.closest('label')) ?
+        ((channel.closest('label').querySelector('span') || {}).textContent || channel.value) :
+        (channel ? channel.value : 'Stable');
+
       setReview('engine', displayEngine);
       setReview('node_name', name || (rebecca ? 'rebecca-node' : 'pg-node'));
       setReview('service_port', sPort ? ':' + sPort : '—');
       setReview('api_port', aPort ? ':' + aPort : '—');
-      setReview('channel', channel ? channel.value : 'stable');
+      setReview('channel', (channelLabel || '').trim());
       setReview('protocol', proto ? proto.value.toUpperCase() : 'gRPC');
 
       var protoRow = modal.querySelector('[data-review-row="protocol"]');
@@ -1261,6 +1284,11 @@
         bundleRow.hidden = !rebecca;
         var hasBundle = bundleInput && bundleInput.value.trim().length > 0;
         setReview('bundle', hasBundle ? '✓ ' + (I18N && I18N.t ? I18N.t('nodes.bundle_valid') || 'Configured' : 'Configured') : '—');
+      }
+
+      if (btnSubmit) {
+        var tpl = (I18N && I18N.t ? I18N.t('nodes.deploy_confirm') : '') || 'Run the official {engine} installer on this server now?';
+        btnSubmit.setAttribute('data-confirm', tpl.replace('{engine}', engineLabel || (rebecca ? 'Rebecca' : 'PasarGuard')));
       }
     }
 
@@ -1319,21 +1347,59 @@
         e.preventDefault();
         if (currentStep === 1) {
           var nameField = form && form.elements['node_name'];
-          if (nameField && !nameField.value.trim()) {
-            nameField.focus();
-            if (nameField.reportValidity) nameField.reportValidity();
+          if (nameField && !nameField.checkValidity()) {
+            nameField.reportValidity();
             return;
           }
+          var sPortField = form && form.elements['service_port'];
+          if (sPortField && !sPortField.checkValidity()) {
+            sPortField.reportValidity();
+            return;
+          }
+          var aPortField = form && form.elements['api_port'];
           var engine = getSelectedEngine();
-          if (isRebecca(engine)) {
+          var rebecca = isRebecca(engine);
+
+          if (aPortField) {
+            var aVal = aPortField.value.trim();
+            if (rebecca && !aVal) {
+              aPortField.value = '62051';
+              aVal = '62051';
+            }
+            if (aVal) {
+              if (!aPortField.checkValidity()) {
+                aPortField.reportValidity();
+                return;
+              }
+              if (sPortField && aVal === sPortField.value.trim()) {
+                var errPortsEq = (I18N && I18N.t ? I18N.t('nodes.err_ports_equal') : '') || 'The API port must differ from the service port.';
+                aPortField.setCustomValidity(errPortsEq);
+                aPortField.reportValidity();
+                return;
+              } else {
+                aPortField.setCustomValidity('');
+              }
+            } else {
+              aPortField.setCustomValidity('');
+            }
+          }
+
+          if (rebecca) {
             var bundleVal = (bundleInput ? bundleInput.value : '').trim();
-            if (!bundleVal) {
+            var hasCert = bundleVal.indexOf('-----BEGIN CERTIFICATE-----') !== -1;
+            var hasKey = bundleVal.indexOf('KEY-----') !== -1;
+            if (!bundleVal || !hasCert || !hasKey) {
               if (bundleState) {
                 bundleState.hidden = false;
                 bundleState.className = 'field-hint deploy-bundle-state is-bad';
                 bundleState.textContent = '⚠ ' + (I18N && I18N.t ? I18N.t('nodes.bundle_invalid') || 'Paste the certificate and its private key.' : 'Paste the certificate and its private key.');
               }
-              if (bundleInput) bundleInput.focus();
+              if (bundleInput) {
+                bundleInput.focus();
+                if (bundleInput.reportValidity && !bundleVal) {
+                  bundleInput.reportValidity();
+                }
+              }
               return;
             }
           }
@@ -1362,12 +1428,29 @@
         if (hasCert && hasKey) {
           bundleState.className = 'field-hint deploy-bundle-state is-ok';
           bundleState.textContent = '✓ ' + (I18N.t('nodes.bundle_valid') || 'Certificate and private key detected.');
-        } else if (hasCert) {
-          bundleState.className = 'field-hint deploy-bundle-state is-bad';
-          bundleState.textContent = '⚠ ' + (I18N.t('nodes.bundle_invalid') || 'Paste the certificate and its private key.');
         } else {
           bundleState.className = 'field-hint deploy-bundle-state is-bad';
           bundleState.textContent = '⚠ ' + (I18N.t('nodes.bundle_invalid') || 'Paste the certificate and its private key.');
+        }
+      });
+    }
+
+    var pasteBtn = modal.querySelector('[data-bundle-paste]');
+    if (pasteBtn && bundleInput) {
+      pasteBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          navigator.clipboard.readText().then(function (text) {
+            if (text) {
+              bundleInput.value = text;
+              bundleInput.dispatchEvent(new Event('input', { bubbles: true }));
+              bundleInput.focus();
+            }
+          }).catch(function () {
+            bundleInput.focus();
+          });
+        } else {
+          bundleInput.focus();
         }
       });
     }

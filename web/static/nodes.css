@@ -1256,10 +1256,15 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 16px;
-  padding: 0;
+  margin: -4px 0 16px;
+  padding: 8px 0 12px;
   list-style: none;
   font-size: 0.74rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #0b1120;
+  border-block-end: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .deploy-step {
@@ -1273,6 +1278,7 @@
   background: rgba(2, 6, 23, 0.3);
   flex: 1;
   justify-content: center;
+  white-space: nowrap;
   transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
@@ -1293,9 +1299,20 @@
   background: rgba(56, 189, 248, 0.1);
 }
 
+.modal[data-selected-engine="rebecca-node"] .deploy-step.is-active {
+  border-color: rgba(167, 139, 250, 0.6);
+  background: rgba(167, 139, 250, 0.12);
+}
+
 .deploy-step.is-done {
   color: #4ade80;
   border-color: rgba(74, 222, 128, 0.35);
+  cursor: pointer;
+}
+
+.deploy-step.is-done:hover {
+  background: rgba(74, 222, 128, 0.08);
+  border-color: rgba(74, 222, 128, 0.5);
 }
 
 .deploy-step.is-done .deploy-step__num { background: rgba(74, 222, 128, 0.22); }
@@ -1314,21 +1331,26 @@
 
 .deploy-engine {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
   gap: 12px;
   padding: 13px 15px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 12px);
   background: rgba(15, 23, 42, 0.5);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.deploy-engine:hover { border-color: rgba(148, 163, 184, 0.4); }
+.deploy-engine:hover {
+  border-color: rgba(148, 163, 184, 0.4);
+  background: rgba(15, 23, 42, 0.7);
+}
 
 .deploy-engine.is-selected {
   border-color: rgba(56, 189, 248, 0.65);
   background: rgba(56, 189, 248, 0.08);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
 }
 
 .deploy-engine[data-engine-card="rebecca-node"].is-selected {
@@ -1343,13 +1365,38 @@
   pointer-events: none;
 }
 
+.deploy-engine__radio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 20px;
+  block-size: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  background: transparent;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.deploy-engine.is-selected .deploy-engine__radio {
+  border-color: var(--accent, #38bdf8);
+  background: var(--accent, #38bdf8);
+  box-shadow: inset 0 0 0 3px #0b1120;
+}
+
+.deploy-engine[data-engine-card="rebecca-node"].is-selected .deploy-engine__radio {
+  border-color: #a78bfa;
+  background: #a78bfa;
+  box-shadow: inset 0 0 0 3px #0b1120;
+}
+
 .deploy-engine__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: 36px;
-  block-size: 36px;
-  border-radius: 9px;
+  inline-size: 38px;
+  block-size: 38px;
+  border-radius: 10px;
   background: rgba(148, 163, 184, 0.12);
   color: var(--accent-soft, #7dd3fc);
 }
@@ -1398,6 +1445,28 @@
 }
 
 .deploy-engine__feature svg { width: 11px; height: 11px; color: #4ade80; }
+
+.deploy-ports-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.deploy-bundle-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.deploy-bundle-textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  min-block-size: 130px;
+  resize: vertical;
+}
 
 .deploy-channel-field {
   border: 0;
@@ -1540,6 +1609,18 @@
   margin-inline-start: auto;
 }
 
+.modal[data-selected-engine="rebecca-node"] .deploy-actions [data-deploy-next],
+.modal[data-selected-engine="rebecca-node"] .deploy-actions [data-deploy-submit] {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  border-color: rgba(167, 139, 250, 0.4);
+}
+
+.modal[data-selected-engine="rebecca-node"] .deploy-actions [data-deploy-next]:hover,
+.modal[data-selected-engine="rebecca-node"] .deploy-actions [data-deploy-submit]:hover {
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
+}
+
 .deploy-actions [hidden] { display: none; }
 
 [dir="rtl"] .deploy-actions [data-deploy-back] svg,
@@ -1662,6 +1743,35 @@
 }
 
 @media (max-width: 480px) {
+  .deploy-channels {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .deploy-ports-grid {
+    gap: 8px;
+  }
+  .deploy-step {
+    padding: 5px 6px;
+    font-size: 0.66rem;
+    gap: 4px;
+  }
+  .deploy-step__num {
+    inline-size: 14px;
+    block-size: 14px;
+    font-size: 0.6rem;
+  }
+  .deploy-engine {
+    padding: 11px 12px;
+    gap: 10px;
+  }
+  .deploy-engine__icon {
+    inline-size: 32px;
+    block-size: 32px;
+  }
+  .deploy-engine__icon svg {
+    width: 16px;
+    height: 16px;
+  }
   .node-proto-option,
   .deploy-channel {
     padding: 9px 12px;

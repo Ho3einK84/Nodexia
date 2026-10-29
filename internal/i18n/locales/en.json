@@ -1204,6 +1204,7 @@
   "nodes.api_key_generate": "Generate UUID",
   "nodes.bundle_valid": "Certificate and private key detected.",
   "nodes.bundle_invalid": "Paste the certificate and its private key.",
+  "nodes.paste_bundle": "Paste from clipboard",
   "nodes.bundle_expiry": "Certificate expires {date}",
   "nodes.bundle_cn": "Common name: {cn}",
   "nodes.ports_title": "Port allocation",

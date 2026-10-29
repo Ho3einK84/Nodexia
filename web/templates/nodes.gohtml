@@ -542,6 +542,7 @@
                     </span>
                     {{ end }}
                   </span>
+                  <span class="deploy-engine__radio" aria-hidden="true"></span>
                 </label>
                 {{ end }}
               </div>
@@ -560,15 +561,21 @@
               <small class="field-hint">{{ tsafe "nodes.node_name_hint" }}</small>
             </label>
 
-            <div class="form-grid">
+            <div class="deploy-ports-grid">
               <label class="form-field">
                 <span>{{ t "nodes.service_port" }}</span>
-                <input type="number" name="service_port" value="{{ $form.ServicePort }}" placeholder="62050" min="1" max="65535">
+                <input type="number" name="service_port" value="{{ $form.ServicePort }}" placeholder="62050" min="1" max="65535" required inputmode="numeric">
                 {{ with index $form.Errors "service_port" }}<small class="field-error">{{ . }}</small>{{ end }}
               </label>
               <label class="form-field">
-                <span>{{ t "nodes.api_port" }} <small class="field-optional">{{ t "nodes.optional_paren" }}</small></span>
-                <input type="number" name="api_port" value="{{ $form.APIPort }}" placeholder="62051" min="1" max="65535">
+                <span data-api-port-label-wrap>
+                  <span>{{ t "nodes.api_port" }}</span>
+                  <small class="field-optional" data-api-port-optional {{ if eq $form.NodeType "rebecca-node" }}hidden{{ end }}>{{ t "nodes.optional_paren" }}</small>
+                </span>
+                <input type="number" name="api_port" value="{{ $form.APIPort }}"
+                       placeholder="{{ if eq $form.NodeType "rebecca-node" }}62051{{ else }}62051 ({{ t "nodes.optional_placeholder" }}){{ end }}"
+                       min="1" max="65535" inputmode="numeric"
+                       {{ if eq $form.NodeType "rebecca-node" }}required{{ end }}>
                 {{ with index $form.Errors "api_port" }}<small class="field-error">{{ . }}</small>{{ end }}
               </label>
             </div>
@@ -626,9 +633,14 @@
             {{/* Rebecca-only configuration (native binary). */}}
             <div class="deploy-engine-group" data-engine-group="binary">
               <label class="form-field">
-                <span>{{ t "nodes.bundle" }}</span>
-                <textarea name="bundle" rows="8" class="cmd-textarea" placeholder="{{ t "nodes.bundle_placeholder" }}"
-                          spellcheck="false" autocomplete="off" data-bundle-input data-engine-field>{{ $form.Bundle }}</textarea>
+                <span class="deploy-bundle-label">
+                  <span>{{ t "nodes.bundle" }}</span>
+                  <button type="button" class="btn btn--ghost btn--xs copy-inline" data-bundle-paste aria-label="{{ t "nodes.paste_bundle" }}">
+                    <i data-lucide="clipboard" class="icon-in-button"></i> {{ t "nodes.paste_bundle" }}
+                  </button>
+                </span>
+                <textarea name="bundle" rows="6" class="cmd-textarea deploy-bundle-textarea" placeholder="{{ t "nodes.bundle_placeholder" }}"
+                          spellcheck="false" autocomplete="off" data-bundle-input data-engine-field {{ if eq $form.NodeType "rebecca-node" }}required{{ end }}>{{ $form.Bundle }}</textarea>
                 {{ with index $form.Errors "bundle" }}<small class="field-error">{{ . }}</small>{{ end }}
                 <small class="field-hint">{{ tsafe "nodes.bundle_hint" }}</small>
                 <small class="field-hint deploy-bundle-state" data-bundle-state hidden></small>

@@ -200,6 +200,14 @@ var clientI18nKeys = []string{
 	"js.tabs.status_disconnected",
 	"js.tabs.open_in_new_tab",
 	"js.tabs.shortcut_hint",
+
+	// Node install wizard
+	"nodes.bundle_valid",
+	"nodes.bundle_invalid",
+	"nodes.deploy_confirm",
+	"nodes.err_ports_equal",
+	"nodes.err_port_range",
+	"nodes.optional_placeholder",
 }
 
 // clientI18nJSON serialises the client-needed translations for loc into a JSON
