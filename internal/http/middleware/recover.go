@@ -3,6 +3,7 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 
 	"github.com/Ho3einK84/Nodexia/internal/config"
 	"github.com/Ho3einK84/Nodexia/internal/view"
@@ -19,6 +20,7 @@ func Recover(cfg config.Config, renderer *view.Renderer) Middleware {
 						slog.String("method", safeLogValue(r.Method)),
 						slog.String("path", safeLogValue(r.URL.Path)),
 						slog.String("panic", safeLogValue(toPanicMessage(recovered))),
+						slog.String("stack", string(debug.Stack())),
 					)
 
 					page := view.NewErrorPageData(

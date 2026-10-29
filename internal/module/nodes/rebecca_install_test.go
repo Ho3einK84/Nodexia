@@ -215,13 +215,28 @@ func TestRebeccaInstallCommand(t *testing.T) {
 		"REBECCA_NODE_SCRIPT_FLAVOR=binary",
 		"install --name rebecca-node --binary --dev",
 		"timeout",
-		// stdin closed so the upstream /dev/tty redirect and every prompt fall
-		// through to the pre-written defaults instead of blocking.
-		"</dev/null",
+		// Stdin provides 'y' so the upstream directory override prompt proceeds,
+		// and falls through to EOF for port prompts to honor pre-written .env values.
+		`printf "y\n" | `,
 	} {
 		if !strings.Contains(command, want) {
 			t.Errorf("install command missing %q:\n%s", want, command)
 		}
+	}
+
+	// Verify stable channel sets --version latest.
+	cfgStable := RebeccaInstallConfig{
+		Channel:     "stable",
+		ServicePort: "62050",
+		APIPort:     "62051",
+		Bundle:      testRebeccaBundle,
+	}
+	cmdStable, err := RebeccaProvider{}.InstallCommand(cfgStable)
+	if err != nil {
+		t.Fatalf("InstallCommand(stable): %v", err)
+	}
+	if !strings.Contains(cmdStable, "install --name rebecca-node --binary --version latest") {
+		t.Errorf("stable install command missing --version latest flag:\n%s", cmdStable)
 	}
 
 	// The cert, key, and .env are pre-written via base64 in the install command.
@@ -260,13 +275,13 @@ func TestRebeccaBuildInstallPlan(t *testing.T) {
 	if plan.Stages[0].TolerateTimeout {
 		t.Errorf("Rebecca install stage must not tolerate the remote timeout (it detaches)")
 	}
-	// No PTY: stdin is closed so every prompt falls back to the pre-written .env.
+	// Stdin provides 'y' to confirm the directory override, then hits EOF.
 	if plan.Stages[0].AllocatePTY || plan.Stages[0].Input != "" {
 		t.Errorf("Rebecca install stage must not manage stdin (got PTY=%v input=%q)",
 			plan.Stages[0].AllocatePTY, plan.Stages[0].Input)
 	}
-	if !strings.Contains(plan.Stages[0].Command, "</dev/null") {
-		t.Errorf("Rebecca install command must close stdin so prompts cannot block")
+	if !strings.Contains(plan.Stages[0].Command, `printf "y\n" | `) {
+		t.Errorf("Rebecca install command must pipe confirmation so override prompt does not abort")
 	}
 	// Ports and PEM both travel base64-encoded inside the command, never via
 	// stdin. Decode every embedded payload and assert the values are really there.
@@ -304,7 +319,21 @@ func TestRebeccaBuildInstallPlan(t *testing.T) {
 func TestRebeccaInstallRunsWithoutBlockingStdin(t *testing.T) {
 	const fixture = `#!/usr/bin/env bash
 set -e
-ENV_FILE="$1"; CERT_FILE="$2"; CERT_KEY_FILE="$3"
+APP_DIR="$1"; ENV_FILE="$1/.env"; CERT_FILE="$2"; CERT_KEY_FILE="$3"
+
+is_rebecca_node_installed() {
+    [ -d "$APP_DIR" ]
+}
+
+# The upstream script checks if APP_DIR exists; since Nodexia pre-creates it
+# to write .env/certs, the override prompt is triggered and expects 'y'.
+if is_rebecca_node_installed; then
+    read -p "Do you want to override the previous installation? (y/n) " -r reply
+    if [[ ! $reply =~ ^[Yy]$ ]]; then
+        echo "Aborted installation" >&2
+        exit 1
+    fi
+fi
 
 get_env_value() {
     local key="$1"
@@ -315,7 +344,7 @@ prompt_node_port_setting() {
     local current_port value
     current_port=$(get_env_value "$key")
     fallback="${current_port:-$fallback}"
-    IFS= read -r value
+    IFS= read -r value || true
     echo "${value:-$fallback}"
 }
 read_node_certificate_bundle() { echo "CERT_PROMPT_RAN" >&2; }
@@ -334,7 +363,11 @@ echo "first-pass=$SERVICE_PORT/$XRAY_API_PORT"
 configure_binary_node_env
 `
 	dir := t.TempDir()
-	envPath := dir + "/.env"
+	appDir := dir + "/node"
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		t.Fatalf("mkdir appDir: %v", err)
+	}
+	envPath := appDir + "/.env"
 	certPath := dir + "/cert.pem"
 	keyPath := dir + "/cert.key"
 	script := "SERVICE_PORT = \"62990\"\nXRAY_API_PORT = \"62991\"\n"
@@ -353,14 +386,9 @@ configure_binary_node_env
 		t.Fatalf("write fixture: %v", err)
 	}
 
-	// stdin is /dev/null: exactly what the generated install command does.
-	cmd := exec.Command("bash", path, envPath, certPath, keyPath)
-	devNull, err := os.Open(os.DevNull)
-	if err != nil {
-		t.Fatalf("open /dev/null: %v", err)
-	}
-	defer func() { _ = devNull.Close() }()
-	cmd.Stdin = devNull
+	// stdin is 'y\n': exactly what the generated install command pipes.
+	cmd := exec.Command("bash", path, appDir, certPath, keyPath)
+	cmd.Stdin = strings.NewReader("y\n")
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {

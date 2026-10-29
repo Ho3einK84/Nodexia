@@ -641,7 +641,7 @@ func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) 
 		rebeccaDefaultProtocol)
 	envB64 := base64.StdEncoding.EncodeToString([]byte(envContent))
 
-	channelFlag := ` --stable`
+	channelFlag := ` --version latest`
 	if normalized.Channel == channelDev {
 		channelFlag = ` --dev`
 	}
@@ -659,11 +659,11 @@ func (RebeccaProvider) InstallCommand(cfg RebeccaInstallConfig) (string, error) 
 		strings.ReplaceAll(downloadPreamble, "URL", scriptURL) +
 		stageMarker(stageDeploying) +
 		`TMO=""; if command -v timeout >/dev/null 2>&1; then TMO="timeout ` + rebeccaInstallScriptTimeout + `"; fi; ` +
-		// stdin is closed so no prompt can block; the pre-written files supply
-		// every default. REBECCA_NODE_SCRIPT_FLAVOR is belt-and-braces for the
-		// script's own mode detection (it already defaults to binary here).
-		`$TMO $SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" install --name ` + normalized.NodeName +
-		` --binary` + channelFlag + ` </dev/null; ` +
+		// Stdin provides 'y' to confirm the directory override prompt (since appDir was pre-created
+		// above to supply .env without interactive prompts), and hits EOF for subsequent port prompts
+		// so they cleanly fall back to the pre-written .env values.
+		`printf "y\n" | $TMO $SUDO env REBECCA_NODE_SCRIPT_FLAVOR=binary bash "$SCRIPT" install --name ` + normalized.NodeName +
+		` --binary` + channelFlag + `; ` +
 		`STATUS=$?; rm -f "$SCRIPT"; ` +
 		`if [ "$STATUS" -ne 0 ]; then echo "[rebecca-node install script exited with status $STATUS]" >&2; fi; ` +
 		`exit $STATUS'`

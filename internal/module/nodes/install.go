@@ -366,13 +366,17 @@ type installSnapshot struct {
 func (j *installJob) snapshot() installSnapshot {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	output := j.output
+	if j.stream != nil {
+		output += j.stream.pending
+	}
 	snap := installSnapshot{
 		ID:             j.id,
 		ServerID:       j.serverID,
 		NodeType:       j.nodeType,
 		NodeName:       j.nodeName,
 		Status:         j.status,
-		Output:         j.output + j.stream.pending,
+		Output:         output,
 		Error:          j.errMessage,
 		CreatedAt:      j.createdAt,
 		FinishedAt:     j.finishedAt,
@@ -414,6 +418,11 @@ func (s *installStore) create(serverID int64, nodeType, nodeName string, plan In
 		plan:      plan,
 		status:    installStatusRunning,
 		createdAt: time.Now().UTC(),
+	}
+	job.stream = &streamProcessor{
+		emit:      job.appendLocked,
+		stage:     job.advanceLocked,
+		trimBlank: job.trimTrailingNewlineLocked,
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
