@@ -686,6 +686,17 @@
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 
+@media (max-width: 767px) {
+  /* The nodes page scrolls to the very bottom of the viewport, where the
+     fixed .bottom-nav (z-index 1100) and the #tab-fab (bottom 76px, z-index
+     1150) overlap card content — most visibly the last card's Uptime badge.
+     This bottom padding keeps every card clear of both. */
+  .nodes-page,
+  .node-grid {
+    padding-bottom: calc(110px + env(safe-area-inset-bottom));
+  }
+}
+
 @media (max-width: 640px) {
   .node-grid {
     grid-template-columns: 1fr;
@@ -916,9 +927,9 @@
 }
 
 .node-proto-option {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   align-items: center;
-  justify-content: center;
   gap: 8px;
   padding: 10px 14px;
   border: 1px solid var(--border);
@@ -926,6 +937,7 @@
   cursor: pointer;
   background: rgba(2, 6, 23, 0.4);
   white-space: nowrap;
+  min-inline-size: 0;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
@@ -1369,6 +1381,7 @@
   border: 0;
   padding: 0;
   margin: 0;
+  min-inline-size: 0;
 }
 
 .deploy-channel-field legend {
@@ -1386,9 +1399,9 @@
 }
 
 .deploy-channel {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   align-items: center;
-  justify-content: center;
   gap: 8px;
   padding: 10px 14px;
   border: 1px solid var(--border);
@@ -1397,13 +1410,17 @@
   cursor: pointer;
   background: rgba(2, 6, 23, 0.4);
   white-space: nowrap;
+  min-inline-size: 0;
 }
 
+/* The radio and its label share the button's two tracks; the label keeps its
+   text on one line so "Dev / Beta" never wraps into two rows. */
 .deploy-channel span {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   white-space: nowrap;
+  min-inline-size: 0;
 }
 
 .deploy-channel:has(input:checked) {

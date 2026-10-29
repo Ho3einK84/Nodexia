@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -27,9 +28,9 @@ const streamRefreshMillis = 2000
 // Handlers serves the nodes route group.  All node knowledge (discovery,
 // action commands, install support) comes from the configured providers.
 type Handlers struct {
-	deps       module.Dependencies
-	serverRepo servers.Repository
-	repo       Repository
+	deps                 module.Dependencies
+	serverRepo           servers.Repository
+	repo                 Repository
 	providers            []Provider
 	installableProviders []InstallableProvider
 	installs             *installStore
@@ -60,15 +61,15 @@ type FormInput struct {
 
 // pageView bundles everything the nodes page template renders.
 type pageView struct {
-	status           int
-	form             view.NodeFormView
-	snapshots        []view.NodeSnapshotView
-	collection       view.NodeCollectionResultView
-	stream           view.CommandStreamView
-	deployForm       view.NodeDeployFormView
-	openDeployModal  bool
-	flashKind        string
-	flashMessage     string
+	status          int
+	form            view.NodeFormView
+	snapshots       []view.NodeSnapshotView
+	collection      view.NodeCollectionResultView
+	stream          view.CommandStreamView
+	deployForm      view.NodeDeployFormView
+	openDeployModal bool
+	flashKind       string
+	flashMessage    string
 }
 
 // ── GET /servers/{id}/nodes ───────────────────────────────────────────────────
@@ -106,9 +107,9 @@ func (h *Handlers) Page(w http.ResponseWriter, r *http.Request) {
 	}
 
 	page := pageView{
-		status:      http.StatusOK,
-		form:        h.defaultFormView(server, hasStoredCreds),
-		snapshots:   snapshots,
+		status:     http.StatusOK,
+		form:       h.defaultFormView(server, hasStoredCreds),
+		snapshots:  snapshots,
 		deployForm: h.deployFormView(r, server, hasStoredCreds),
 	}
 	page.stream, page.flashKind, page.flashMessage = h.loadStreamView(streamID, server.ID)
@@ -158,7 +159,7 @@ func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
 		h.renderPage(w, r, server, pageView{
 			status:       http.StatusUnprocessableEntity,
 			form:         formViewFromInput(form, validationErrors, server.ID),
-			deployForm:  h.deployFormView(r, server, false),
+			deployForm:   h.deployFormView(r, server, false),
 			flashKind:    "error",
 			flashMessage: "Please fix the highlighted fields before refreshing node discovery.",
 		})
@@ -190,8 +191,8 @@ func (h *Handlers) collectWith(w http.ResponseWriter, r *http.Request, server se
 	}, h.providers)
 	if err != nil {
 		h.renderPage(w, r, server, pageView{
-			status:      http.StatusBadGateway,
-			form:        h.defaultFormView(server, hasStoredCreds),
+			status:     http.StatusBadGateway,
+			form:       h.defaultFormView(server, hasStoredCreds),
 			deployForm: h.deployFormView(r, server, hasStoredCreds),
 			collection: view.NodeCollectionResultView{
 				Available: true,
@@ -225,7 +226,7 @@ func (h *Handlers) collectWith(w http.ResponseWriter, r *http.Request, server se
 		form:         h.defaultFormView(server, hasStoredCreds),
 		snapshots:    snapshotViews,
 		collection:   collectionViewFromProbes(probes, collectedAt),
-		deployForm:  h.deployFormView(r, server, hasStoredCreds),
+		deployForm:   h.deployFormView(r, server, hasStoredCreds),
 		flashKind:    "success",
 		flashMessage: flashMessage,
 	})
@@ -789,6 +790,7 @@ func (h *Handlers) renderPage(w http.ResponseWriter, r *http.Request, server ser
 	page.NodeTarget = nodeTargetView(server)
 	page.NodeForm = state.form
 	page.NodeSnapshots = state.snapshots
+	page.NodeFleet = buildNodeFleetView(state.snapshots)
 	page.NodeCollection = state.collection
 	page.NodeStream = state.stream
 	deployForm := state.deployForm
@@ -823,6 +825,63 @@ func nodeTargetView(server servers.Server) view.NodeTargetView {
 		CredentialRef:      server.CredentialRef,
 		UpdatedAt:          formatTimestamp(server.UpdatedAt),
 	}
+}
+
+// buildNodeFleetView aggregates the per-node snapshots into the command
+// header's fleet counters. It runs on the server for every render so the
+// header can never drift from the node cards below it (there is no
+// client-side recomputation).
+func buildNodeFleetView(snapshots []view.NodeSnapshotView) view.NodeFleetView {
+	fleet := view.NodeFleetView{
+		Total: len(snapshots),
+	}
+	portSet := make(map[string]struct{})
+	var totalUptime, countUptime int
+
+	// addPort ignores the "-" placeholder that fallbackDisplay substitutes for
+	// an unknown value, so placeholders never inflate the port counter.
+	addPort := func(p string) {
+		p = strings.TrimSpace(p)
+		if p == "" || p == "-" {
+			return
+		}
+		portSet[p] = struct{}{}
+	}
+
+	for _, s := range snapshots {
+		switch strings.ToLower(strings.TrimSpace(s.HealthStatus)) {
+		case "running", "active", "healthy":
+			fleet.Running++
+		case "stopped", "inactive":
+			fleet.Stopped++
+		default:
+			fleet.Unknown++
+		}
+
+		addPort(s.ServicePort)
+		addPort(s.APIPort)
+		for _, p := range s.ActivePorts {
+			addPort(p)
+		}
+
+		if s.UptimeKnown {
+			totalUptime += s.UptimePct
+			countUptime++
+		}
+	}
+
+	fleet.Ports = len(portSet)
+	for port := range portSet {
+		fleet.PortList = append(fleet.PortList, port)
+	}
+	sort.Strings(fleet.PortList)
+
+	if countUptime > 0 {
+		fleet.HealthPct = totalUptime / countUptime
+		fleet.HealthKnown = true
+	}
+
+	return fleet
 }
 
 func (h *Handlers) defaultFormView(server servers.Server, hasStoredCreds bool) view.NodeFormView {

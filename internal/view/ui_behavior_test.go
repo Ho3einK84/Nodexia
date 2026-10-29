@@ -291,3 +291,45 @@ func TestLiveMetricsSocketIsScopedAndDisposedWithItsPane(t *testing.T) {
 		}
 	}
 }
+
+// The fleet header is rendered straight from PageData.NodeFleet; a regression
+// that leaves the struct at its zero value must fail loudly rather than
+// silently render "ACTIVE: 0" next to running node cards.
+func TestNodeFleetHeaderRendersAggregates(t *testing.T) {
+	body := renderUIBehaviorFixture(t, PageData{
+		AppName:         "Nodexia",
+		ContentTemplate: "content-nodes",
+		NodeTarget:      NodeTargetView{ID: 1, Name: "edge-1"},
+		NodeFleet: NodeFleetView{
+			Total:       2,
+			Running:     1,
+			Stopped:     1,
+			Ports:       2,
+			PortList:    []string{"62011", "62050"},
+			HealthPct:   97,
+			HealthKnown: true,
+		},
+		NodeSnapshots: []NodeSnapshotView{
+			{Name: "node2", NodeType: "pasarguard-node", TypeLabel: "PasarGuard", HealthStatus: "running", ServicePort: "62011"},
+		},
+	})
+
+	fleetStart := strings.Index(body, `class="nodes-fleet"`)
+	if fleetStart < 0 {
+		t.Fatal("rendered nodes page is missing the fleet header")
+	}
+	// Take the whole header block, not just the first stat cell.
+	header := body[fleetStart:]
+	if end := strings.Index(header, `</section>`); end > 0 {
+		header = header[:end]
+	}
+
+	if !strings.Contains(header, `data-total="2"`) {
+		t.Errorf("fleet header lost its total: %s", header)
+	}
+	for _, want := range []string{`>1</span>`, `>2</span>`, `97%`, `:62011`, `:62050`} {
+		if !strings.Contains(header, want) {
+			t.Errorf("fleet header missing %q:\n%s", want, header)
+		}
+	}
+}

@@ -828,6 +828,17 @@ body.tab-switcher-open {
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
 }
 
+/* While a modal (or the log drawer, which reuses the same body class) is
+   open, the floating buttons must not paint over the dialog. Both class
+   names are honoured: app.js sets `modal-open`, other surfaces use
+   `has-modal-open`. */
+body.modal-open .tab-fab,
+body.has-modal-open .tab-fab,
+body.modal-open .back-to-top,
+body.has-modal-open .back-to-top {
+  display: none !important;
+}
+
 .tab-fab:hover {
   background: rgba(59, 130, 246, 0.25);
   border-color: rgba(96, 165, 250, 0.5);
