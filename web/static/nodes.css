@@ -927,13 +927,14 @@
 }
 
 .node-proto-option {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 9px;
+  font-size: 0.84rem;
   cursor: pointer;
   background: rgba(2, 6, 23, 0.4);
   white-space: nowrap;
@@ -952,19 +953,25 @@
 
 .node-proto-option input {
   accent-color: var(--accent, #38bdf8);
+  margin: 0;
+  flex-shrink: 0;
 }
 
 .node-proto-option span {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.88rem;
+  font-size: 0.84rem;
   white-space: nowrap;
 }
 
 .node-proto-option small {
   color: var(--text-muted, #94a3b8);
   font-size: 0.72rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.12);
+  margin-inline-start: 2px;
 }
 
 /* ── Install launcher (opens the install modal) ──────────────────────────── */
@@ -1320,6 +1327,12 @@
   background: rgba(56, 189, 248, 0.08);
 }
 
+.deploy-engine[data-engine-card="rebecca-node"].is-selected {
+  border-color: rgba(167, 139, 250, 0.7);
+  background: rgba(167, 139, 250, 0.08);
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.25);
+}
+
 .deploy-engine input {
   position: absolute;
   opacity: 0;
@@ -1340,6 +1353,11 @@
 .deploy-engine.is-selected .deploy-engine__icon {
   background: rgba(56, 189, 248, 0.18);
   color: #38bdf8;
+}
+
+.deploy-engine[data-engine-card="rebecca-node"].is-selected .deploy-engine__icon {
+  background: rgba(167, 139, 250, 0.18);
+  color: #c4b5fd;
 }
 
 .deploy-engine__icon svg { width: 18px; height: 18px; }
@@ -1463,21 +1481,50 @@
 .deploy-review__row > strong { color: #f1f5f9; font-weight: var(--fw-medium); text-align: end; word-break: break-all; }
 .deploy-review__row[hidden] { display: none; }
 
+.modal--deploy .modal__body {
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal--deploy .modal__body > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.modal--deploy .deploy-pane {
+  flex: 1;
+  padding-bottom: 8px;
+}
+
 .deploy-actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
   position: sticky;
   bottom: 0;
-  background: linear-gradient(180deg, rgba(11, 17, 32, 0.85) 0%, rgba(11, 17, 32, 0.98) 100%);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  padding: 12px 0 2px;
-  margin-top: 14px;
+  background: linear-gradient(180deg, rgba(11, 17, 32, 0.92) 0%, #0b1120 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 12px 18px calc(14px + env(safe-area-inset-bottom, 0px));
+  margin: 16px -18px 0 -18px;
   border-top: 1px solid var(--border);
   z-index: 10;
 }
+
+.deploy-actions [data-deploy-next],
+.deploy-actions [data-deploy-submit] {
+  margin-inline-start: auto;
+}
+
 .deploy-actions [hidden] { display: none; }
+
+[dir="rtl"] .deploy-actions [data-deploy-back] svg,
+[dir="rtl"] .deploy-actions [data-deploy-next] svg {
+  transform: scaleX(-1);
+}
 
 /* ══ Live log drawer ═══════════════════════════════════════════════════════ */
 
@@ -1572,5 +1619,21 @@
 @media (max-width: 640px) {
   .modal--deploy .modal__dialog--wide { inline-size: 100vw; max-inline-size: 100vw; }
   .deploy-step { font-size: 0.68rem; padding: 5px 7px; }
+  .deploy-actions { padding: 10px 14px calc(14px + env(safe-area-inset-bottom, 0px)); margin: 14px -14px 0 -14px; }
+  .modal--deploy .modal__body { padding-inline: 14px; }
   .log-drawer__panel { inline-size: 100vw; }
+}
+
+@media (max-width: 480px) {
+  .node-proto-option,
+  .deploy-channel {
+    padding: 8px 10px;
+    font-size: 0.8rem;
+    gap: 6px;
+  }
+  .node-proto-option span,
+  .deploy-channel span {
+    font-size: 0.8rem;
+    gap: 4px;
+  }
 }

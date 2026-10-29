@@ -753,6 +753,8 @@ type NodeDeployEngineView struct {
 	Kind string
 	// Features are short bullet strings rendered under the description.
 	Features []string
+	// DefaultName is the default instance name (e.g. "pg-node", "rebecca-node").
+	DefaultName string
 }
 
 // NodeDeployFormView powers the single unified deploy modal. It carries every

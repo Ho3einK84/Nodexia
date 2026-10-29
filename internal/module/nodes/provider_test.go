@@ -1,8 +1,11 @@
 package nodes
 
 import (
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/Ho3einK84/Nodexia/internal/view"
 )
 
 func TestValidateNodeName(t *testing.T) {
@@ -101,5 +104,27 @@ func TestDedupeSnapshots(t *testing.T) {
 	// PasarGuard sorts before Rebecca; names sort within a type.
 	if snapshots[0].ServiceName != "node" || snapshots[1].ServiceName != "node2" || snapshots[2].ServiceName != "rebecca-node" {
 		t.Fatalf("unexpected order: %s, %s, %s", snapshots[0].ServiceName, snapshots[1].ServiceName, snapshots[2].ServiceName)
+	}
+}
+
+func TestDeployEnginesDefaults(t *testing.T) {
+	installable := DefaultInstallableProviders()
+	h := &Handlers{
+		installableProviders: installable,
+	}
+	r := httptest.NewRequest("GET", "/servers/1/nodes", nil)
+	engines := h.deployEngines(r)
+	if len(engines) != 2 {
+		t.Fatalf("len(engines) = %d, want 2", len(engines))
+	}
+	byKey := make(map[string]view.NodeDeployEngineView)
+	for _, e := range engines {
+		byKey[e.Key] = e
+	}
+	if pg, ok := byKey["pasarguard-node"]; !ok || pg.DefaultName != "pg-node" {
+		t.Errorf("pasarguard DefaultName = %q, want pg-node", pg.DefaultName)
+	}
+	if rb, ok := byKey["rebecca-node"]; !ok || rb.DefaultName != "rebecca-node" {
+		t.Errorf("rebecca DefaultName = %q, want rebecca-node", rb.DefaultName)
 	}
 }

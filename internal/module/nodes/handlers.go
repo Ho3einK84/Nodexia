@@ -902,6 +902,7 @@ func (h *Handlers) deployEngines(r *http.Request) []view.NodeDeployEngineView {
 	engines := make([]view.NodeDeployEngineView, 0, len(h.installableProviders))
 	for i, provider := range h.installableProviders {
 		meta := enginePresentation(provider.Type())
+		defaults := provider.InstallDefaults()
 		engines = append(engines, view.NodeDeployEngineView{
 			Key:         provider.Type(),
 			Label:       h.t(r, meta.labelKey),
@@ -910,6 +911,7 @@ func (h *Handlers) deployEngines(r *http.Request) []view.NodeDeployEngineView {
 			Kind:        meta.kind,
 			Recommended: i == 0,
 			Features:    []string{h.t(r, meta.featureOneKey), h.t(r, meta.featureTwoKey)},
+			DefaultName: defaults.NodeName,
 		})
 	}
 	return engines

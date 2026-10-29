@@ -525,7 +525,7 @@
               <legend>{{ t "nodes.engine" }}</legend>
               <div class="deploy-engines" data-deploy-engines>
                 {{ range $form.Engines }}
-                <label class="deploy-engine" data-engine-card="{{ .Key }}">
+                <label class="deploy-engine" data-engine-card="{{ .Key }}" data-default-name="{{ .DefaultName }}">
                   <input type="radio" name="node_type" value="{{ .Key }}"
                          {{ if eq .Key $form.NodeType }}checked{{ end }} required>
                   <span class="deploy-engine__icon"><i data-lucide="{{ .Icon }}"></i></span>
@@ -554,7 +554,7 @@
           <section class="deploy-pane" data-deploy-pane="1" hidden>
             <label class="form-field">
               <span>{{ t "nodes.node_name" }}</span>
-              <input type="text" name="node_name" value="{{ $form.NodeName }}" placeholder="node" maxlength="64" required
+              <input type="text" name="node_name" value="{{ $form.NodeName }}" placeholder="{{ if eq $form.NodeType "rebecca-node" }}rebecca-node{{ else }}pg-node{{ end }}" maxlength="64" required
                      data-modal-autofocus spellcheck="false" autocomplete="off">
               {{ with index $form.Errors "node_name" }}<small class="field-error">{{ . }}</small>{{ end }}
               <small class="field-hint">{{ tsafe "nodes.node_name_hint" }}</small>
@@ -644,8 +644,10 @@
               <div class="deploy-review__row"><span>{{ t "nodes.api_port" }}</span><strong data-review="api_port">—</strong></div>
               <div class="deploy-review__row"><span>{{ t "nodes.channel" }}</span><strong data-review="channel">—</strong></div>
               <div class="deploy-review__row" data-review-row="protocol"><span>{{ t "nodes.protocol" }}</span><strong data-review="protocol">—</strong></div>
+              <div class="deploy-review__row" data-review-row="bundle" hidden><span>{{ t "nodes.bundle" }}</span><strong data-review="bundle">—</strong></div>
             </div>
-            <p class="node-install-note">{{ tsafe "nodes.install_note" }}</p>
+            <p class="node-install-note" data-install-note="docker">{{ tsafe "nodes.install_note" }}</p>
+            <p class="node-install-note" data-install-note="binary" hidden>{{ tsafe "nodes.rebecca_install_note" }}</p>
           </section>
 
           <div class="sys-form__actions deploy-actions">

@@ -1172,28 +1172,64 @@
     var engineCards = modal.querySelectorAll('[data-engine-card]');
     var currentStep = 0;
 
-    function getSelectedEngine() {
-      var checked = modal.querySelector('input[name="node_type"]:checked');
-      return checked ? checked.value : 'pasarguard';
+    function isRebecca(engine) {
+      return engine === 'rebecca' || engine === 'rebecca-node';
     }
 
-    function syncEngineUI() {
+    function getSelectedEngine() {
+      var checked = modal.querySelector('input[name="node_type"]:checked');
+      return checked ? checked.value : 'pasarguard-node';
+    }
+
+    function syncEngineUI(prevEngine) {
       var engine = getSelectedEngine();
-      var kind = (engine === 'rebecca') ? 'binary' : 'docker';
+      var rebecca = isRebecca(engine);
+      var kind = rebecca ? 'binary' : 'docker';
       modal.setAttribute('data-selected-engine', engine);
+
       engineCards.forEach(function (card) {
         var radio = card.querySelector('input[type="radio"]');
-        card.classList.toggle('is-selected', radio && radio.checked);
+        card.classList.toggle('is-selected', !!(radio && radio.checked));
       });
+
       modal.querySelectorAll('[data-engine-group]').forEach(function (grp) {
-        grp.hidden = (grp.getAttribute('data-engine-group') !== kind);
+        var isGrpActive = (grp.getAttribute('data-engine-group') === kind);
+        grp.hidden = !isGrpActive;
+        grp.querySelectorAll('input, textarea, select').forEach(function (el) {
+          el.disabled = !isGrpActive;
+        });
       });
+
       var protoRow = modal.querySelector('[data-review-row="protocol"]');
       if (protoRow) protoRow.hidden = (kind !== 'docker');
+
+      var bundleRow = modal.querySelector('[data-review-row="bundle"]');
+      if (bundleRow) bundleRow.hidden = (kind !== 'binary');
+
+      modal.querySelectorAll('[data-install-note]').forEach(function (el) {
+        el.hidden = (el.getAttribute('data-install-note') !== kind);
+      });
+
+      var nameInput = form ? form.elements['node_name'] : null;
+      if (nameInput) {
+        var selectedCard = modal.querySelector('[data-engine-card="' + engine + '"]');
+        var targetDefaultName = (selectedCard && selectedCard.getAttribute('data-default-name')) ||
+          (rebecca ? 'rebecca-node' : 'pg-node');
+        var prevCard = prevEngine ? modal.querySelector('[data-engine-card="' + prevEngine + '"]') : null;
+        var prevDefaultName = (prevCard && prevCard.getAttribute('data-default-name')) ||
+          (prevEngine ? (isRebecca(prevEngine) ? 'rebecca-node' : 'pg-node') : (rebecca ? 'pg-node' : 'rebecca-node'));
+        var currentVal = nameInput.value.trim();
+
+        if (!currentVal || currentVal === 'node' || currentVal === prevDefaultName || currentVal === (rebecca ? 'pg-node' : 'rebecca-node')) {
+          nameInput.value = targetDefaultName;
+        }
+        nameInput.placeholder = targetDefaultName;
+      }
     }
 
     function updateReview() {
       var engine = getSelectedEngine();
+      var rebecca = isRebecca(engine);
       var name = (form && form.elements['node_name'] ? form.elements['node_name'].value : '').trim();
       var sPort = (form && form.elements['service_port'] ? form.elements['service_port'].value : '').trim();
       var aPort = (form && form.elements['api_port'] ? form.elements['api_port'].value : '').trim();
@@ -1205,12 +1241,27 @@
         if (el) el.textContent = val || '—';
       };
 
-      setReview('engine', engine === 'rebecca' ? 'Rebecca (Native)' : 'PasarGuard (Docker)');
-      setReview('node_name', name);
+      var selectedCard = modal.querySelector('[data-engine-card="' + engine + '"]');
+      var engineLabel = selectedCard ? (selectedCard.querySelector('.deploy-engine__label') || {}).textContent : '';
+      var engineKind = selectedCard ? (selectedCard.querySelector('.deploy-engine__kind') || {}).textContent : '';
+      var displayEngine = engineLabel ? (engineLabel + ' (' + engineKind + ')') : (rebecca ? 'Rebecca (Native)' : 'PasarGuard (Docker)');
+
+      setReview('engine', displayEngine);
+      setReview('node_name', name || (rebecca ? 'rebecca-node' : 'pg-node'));
       setReview('service_port', sPort ? ':' + sPort : '—');
       setReview('api_port', aPort ? ':' + aPort : '—');
       setReview('channel', channel ? channel.value : 'stable');
       setReview('protocol', proto ? proto.value.toUpperCase() : 'gRPC');
+
+      var protoRow = modal.querySelector('[data-review-row="protocol"]');
+      if (protoRow) protoRow.hidden = rebecca;
+
+      var bundleRow = modal.querySelector('[data-review-row="bundle"]');
+      if (bundleRow) {
+        bundleRow.hidden = !rebecca;
+        var hasBundle = bundleInput && bundleInput.value.trim().length > 0;
+        setReview('bundle', hasBundle ? '✓ ' + (I18N && I18N.t ? I18N.t('nodes.bundle_valid') || 'Configured' : 'Configured') : '—');
+      }
     }
 
     function setStep(idx) {
@@ -1239,15 +1290,43 @@
       card.addEventListener('click', function () {
         var radio = card.querySelector('input[type="radio"]');
         if (radio) {
+          var prevEngine = getSelectedEngine();
           radio.checked = true;
-          syncEngineUI();
+          syncEngineUI(prevEngine);
         }
       });
+      var radio = card.querySelector('input[type="radio"]');
+      if (radio) {
+        radio.addEventListener('change', function () {
+          syncEngineUI();
+        });
+      }
     });
 
     if (btnNext) {
       btnNext.addEventListener('click', function (e) {
         e.preventDefault();
+        if (currentStep === 1) {
+          var nameField = form && form.elements['node_name'];
+          if (nameField && !nameField.value.trim()) {
+            nameField.focus();
+            if (nameField.reportValidity) nameField.reportValidity();
+            return;
+          }
+          var engine = getSelectedEngine();
+          if (isRebecca(engine)) {
+            var bundleVal = (bundleInput ? bundleInput.value : '').trim();
+            if (!bundleVal) {
+              if (bundleState) {
+                bundleState.hidden = false;
+                bundleState.className = 'field-hint deploy-bundle-state is-bad';
+                bundleState.textContent = '⚠ ' + (I18N && I18N.t ? I18N.t('nodes.bundle_invalid') || 'Paste the certificate and its private key.' : 'Paste the certificate and its private key.');
+              }
+              if (bundleInput) bundleInput.focus();
+              return;
+            }
+          }
+        }
         setStep(currentStep + 1);
       });
     }
@@ -1285,13 +1364,22 @@
     document.querySelectorAll('[data-engine-preselect]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var eng = btn.getAttribute('data-engine-preselect');
+        var prevEngine = getSelectedEngine();
         var r = modal.querySelector('input[name="node_type"][value="' + eng + '"]');
         if (r) {
           r.checked = true;
-          syncEngineUI();
+          syncEngineUI(prevEngine);
           setStep(1);
         }
       });
+    });
+
+    document.querySelectorAll('[data-modal-open="deploy-node-modal"]').forEach(function (btn) {
+      if (!btn.hasAttribute('data-engine-preselect')) {
+        btn.addEventListener('click', function () {
+          setStep(0);
+        });
+      }
     });
 
     if (modal.classList.contains('is-open') || modal.hasAttribute('data-modal-open-initial')) {
