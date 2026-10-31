@@ -5,7 +5,7 @@ go 1.26.8
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/go-sql-driver/mysql v1.10.1
-	github.com/pkg/sftp v1.13.11
+	github.com/pkg/sftp v1.13.12
 	golang.org/x/crypto v0.58.0
 	modernc.org/sqlite v1.61.0
 )
