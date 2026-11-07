@@ -7,7 +7,7 @@ require (
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/pkg/sftp v1.13.11
 	golang.org/x/crypto v0.58.0
-	modernc.org/sqlite v1.61.0
+	modernc.org/sqlite v1.61.1
 )
 
 require (
