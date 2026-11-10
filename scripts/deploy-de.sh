@@ -7,9 +7,13 @@ DE_DIR="/opt/nodexia"
 
 cd "$REPO_DIR"
 
-GIT_REV="$(git rev-parse --short HEAD 2>/dev/null || echo 'dev')"
+GIT_REV="$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'dev')"
-VERSION="dev-${BRANCH}-${GIT_REV}"
+if [ "$BRANCH" = "dev" ]; then
+  VERSION="dev-${GIT_REV}"
+else
+  VERSION="${BRANCH}-${GIT_REV}"
+fi
 
 echo "==> [1/4] Building Nodexia (${VERSION})..."
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 /usr/local/go/bin/go build \
