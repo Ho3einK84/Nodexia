@@ -15,7 +15,7 @@ var (
 	//go:embed web/templates/*.gohtml
 	templateFiles embed.FS
 
-	//go:embed web/static/*
+	//go:embed web/static
 	staticFiles embed.FS
 
 	//go:embed schema.sql
