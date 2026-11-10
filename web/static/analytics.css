@@ -950,15 +950,15 @@
 .traffic-summary__card {
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid var(--border);
-  border-left-width: 3px;
+  border-inline-start-width: 3px;
   border-radius: var(--radius-lg);
   padding: 16px 18px;
   backdrop-filter: blur(8px);
 }
 
-.traffic-summary__card--dl { border-left-color: #3b82f6; }
-.traffic-summary__card--ul { border-left-color: #8b5cf6; }
-.traffic-summary__card--total { border-left-color: var(--ok); }
+.traffic-summary__card--dl { border-inline-start-color: var(--accent); }
+.traffic-summary__card--ul { border-inline-start-color: var(--violet); }
+.traffic-summary__card--total { border-inline-start-color: var(--ok); }
 
 .traffic-summary__label {
   display: flex;

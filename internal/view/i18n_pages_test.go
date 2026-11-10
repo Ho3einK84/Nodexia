@@ -20,6 +20,10 @@ var rawKeyPattern = regexp.MustCompile(`\b(servers|common|nav|home|diagnostics|l
 // keys as JSON property names, so it is stripped before scanning for leaks.
 var clientI18nIslandPattern = regexp.MustCompile(`(?s)<script type="application/json" id="nodexia-i18n">.*?</script>`)
 
+// headPattern matches the document head containing asset links (e.g. shell.css)
+// so that asset URLs are not falsely flagged as leaked translation keys.
+var headPattern = regexp.MustCompile(`(?s)<head>.*?</head>`)
+
 // translatedPages enumerates the content templates that phase 2 has localized.
 // Each renders end-to-end in every supported locale; any raw-key leak or
 // template execution error fails the build. Extend this list as more areas are
@@ -86,9 +90,11 @@ func TestTranslatedPagesNoRawKeyLeak(t *testing.T) {
 				if err := renderer.Render(rec, http.StatusOK, page); err != nil {
 					t.Fatalf("render %s (%s): %v", tmpl, lang, err)
 				}
-				// The client-i18n JSON island contains catalog keys by design;
-				// strip it so only genuine leaks in rendered copy are flagged.
+				// The client-i18n JSON island contains catalog keys by design, and
+				// the <head> contains static asset links like shell.css; strip both
+				// so only genuine leaks in rendered copy are flagged.
 				body := clientI18nIslandPattern.ReplaceAllString(rec.Body.String(), "")
+				body = headPattern.ReplaceAllString(body, "")
 				if m := rawKeyPattern.FindString(body); m != "" {
 					t.Errorf("%s (%s): leaked raw translation key %q", tmpl, lang, m)
 				}
