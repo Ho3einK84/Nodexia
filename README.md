@@ -1,56 +1,45 @@
 # 🛰️ Nodexia
 
-> Lightweight, self-hosted control panel for monitoring and managing **Rebecca** and **Pasarguard** panel nodes.
+> **Lightweight, single-binary control plane for managing and monitoring server fleets, Rebecca, and PasarGuard VPN nodes.**
 
-![status](https://img.shields.io/badge/status-active%20development-orange) ![license](https://img.shields.io/badge/license-MIT-blue) ![go](https://img.shields.io/badge/go-1.26-00ADD8)
+[![status](https://img.shields.io/badge/status-active%20development-orange)](https://github.com/Ho3einK84/Nodexia)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![go](https://img.shields.io/badge/go-1.26-00ADD8)](https://golang.org)
+[![zero--build](https://img.shields.io/badge/frontend-zero--build-success)](FRONTEND.md)
 
-> ⚠️ **Under active development.** Built with AI assistance — review, test, and harden before using with sensitive production data.
-
-A single Go binary — server-rendered HTML (`html/template`), the standard-library
-HTTP server, and a tiny pinned set of dependencies. It connects to your nodes
-over SSH, collects resource and traffic metrics on a schedule, and surfaces them
-through monitoring, analytics, forecasting, and alerting.
+Nodexia connects to your Linux servers over SSH, gathers resource and vnStat traffic metrics on a schedule, projects usage against billing cycles, and delivers instant alerts. It delivers all of this through a blazing-fast, bilingual (English & Persian RTL) web UI embedded into a single, self-contained Go binary.
 
 ---
 
-## ✨ Features
+## ✨ Highlights
 
-- 📊 **Monitoring & analytics** — CPU, RAM, swap, disk, load, and uptime per
-  server, plus vnStat traffic (daily/monthly download & upload), charted from rollups.
-- 🚨 **Fleet warnings** — the dashboard leads with dismissible banners for
-  traffic running out before the reset, resources at 90%+, and traffic anomalies.
-- 🔮 **Bandwidth forecasting** — projects today / this-week / this-period usage
-  with a confidence level; the model adapts as more history arrives.
-- 📅 **Billing-cycle anchor** — set the day your provider resets the quota
-  (e.g. the 15th) and every projection, limit, and alert follows that period.
-- 🚦 **Traffic limits** — caps on **download, upload, or total** with a
-  days-to-exhaustion estimate, set per-server, **per-tag**, or as a
-  **fleet-wide default** (most-specific wins).
-- 🔔 **Alerting** — threshold, **predictive** (warn *before* a limit is hit),
-  and **anomaly** rules (traffic spike / unusual growth), plus **server-down**
-  and **node-stopped** alerts, with cooldowns, silences, history, Telegram
-  delivery, and an optional digest.
-- 🔍 **Node discovery** — detect and manage Rebecca / Pasarguard nodes with a
-  **30-day uptime** badge per node, a Pasarguard install wizard, and a fleet
-  node-status glance on the dashboard.
-- 📈 **Observability** — persisted scheduler run history on diagnostics and an
-  optional token-gated Prometheus `/metrics` endpoint for Grafana.
-- 🌐 **Bilingual UI** — full English and Persian (فارسی) with RTL; installable as a PWA.
-- 🗂️ **Multi-tab workspace** *(v0.6.0)* — open several pages at once in a
-  browser-tab-style bar (mobile: a bottom-sheet switcher + FAB), each kept
-  alive and switchable instantly; see [`docs/tab-system.md`](docs/tab-system.md).
-- 🧰 **Supporting tools** — bulk reboot/update/delete, in-browser SSH terminal,
-  command runner, SFTP browser, and encrypted backup/restore.
-- 🔒 **Security** — single admin, HMAC CSRF-protected sessions, login rate
-  limiting, SSH host-key pinning, and runtime-only SSH credentials.
+- 📊 **Monitoring & Analytics:** Real-time CPU, RAM, disk, load, and vnStat traffic rollups.
+- 🔮 **Predictive Forecasting:** Adapting usage projections anchored to your provider's monthly billing reset day.
+- 🚦 **Traffic Quotas & Fleet Warnings:** Hard and soft limits with days-to-exhaustion indicators and dismissible dashboard warning cards.
+- 🔍 **Node Discovery & Deployment:** Automatically detect and manage Rebecca and PasarGuard nodes, complete with an interactive deployment wizard and 30-day uptime indicators.
+- 🔔 **Multi-Engine Alerting:** Threshold, predictive, anomaly, and host-down alert rules delivered straight to Telegram.
+- 🗂️ **Multi-Tab Workspace:** Open multiple servers, terminals, and metrics tabs concurrently without full page reloads.
+- 🌐 **Bilingual & Responsive:** Full English and Persian (فارسی) support with bidirectional layout (LTR/RTL) and installable PWA.
+- 🧰 **Built-In Ops Suite:** In-browser SSH terminal (xterm.js + WebSockets), remote command runner, SFTP file browser, and batch reboot/update tasks.
+- ⚡ **Zero-Build Architecture:** No `npm`, `vite`, or Webpack. Pure Go SSR templates, browser-native ES Modules, and CSS design tokens.
 
 ---
 
-## 🚀 Install
+## 🏗️ Architecture at a Glance
 
-Nodexia runs as a Docker Compose stack behind [Caddy](https://caddyserver.com/)
-(automatic HTTPS). On a fresh **Ubuntu 24.04** host with root/sudo, a domain
-`A` record pointing at it, and inbound TCP **80**/**443** open:
+| Layer | Technology | Details |
+|---|---|---|
+| **Backend** | Go 1.26+ | Standard library HTTP (`net/http`), no heavy web frameworks |
+| **Database** | SQLite / MySQL | Pure Go SQLite (`modernc.org/sqlite`) default; MySQL 8+ supported |
+| **Frontend** | Zero-Build | Native ES Modules (`app.js` + 5 modules) and pure CSS tokens |
+| **Packaging** | Single Binary | HTML templates and static assets embedded via Go `embed.FS` |
+| **Security** | Production-Hardened | Single admin, HMAC CSRF protection, rate limiting, pinned host keys |
+
+---
+
+## 🚀 Quick Install
+
+Nodexia installs on **Ubuntu 24.04** in seconds via automated Docker Compose with [Caddy](https://caddyserver.com/) providing automatic HTTPS:
 
 ```bash
 git clone https://github.com/Ho3einK84/Nodexia.git
@@ -58,118 +47,62 @@ cd Nodexia
 sudo ./install.sh --domain panel.example.com --email you@example.com
 ```
 
-`install.sh` installs Docker, deploys to `/opt/nodexia`, generates secrets,
-registers the `nodexia.service` systemd unit, installs the `nodexia` CLI, and
-waits for health. It downloads a prebuilt, SHA-256-verified binary for a
-sub-second build (falling back to compiling from source). Add `--non-interactive`
-for an unattended run (a random admin password is printed once at the end).
+> **Unattended install:** add `--non-interactive` to automatically generate random secure credentials.
 
-| Flag | Purpose |
-|------|---------|
-| `--domain <host>` | Public hostname (required for a new install) |
-| `--email <addr>` | ACME / Let's Encrypt contact |
-| `--admin-user` / `--admin-password` | Admin login (preserved on rerun unless set) |
-| `--telegram-bot-token <token>` | Enable Telegram alert delivery |
-| `--image-version <tag>` | Release to deploy — a tag (e.g. `v0.7.3`) or `latest` |
-| `--build-from-source` | Always compile from source; skip prebuilt binaries |
-| `--non-interactive` | Never prompt; auto-generate missing values |
-| `-h`, `--help` | Show all options |
+### 🧭 CLI Management
+
+The installer sets up a global `nodexia` command:
+
+```bash
+nodexia status                 # Check container health and status
+nodexia logs -f                # Follow live application logs
+nodexia restart                # Restart application stack
+nodexia update                 # Upgrade to latest release keeping configuration
+nodexia uninstall --purge      # Remove stack and wipe data
+```
 
 ---
 
-## 🧭 Managing Nodexia
+## ⚙️ Essential Configuration
 
-The installer adds a `nodexia` command (it uses `sudo` automatically when needed):
+Configuration is managed through `/opt/nodexia/.env.production` (see [`.env.production.example`](.env.production.example)):
 
-```bash
-nodexia status                            # container status
-nodexia logs                              # follow logs (e.g. `nodexia logs app`)
-nodexia up / down / restart               # control the stack
-nodexia update                            # upgrade to the latest release, keeping secrets
-nodexia update --image-version v0.7.3     # or pin a specific version
-nodexia uninstall [--purge] [--yes]       # remove stack + CLI; --purge also wipes data
-```
-
-> 🛠️ **Manual / non-Ubuntu:** `cp .env.production.example .env.production`, edit
-> it, then `docker compose -f compose.production.yml up -d --build`.
+| Variable | Description | Default |
+|---|---|---|
+| `NODEXIA_AUTH_USERNAME` | Admin login username | Required |
+| `NODEXIA_AUTH_PASSWORD` | Admin login password | Required |
+| `NODEXIA_SESSION_SECRET` | 48-char random string for HMAC cookies | Required |
+| `NODEXIA_DOMAIN` | Public domain for Caddy HTTPS | Required |
+| `NODEXIA_TELEGRAM_BOT_TOKEN` | Bot token for alerts and daily digests | Optional |
+| `NODEXIA_DB_DRIVER` | Database engine (`sqlite` or `mysql`) | `sqlite` |
 
 ---
 
 ## 📚 Documentation
 
-- [`docs/architecture.md`](docs/architecture.md) — codebase map, module patterns, auth/CSRF model, module invariants.
-- [`docs/tab-system.md`](docs/tab-system.md) — multi-tab workspace design and contract.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — development workflow, coding standards, and contribution guide.
+- [**Frontend Architecture (`FRONTEND.md`)**](FRONTEND.md) — Zero-Build philosophy, template partials, ES modules, and CSS design tokens.
+- [**System Architecture (`docs/architecture.md`)**](docs/architecture.md) — Request lifecycle, database model, module invariants, and security patterns.
+- [**Multi-Tab Workspace (`docs/tab-system.md`)**](docs/tab-system.md) — In-page multi-tab lifecycle, state isolation, and terminal adapters.
+- [**Contributing Guide (`CONTRIBUTING.md`)**](CONTRIBUTING.md) — Local development, code standards, and PR guidelines.
 
 ---
 
-## 📸 Screenshots
-
-> From **v0.7.6**, with demo data shown purely to illustrate the interface.
-
-| | |
-|---|---|
-| **Dashboard** — health, traffic, and collection status.<br>![Dashboard](docs/screenshots/01-dashboard.png) | **Server registry** — shared hosts with country, tags, actions.<br>![Servers](docs/screenshots/02-servers.png) |
-| **Monitoring** — live CPU / RAM / disk gauges, load, uptime.<br>![Monitoring](docs/screenshots/03-monitoring.png) | **Node discovery** — detected nodes per host.<br>![Nodes](docs/screenshots/06-nodes.png) |
-| **Forecast — exceeding limit**.<br>![Forecast exceeding](docs/screenshots/04-analytics-forecast.png) | **Forecast — within limit**.<br>![Forecast safe](docs/screenshots/05-analytics-forecast-safe.png) |
-| **Alerting** — threshold + predictive rules.<br>![Alerts](docs/screenshots/07-alerts.png) | **Persian (فارسی)** — full RTL layout.<br>![Persian dashboard](docs/screenshots/08-dashboard-fa.png) |
-
----
-
-## ⚙️ Configuration
-
-Environment-based — the full annotated list lives in
-[`.env.production.example`](.env.production.example). Edit
-`/opt/nodexia/.env.production` and run `nodexia restart` to apply.
-
-| Variable | Required | Description |
-|----------|:--------:|-------------|
-| `NODEXIA_AUTH_USERNAME` / `NODEXIA_AUTH_PASSWORD` | ✅ | Admin login; weak/empty passwords are refused in production. |
-| `NODEXIA_SESSION_SECRET` | ✅ | HMAC key for signed cookies; unique, ≥ 16 chars (`openssl rand -base64 48`). |
-| `NODEXIA_DOMAIN` | ✅ | Public hostname; changing it re-issues certificates on restart. |
-| `NODEXIA_TELEGRAM_BOT_TOKEN` | — | Telegram bot token for alerts/digest; blank disables sending. |
-| `NODEXIA_DB_DRIVER` / `NODEXIA_DB_DSN` | — | `sqlite` (default) or `mysql` + DSN. |
-| `NODEXIA_SSH_HOST_KEY_POLICY` | — | `tofu` (default) or `insecure`. |
-| `NODEXIA_METRICS_TOKEN` | — | Enables `GET /metrics` (Prometheus format) for scrapers; blank keeps it disabled. |
-
-> 🔐 **Never commit or share `.env.production`** — it holds your admin password,
-> session secret, and bot token. It's gitignored.
-
-**Telegram alerts.** Create a bot with [@BotFather](https://t.me/BotFather), set
-`NODEXIA_TELEGRAM_BOT_TOKEN`, restart, then add a channel and rules under
-`/alerts`. Predictive metrics (`projected_exceed_limit`, `days_to_exhaustion`)
-require a monthly limit set on the server's analytics page.
-
----
-
-## 💻 Local development
+## 💻 Local Development
 
 ```bash
-cp .env.example .env          # set NODEXIA_AUTH_USERNAME / NODEXIA_AUTH_PASSWORD
+# 1. Setup local environment
+cp .env.example .env
+
+# 2. Run application
 go run ./cmd/nodexia/
+
+# 3. Test & static analysis
+make test              # Run unit and integration tests
+go vet ./...           # Static code inspection
+make build             # Compile static binary to bin/nodexia
 ```
 
-Open <http://localhost:8080> and sign in (dev cookies aren't `Secure`, so plain
-HTTP works).
-
----
-
-## 🧪 Build, test & release
-
-```bash
-make build    # → bin/nodexia
-make test     # full test suite
-go vet ./...  # static analysis
-```
-
-Pushing a version tag (`git tag v0.7.3 && git push origin v0.7.3`) triggers
-[`release.yml`](.github/workflows/release.yml): it runs the tests, cross-compiles
-static `linux/amd64` + `linux/arm64` binaries, and publishes them (with
-`checksums.txt`) to a GitHub Release. The project targets the latest **Go 1.26.x**.
-
-`make release VERSION=v0.7.3` is a shortcut: it bumps every version reference,
-runs the tests, then commits and tags the release for you (push the branch and
-tag to publish).
+Access the local instance at `http://localhost:8080`.
 
 ---
 

@@ -1,86 +1,79 @@
-# Nodexia architecture
+# Nodexia Architecture
 
-A high-level map of the codebase for new contributors. For the multi-tab
-workspace, see [`tab-system.md`](tab-system.md).
+> High-level system architecture, component relationships, and engineering standards for Nodexia.
+> For frontend specifics, see [`FRONTEND.md`](../FRONTEND.md); for tab mechanics, see [`docs/tab-system.md`](tab-system.md).
 
-## Stack at a glance
+---
 
-- **Language**: Go 1.26.
-- **HTTP**: standard library only — `net/http` + `ServeMux` (Go 1.22+ pattern
-  matching). No web framework, no router library.
-- **Rendering**: server-side `html/template`. All pages are SSR; there is no
-  client-side framework, no SPA, and no client rendering step. The
-  `tab-manager.js` multi-tab workspace is the one place the browser does
-  in-place navigation via `fetch()` + `DOMParser` + `importNode`, but the HTML
-  it injects is still fully rendered server-side.
-- **Asset embedding**: `web/templates/` and `web/static/` are compiled into
-  the binary with `go:embed` in `assets.go`. A rebuild is required to ship a
-  template or JS change — a container restart is not enough.
-- **Database**: SQLite (via `modernc.org/sqlite`, pure Go) by default, with
-  full MySQL / MariaDB 8+ support via `github.com/go-sql-driver/mysql` and
-  automatic DDL dialect translation. All queries go through the `db.DBTX`
-  interface in `internal/db/` so both drivers work behind the same code.
-- **SSH**: `golang.org/x/crypto/ssh`. A shared client lives in
-  `internal/sshclient/`. Host keys are pinned on first use.
-- **SFTP**: `github.com/pkg/sftp`.
-- **WebSocket terminal**: `github.com/coder/websocket`.
-- **Pinned, minimal dependency set** — see `go.mod`. Justify any new module.
+## 1. Stack at a Glance
 
-## Repository layout
+- **Backend Runtime:** Go 1.26+ with standard library HTTP (`net/http`, Go 1.22+ routing). No web framework.
+- **Frontend Architecture:** **Zero-Build** (no npm, vite, or bundlers).
+  - **HTML:** Server-side Go `html/template` composed from layout and partials (`web/templates/partials/`).
+  - **JavaScript:** Browser-native ES Modules (`app.js` orchestrator + `web/static/modules/`).
+  - **CSS:** Native CSS design tokens (`tokens.css`), application shell chrome (`shell.css`), core UI library (`style.css`), and tab styles (`tabs.css`). Full bidirectional (LTR/RTL) support.
+- **Asset Embedding:** Templates and static files are compiled into the binary via `go:embed` with SHA-256 cache-busting fingerprints.
+- **Database:** Pure Go SQLite (`modernc.org/sqlite`) by default, with MySQL 8+ support via `go-sql-driver/mysql`. Queries use the shared `db.DBTX` interface.
+- **Remote Operations:** SSH (`golang.org/x/crypto/ssh`) with TOFU host-key pinning, SFTP (`pkg/sftp`), and in-browser WebSocket terminal (`coder/websocket` + vendored xterm.js).
+
+---
+
+## 2. Repository Layout
 
 ```
-cmd/nodexia/             entrypoint (main.go)
-internal/app/            bootstrap + dependency wiring
-internal/config/         env config (NODEXIA_*)
-internal/db/             drivers, migrations, DBTX
-internal/http/           router, middleware, shared handlers
-internal/module/         feature modules + registry
-  ├─ servers/            server registry CRUD
-  ├─ nodes/              Rebecca / Pasarguard discovery + management
-  ├─ monitoring/         resource + traffic sweeps
-  ├─ analytics/          forecasting + limit math
-  ├─ alerts/             rule evaluation + event history
-  ├─ terminal/           in-browser SSH terminal
-  ├─ commands/           run / stream / test
-  ├─ files/              SFTP browser
-  ├─ bulk/               multi-server actions
-  ├─ system/             /ops pages
-  └─ registry/           module registration (DefaultModules)
-internal/scheduler/      background jobs (monitoring/nodes sweeps, analytics
-                         rollup/cleanup, alert evaluation, country resolution,
-                         status digest)
-internal/sshclient/      shared SSH runtime
-internal/view/           Renderer, PageData, nav, client-i18n bridge
-internal/i18n/           en/fa catalogs (locales/*.json) + lookup; parity-tested
-internal/notify/         Telegram client + alert/digest message templates
-internal/backup/         encrypted logical DB backup/restore (diagnostics page)
-internal/geoip/          country lookup for traffic sources
-internal/livemetrics/    live SSE metrics
-internal/terminalticket/ single-use WS ticket store (30s TTL)
-internal/commandstream/  background SSH command sessions
-internal/ratelimit/      login rate limiter
-internal/sse/            Server-Sent Events helpers
-schema.sql               schema + migration bookkeeping (append only)
-web/templates/           html/template definitions
-web/static/              JS, CSS, fonts, vendored xterm.js + addons
+Nodexia/
+├── cmd/nodexia/          # Main application entrypoint
+├── internal/
+│   ├── app/              # Bootstrap, dependency wiring, and shutdown
+│   ├── config/           # Environment configuration (NODEXIA_*)
+│   ├── db/               # Drivers, migrations, and shared DBTX
+│   ├── http/             # Router, middleware chain, and shared handlers
+│   ├── module/           # Feature domain modules
+│   │   ├── servers/      # Server inventory and credentials
+│   │   ├── nodes/        # Rebecca & PasarGuard discovery and deployment
+│   │   ├── monitoring/   # Telemetry collection sweeps (CPU, RAM, vnStat)
+│   │   ├── analytics/    # Forecasting models and traffic quota math
+│   │   ├── alerts/       # Rule evaluation, cooldowns, and Telegram delivery
+│   │   ├── terminal/     # Web terminal SSH sessions and ticket broker
+│   │   ├── commands/     # Remote command execution and streaming
+│   │   ├── files/        # SFTP file manager
+│   │   ├── bulk/         # Asynchronous batch tasks (reboot, update)
+│   │   └── system/       # Host diagnostics and SQLite backup/restore
+│   ├── scheduler/        # Background tickers (sweeps, alerts, rollups)
+│   ├── sshclient/        # Shared SSH connection pool and runtime
+│   ├── view/             # HTML render engine, PageData models, i18n bridge
+│   ├── i18n/             # En/Fa translation catalogs (en.json, fa.json)
+│   └── notify/           # Telegram client and alert formatters
+├── web/
+│   ├── templates/        # Go html/templates (layout, partials, views)
+│   └── static/           # Static assets (tokens.css, shell.css, JS modules)
+├── schema.sql            # Append-only database migrations
+├── FRONTEND.md           # Authoritative frontend & UI guidelines
+└── assets.go             # Asset embedding and fingerprint registry
 ```
 
-## Request lifecycle
+---
 
-1. `cmd/nodexia/main.go` calls `internal/app` to build the config, open the DB,
-   start the SSH service, register the scheduler jobs, and construct the
-   `http.Handler`.
-2. `internal/http/router.go` mounts the module routes and wraps them in the
-   middleware chain (outside-in):
-   `Recover` → `Logging` → `RequireAuth` → `CSRF` → `Session` → `Locale` →
-   `SecurityHeaders` → `RequestID`. Static assets, health, metrics, and PWA
-   entry points are exempted where appropriate.
-3. A module handler renders via `deps.Renderer.Render(w, status, view.PageData)`,
-   which executes the layout + content template and writes the response.
+## 3. Request Lifecycle & Middleware
 
-## Module pattern
+Incoming requests pass through a layered middleware pipeline:
 
-Every feature module implements `module.Module`:
+```
+Request ──► Recover ──► Logging ──► RequireAuth ──► CSRF ──► Session ──► Locale ──► SecurityHeaders ──► Module Handler
+```
+
+1. **Routing:** `internal/http/router.go` mounts domain modules to the `ServeMux`.
+2. **Authentication:** Two HTTP-only, `SameSite=Lax` cookies:
+   - `nodexia_session`: visitor session anchoring the CSRF token.
+   - `nodexia_auth`: authenticated admin identity with expiration.
+3. **CSRF Protection:** Synchronizer token pattern checking same-origin headers and hidden `_csrf_token` on mutable requests.
+4. **Rendering:** Handlers call `deps.Renderer.Render(w, status, view.PageData)` to execute the layout template with server-side localization (`page.T("key")`).
+
+---
+
+## 4. Module & Repository Pattern
+
+All feature modules implement the `module.Module` contract:
 
 ```go
 type Module interface {
@@ -90,180 +83,49 @@ type Module interface {
 }
 ```
 
-Registration goes through `internal/module/registry/registry.go` →
-`DefaultModules()`. **`RegisterRoutes` must fall back to
-`module.NewPlaceholderHandler` when DB/SSH are unavailable — never panic.**
-Routes are server-scoped `/servers/{id}/<group>`; read the id via
-`r.PathValue("id")`.
+- **Database Access:** Modules define a domain entity, a `Repository` interface, and an SQL implementation over `db.DBTX`.
+- **Transactions:** Multi-statement writes execute inside explicit transactions (`BeginTx`/`Commit`/`Rollback`).
+- **Sentinel Errors:** Map driver `sql.ErrNoRows` to `ErrNotFound` at the repository boundary.
 
-### Repository pattern
+---
 
-Each module that touches the DB defines:
+## 5. Key Subsystems
 
-- A domain type in `types.go` (or similar).
-- A `Repository` interface in `repository.go`.
-- An `SQLRepository` over `*sql.DB` in `sql_repository.go`.
+### 5.1. Multi-Tab Workspace
+The workspace (`tab-manager.js`) intercepts in-app navigation and dynamically loads server-rendered pages into isolated `.tab-pane` containers via `fetch()` and `DOMParser`. Background tabs stay alive without reloading, preserving live state (e.g., active SSH terminals).
 
-Multi-statement writes go in a transaction (`BeginTx`/`Commit`/`Rollback`).
-Errors are wrapped with `fmt.Errorf("pkg: op: %w", err)`. Export `ErrNotFound`
-and map `sql.ErrNoRows` to it at the repository boundary so handlers can use
-a single sentinel.
+### 5.2. Web Terminal WebSocket Lifecycle
+1. `GET /servers/{id}/terminal`: Renders credentials form.
+2. `POST /servers/{id}/terminal`: Verifies SSH credentials and issues a 30-second single-use ticket.
+3. `GET /servers/{id}/terminal/ws?ticket=...`: Upgrades connection via `coder/websocket`, opens a PTY shell (`xterm-256color`), and pipes bidirectional I/O.
 
-## Multi-tab workspace (v0.6.0+)
+### 5.3. Scheduler & Background Workers
+`internal/scheduler/` manages asynchronous cron tasks:
+- **Telemetry Sweeps:** Resource & vnStat snapshots.
+- **Node Discovery:** Background checks for Rebecca/PasarGuard processes.
+- **Analytics Rollups:** Compaction of daily/monthly traffic samples.
+- **Alert Evaluation:** Rule thresholds, predictive forecasting triggers, and Telegram dispatch.
 
-The browser keeps a single page loaded and swaps in new content per tab. The
-full design is in [`docs/tab-system.md`](tab-system.md); the short version:
+---
 
-- **Server-side** renders the full HTML page (layout + content + scripts +
-  styles) for every route, as before. The tab bar markup is part of the layout.
-- **Client-side** `tab-manager.js` (the only non-vendored `web/static` script
-  that orchestrates navigation) intercepts in-tab links and form submits.
-  Links → `pushState` + `fetch()` + `DOMParser` extraction of `#tab-content`
-  into the active `.tab-pane`. Forms → `fetch()` with the form body + CSRF
-  token, then the same extraction on the response.
-- **Scripts and stylesheets** that the new page needs are deduped and hoisted
-  to `<head>` (stylesheets) or cloned into the pane (scripts after
-  `/static/app.js`). `NodexiaApp.rescan(pane)` re-runs the page's `init*`
-  helpers on the swapped-in DOM.
-- **Terminal** uses a `tab-activated` / `tab-deactivated` /
-  `tab-closing` event surface (`terminal-tab-adapter.js` → `card.__nodexiaTerminal`)
-  so the WebSocket and PTY keep running while the pane is backgrounded, and
-  are disposed only when the tab itself is closed.
+## 6. Critical Module Invariants
 
-## Terminal WebSocket lifecycle
+To avoid regressions, maintain these key domain guarantees:
 
-`internal/module/terminal/`:
+- **Bulk Actions:** Never run SSH inline; queue jobs in an in-memory worker pool and redirect to an auto-refreshing status view.
+- **Node Management:** Allocate a non-echoing command PTY for Rebecca installs to handle interactive prompts; preflight PasarGuard script prompts before passing responses.
+- **Terminal:** Static assets for xterm.js must remain vendored (`script-src 'self'`); WebGL renderer with canvas fallback.
+- **Analytics & Quotas:** Daily vnStat rows are retained for 35 days (5 weeks) to power seasonal weekday forecasting; period resets anchor to `traffic_reset_day`.
+- **Alerts:** Unavailable metrics during a sweep are skipped (neither fired nor resolved) to prevent false cooldown flappings.
+- **Bilingual Parity:** All new UI text must be defined in both `en.json` and `fa.json`. Key parity is enforced by `internal/i18n/parity_test.go`.
 
-1. `GET /servers/{id}/terminal` — renders the credential form (or the xterm
-   card if a ticket is already present).
-2. `POST /servers/{id}/terminal` — dials SSH with the submitted (or
-   stored) credentials, mints a single-use 30-second ticket via
-   `internal/terminalticket`, and re-renders the same page with the ticket
-   embedded as `data-ticket` on `#terminal-card`.
-3. `GET /servers/{id}/terminal/ws?ticket=…` — same-origin check, atomic
-   ticket consumption, session limit (max 3/user), then WebSocket upgrade via
-   `coder/websocket`. The server opens an SSH shell with `xterm-256color`,
-   pipes `io.Pipe` for stdin and the WS writer for stdout, and runs a 30s
-   server-side ping. The single-use ticket model means "reconnect" navigates
-   back to the credential page rather than re-dialling the consumed socket.
+---
 
-Any `http.ResponseWriter` wrapper in the middleware chain must implement
-`Hijacker` + `Flusher` + `Unwrap()` or the upgrade fails. The logging
-middleware's `statusRecorder` does this explicitly.
-
-## Auth, sessions, CSRF
-
-- **Auth**: a single admin. Two HMAC cookies, both `HttpOnly` + `SameSite=Lax`:
-  - `nodexia_session` — issued to every visitor, anchors the CSRF token.
-  - `nodexia_auth` — set after login, carries the username and expiry.
-- **CSRF**: synchronizer-token pattern. The CSRF middleware checks
-  `Origin`/`Referer` (same-origin) AND the hidden `_csrf_token` form field
-  against `DeriveCSRFToken(sessionID, secret)`. GET/HEAD/OPTIONS are exempt.
-  Every form embeds `<input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">`
-  via `middleware.GetCSRFToken(r.Context())`.
-- **Login rate limiting**: `internal/ratelimit/`.
-- **SSH credentials are runtime-only** — the DB stores only strategy and
-  reference metadata, never the password/key. The shared
-  `internal/sshclient.Service` owns host-key pinning (trust on first use).
-
-## Bilingual UI (en / fa + RTL)
-
-- Server-rendered strings live in `internal/i18n/locales/{en,fa}.json`. The
-  parity test in `internal/i18n/parity_test.go` enforces key equality.
-- Handlers resolve server-side strings via `page.T("key", args…)`.
-- Client JS strings live in the `js.*` namespace and are exported to the
-  browser via `internal/view/clienti18n.go`. Look them up with `I18N.t(...)`.
-- Telegram alert and digest text is template English only — the notify layer
-  has no request locale.
-
-## Background work
-
-`internal/scheduler/` runs tickers for:
-
-- Monitoring sweeps (resource + traffic collection)
-- Node discovery sweeps
-- Analytics rollup and cleanup
-- Alert evaluation
-- GeoIP country resolution
-- Status digest (opt-in periodic Telegram summary, `NODEXIA_DIGEST_*`)
-
-The first digest send is one interval after startup, never immediately. Every
-scheduler failure is logged and swallowed — it must never disrupt other jobs.
-
-## Module invariants to preserve
-
-These are the non-obvious behaviours future changes must not silently break.
-(See `CHANGELOG.md` for the history.)
-
-- **bulk**: POST never runs SSH inline — it creates an in-memory job and
-  redirects to a 2 s auto-refresh page. 5-worker pool. Own timeouts (reboot
-  2m, update 20m). Sudo preamble exit codes: 88 = needs password, 87 = no
-  package manager. Servers without credentials are skipped, never dropped.
-- **nodes**: provider/driver architecture (`DefaultProviders()`); never
-  hardcode node names — they come from remote config and must pass
-  `ValidateNodeName`. Actions and installs run as background
-  `commandstream`/job sessions. The PasarGuard install drives the official
-  script over positional stdin, but preflights the downloaded script's prompt
-  contract before sending answers, then patches `/opt/<name>/.env`. Rebecca
-  binary installs allocate a non-echoing command PTY and deliver the
-  certificate/key bundle plus ports through that PTY so upstream `/dev/tty`
-  reads work. Generated shell must stay
-  single-quote-free inside `sh -c '...'` (`TestGeneratedShellSyntax` guard).
-  Discovery + Docker actions use `sudo -n`. One discovery sweep = one
-  `created_at`. API key/cert are shown once, never persisted.
-- **terminal**: see "Terminal WebSocket lifecycle" above. Vendored xterm.js
-  v5.5.0 + the `@xterm/addon-*` suite (fit, unicode11, web-links, search,
-  serialize, webgl, canvas) live in `web/static/`. The CSP is
-  `script-src 'self'` — no CDN. Renderer is WebGL on desktop (canvas
-  fallback), canvas on mobile.
-- **commands**: `run` / `stream` start background sessions (never inline);
-  `test` is a sync connection check; interactive TUIs (top, vim, mysql,
-  `tail -f` …) are detected server-side and redirected to the terminal
-  (`data-interactive-programs` is the shared source of truth).
-- **monitoring**: each sweep stores ONE latest vnStat snapshot per server
-  (JSON daily/monthly rows). Daily rows are tailed to 35
-  (`retainedDailyRows`, 5 weeks) so the seasonal forecast has enough
-  per-weekday samples AND a full anchored billing period can be summed from
-  dailies; monthly rows to 6. `TotalBytes` always defaults to `RX+TX`.
-  Forecast / analytics default to download (RX) but follow the limit's
-  series kind (rx/tx/total).
-- **analytics / forecast**: `ForecastService.ComputeWithConfig(days, months, cfg)`
-  selects an algorithm by history length (trend < 7 ≤ MA < 14 ≤ WMA < 21 ≤
-  seasonal); `Compute` is the calendar-month/RX wrapper. The accounting
-  period follows `servers.traffic_reset_day` (1 = calendar month, 2–28 =
-  billing anchor): calendar periods use the authoritative monthly row,
-  anchored periods sum the daily series. `computeExhaustion` is bounded to
-  the period end and reuses the SAME per-day predictor as the period
-  projection so they can't disagree.
-- **alerts**: the evaluator persists events, cooldowns, and consecutive-hit
-  streaks. A metric that is unavailable this cycle is **skipped** (neither
-  fired nor resolved) to keep streaks/cooldowns sane across gaps; recovery
-  resolves an open event even while silenced. Predictive comparators /
-  thresholds are normalised in validation — don't let the operator store an
-  incoherent condition.
-
-## Database conventions
-
-- Portable SQL: explicit column lists, `?` placeholders, `LastInsertId()` not
-  `RETURNING`. All shared paths go through `db.DBTX`.
-- Schema lives in `schema.sql` and is append-only — never rewrite or delete
-  statements. New migrations are added at the bottom with a version comment.
-- `internal/db/` wraps both SQLite and MySQL behind the same
-  interface so handlers stay driver-agnostic.
-
-## Workflow
-
-- Tests live beside code (`*_test.go`); helpers in `internal/testutil`.
-- Run `go vet ./...` and `make test` after changes.
-- Mirror an existing module's structure for a new feature instead of
-  inventing one.
-- Prefer small, surgical changes.
-- Conventional Commits: `type(scope): subject`, lowercase, imperative,
-  ≤ ~50 chars.
+## 7. Development & Verification
 
 ```bash
-make build              # → bin/nodexia
-make test               # go test ./...
-go run ./cmd/nodexia/   # local dev (needs NODEXIA_AUTH_USERNAME/PASSWORD)
-go vet ./...
+make test             # Run complete unit, race, and parity test suite
+go vet ./...          # Static code inspection
+make build            # Compile binary to bin/nodexia
+go run ./cmd/nodexia/ # Launch local dev server (port 8080)
 ```
