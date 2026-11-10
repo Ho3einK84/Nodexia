@@ -9,7 +9,7 @@
        {{ if or $form.Errors .NodeDeployOpen }}data-modal-open-initial{{ end }}>
     <div class="modal__backdrop" data-modal-close></div>
     <div class="modal__dialog modal__dialog--wide" role="dialog" aria-modal="true" aria-labelledby="deploy-node-modal-title">
-      <header class="modal__header">
+      <header class="modal__header deploy-modal__header">
         <div class="deploy-modal__heading">
           <h3 class="modal__title" id="deploy-node-modal-title"><i data-lucide="rocket"></i> {{ t "nodes.deploy_title" }}</h3>
           <p class="deploy-modal__subtitle">{{ t "nodes.deploy_subtitle" "server" .NodeTarget.Name }}</p>
@@ -24,33 +24,62 @@
         <p class="empty-state">{{ t "nodes.install_needs_creds" }}</p>
         {{ else }}
 
-        {{/* Wizard progress: engine → config → credentials → review */}}
-        <ol class="deploy-steps" data-deploy-steps aria-hidden="true">
-          <li class="deploy-step is-active" data-step-indicator="0"><span class="deploy-step__num">1</span> {{ t "nodes.deploy_step_engine" }}</li>
-          <li class="deploy-step" data-step-indicator="1"><span class="deploy-step__num">2</span> {{ t "nodes.deploy_step_config" }}</li>
-          <li class="deploy-step" data-step-indicator="2"><span class="deploy-step__num">3</span> {{ t "nodes.deploy_step_review" }}</li>
-        </ol>
+        {{/* Wizard progress: engine → configuration → review */}}
+        <nav class="deploy-stepper" aria-label="{{ t "nodes.deploy_title" }}">
+          <ol class="deploy-steps" data-deploy-steps>
+            <li class="deploy-step is-active" data-step-indicator="0" aria-current="step">
+              <button type="button" class="deploy-step__hit">
+                <span class="deploy-step__badge">
+                  <span class="deploy-step__num">1</span>
+                  <i data-lucide="check" class="deploy-step__check" aria-hidden="true"></i>
+                </span>
+                <span class="deploy-step__label">{{ t "nodes.deploy_step_engine" }}</span>
+              </button>
+            </li>
+            <li class="deploy-step" data-step-indicator="1">
+              <button type="button" class="deploy-step__hit" disabled>
+                <span class="deploy-step__badge">
+                  <span class="deploy-step__num">2</span>
+                  <i data-lucide="check" class="deploy-step__check" aria-hidden="true"></i>
+                </span>
+                <span class="deploy-step__label">{{ t "nodes.deploy_step_config" }}</span>
+              </button>
+            </li>
+            <li class="deploy-step" data-step-indicator="2">
+              <button type="button" class="deploy-step__hit" disabled>
+                <span class="deploy-step__badge">
+                  <span class="deploy-step__num">3</span>
+                  <i data-lucide="check" class="deploy-step__check" aria-hidden="true"></i>
+                </span>
+                <span class="deploy-step__label">{{ t "nodes.deploy_step_review" }}</span>
+              </button>
+            </li>
+          </ol>
+          <span class="deploy-progress" aria-hidden="true"><span class="deploy-progress__fill" data-deploy-progress></span></span>
+        </nav>
 
         <form method="post" action="{{ $form.Action }}" data-deploy-form novalidate>
           <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
 
           {{/* ── Step 1: engine ───────────────────────────── */}}
-          <section class="deploy-pane is-active" data-deploy-pane="0">
-            <fieldset class="form-field deploy-engines-field">
-              <legend>{{ t "nodes.engine" }}</legend>
+          <section class="deploy-pane is-active" data-deploy-pane="0" role="group" aria-label="{{ t "nodes.deploy_step_engine" }}">
+            <fieldset class="deploy-group deploy-group--engines">
+              <legend class="deploy-group__title">{{ t "nodes.engine" }}</legend>
               <div class="deploy-engines" data-deploy-engines>
                 {{ range $form.Engines }}
-                <label class="deploy-engine" data-engine-card="{{ .Key }}" data-default-name="{{ .DefaultName }}">
+                <label class="deploy-engine deploy-engine--{{ .Kind }}" data-engine-card="{{ .Key }}" data-default-name="{{ .DefaultName }}">
                   <input type="radio" name="node_type" value="{{ .Key }}"
-                         {{ if eq .Key $form.NodeType }}checked{{ end }} required>
+                         {{ if eq .Key $form.NodeType }}checked{{ end }}
+                         {{ if eq .Key $form.NodeType }}data-modal-autofocus{{ end }} required>
                   <span class="deploy-engine__icon"><i data-lucide="{{ .Icon }}"></i></span>
                   <span class="deploy-engine__body">
                     <span class="deploy-engine__head">
                       <span class="deploy-engine__title-wrap">
                         <span class="deploy-engine__label">{{ .Label }}</span>
-                        <span class="deploy-engine__kind deploy-engine__kind--{{ .Kind }}">{{ .Kind }}</span>
+                        <span class="deploy-engine__kind deploy-engine__kind--{{ .Kind }}">{{ t (printf "nodes.engine_kind_%s" .Kind) }}</span>
+                        {{ if .Recommended }}<span class="deploy-engine__reco">{{ t "nodes.recommended" }}</span>{{ end }}
                       </span>
-                      <span class="deploy-engine__radio" aria-hidden="true"></span>
+                      <span class="deploy-engine__radio" aria-hidden="true"><i data-lucide="check"></i></span>
                     </span>
                     <span class="deploy-engine__desc">{{ .Description }}</span>
                     {{ if .Features }}
@@ -64,130 +93,241 @@
               </div>
               {{ with index $form.Errors "node_type" }}<small class="field-error">{{ . }}</small>{{ end }}
               {{ with index $form.Errors "engine" }}<small class="field-error">{{ . }}</small>{{ end }}
+              <small class="field-error" data-deploy-error="engine" hidden></small>
             </fieldset>
           </section>
 
           {{/* ── Step 2: configuration (per engine) ───────── */}}
-          <section class="deploy-pane" data-deploy-pane="1" hidden>
-            <label class="form-field">
-              <span>{{ t "nodes.node_name" }}</span>
-              <input type="text" name="node_name" value="{{ $form.NodeName }}" placeholder="{{ if eq $form.NodeType "rebecca-node" }}rebecca-node{{ else }}pg-node{{ end }}" maxlength="64" required
-                     data-modal-autofocus spellcheck="false" autocomplete="off">
-              {{ with index $form.Errors "node_name" }}<small class="field-error">{{ . }}</small>{{ end }}
-              <small class="field-hint">{{ tsafe "nodes.node_name_hint" }}</small>
-            </label>
-
-            <div class="deploy-ports-grid">
-              <label class="form-field">
-                <span>{{ t "nodes.service_port" }}</span>
-                <input type="number" name="service_port" value="{{ $form.ServicePort }}" placeholder="62050" min="1" max="65535" required inputmode="numeric">
-                {{ with index $form.Errors "service_port" }}<small class="field-error">{{ . }}</small>{{ end }}
-              </label>
-              <label class="form-field">
-                <span data-api-port-label-wrap>
-                  <span>{{ t "nodes.api_port" }}</span>
-                  <small class="field-optional" data-api-port-optional {{ if eq $form.NodeType "rebecca-node" }}hidden{{ end }}>{{ t "nodes.optional_paren" }}</small>
+          <section class="deploy-pane" data-deploy-pane="1" role="group" aria-label="{{ t "nodes.deploy_step_config" }}" hidden>
+            <div class="deploy-block">
+              <p class="deploy-block__title"><i data-lucide="server"></i> {{ t "nodes.deploy_section_identity" }}</p>
+              <label class="form-field deploy-field" data-field="node_name">
+                <span class="deploy-field__label">{{ t "nodes.node_name" }}</span>
+                <span class="deploy-input">
+                  <i data-lucide="hash" class="deploy-input__icon" aria-hidden="true"></i>
+                  <input type="text" name="node_name" class="deploy-input__control deploy-input__control--mono"
+                         value="{{ $form.NodeName }}"
+                         placeholder="{{ if eq $form.NodeType "rebecca-node" }}rebecca-node{{ else }}pg-node{{ end }}"
+                         maxlength="64" required data-modal-autofocus spellcheck="false" autocomplete="off">
                 </span>
-                <input type="number" name="api_port" value="{{ $form.APIPort }}"
-                       placeholder="62051"
-                       min="1" max="65535" inputmode="numeric"
-                       {{ if eq $form.NodeType "rebecca-node" }}required{{ end }}>
-                {{ with index $form.Errors "api_port" }}<small class="field-error">{{ . }}</small>{{ end }}
+                <small class="field-hint">{{ tsafe "nodes.node_name_hint" }}</small>
+                {{ with index $form.Errors "node_name" }}<small class="field-error">{{ . }}</small>{{ end }}
+                <small class="field-error" data-field-error="node_name" hidden></small>
               </label>
             </div>
 
-            <fieldset class="deploy-channel-field">
-              <legend>{{ t "nodes.channel" }}</legend>
-              <div class="deploy-channels">
-                {{ range $form.Channels }}
-                <label class="deploy-channel{{ if not .Enabled }} is-disabled{{ end }}">
-                  <input type="radio" name="channel" value="{{ .Key }}"
-                         {{ if and (eq .Key $form.Channel) .Enabled }}checked{{ end }}
-                         {{ if not .Enabled }}disabled{{ end }}>
-                  <span>{{ t .Label }}{{ if not .Enabled }} <small>{{ t "nodes.channel_disabled" }}</small>{{ end }}</span>
+            <div class="deploy-block">
+              <p class="deploy-block__title"><i data-lucide="network"></i> {{ t "nodes.deploy_section_network" }}</p>
+              <div class="deploy-ports-grid">
+                <label class="form-field deploy-field" data-field="service_port">
+                  <span class="deploy-field__label">
+                    <span>{{ t "nodes.service_port" }}</span>
+                    <span class="deploy-field__tag">{{ t "nodes.ports_service" }}</span>
+                  </span>
+                  <span class="deploy-input">
+                    <i data-lucide="network" class="deploy-input__icon" aria-hidden="true"></i>
+                    <input type="number" name="service_port" class="deploy-input__control" value="{{ $form.ServicePort }}"
+                           placeholder="62050" min="1" max="65535" required inputmode="numeric">
+                  </span>
+                  {{ with index $form.Errors "service_port" }}<small class="field-error">{{ . }}</small>{{ end }}
+                  <small class="field-error" data-field-error="service_port" hidden></small>
                 </label>
-                {{ end }}
+                <label class="form-field deploy-field" data-field="api_port">
+                  <span class="deploy-field__label">
+                    <span>{{ t "nodes.api_port" }}</span>
+                    <span class="deploy-field__tag deploy-field__tag--req" data-api-port-required {{ if ne $form.NodeType "rebecca-node" }}hidden{{ end }}>{{ t "nodes.port_api_required" }}</span>
+                    <span class="deploy-field__tag deploy-field__tag--opt" data-api-port-optional {{ if eq $form.NodeType "rebecca-node" }}hidden{{ end }}>{{ t "nodes.optional_paren" }}</span>
+                  </span>
+                  <span class="deploy-input">
+                    <i data-lucide="plug-zap" class="deploy-input__icon" aria-hidden="true"></i>
+                    <input type="number" name="api_port" class="deploy-input__control" value="{{ $form.APIPort }}"
+                           placeholder="62051" min="1" max="65535" inputmode="numeric"
+                           {{ if eq $form.NodeType "rebecca-node" }}required{{ end }}>
+                  </span>
+                  {{ with index $form.Errors "api_port" }}<small class="field-error">{{ . }}</small>{{ end }}
+                  <small class="field-error" data-field-error="api_port" hidden></small>
+                </label>
               </div>
-              {{ with index $form.Errors "channel" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </fieldset>
+            </div>
+
+            <div class="deploy-block">
+              <p class="deploy-block__title"><i data-lucide="git-branch"></i> {{ t "nodes.deploy_section_channel" }}</p>
+              <fieldset class="deploy-group deploy-group--channels">
+                <legend class="visually-hidden">{{ t "nodes.channel" }}</legend>
+                <div class="deploy-channels">
+                  {{ range $form.Channels }}
+                  <label class="deploy-channel{{ if not .Enabled }} is-disabled{{ end }}">
+                    <input type="radio" name="channel" value="{{ .Key }}"
+                           {{ if and (eq .Key $form.Channel) .Enabled }}checked{{ end }}
+                           {{ if not .Enabled }}disabled{{ end }}>
+                    <span class="deploy-channel__body">
+                      <span class="deploy-channel__title">
+                        {{ t .Label }}
+                        {{ if and .Enabled (eq .Key "stable") }}<span class="deploy-channel__reco">{{ t "nodes.recommended" }}</span>{{ end }}
+                        {{ if not .Enabled }}<span class="deploy-channel__soon">{{ t "nodes.channel_disabled" }}</span>{{ end }}
+                      </span>
+                      <span class="deploy-channel__hint">{{ if eq .Key "stable" }}{{ t "nodes.channel_stable_hint" }}{{ else }}{{ t "nodes.channel_dev_hint" }}{{ end }}</span>
+                    </span>
+                    <span class="deploy-channel__radio" aria-hidden="true"></span>
+                  </label>
+                  {{ end }}
+                </div>
+                {{ with index $form.Errors "channel" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </fieldset>
+            </div>
 
             {{/* PasarGuard-only configuration. */}}
-            <div class="deploy-engine-group" data-engine-group="docker">
-              <fieldset class="node-proto-choice">
-                <legend>{{ t "nodes.connection_type" }}</legend>
-                <div class="node-proto-options">
-                  <label class="node-proto-option">
-                    <input type="radio" name="protocol" value="grpc" data-engine-field {{ if ne $form.Protocol "rest" }}checked{{ end }}>
-                    <span class="node-proto-option__label"><i data-lucide="layers" class="icon-in-button"></i> gRPC</span>
+            <div class="deploy-block" data-engine-group="docker">
+              <p class="deploy-block__title"><i data-lucide="shield-check"></i> {{ t "nodes.deploy_section_transport" }}</p>
+
+              <fieldset class="deploy-group deploy-group--proto">
+                <legend class="deploy-group__label">{{ t "nodes.connection_type" }}</legend>
+                <div class="deploy-segmented">
+                  <label class="deploy-segment">
+                    <input type="radio" name="protocol" value="grpc" {{ if ne $form.Protocol "rest" }}checked{{ end }}>
+                    <span class="deploy-segment__label"><i data-lucide="layers" aria-hidden="true"></i> gRPC</span>
                   </label>
-                  <label class="node-proto-option">
-                    <input type="radio" name="protocol" value="rest" data-engine-field {{ if eq $form.Protocol "rest" }}checked{{ end }}>
-                    <span class="node-proto-option__label"><i data-lucide="globe" class="icon-in-button"></i> REST</span>
+                  <label class="deploy-segment">
+                    <input type="radio" name="protocol" value="rest" {{ if eq $form.Protocol "rest" }}checked{{ end }}>
+                    <span class="deploy-segment__label"><i data-lucide="globe" aria-hidden="true"></i> REST</span>
                   </label>
                 </div>
                 {{ with index $form.Errors "protocol" }}<small class="field-error">{{ . }}</small>{{ end }}
               </fieldset>
 
-              <label class="form-field">
-                <span>{{ t "nodes.api_key" }} <small class="field-optional">{{ t "nodes.optional_paren" }}</small></span>
-                <input type="text" name="api_key" value="{{ $form.APIKey }}" placeholder="{{ t "nodes.api_key_placeholder" }}"
-                       autocomplete="off" spellcheck="false">
+              <label class="form-field deploy-field" data-field="api_key">
+                <span class="deploy-field__label">
+                  <span>{{ t "nodes.api_key" }}</span>
+                  <span class="deploy-field__tag deploy-field__tag--opt">{{ t "nodes.optional_paren" }}</span>
+                </span>
+                <span class="deploy-input">
+                  <i data-lucide="key-round" class="deploy-input__icon" aria-hidden="true"></i>
+                  <input type="text" name="api_key" class="deploy-input__control deploy-input__control--mono"
+                         value="{{ $form.APIKey }}" placeholder="{{ t "nodes.api_key_placeholder" }}"
+                         autocomplete="off" spellcheck="false">
+                </span>
+                <small class="field-hint">{{ tsafe "nodes.api_key_hint" }}</small>
                 {{ with index $form.Errors "api_key" }}<small class="field-error">{{ . }}</small>{{ end }}
-                <small class="field-hint">{{ t "nodes.api_key_hint" }}</small>
+                <small class="field-error" data-field-error="api_key" hidden></small>
               </label>
 
-              <label class="form-field">
-                <span>{{ t "nodes.san_entries" }} <small class="field-optional">{{ t "nodes.optional_paren" }}</small></span>
-                <input type="text" name="san_entries" value="{{ $form.SANEntries }}" placeholder="node.example.com, 192.0.2.10"
-                       autocomplete="off" spellcheck="false">
-                {{ with index $form.Errors "san_entries" }}<small class="field-error">{{ . }}</small>{{ end }}
+              <label class="form-field deploy-field" data-field="san_entries">
+                <span class="deploy-field__label">
+                  <span>{{ t "nodes.san_entries" }}</span>
+                  <span class="deploy-field__tag deploy-field__tag--opt">{{ t "nodes.optional_paren" }}</span>
+                </span>
+                <span class="deploy-input">
+                  <i data-lucide="shield-check" class="deploy-input__icon" aria-hidden="true"></i>
+                  <input type="text" name="san_entries" class="deploy-input__control" value="{{ $form.SANEntries }}"
+                         placeholder="node.example.com, 192.0.2.10" autocomplete="off" spellcheck="false">
+                </span>
                 <small class="field-hint">{{ tsafe "nodes.san_entries_hint" }}</small>
+                {{ with index $form.Errors "san_entries" }}<small class="field-error">{{ . }}</small>{{ end }}
+                <small class="field-error" data-field-error="san_entries" hidden></small>
               </label>
             </div>
 
             {{/* Rebecca-only configuration (native binary). */}}
-            <div class="deploy-engine-group" data-engine-group="binary">
-              <label class="form-field">
-                <span class="deploy-bundle-label">
+            <div class="deploy-block" data-engine-group="binary">
+              <p class="deploy-block__title"><i data-lucide="file-badge"></i> {{ t "nodes.deploy_section_bundle" }}</p>
+
+              <label class="form-field deploy-field deploy-field--bundle" data-field="bundle">
+                <span class="deploy-field__label">
                   <span>{{ t "nodes.bundle" }}</span>
-                  <button type="button" class="btn btn--ghost btn--xs copy-inline" data-bundle-paste aria-label="{{ t "nodes.paste_bundle" }}">
-                    <i data-lucide="clipboard" class="icon-in-button"></i> {{ t "nodes.paste_bundle" }}
-                  </button>
+                  <span class="deploy-bundle__tools">
+                    <button type="button" class="btn btn--ghost btn--xs" data-bundle-paste>
+                      <i data-lucide="clipboard" aria-hidden="true"></i> {{ t "nodes.paste_bundle" }}
+                    </button>
+                    <button type="button" class="btn btn--ghost btn--xs" data-bundle-clear hidden>
+                      <i data-lucide="eraser" aria-hidden="true"></i> {{ t "nodes.bundle_clear" }}
+                    </button>
+                  </span>
                 </span>
                 <textarea name="bundle" rows="6" class="cmd-textarea deploy-bundle-textarea" placeholder="{{ t "nodes.bundle_placeholder" }}"
-                          spellcheck="false" autocomplete="off" data-bundle-input data-engine-field {{ if eq $form.NodeType "rebecca-node" }}required{{ end }}>{{ $form.Bundle }}</textarea>
-                {{ with index $form.Errors "bundle" }}<small class="field-error">{{ . }}</small>{{ end }}
+                          spellcheck="false" autocomplete="off" data-bundle-input {{ if eq $form.NodeType "rebecca-node" }}required{{ end }}>{{ $form.Bundle }}</textarea>
+                <span class="deploy-status is-idle" data-bundle-state>
+                  <i data-lucide="circle-alert" class="deploy-status__icon" aria-hidden="true"></i>
+                  <span class="deploy-status__text" data-bundle-state-text>{{ t "nodes.bundle_waiting" }}</span>
+                </span>
                 <small class="field-hint">{{ tsafe "nodes.bundle_hint" }}</small>
-                <small class="field-hint deploy-bundle-state" data-bundle-state hidden></small>
+                {{ with index $form.Errors "bundle" }}<small class="field-error">{{ . }}</small>{{ end }}
+                <small class="field-error" data-field-error="bundle" hidden></small>
               </label>
             </div>
           </section>
 
           {{/* ── Step 3: review ──────────────────────────── */}}
-          <section class="deploy-pane" data-deploy-pane="2" hidden>
-            <div class="deploy-review" data-deploy-review>
-              <div class="deploy-review__row"><span>{{ t "nodes.engine" }}</span><strong data-review="engine">—</strong></div>
-              <div class="deploy-review__row"><span>{{ t "nodes.node_name" }}</span><strong data-review="node_name">—</strong></div>
-              <div class="deploy-review__row"><span>{{ t "nodes.service_port" }}</span><strong data-review="service_port">—</strong></div>
-              <div class="deploy-review__row"><span>{{ t "nodes.api_port" }}</span><strong data-review="api_port">—</strong></div>
-              <div class="deploy-review__row"><span>{{ t "nodes.channel" }}</span><strong data-review="channel">—</strong></div>
-              <div class="deploy-review__row" data-review-row="protocol"><span>{{ t "nodes.protocol" }}</span><strong data-review="protocol">—</strong></div>
-              <div class="deploy-review__row" data-review-row="bundle" hidden><span>{{ t "nodes.bundle" }}</span><strong data-review="bundle">—</strong></div>
-            </div>
-            <p class="node-install-note" data-install-note="docker">{{ tsafe "nodes.install_note" }}</p>
-            <p class="node-install-note" data-install-note="binary" hidden>{{ tsafe "nodes.rebecca_install_note" }}</p>
+          <section class="deploy-pane" data-deploy-pane="2" role="group" aria-label="{{ t "nodes.deploy_step_review" }}" hidden>
+            <article class="deploy-manifest" data-deploy-review>
+              <header class="deploy-manifest__head">
+                <span class="deploy-manifest__icon" aria-hidden="true">
+                  <i data-lucide="container" data-review-icon="docker"></i>
+                  <i data-lucide="package" data-review-icon="binary" hidden></i>
+                </span>
+                <span class="deploy-manifest__titles">
+                  <span class="deploy-manifest__kicker">{{ t "nodes.deploy_manifest_title" }}</span>
+                  <span class="deploy-manifest__engine">
+                    <strong data-review="engine">—</strong>
+                    <span class="deploy-engine__kind" data-review="engine_kind">—</span>
+                  </span>
+                </span>
+                <span class="deploy-manifest__target">
+                  <i data-lucide="server" aria-hidden="true"></i>
+                  <span class="deploy-manifest__target-name">{{ .NodeTarget.Name }}</span>
+                </span>
+              </header>
+
+              <dl class="deploy-specs">
+                <div class="deploy-spec">
+                  <dt><i data-lucide="hash" aria-hidden="true"></i> {{ t "nodes.node_name" }}</dt>
+                  <dd data-review="node_name">—</dd>
+                </div>
+                <div class="deploy-spec">
+                  <dt><i data-lucide="network" aria-hidden="true"></i> {{ t "nodes.service_port" }}</dt>
+                  <dd><span class="node-port node-port--service" data-review="service_port">—</span></dd>
+                </div>
+                <div class="deploy-spec">
+                  <dt><i data-lucide="plug-zap" aria-hidden="true"></i> {{ t "nodes.api_port" }}</dt>
+                  <dd><span class="node-port node-port--api" data-review="api_port">—</span></dd>
+                </div>
+                <div class="deploy-spec">
+                  <dt><i data-lucide="git-branch" aria-hidden="true"></i> {{ t "nodes.channel" }}</dt>
+                  <dd><span class="deploy-spec__pill" data-review="channel">—</span></dd>
+                </div>
+                <div class="deploy-spec" data-review-row="protocol">
+                  <dt><i data-lucide="layers" aria-hidden="true"></i> {{ t "nodes.protocol" }}</dt>
+                  <dd><span class="deploy-spec__pill" data-review="protocol">—</span></dd>
+                </div>
+                <div class="deploy-spec deploy-spec--wide" data-review-row="bundle" hidden>
+                  <dt><i data-lucide="file-badge" aria-hidden="true"></i> {{ t "nodes.bundle" }}</dt>
+                  <dd><span class="deploy-spec__pill deploy-spec__pill--ok" data-review="bundle">—</span></dd>
+                </div>
+              </dl>
+
+              <footer class="deploy-manifest__foot">
+                <p class="node-install-note" data-install-note="docker">{{ tsafe "nodes.install_note" }}</p>
+                <p class="node-install-note" data-install-note="binary" hidden>{{ tsafe "nodes.rebecca_install_note" }}</p>
+                <p class="deploy-manifest__preflight">
+                  <i data-lucide="shield-check" aria-hidden="true"></i>
+                  <span>{{ t "nodes.deploy_preflight_ok" }}</span>
+                </p>
+              </footer>
+            </article>
           </section>
 
-          <div class="sys-form__actions deploy-actions">
-            <button type="button" class="btn btn--ghost" data-deploy-back hidden>
-              <i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "nodes.deploy_back" }}
-            </button>
-            <button type="button" class="btn btn--primary" data-deploy-next>
-              {{ t "nodes.deploy_next" }} <i data-lucide="arrow-right" class="icon-in-button"></i>
-            </button>
-            <button type="submit" class="btn btn--primary" data-deploy-submit hidden data-confirm="">
-              <i data-lucide="download" class="icon-in-button"></i> {{ t "nodes.deploy_submit" }}
-            </button>
+          <div class="deploy-actions">
+            <span class="deploy-actions__status" data-deploy-status aria-live="polite"></span>
+            <div class="deploy-actions__buttons">
+              <button type="button" class="btn btn--ghost deploy-actions__back" data-deploy-back hidden>
+                <i data-lucide="arrow-left" aria-hidden="true"></i> {{ t "nodes.deploy_back" }}
+              </button>
+              <button type="button" class="btn btn--primary deploy-actions__next" data-deploy-next>
+                {{ t "nodes.deploy_next" }} <i data-lucide="arrow-right" aria-hidden="true"></i>
+              </button>
+              <button type="submit" class="btn btn--primary deploy-actions__submit" data-deploy-submit hidden data-confirm="">
+                <i data-lucide="rocket" aria-hidden="true"></i> {{ t "nodes.deploy_submit" }}
+              </button>
+            </div>
           </div>
         </form>
         {{ end }}

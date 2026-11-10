@@ -261,8 +261,13 @@ function initDeployModal(root) {
   var btnBack = modal.querySelector('[data-deploy-back]');
   var btnNext = modal.querySelector('[data-deploy-next]');
   var btnSubmit = modal.querySelector('[data-deploy-submit]');
+  var progressBar = modal.querySelector('[data-deploy-progress]');
+  var statusEl = modal.querySelector('[data-deploy-status]');
   var bundleInput = modal.querySelector('[data-bundle-input]');
   var bundleState = modal.querySelector('[data-bundle-state]');
+  var bundleStateText = modal.querySelector('[data-bundle-state-text]');
+  var bundlePasteBtn = modal.querySelector('[data-bundle-paste]');
+  var bundleClearBtn = modal.querySelector('[data-bundle-clear]');
   var engineCards = modal.querySelectorAll('[data-engine-card]');
   var currentStep = 0;
 
@@ -273,6 +278,25 @@ function initDeployModal(root) {
   function getSelectedEngine() {
     var checked = modal.querySelector('input[name="node_type"]:checked');
     return checked ? checked.value : 'pasarguard-node';
+  }
+
+  function clearFieldErrors() {
+    modal.querySelectorAll('[data-field-error]').forEach(function (el) {
+      el.textContent = '';
+      el.hidden = true;
+    });
+    if (statusEl) statusEl.textContent = '';
+  }
+
+  function showFieldError(fieldName, msg) {
+    var el = modal.querySelector('[data-field-error="' + fieldName + '"]');
+    if (el) {
+      el.textContent = msg;
+      el.hidden = false;
+    }
+    if (statusEl && !statusEl.textContent) {
+      statusEl.textContent = msg;
+    }
   }
 
   function syncEngineUI(prevEngine) {
@@ -295,10 +319,10 @@ function initDeployModal(root) {
     });
 
     var protoRow = modal.querySelector('[data-review-row="protocol"]');
-    if (protoRow) protoRow.hidden = (kind !== 'docker');
+    if (protoRow) protoRow.hidden = rebecca;
 
     var bundleRow = modal.querySelector('[data-review-row="bundle"]');
-    if (bundleRow) bundleRow.hidden = (kind !== 'binary');
+    if (bundleRow) bundleRow.hidden = !rebecca;
 
     modal.querySelectorAll('[data-install-note]').forEach(function (el) {
       el.hidden = (el.getAttribute('data-install-note') !== kind);
@@ -321,20 +345,54 @@ function initDeployModal(root) {
     }
 
     var apiPortInput = form ? form.elements['api_port'] : null;
+    var reqBadge = modal.querySelector('[data-api-port-required]');
     var optBadge = modal.querySelector('[data-api-port-optional]');
     if (apiPortInput) {
       if (rebecca) {
         if (!apiPortInput.value.trim()) apiPortInput.value = '62051';
         apiPortInput.required = true;
         apiPortInput.placeholder = '62051';
+        if (reqBadge) reqBadge.hidden = false;
         if (optBadge) optBadge.hidden = true;
         if (bundleInput) bundleInput.required = true;
       } else {
         if (apiPortInput.value === '62051') apiPortInput.value = '';
         apiPortInput.required = false;
         apiPortInput.placeholder = '62051';
+        if (reqBadge) reqBadge.hidden = true;
         if (optBadge) optBadge.hidden = false;
         if (bundleInput) bundleInput.required = false;
+      }
+    }
+
+    validateBundle();
+  }
+
+  function validateBundle() {
+    if (!bundleInput || !bundleState) return;
+    var val = bundleInput.value.trim();
+    if (bundleClearBtn) bundleClearBtn.hidden = !val;
+
+    if (!val) {
+      bundleState.className = 'deploy-status is-idle';
+      if (bundleStateText) {
+        bundleStateText.textContent = (I18N && I18N.t ? I18N.t('nodes.bundle_waiting') : '') || 'Waiting for registration bundle...';
+      }
+      return;
+    }
+
+    var hasCert = val.indexOf('-----BEGIN CERTIFICATE-----') !== -1;
+    var hasKey = val.indexOf('KEY-----') !== -1;
+
+    if (hasCert && hasKey) {
+      bundleState.className = 'deploy-status is-ok';
+      if (bundleStateText) {
+        bundleStateText.textContent = '✓ ' + ((I18N && I18N.t ? I18N.t('nodes.bundle_valid') : '') || 'Certificate and private key detected.');
+      }
+    } else {
+      bundleState.className = 'deploy-status is-bad';
+      if (bundleStateText) {
+        bundleStateText.textContent = '⚠ ' + ((I18N && I18N.t ? I18N.t('nodes.bundle_invalid') : '') || 'Paste the certificate and its private key.');
       }
     }
   }
@@ -356,17 +414,23 @@ function initDeployModal(root) {
     var selectedCard = modal.querySelector('[data-engine-card="' + engine + '"]');
     var engineLabel = selectedCard ? (selectedCard.querySelector('.deploy-engine__label') || {}).textContent : '';
     var engineKind = selectedCard ? (selectedCard.querySelector('.deploy-engine__kind') || {}).textContent : '';
-    var displayEngine = engineLabel ? (engineLabel + ' (' + engineKind + ')') : (rebecca ? 'Rebecca (Native)' : 'PasarGuard (Docker)');
+
+    setReview('engine', engineLabel || (rebecca ? 'Rebecca Node' : 'PasarGuard Node'));
+    setReview('engine_kind', engineKind || (rebecca ? 'Binary' : 'Docker'));
+
+    var dockerIcon = modal.querySelector('[data-review-icon="docker"]');
+    var binaryIcon = modal.querySelector('[data-review-icon="binary"]');
+    if (dockerIcon) dockerIcon.hidden = rebecca;
+    if (binaryIcon) binaryIcon.hidden = !rebecca;
 
     var channelLabel = (channel && channel.closest('label')) ?
-      ((channel.closest('label').querySelector('span') || {}).textContent || channel.value) :
+      ((channel.closest('label').querySelector('.deploy-channel__title') || {}).textContent || channel.value) :
       (channel ? channel.value : 'Stable');
 
-    setReview('engine', displayEngine);
     setReview('node_name', name || (rebecca ? 'rebecca-node' : 'pg-node'));
     setReview('service_port', sPort ? ':' + sPort : '—');
     setReview('api_port', aPort ? ':' + aPort : '—');
-    setReview('channel', (channelLabel || '').trim());
+    setReview('channel', (channelLabel || '').trim().split('\n')[0]);
     setReview('protocol', proto ? proto.value.toUpperCase() : 'gRPC');
 
     var protoRow = modal.querySelector('[data-review-row="protocol"]');
@@ -375,8 +439,10 @@ function initDeployModal(root) {
     var bundleRow = modal.querySelector('[data-review-row="bundle"]');
     if (bundleRow) {
       bundleRow.hidden = !rebecca;
-      var hasBundle = bundleInput && bundleInput.value.trim().length > 0;
-      setReview('bundle', hasBundle ? '✓ ' + (I18N && I18N.t ? I18N.t('nodes.bundle_valid') || 'Configured' : 'Configured') : '—');
+      var bundleVal = bundleInput ? bundleInput.value.trim() : '';
+      var hasCert = bundleVal.indexOf('-----BEGIN CERTIFICATE-----') !== -1;
+      var hasKey = bundleVal.indexOf('KEY-----') !== -1;
+      setReview('bundle', (hasCert && hasKey) ? '✓ ' + ((I18N && I18N.t ? I18N.t('nodes.bundle_valid') : '') || 'Valid Bundle') : '—');
     }
 
     if (btnSubmit) {
@@ -392,29 +458,54 @@ function initDeployModal(root) {
       modalBody.scrollTop = 0;
       modalBody.scrollLeft = 0;
     }
+    clearFieldErrors();
 
     steps.forEach(function (s, i) {
-      s.classList.toggle('is-active', i === currentStep);
-      s.classList.toggle('is-done', i < currentStep);
+      var isActive = (i === currentStep);
+      var isDone = (i < currentStep);
+      s.classList.toggle('is-active', isActive);
+      s.classList.toggle('is-done', isDone);
+      if (isActive) {
+        s.setAttribute('aria-current', 'step');
+      } else {
+        s.removeAttribute('aria-current');
+      }
+      var hit = s.querySelector('.deploy-step__hit');
+      if (hit) {
+        hit.disabled = (i > currentStep);
+      }
     });
+
+    if (progressBar) {
+      var pct = currentStep === 0 ? 0 : (currentStep === 1 ? 50 : 100);
+      progressBar.style.width = pct + '%';
+    }
+
     panes.forEach(function (p, i) {
       p.hidden = (i !== currentStep);
       p.classList.toggle('is-active', i === currentStep);
     });
+
     if (btnBack) btnBack.hidden = (currentStep === 0);
     if (btnNext) btnNext.hidden = (currentStep === 2);
     if (btnSubmit) btnSubmit.hidden = (currentStep !== 2);
 
     if (currentStep === 1) {
-      var focus = panes[1] ? panes[1].querySelector('input[name="node_name"]') : null;
-      if (focus) setTimeout(function () { focus.focus(); }, 50);
+      var focusInput = panes[1] ? panes[1].querySelector('input[name="node_name"]') : null;
+      if (focusInput) setTimeout(function () { focusInput.focus(); }, 60);
     } else if (currentStep === 2) {
       updateReview();
+      if (btnSubmit) setTimeout(function () { btnSubmit.focus(); }, 60);
     }
+
+    renderIcons(modal);
   }
 
   steps.forEach(function (stepEl, idx) {
-    stepEl.addEventListener('click', function () {
+    var hit = stepEl.querySelector('.deploy-step__hit');
+    var target = hit || stepEl;
+    target.addEventListener('click', function (e) {
+      e.preventDefault();
       if (idx < currentStep) {
         setStep(idx);
       }
@@ -441,34 +532,66 @@ function initDeployModal(root) {
   if (btnNext) {
     btnNext.addEventListener('click', function (e) {
       e.preventDefault();
+      clearFieldErrors();
+
+      if (currentStep === 0) {
+        var engine = getSelectedEngine();
+        if (!engine) {
+          showFieldError('engine', (I18N && I18N.t ? I18N.t('nodes.err_engine_required') : '') || 'Please select a node engine.');
+          return;
+        }
+        setStep(1);
+        return;
+      }
+
       if (currentStep === 1) {
-        var nameField = form && form.elements['node_name'];
-        if (nameField && !nameField.checkValidity()) {
-          nameField.reportValidity();
-          return;
-        }
-        var sPortField = form && form.elements['service_port'];
-        if (sPortField && !sPortField.checkValidity()) {
-          sPortField.reportValidity();
-          return;
-        }
-        var aPortField = form && form.elements['api_port'];
         var engine = getSelectedEngine();
         var rebecca = isRebecca(engine);
 
-        if (aPortField) {
-          var aVal = aPortField.value.trim();
-          if (rebecca && !aVal) {
-            aPortField.value = '62051';
-            aVal = '62051';
+        var nameField = form && form.elements['node_name'];
+        if (nameField) {
+          var nameVal = nameField.value.trim();
+          if (!nameVal) {
+            showFieldError('node_name', (I18N && I18N.t ? I18N.t('nodes.err_node_name') : '') || 'Node name is required.');
+            nameField.focus();
+            if (nameField.reportValidity) nameField.reportValidity();
+            return;
           }
-          if (aVal) {
-            if (!aPortField.checkValidity()) {
-              aPortField.reportValidity();
+          if (!nameField.checkValidity()) {
+            nameField.reportValidity();
+            return;
+          }
+        }
+
+        var sPortField = form && form.elements['service_port'];
+        if (sPortField) {
+          var sVal = parseInt(sPortField.value.trim(), 10);
+          if (!sVal || isNaN(sVal) || sVal < 1 || sVal > 65535) {
+            showFieldError('service_port', (I18N && I18N.t ? I18N.t('nodes.err_service_port') : '') || 'Enter a valid port (1-65535).');
+            sPortField.focus();
+            if (sPortField.reportValidity) sPortField.reportValidity();
+            return;
+          }
+        }
+
+        var aPortField = form && form.elements['api_port'];
+        if (aPortField) {
+          var aRaw = aPortField.value.trim();
+          if (rebecca && !aRaw) {
+            aPortField.value = '62051';
+            aRaw = '62051';
+          }
+          if (aRaw) {
+            var aVal = parseInt(aRaw, 10);
+            if (!aVal || isNaN(aVal) || aVal < 1 || aVal > 65535) {
+              showFieldError('api_port', (I18N && I18N.t ? I18N.t('nodes.err_api_port') : '') || 'Enter a valid port (1-65535).');
+              aPortField.focus();
+              if (aPortField.reportValidity) aPortField.reportValidity();
               return;
             }
-            if (sPortField && aVal === sPortField.value.trim()) {
+            if (sPortField && aRaw === sPortField.value.trim()) {
               var errPortsEq = (I18N && I18N.t ? I18N.t('nodes.err_ports_equal') : '') || 'The API port must differ from the service port.';
+              showFieldError('api_port', errPortsEq);
               aPortField.setCustomValidity(errPortsEq);
               aPortField.reportValidity();
               return;
@@ -485,55 +608,45 @@ function initDeployModal(root) {
           var hasCert = bundleVal.indexOf('-----BEGIN CERTIFICATE-----') !== -1;
           var hasKey = bundleVal.indexOf('KEY-----') !== -1;
           if (!bundleVal || !hasCert || !hasKey) {
-            if (bundleState) {
-              bundleState.hidden = false;
-              bundleState.className = 'field-hint deploy-bundle-state is-bad';
-              bundleState.textContent = '⚠ ' + (I18N && I18N.t ? I18N.t('nodes.bundle_invalid') || 'Paste the certificate and its private key.' : 'Paste the certificate and its private key.');
-            }
+            showFieldError('bundle', (I18N && I18N.t ? I18N.t('nodes.bundle_invalid') : '') || 'Paste the certificate and its private key.');
+            validateBundle();
             if (bundleInput) {
               bundleInput.focus();
-              if (bundleInput.reportValidity && !bundleVal) {
-                bundleInput.reportValidity();
-              }
+              if (bundleInput.reportValidity && !bundleVal) bundleInput.reportValidity();
             }
             return;
           }
         }
+
+        setStep(2);
+        return;
       }
-      setStep(currentStep + 1);
     });
   }
 
   if (btnBack) {
     btnBack.addEventListener('click', function (e) {
       e.preventDefault();
+      clearFieldErrors();
       setStep(currentStep - 1);
     });
   }
 
-  if (bundleInput && bundleState) {
-    bundleInput.addEventListener('input', function () {
-      var val = bundleInput.value.trim();
-      if (!val) {
-        bundleState.hidden = true;
-        return;
-      }
-      var hasCert = val.indexOf('-----BEGIN CERTIFICATE-----') !== -1;
-      var hasKey = val.indexOf('KEY-----') !== -1;
-      bundleState.hidden = false;
-      if (hasCert && hasKey) {
-        bundleState.className = 'field-hint deploy-bundle-state is-ok';
-        bundleState.textContent = '✓ ' + (I18N.t('nodes.bundle_valid') || 'Certificate and private key detected.');
-      } else {
-        bundleState.className = 'field-hint deploy-bundle-state is-bad';
-        bundleState.textContent = '⚠ ' + (I18N.t('nodes.bundle_invalid') || 'Paste the certificate and its private key.');
-      }
+  if (bundleInput) {
+    bundleInput.addEventListener('input', validateBundle);
+  }
+
+  if (bundleClearBtn && bundleInput) {
+    bundleClearBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      bundleInput.value = '';
+      bundleInput.dispatchEvent(new Event('input', { bubbles: true }));
+      bundleInput.focus();
     });
   }
 
-  var pasteBtn = modal.querySelector('[data-bundle-paste]');
-  if (pasteBtn && bundleInput) {
-    pasteBtn.addEventListener('click', function (e) {
+  if (bundlePasteBtn && bundleInput) {
+    bundlePasteBtn.addEventListener('click', function (e) {
       e.preventDefault();
       if (navigator.clipboard && navigator.clipboard.readText) {
         navigator.clipboard.readText().then(function (text) {
@@ -550,6 +663,20 @@ function initDeployModal(root) {
       }
     });
   }
+
+  // Pressing Enter in Step 1 inputs advances to Step 2
+  panes.forEach(function (pane, paneIdx) {
+    if (paneIdx === 1) {
+      pane.querySelectorAll('input').forEach(function (input) {
+        input.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            if (btnNext) btnNext.click();
+          }
+        });
+      });
+    }
+  });
 
   document.querySelectorAll('[data-engine-preselect]').forEach(function (btn) {
     btn.addEventListener('click', function () {
