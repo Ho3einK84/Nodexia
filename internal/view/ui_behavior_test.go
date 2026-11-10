@@ -161,7 +161,12 @@ func TestCollapsibleInitializationPreservesStoredPreferenceAndRescan(t *testing.
 	}
 	script := string(raw)
 
-	if !strings.Contains(script, `var isOpen = stored ? stored !== 'closed' : !defaultClosed;`) {
+	uiScript := script
+	if uiRaw, err := fs.ReadFile(staticFS, "modules/ui.js"); err == nil {
+		uiScript = string(uiRaw)
+	}
+
+	if !strings.Contains(uiScript, `var isOpen = stored ? stored !== 'closed' : !defaultClosed;`) {
 		t.Error("initCollapsibles no longer gives a stored preference precedence over the template default")
 	}
 	if strings.Count(script, "initCollapsibles(root);") < 1 {
