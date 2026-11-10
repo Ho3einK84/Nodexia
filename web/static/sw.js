@@ -17,7 +17,7 @@
  */
 'use strict';
 
-var CACHE_VERSION = 'v8';
+var CACHE_VERSION = 'v9';
 var STATIC_CACHE = 'nodexia-static-' + CACHE_VERSION;
 var OFFLINE_URL = '/static/offline.html';
 

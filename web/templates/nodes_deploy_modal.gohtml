@@ -77,7 +77,7 @@
                       <span class="deploy-engine__title-wrap">
                         <span class="deploy-engine__label">{{ .Label }}</span>
                         <span class="deploy-engine__kind deploy-engine__kind--{{ .Kind }}">{{ t (printf "nodes.engine_kind_%s" .Kind) }}</span>
-                        {{ if .Recommended }}<span class="deploy-engine__reco">{{ t "nodes.recommended" }}</span>{{ end }}
+                        {{ if .Recommended }}<span class="deploy-engine__reco" hidden>{{ t "nodes.recommended" }}</span>{{ end }}
                       </span>
                       <span class="deploy-engine__radio" aria-hidden="true"><i data-lucide="check"></i></span>
                     </span>
@@ -122,7 +122,6 @@
                 <label class="form-field deploy-field" data-field="service_port">
                   <span class="deploy-field__label">
                     <span>{{ t "nodes.service_port" }}</span>
-                    <span class="deploy-field__tag">{{ t "nodes.ports_service" }}</span>
                   </span>
                   <span class="deploy-input">
                     <i data-lucide="network" class="deploy-input__icon" aria-hidden="true"></i>

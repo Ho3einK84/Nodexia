@@ -354,12 +354,20 @@ function initDeployModal(root) {
       // optional. Never rewrite a port the user typed: only seed the default
       // when the field is still empty.
       if (rebecca) {
-        if (!apiPortInput.value.trim()) apiPortInput.value = '62051';
+        if (!apiPortInput.value.trim()) {
+          apiPortInput.value = '62051';
+          apiPortInput.dataset.autoseeded = '1';
+        }
         apiPortInput.required = true;
         apiPortInput.placeholder = '62051';
         if (reqBadge) reqBadge.hidden = false;
         if (optBadge) optBadge.hidden = true;
       } else {
+        // Drop only the value WE seeded; a port the user typed is kept.
+        if (apiPortInput.dataset.autoseeded === '1') {
+          apiPortInput.value = '';
+          delete apiPortInput.dataset.autoseeded;
+        }
         apiPortInput.required = false;
         apiPortInput.placeholder = '62051';
         if (reqBadge) reqBadge.hidden = true;

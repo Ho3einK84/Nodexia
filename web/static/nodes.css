@@ -1878,10 +1878,14 @@
   z-index: 1;
 }
 
+/* `.form-field input` in style.css sets `padding: 11px 14px`, which wins on
+   specificity and pulls the text under the leading icon. Re-assert the icon
+   gutter with a matching-or-higher specific selector. */
+.deploy-input > .deploy-input__control,
 .deploy-input__control {
   width: 100%;
   box-sizing: border-box;
-  padding-inline-start: 38px;
+  padding-inline-start: 2.5rem;
   padding-inline-end: 12px;
   block-size: 38px;
   border-radius: var(--radius-md, 8px);
@@ -2106,6 +2110,11 @@
   line-height: 1.45;
   min-block-size: 110px;
   resize: vertical;
+  /* PEM armour, the node name and the SAN list are machine text: keep them
+     left-to-right even when the page runs RTL, or the base64 blocks and the
+     `-----BEGIN …` delimiters reorder visually. */
+  direction: ltr;
+  text-align: left;
   border-radius: var(--radius-md, 8px);
   background: rgba(2, 6, 23, 0.7);
   border: 1px solid var(--border);
