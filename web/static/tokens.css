@@ -226,6 +226,16 @@
   box-sizing: border-box;
 }
 
+/* `hidden` must always win.
+   The UA stylesheet only gives [hidden] `display: none` at author-origin
+   priority 0, so ANY component rule that sets `display` (.btn, .field-error,
+   .deploy-block, …) silently overrides it and the element stays visible. The
+   deploy wizard relies on `hidden` to swap per-engine field groups, so without
+   this the Rebecca and PasarGuard forms render at the same time. */
+[hidden] {
+  display: none !important;
+}
+
 html {
   /* Prevent horizontal spill from off-canvas elements */
   overflow-x: hidden;

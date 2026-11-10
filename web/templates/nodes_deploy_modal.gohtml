@@ -176,8 +176,10 @@
               </fieldset>
             </div>
 
-            {{/* PasarGuard-only configuration. */}}
-            <div class="deploy-block" data-engine-group="docker">
+            {{/* PasarGuard-only configuration. Rendered hidden and disabled for
+                 Rebecca so the two engines never share a field set, even if
+                 JavaScript fails to run. */}}
+            <div class="deploy-block" data-engine-group="docker"{{ if eq $form.NodeType "rebecca-node" }} hidden{{ end }}>
               <p class="deploy-block__title"><i data-lucide="shield-check"></i> {{ t "nodes.deploy_section_transport" }}</p>
 
               <fieldset class="deploy-group deploy-group--proto">
@@ -227,8 +229,9 @@
               </label>
             </div>
 
-            {{/* Rebecca-only configuration (native binary). */}}
-            <div class="deploy-block" data-engine-group="binary">
+            {{/* Rebecca-only configuration (native binary). Rendered hidden for
+                 PasarGuard, and disabled so no stale value is submitted. */}}
+            <div class="deploy-block" data-engine-group="binary"{{ if ne $form.NodeType "rebecca-node" }} hidden{{ end }}>
               <p class="deploy-block__title"><i data-lucide="file-badge"></i> {{ t "nodes.deploy_section_bundle" }}</p>
 
               <label class="form-field deploy-field deploy-field--bundle" data-field="bundle">
