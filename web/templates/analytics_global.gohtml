@@ -1,0 +1,116 @@
+{{ define "content-analytics-global" }}
+<section class="hero">
+
+  {{ template "page-header" . }}
+
+  {{/* Traffic limits at a glance — replaces the easy-to-miss ghost button
+       with a summary of the fleet caps and a clear entry point. */}}
+  <article class="card limits-banner">
+    <div class="limits-banner__icon" aria-hidden="true"><i data-lucide="gauge"></i></div>
+    <div class="limits-banner__body">
+      <h3>{{ t "analytics.limits.banner_title" }}</h3>
+      <p>{{ t "analytics.limits.banner_desc" }}</p>
+      <div class="limits-banner__stats">
+        {{ if .GlobalAnalytics.HasGlobalLimit }}
+        <span class="badge badge--ok">{{ t "analytics.limits.banner_global" "value" .GlobalAnalytics.GlobalLimitHuman }}</span>
+        {{ else }}
+        <span class="badge badge--warn">{{ t "analytics.limits.banner_none" }}</span>
+        {{ end }}
+        <span class="badge badge--id">{{ t "analytics.limits.banner_tags" "count" .GlobalAnalytics.TagLimitCount }}</span>
+      </div>
+    </div>
+    <a class="btn btn--primary btn--sm limits-banner__cta" href="/analytics/limits"><i data-lucide="sliders-horizontal" class="icon-in-button"></i> {{ t "analytics.limits.manage" }}</a>
+  </article>
+
+  {{ if eq .GlobalAnalytics.ServerCount 0 }}
+  <article class="card card--empty">
+    <i data-lucide="bar-chart-2" class="empty-icon"></i>
+    <h3>{{ t "analytics.global_empty_title" }}</h3>
+    <p>{{ t "analytics.global_empty_desc" }}</p>
+    <a class="btn btn--primary" href="/servers">{{ t "analytics.go_servers" }}</a>
+  </article>
+  {{ else }}
+
+  <!-- Top consumers by CPU / RAM / Disk -->
+  <article class="card">
+    <h3><i data-lucide="cpu"></i> {{ t "analytics.top_resource" }}</h3>
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead>
+          <tr>
+            <th>{{ t "common.server" }}</th>
+            <th class="text-right">{{ t "home.metric.cpu" }}</th>
+            <th class="text-right">{{ t "home.metric.ram" }}</th>
+            <th class="text-right">{{ t "home.metric.disk" }}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ range .GlobalAnalytics.TopMetrics }}
+          <tr>
+            <td class="server-name-cell">
+              <i data-lucide="server" class="table-icon"></i>
+              {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}
+            </td>
+            <td class="text-right"><span class="metric-badge metric-badge--cpu">{{ .CPU }}</span></td>
+            <td class="text-right"><span class="metric-badge metric-badge--ram">{{ .RAM }}</span></td>
+            <td class="text-right"><span class="metric-badge metric-badge--disk">{{ .Disk }}</span></td>
+            <td class="text-right">
+              <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics">
+                <i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}
+              </a>
+            </td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  {{ if .GlobalAnalytics.TopTraffic }}
+  <!-- Top consumers by bandwidth -->
+  <article class="card">
+    <h3><i data-lucide="network"></i> {{ t "analytics.top_traffic" }}</h3>
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead>
+          <tr>
+            <th>{{ t "common.server" }}</th>
+            <th class="text-right"><i data-lucide="arrow-down" class="th-icon th-icon--dl"></i> {{ t "analytics.download" }}</th>
+            <th class="text-right"><i data-lucide="arrow-up" class="th-icon th-icon--ul"></i> {{ t "analytics.upload" }}</th>
+            <th class="text-right">{{ t "analytics.total_month" "label" (index .GlobalAnalytics.TopTraffic 0).MonthLabel }}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ range .GlobalAnalytics.TopTraffic }}
+          <tr>
+            <td class="server-name-cell">
+              <i data-lucide="server" class="table-icon"></i>
+              {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}
+            </td>
+            <td class="text-right">
+              <span class="traffic-badge traffic-badge--dl">{{ .Download }}</span>
+            </td>
+            <td class="text-right">
+              <span class="traffic-badge traffic-badge--ul">{{ .Upload }}</span>
+            </td>
+            <td class="text-right">
+              <span class="traffic-badge">{{ .MonthBytes }}</span>
+            </td>
+            <td class="text-right">
+              <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics">
+                <i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}
+              </a>
+            </td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+  </article>
+  {{ end }}
+
+  {{ end }}
+</section>
+{{ end }}
