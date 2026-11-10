@@ -1,0 +1,139 @@
+{{ define "monitoring-traffic" }}
+  {{ if .MonitoringTraffic.Known }}
+  {{ if .MonitoringTraffic.Available }}
+  <article class="card traffic-card">
+
+    <div class="traffic-header">
+      <div class="traffic-iface">
+        <span class="traffic-iface__label"><i data-lucide="activity"></i> {{ t "monitoring.traffic_title" }}</span>
+        <span class="traffic-iface__name"><span class="iface-chip iface-chip--active">{{ .MonitoringTraffic.InterfaceName }}</span></span>
+        {{ if gt (len .MonitoringTraffic.AvailableInterfaces) 1 }}
+        <div class="traffic-iface__others">
+          {{ range .MonitoringTraffic.AvailableInterfaces }}
+          {{ if ne . $.MonitoringTraffic.InterfaceName }}
+          <form method="post" action="{{ $.MonitoringForm.Action }}" class="inline-form">
+            <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+            <input type="hidden" name="traffic_interface" value="{{ . }}">
+            <button type="submit" class="iface-chip" title="{{ t "monitoring.vnstat_interface" }}: {{ . }}">{{ . }}</button>
+          </form>
+          {{ end }}
+          {{ end }}
+        </div>
+        {{ end }}
+      </div>
+      <span class="traffic-meta"><i data-lucide="calendar" class="icon-in-button"></i> {{ .MonitoringTraffic.CollectedAt }}</span>
+    </div>
+
+    {{ if or (ne .MonitoringTraffic.PeakMbps "-") (ne .MonitoringTraffic.AvgMbps "-") }}
+    <div class="traffic-bw">
+      <div class="traffic-bw__item">
+        <span class="traffic-bw__label"><i data-lucide="zap"></i> {{ t "home.metric.peak_download" }}</span>
+        <span class="traffic-bw__value" title="{{ t "home.metric.peak_download_title" }}">{{ .MonitoringTraffic.PeakMbps }}</span>
+        <span class="traffic-bw__sub">{{ t "monitoring.peak_sub" }}</span>
+      </div>
+      <div class="traffic-bw__item">
+        <span class="traffic-bw__label"><i data-lucide="trending-up"></i> {{ t "monitoring.avg_download" }}</span>
+        <span class="traffic-bw__value" title="{{ t "monitoring.avg_title" }}">{{ .MonitoringTraffic.AvgMbps }}</span>
+        <span class="traffic-bw__sub">{{ t "monitoring.avg_sub" }}</span>
+      </div>
+    </div>
+    {{ end }}
+
+    <div class="traffic-columns">
+
+      <div class="traffic-section">
+        <div class="traffic-section__head">
+          <span><i data-lucide="calendar-days" class="icon-in-button"></i> {{ t "monitoring.recent_days" }}</span>
+          {{ if .MonitoringTraffic.DailyRows }}<span class="traffic-section__count">{{ t "monitoring.days_count" "count" (len .MonitoringTraffic.DailyRows) }}</span>{{ end }}
+        </div>
+        {{ if .MonitoringTraffic.DailyRows }}
+        <div class="traffic-rows" id="traffic-daily-rows">
+          {{ range $idx, $row := .MonitoringTraffic.DailyRows }}
+          <div class="traffic-row{{ if .IsLatest }} traffic-row--latest{{ end }}{{ if ge $idx 7 }} traffic-row--extra{{ end }}">
+            <span class="traffic-row__label">{{ .Label }}</span>
+            <div class="traffic-row__data">
+              <span class="traffic-row__rx"><i data-lucide="arrow-down"></i>{{ .RX }}</span>
+              <span class="traffic-row__tx"><i data-lucide="arrow-up"></i>{{ .TX }}</span>
+              <span class="traffic-row__total">{{ .Total }}</span>
+            </div>
+            <div class="traffic-row__bar"><div class="traffic-row__bar-fill" style="width:{{ .Bar }}%"></div></div>
+          </div>
+          {{ end }}
+        </div>
+        {{ if gt (len .MonitoringTraffic.DailyRows) 7 }}
+        <div class="traffic-more-wrap">
+          <button type="button" class="btn btn--ghost btn--xs traffic-more-btn" id="traffic-more-daily" data-toggle-daily="true">
+            <i data-lucide="chevron-down" class="icon-in-button"></i>
+            <span class="traffic-more-text">{{ t "monitoring.show_more" }}</span>
+          </button>
+        </div>
+        {{ end }}
+        {{ else }}
+        <p class="empty-state">{{ t "monitoring.no_daily" }}</p>
+        {{ end }}
+      </div>
+
+      <div class="traffic-section">
+        <div class="traffic-section__head">
+          <span><i data-lucide="calendar-range" class="icon-in-button"></i> {{ t "monitoring.monthly" }}</span>
+          {{ if .MonitoringTraffic.MonthlyRows }}<span class="traffic-section__count">{{ t "monitoring.months_count" "count" (len .MonitoringTraffic.MonthlyRows) }}</span>{{ end }}
+        </div>
+        {{ if .MonitoringTraffic.MonthlyRows }}
+        <div class="traffic-rows">
+          {{ range .MonitoringTraffic.MonthlyRows }}
+          <div class="traffic-row{{ if .IsLatest }} traffic-row--latest{{ end }}">
+            <span class="traffic-row__label">{{ .Label }}</span>
+            <div class="traffic-row__data">
+              <span class="traffic-row__rx"><i data-lucide="arrow-down"></i>{{ .RX }}</span>
+              <span class="traffic-row__tx"><i data-lucide="arrow-up"></i>{{ .TX }}</span>
+              <span class="traffic-row__total">{{ .Total }}</span>
+            </div>
+            <div class="traffic-row__bar"><div class="traffic-row__bar-fill" style="width:{{ .Bar }}%"></div></div>
+          </div>
+          {{ end }}
+        </div>
+        {{ else }}
+        <p class="empty-state">{{ t "monitoring.no_monthly" }}</p>
+        {{ end }}
+      </div>
+
+    </div>
+
+    {{ if .MonitoringTrafficCollection.Available }}
+    <div class="traffic-collector">
+      <div class="collapsible">
+        <button class="collapsible__toggle" data-collapse-key="traffic_collect" data-collapse-default="closed">
+          <i data-lucide="chevron-right" class="collapsible__icon"></i>
+          <span>{{ t "monitoring.vnstat_output" }}</span>
+          <code class="result-duration">{{ .MonitoringTrafficCollection.Duration }}</code>
+        </button>
+        <div class="collapsible__content">
+          {{ if .MonitoringTrafficCollection.Error }}<pre class="output-block output-block--error">{{ .MonitoringTrafficCollection.Error }}</pre>{{ end }}
+          {{ if .MonitoringTrafficCollection.Stdout }}<pre class="output-block scrollable">{{ .MonitoringTrafficCollection.Stdout }}</pre>{{ end }}
+          {{ if .MonitoringTrafficCollection.Stderr }}<pre class="output-block output-block--error scrollable">{{ .MonitoringTrafficCollection.Stderr }}</pre>{{ end }}
+        </div>
+      </div>
+    </div>
+    {{ end }}
+
+  </article>
+  {{ else }}
+  <div class="empty-state-card">
+    <span class="empty-state-icon"><i data-lucide="activity"></i></span>
+    <p class="empty-state-title">{{ .MonitoringTraffic.Message }}</p>
+    <p class="empty-state-desc">
+      {{ if .MonitoringTraffic.AvailableInterfaces }}
+      {{ t "monitoring.available_interfaces" }}{{ range .MonitoringTraffic.AvailableInterfaces }} <code>{{ . }}</code>{{ end }}
+      {{ else }}
+      {{ t "monitoring.vnstat_missing_hint" }}
+      {{ end }}
+    </p>
+    {{ if .MonitoringTraffic.VnstatMissing }}
+    <a class="btn btn--primary" href="/servers/{{ .MonitoringTarget.ID }}/commands?preset=install-vnstat">
+      <i data-lucide="terminal" class="icon-in-button"></i> {{ t "monitoring.install_via_commands" }}
+    </a>
+    {{ end }}
+  </div>
+  {{ end }}
+  {{ end }}
+{{ end }}

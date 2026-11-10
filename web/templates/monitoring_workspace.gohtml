@@ -1,0 +1,122 @@
+{{ define "monitoring-workspace" }}
+  <div class="sys-workspace">
+
+    {{- $monAdvErr := or (index .MonitoringForm.Errors "password") (index .MonitoringForm.Errors "private_key") (index .MonitoringForm.Errors "connect_timeout") (index .MonitoringForm.Errors "command_timeout") -}}
+    <details class="card card--collapsible" {{ if or $monAdvErr .MonitoringForm.Errors }}open{{ end }}>
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <h3><i data-lucide="refresh-cw"></i> {{ t "monitoring.refresh_snapshot" }}</h3>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
+
+      <div class="card__collapsible-body">
+        <form method="post" action="{{ .MonitoringForm.Action }}" id="mon-form">
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+
+          {{ if .MonitoringForm.StoredCredentialsAvailable }}
+          <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> {{ t "system.stored_note" }}</p>
+          {{ end }}
+
+          <label class="form-field">
+            <span><i data-lucide="wifi" class="icon-in-button"></i> {{ t "monitoring.vnstat_interface" }}</span>
+            <input type="text" name="traffic_interface" value="{{ .MonitoringForm.TrafficInterface }}" placeholder="{{ t "monitoring.autodetect" }}">
+            {{ with index .MonitoringForm.Errors "traffic_interface" }}<small class="field-error">{{ . }}</small>{{ end }}
+            {{ if .MonitoringTraffic.AvailableInterfaces }}
+            <div class="iface-hints">
+              {{ range .MonitoringTraffic.AvailableInterfaces }}
+              <button type="button" class="iface-chip{{ if eq . $.MonitoringTraffic.InterfaceName }} iface-chip--active{{ end }}" data-iface-fill="{{ . }}" title="{{ . }}">{{ . }}</button>
+              {{ end }}
+            </div>
+            {{ end }}
+          </label>
+
+          <div
+            id="mon-advanced"
+            class="sys-advanced"
+            {{ if and (not $monAdvErr) .MonitoringForm.StoredCredentialsAvailable }}hidden{{ end }}
+          >
+            <div class="form-grid">
+              <label class="form-field">
+                <span>{{ t "common.connect_timeout" }}</span>
+                <input type="text" name="connect_timeout" value="{{ .MonitoringForm.ConnectTimeout }}" placeholder="10s">
+                {{ with index .MonitoringForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+              <label class="form-field">
+                <span>{{ t "common.command_timeout" }}</span>
+                <input type="text" name="command_timeout" value="{{ .MonitoringForm.CommandTimeout }}" placeholder="20s">
+                {{ with index .MonitoringForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+            </div>
+            {{ if not .MonitoringForm.StoredCredentialsAvailable }}
+            <label class="form-field">
+              <span>{{ t "monitoring.ssh_password" }}</span>
+              <input type="password" name="password" placeholder="{{ t "monitoring.password_placeholder" }}" autocomplete="current-password">
+              {{ with index .MonitoringForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>{{ t "monitoring.private_key" }}</span>
+              <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+              {{ with index .MonitoringForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>{{ t "monitoring.passphrase" }}</span>
+              <input type="password" name="key_passphrase" placeholder="{{ t "monitoring.optional_placeholder" }}">
+            </label>
+            {{ end }}
+          </div>
+
+          <div class="sys-form__actions">
+            <button type="submit" class="btn btn--primary">
+              <i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "monitoring.refresh_now" }}
+            </button>
+            {{ if .MonitoringForm.StoredCredentialsAvailable }}
+            <button type="button" class="btn btn--ghost" data-refresh-now="{{ .MonitoringForm.RefreshURL }}?refresh=1">
+              <i data-lucide="zap" class="icon-in-button"></i> {{ t "system.quick_refresh" }}
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="mon-advanced" aria-expanded="false">
+              <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
+            </button>
+            {{ end }}
+          </div>
+
+        </form>
+      </div>
+    </details>
+
+    {{ if .MonitoringCollection.Available }}
+    <article class="card sys-result-card{{ if .MonitoringCollection.Error }} sys-result-card--error{{ else }} sys-result-card--ok{{ end }}">
+      <div class="result-header">
+        <span class="result-header__label">
+          <i data-lucide="{{ if .MonitoringCollection.Error }}alert-circle{{ else }}check-circle{{ end }}" class="icon-in-button"></i>
+          {{ if .MonitoringCollection.Error }}{{ t "system.collection_failed" }}{{ else }}{{ t "system.collection_complete" }}{{ end }}
+        </span>
+        <code class="result-duration">{{ .MonitoringCollection.Duration }}</code>
+      </div>
+      <div class="result-cmd"><code>{{ .MonitoringCollection.Command }}</code></div>
+      {{ if .MonitoringCollection.Error }}<pre class="output-block output-block--error">{{ .MonitoringCollection.Error }}</pre>{{ end }}
+      {{ if .MonitoringCollection.Stdout }}
+      <div class="collapsible">
+        <button class="collapsible__toggle" data-collapse-key="mon_stdout" data-collapse-default="closed">
+          <i data-lucide="chevron-right" class="collapsible__icon"></i> {{ t "common.stdout" }}
+        </button>
+        <div class="collapsible__content">
+          <pre class="output-block scrollable">{{ .MonitoringCollection.Stdout }}</pre>
+        </div>
+      </div>
+      {{ end }}
+      {{ if .MonitoringCollection.Stderr }}
+      <div class="collapsible">
+        <button class="collapsible__toggle" data-collapse-key="mon_stderr" data-collapse-default="closed">
+          <i data-lucide="chevron-right" class="collapsible__icon"></i> {{ t "common.stderr" }}
+        </button>
+        <div class="collapsible__content">
+          <pre class="output-block output-block--error scrollable">{{ .MonitoringCollection.Stderr }}</pre>
+        </div>
+      </div>
+      {{ end }}
+    </article>
+    {{ end }}
+
+  </div>
+{{ end }}
