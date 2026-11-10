@@ -1,0 +1,192 @@
+{{- define "node-grid" -}}
+  <div class="node-grid">
+    {{ range .NodeSnapshots }}
+    {{ if ne .NodeType "none" }}
+    <article class="node-card node-card--{{ .NodeType }} collapsible">
+
+      <header class="node-card__head">
+        <span class="node-card__icon">
+          <i data-lucide="{{ template "node-icon" .NodeType }}"></i>
+        </span>
+        <div class="node-card__title">
+          <div class="node-card__title-row">
+            <span class="node-card__name">{{ .Name }}</span>
+            {{ if and (ne .ServicePort "-") (ne .ServicePort "") }}
+            <code class="node-card__port-tag">:{{ .ServicePort }}</code>
+            {{ end }}
+          </div>
+          <code class="node-card__type">{{ .TypeLabel }}</code>
+        </div>
+        <div class="node-card__head-end">
+          <div class="node-confidence node-confidence--{{ .Confidence }}" title="{{ t "nodes.confidence_title" "level" .Confidence }}">
+            <span class="node-confidence__meter">
+              <span class="node-confidence__seg"></span>
+              <span class="node-confidence__seg"></span>
+              <span class="node-confidence__seg"></span>
+            </span>
+            <span class="node-confidence__label">{{ .Confidence }}</span>
+          </div>
+
+          <button type="button"
+                  class="collapsible__toggle node-card__body-toggle"
+                  data-collapse-key="node_body_{{ .NodeType }}_{{ .Name }}"
+                  data-collapse-default="closed"
+                  aria-label="{{ t "nodes.details_aria" "name" .Name }}"
+                  title="{{ t "nodes.details_aria" "name" .Name }}">
+            <i data-lucide="chevron-right" class="collapsible__icon"></i>
+          </button>
+
+          {{ if .Actions }}
+          <div class="action-menu action-menu--below node-card__menu" data-action-menu>
+            <button type="button" class="btn btn--ghost btn--sm action-menu__toggle node-card__menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="{{ t "nodes.actions_aria" "name" .Name }}">
+              <i data-lucide="ellipsis-vertical"></i>
+            </button>
+            <div class="action-menu__panel" role="menu">
+              <span class="action-menu__caption"><i data-lucide="wrench"></i> {{ t "nodes.node_actions" }}</span>
+              <div class="action-menu__divider" role="separator"></div>
+              {{ if .ActionsEnabled }}
+              <form method="post" action="/servers/{{ $.NodeTarget.ID }}/nodes/actions" class="action-menu__form">
+                <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+                <input type="hidden" name="node_type" value="{{ .NodeType }}">
+                <input type="hidden" name="node_name" value="{{ .Name }}">
+                {{ $node := . }}
+                {{ range .Actions }}
+                <button
+                  type="submit"
+                  name="action"
+                  value="{{ .Key }}"
+                  role="menuitem"
+                  class="action-menu__item{{ if .Danger }} action-menu__item--danger{{ end }}"
+                  {{ if .Danger }}data-confirm="{{ t "nodes.action_confirm" "action" .Label "name" $node.Name }}"{{ end }}
+                >
+                  <i data-lucide="{{ .Icon }}" class="icon-in-button"></i> {{ .Label }}
+                </button>
+                {{ end }}
+              </form>
+              {{ else }}
+              <span class="action-menu__note"><i data-lucide="key-round"></i> {{ t "nodes.store_creds_manage" }}</span>
+              {{ end }}
+            </div>
+          </div>
+          {{ end }}
+        </div>
+      </header>
+
+      <div class="node-status-row">
+        <span class="node-pill node-pill--health-{{ .HealthStatus }}">
+          <span class="node-pill__dot"></span>{{ template "node-health-label" .HealthStatus }}
+        </span>
+        <span class="node-pill node-pill--mode-{{ .InstallMode }}">
+          <i data-lucide="{{ if eq .InstallMode "docker" }}container{{ else if eq .InstallMode "binary" }}package{{ else }}help-circle{{ end }}"></i>{{ .InstallMode }}
+        </span>
+        {{ if and (ne .Protocol "-") (ne .Protocol "") }}
+        <span class="node-pill node-pill--proto-{{ .Protocol }}">
+          <i data-lucide="{{ if eq .Protocol "grpc" }}layers{{ else }}globe{{ end }}"></i>{{ .Protocol }}
+        </span>
+        {{ end }}
+        {{ if .UptimeKnown }}
+        <span class="node-pill node-pill--uptime-{{ if ge .UptimePct 99 }}ok{{ else if ge .UptimePct 90 }}warn{{ else }}crit{{ end }}" title="{{ t "nodes.uptime_checks" "detail" .UptimeDetail }}">
+          <i data-lucide="activity"></i>{{ t "nodes.uptime_30d" }} {{ .UptimePct }}%
+        </span>
+        {{ end }}
+      </div>
+
+      <div class="collapsible__content node-card__body">
+      <div class="node-facts">
+        <div class="node-fact">
+          <span class="node-fact__label"><i data-lucide="tag"></i> {{ t "common.version" }}</span>
+          <span class="node-fact__value">{{ .Version }}</span>
+        </div>
+        <div class="node-fact">
+          <span class="node-fact__label"><i data-lucide="plug"></i> {{ t "nodes.service_port" }}</span>
+          <span class="node-fact__value">
+            {{ if and (ne .ServicePort "-") (ne .ServicePort "") }}
+            <code class="node-port node-port--service">{{ .ServicePort }}</code>
+            {{ else }}-{{ end }}
+          </span>
+        </div>
+        <div class="node-fact">
+          <span class="node-fact__label"><i data-lucide="webhook"></i> {{ t "nodes.api_port" }}</span>
+          <span class="node-fact__value">
+            {{ if and (ne .APIPort "-") (ne .APIPort "") }}
+            <code class="node-port node-port--api">{{ .APIPort }}</code>
+            {{ else }}-{{ end }}
+          </span>
+        </div>
+        <div class="node-fact node-fact--wide">
+          <span class="node-fact__label"><i data-lucide="folder"></i> {{ t "nodes.data_directory" }}</span>
+          <span class="node-fact__value"><code class="node-path">{{ .DataDir }}</code></span>
+        </div>
+      </div>
+
+      {{ if eq .NodeType "pasarguard-node" }}
+      <div class="node-section node-credentials">
+        <span class="node-section__label"><i data-lucide="key-round"></i> {{ t "nodes.credentials" }}</span>
+        {{ if .ActionsEnabled }}
+        <button type="button" class="btn btn--ghost btn--sm node-credentials__btn"
+                data-node-credentials
+                data-url="/servers/{{ $.NodeTarget.ID }}/nodes/credentials?type={{ .NodeType }}&amp;name={{ .Name }}">
+          <i data-lucide="key-round" class="icon-in-button"></i> {{ t "nodes.show_api_cert" }}
+        </button>
+        <div class="node-credentials__out" hidden></div>
+        {{ else }}
+        <p class="node-actions-note"><i data-lucide="key-round" class="icon-in-button"></i> {{ t "nodes.store_creds_view" }}</p>
+        {{ end }}
+      </div>
+      {{ end }}
+
+      {{ if .ActivePorts }}
+      {{ $apiPort := .APIPort }}{{ $servicePort := .ServicePort }}
+      <div class="node-section">
+        <span class="node-section__label"><i data-lucide="network"></i> {{ t "nodes.active_ports" }}</span>
+        <div class="node-chips">
+          {{ range .ActivePorts }}
+          <code class="node-port{{ if eq . $apiPort }} node-port--api{{ else if eq . $servicePort }} node-port--service{{ end }}">{{ . }}</code>
+          {{ end }}
+        </div>
+      </div>
+      {{ end }}
+
+      {{ if .XrayPorts }}
+      <div class="node-section">
+        <span class="node-section__label"><i data-lucide="arrow-left-right"></i> {{ t "nodes.xray_ports" }}</span>
+        <div class="node-chips">
+          {{ range .XrayPorts }}<code class="node-port node-port--xray">{{ . }}</code>{{ end }}
+        </div>
+      </div>
+      {{ end }}
+
+      {{ if .Dependencies }}
+      <div class="node-section">
+        <span class="node-section__label"><i data-lucide="package-check"></i> {{ t "nodes.dependencies" }}</span>
+        <div class="node-chips">
+          {{ range .Dependencies }}<code class="node-dep{{ if hasSuffix . ":missing" }} node-dep--missing{{ end }}">{{ . }}</code>{{ end }}
+        </div>
+      </div>
+      {{ end }}
+
+      {{ if .Evidence }}
+      <div class="node-evidence collapsible">
+        <button class="collapsible__toggle" data-collapse-key="evidence_{{ .NodeType }}_{{ .Name }}" data-collapse-default="closed">
+          <i data-lucide="chevron-right" class="collapsible__icon"></i>
+          <span>{{ t "nodes.evidence" }}</span>
+          <span class="node-evidence__count">{{ len .Evidence }}</span>
+        </button>
+        <div class="collapsible__content">
+          <ul class="node-evidence__list">
+            {{ range .Evidence }}<li><i data-lucide="check" class="node-evidence__check"></i><span>{{ . }}</span></li>{{ end }}
+          </ul>
+        </div>
+      </div>
+      {{ end }}
+
+      <div class="node-card__footer">
+        <span><i data-lucide="calendar"></i> {{ .CollectedAt }}</span>
+      </div>
+      </div>
+
+    </article>
+    {{ end }}
+    {{ end }}
+  </div>
+{{- end -}}
