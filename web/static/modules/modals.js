@@ -277,7 +277,7 @@ function initDeployModal(root) {
 
   function getSelectedEngine() {
     var checked = modal.querySelector('input[name="node_type"]:checked');
-    return checked ? checked.value : 'pasarguard-node';
+    return checked ? checked.value : '';
   }
 
   function clearFieldErrors() {
@@ -348,22 +348,36 @@ function initDeployModal(root) {
     var reqBadge = modal.querySelector('[data-api-port-required]');
     var optBadge = modal.querySelector('[data-api-port-optional]');
     if (apiPortInput) {
+      // Rebecca's node registers against the panel over the REST API, so the
+      // API port is mandatory. PasarGuard's script can install without the
+      // management service (`--no-install-service`), so its API port is
+      // optional. Never rewrite a port the user typed: only seed the default
+      // when the field is still empty.
       if (rebecca) {
-        if (!apiPortInput.value.trim()) apiPortInput.value = '62051';
+        if (!apiPortInput.value.trim()) {
+          apiPortInput.value = '62051';
+          apiPortInput.dataset.autoseeded = '1';
+        }
         apiPortInput.required = true;
         apiPortInput.placeholder = '62051';
         if (reqBadge) reqBadge.hidden = false;
         if (optBadge) optBadge.hidden = true;
-        if (bundleInput) bundleInput.required = true;
       } else {
-        if (apiPortInput.value === '62051') apiPortInput.value = '';
+        // Drop only the value WE seeded; a port the user typed is kept.
+        if (apiPortInput.dataset.autoseeded === '1') {
+          apiPortInput.value = '';
+          delete apiPortInput.dataset.autoseeded;
+        }
         apiPortInput.required = false;
         apiPortInput.placeholder = '62051';
         if (reqBadge) reqBadge.hidden = true;
         if (optBadge) optBadge.hidden = false;
-        if (bundleInput) bundleInput.required = false;
       }
     }
+
+    // The bundle is Rebecca-only and is NOT nested under the API-port guard:
+    // PasarGuard must never require it, Rebecca always must.
+    if (bundleInput) bundleInput.required = rebecca;
 
     validateBundle();
   }
