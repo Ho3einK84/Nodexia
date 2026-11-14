@@ -1000,6 +1000,8 @@
   "js.bulk.confirm_node_restart": "Restart every PasarGuard and Rebecca node on {noun}? Active connections will drop briefly.",
   "js.bulk.confirm_node_update": "Update every PasarGuard and Rebecca node on {noun}? This can take many minutes per server.",
   "js.bulk.confirm_generic": "Run this bulk action on {noun}?",
+  "js.bulk.stream_reconnecting": "Live stream connection interrupted — reconnecting…",
+  "js.bulk.stream_error": "Live stream disconnected. Refresh to view the latest results.",
   "js.analytics.chart_footer": "Avg: {avg} · Peak: {peak} · {count} points",
   "js.analytics.forecast_unavailable": "Forecast unavailable — no traffic data collected yet",
   "js.analytics.today": "Today",

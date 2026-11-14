@@ -289,8 +289,8 @@ function initServerCards(root) {
   var cards = root.querySelectorAll('[data-server-card]');
   if (!cards.length) return;
 
-  var toggleAllBtn = root.getElementById ? root.getElementById('server-toggle-all') : document.getElementById('server-toggle-all');
-  var toggleAllLabel = root.getElementById ? root.getElementById('server-toggle-all-label') : document.getElementById('server-toggle-all-label');
+  var toggleAllBtn = root.querySelector('#server-toggle-all');
+  var toggleAllLabel = root.querySelector('#server-toggle-all-label');
 
   function updateCard(card, open, persist) {
     var body = card.querySelector('[data-server-body]');
@@ -314,6 +314,37 @@ function initServerCards(root) {
     }
   }
 
+  function positionActionMenu(menu, toggle) {
+    var panel = menu.querySelector('.action-menu__panel');
+    if (!panel || !toggle) return;
+    var panelH = panel.offsetHeight;
+    if (!panelH) {
+      panel.style.visibility = 'hidden';
+      panel.style.display = 'flex';
+      panelH = panel.offsetHeight || 260;
+      panel.style.display = '';
+      panel.style.visibility = '';
+    }
+    var rect = toggle.getBoundingClientRect();
+    var pane = cardScrollBounds(menu);
+    var spaceAbove = rect.top - pane.top;
+    var spaceBelow = pane.bottom - rect.bottom;
+    var openBelow = spaceAbove < (panelH + 12) && (spaceBelow >= (panelH + 12) || spaceBelow > spaceAbove);
+    menu.classList.toggle('action-menu--below', openBelow);
+  }
+
+  function cardScrollBounds(el) {
+    var pane = el.closest && el.closest('.tab-pane');
+    if (pane) {
+      var pr = pane.getBoundingClientRect();
+      return {
+        top: Math.max(pr.top, 0),
+        bottom: Math.min(pr.bottom, window.innerHeight)
+      };
+    }
+    return { top: 0, bottom: window.innerHeight };
+  }
+
   cards.forEach(function (card) {
     if (card.dataset.serverCardReady === '1') return;
     card.dataset.serverCardReady = '1';
@@ -326,6 +357,23 @@ function initServerCards(root) {
     // Default to closed so the server list is compact and space-efficient.
     var isOpen = stored === 'open';
     updateCard(card, isOpen, false);
+
+    var checkboxWrap = card.querySelector('.server-card__checkbox-wrap');
+    if (checkboxWrap) {
+      checkboxWrap.addEventListener('click', function (e) {
+        e.stopPropagation();
+      });
+    }
+
+    var menu = card.querySelector('[data-action-menu]');
+    var menuToggle = menu && menu.querySelector('.action-menu__toggle');
+    if (menu && menuToggle) {
+      menuToggle.addEventListener('click', function () {
+        if (!menu.classList.contains('is-open')) {
+          positionActionMenu(menu, menuToggle);
+        }
+      }, true);
+    }
 
     var header = card.querySelector('[data-server-toggle]');
     if (header) {

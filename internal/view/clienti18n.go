@@ -48,6 +48,8 @@ var clientI18nKeys = []string{
 	"js.bulk.confirm_node_restart",
 	"js.bulk.confirm_node_update",
 	"js.bulk.confirm_generic",
+	"js.bulk.stream_reconnecting",
+	"js.bulk.stream_error",
 
 	// Stream result meta (app.js) — reuse the server-rendered exit label.
 	"commands.exit",

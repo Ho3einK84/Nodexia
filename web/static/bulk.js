@@ -11,19 +11,35 @@
 (function () {
   'use strict';
 
-  var form = document.getElementById('bulk-form');
-  if (!form) return;
+  var currentScript = document.currentScript;
+  var root = (currentScript && currentScript.closest && currentScript.closest('.tab-pane')) || document;
 
-  var selectAll = document.getElementById('bulk-select-all');
-  var countEl   = document.getElementById('bulk-count');
-  var actionEl  = document.getElementById('bulk-action');
-  var submitBtn = document.getElementById('bulk-submit');
+  var form = root.querySelector('#bulk-form');
+  if (!form || form.dataset.bulkReady === '1') return;
+  form.dataset.bulkReady = '1';
 
-  // Checkboxes are outside the <form>, associated via form="bulk-form", so we
-  // query the whole document rather than the form subtree.
+  var toolbar   = root.querySelector('#bulk-toolbar');
+  var selectAll = root.querySelector('#bulk-select-all');
+  var countEl   = root.querySelector('#bulk-count');
+  var actionEl  = root.querySelector('#bulk-action');
+  var submitBtn = root.querySelector('#bulk-submit');
+
+  if (root !== document) {
+    var scopedFormId = 'bulk-form-' + Math.random().toString(36).slice(2, 8);
+    form.id = scopedFormId;
+    root.querySelectorAll('.bulk-server-checkbox').forEach(function (cb) {
+      cb.setAttribute('form', scopedFormId);
+    });
+    if (selectAll && selectAll.parentElement && selectAll.parentElement.tagName === 'LABEL') {
+      selectAll.parentElement.removeAttribute('for');
+    }
+  }
+
+  // Checkboxes live outside <form>, associated via form="bulk-form", so we
+  // query within the owning tab pane (or document on full page load).
   function serverCheckboxes() {
     return Array.prototype.slice.call(
-      document.querySelectorAll('.bulk-server-checkbox')
+      root.querySelectorAll('.bulk-server-checkbox')
     );
   }
 
@@ -49,12 +65,18 @@
   }
 
   function updateState() {
-    var boxes   = serverCheckboxes();
-    var checked = boxes.filter(function (cb) { return cb.checked; });
-    var n       = checked.length;
+    var boxes     = serverCheckboxes();
+    var checked   = boxes.filter(function (cb) { return cb.checked; });
+    var n         = checked.length;
+    var actionVal = actionEl ? actionEl.value : '';
 
     if (countEl) {
       countEl.textContent = window.nxT ? window.nxT('js.bulk.selected', { count: n }) : n + ' selected';
+    }
+
+    if (toolbar) {
+      toolbar.classList.toggle('is-empty', n === 0);
+      toolbar.classList.toggle('is-active', n > 0);
     }
 
     if (selectAll) {
@@ -63,35 +85,48 @@
     }
 
     if (submitBtn) {
-      submitBtn.disabled = n === 0;
+      submitBtn.disabled = n === 0 || actionVal === '';
       // app.js reads data-confirm off the submitter on submit; keep it current.
       submitBtn.setAttribute(
         'data-confirm',
-        confirmMessage(actionEl ? actionEl.value : '', n)
+        confirmMessage(actionVal, n)
       );
     }
   }
 
-  if (selectAll) {
-    selectAll.addEventListener('change', function () {
-      serverCheckboxes().forEach(function (cb) {
-        cb.checked = selectAll.checked;
-      });
-      updateState();
+  function onSelectAllChange() {
+    serverCheckboxes().forEach(function (cb) {
+      cb.checked = selectAll.checked;
     });
+    updateState();
+  }
+
+  function onRootChange(e) {
+    if (e.target && e.target.classList &&
+        e.target.classList.contains('bulk-server-checkbox')) {
+      updateState();
+    }
+  }
+
+  if (selectAll) {
+    selectAll.addEventListener('change', onSelectAllChange);
   }
 
   if (actionEl) {
     actionEl.addEventListener('change', updateState);
   }
 
-  // Delegate on the document so dynamically present checkboxes are covered.
-  document.addEventListener('change', function (e) {
-    if (e.target && e.target.classList &&
-        e.target.classList.contains('bulk-server-checkbox')) {
-      updateState();
-    }
-  });
+  // Scope delegated change listener to this pane and tear down cleanly when the tab closes/reloads.
+  root.addEventListener('change', onRootChange);
+
+  if (root !== document) {
+    root.__nxCleanups = root.__nxCleanups || [];
+    root.__nxCleanups.push(function () {
+      root.removeEventListener('change', onRootChange);
+      if (selectAll) selectAll.removeEventListener('change', onSelectAllChange);
+      if (actionEl) actionEl.removeEventListener('change', updateState);
+    });
+  }
 
   // Initial state.
   updateState();

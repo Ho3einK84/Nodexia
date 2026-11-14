@@ -367,4 +367,48 @@ function initAdvancedToggle(root) {
     });
   });
 }
-export { initForms, initLinks, initFlash, initSecrets, initCopyButtons, initCopyTargets, initProgressBars, initReveal, initBackToTop, initShortcuts, initCollapsibles, initAdvancedToggle, copyText };
+
+/* ── Server create/edit credential strategy switching ───── */
+function initServerForm(root) {
+  root = root || document;
+  root.querySelectorAll('#server-form').forEach(function (form) {
+    if (form.dataset.serverFormReady === '1') return;
+    form.dataset.serverFormReady = '1';
+
+    var strategyEl = form.querySelector('#cred-strategy');
+    if (!strategyEl) return;
+
+    var sections = {
+      stored:       form.querySelector('#cred-section-stored'),
+      runtime:      form.querySelector('#cred-section-runtime'),
+      external_ref: form.querySelector('#cred-section-external_ref'),
+      agent_ready:  form.querySelector('#cred-section-agent_ready')
+    };
+
+    var storedInput  = form.querySelector('#cred-ref-stored');
+    var runtimeInput = form.querySelector('#cred-ref-runtime');
+    var extTextarea  = form.querySelector('#cred-ref-ext');
+
+    function setControlState(el, active) {
+      if (!el) return;
+      el.disabled = !active;
+      el.name = active ? 'credential_ref' : 'credential_ref_disabled';
+    }
+
+    function syncStrategy() {
+      var current = strategyEl.value || 'stored';
+      Object.keys(sections).forEach(function (key) {
+        if (sections[key]) sections[key].hidden = key !== current;
+      });
+      setControlState(storedInput, current === 'stored');
+      setControlState(runtimeInput, current === 'runtime');
+      setControlState(extTextarea, current === 'external_ref');
+    }
+
+    strategyEl.addEventListener('change', syncStrategy);
+    form.addEventListener('submit', syncStrategy);
+    syncStrategy();
+  });
+}
+
+export { initForms, initLinks, initFlash, initSecrets, initCopyButtons, initCopyTargets, initProgressBars, initReveal, initBackToTop, initShortcuts, initCollapsibles, initAdvancedToggle, initServerForm, copyText };

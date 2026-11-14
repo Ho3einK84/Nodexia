@@ -16,7 +16,7 @@
  *   shell.js  — home warnings, log drawer, mobile drawer, server cards, PWA.
  */
 import { renderIcons, finishTopBar } from './modules/core.js';
-import { initForms, initLinks, initFlash, initSecrets, initCopyButtons, initCopyTargets, initProgressBars, initReveal, initBackToTop, initShortcuts, initCollapsibles, initAdvancedToggle } from './modules/ui.js';
+import { initForms, initLinks, initFlash, initSecrets, initCopyButtons, initCopyTargets, initProgressBars, initReveal, initBackToTop, initShortcuts, initCollapsibles, initAdvancedToggle, initServerForm } from './modules/ui.js';
 import { initNodeCredentials, initActionMenus, initModals, initDeployModal } from './modules/modals.js';
 import { initAutoRefresh, initStream, initNodeResult, initBulkStream, initManualRefresh } from './modules/stream.js';
 import { initHomeWarnings, initLogDrawer, initDrawer, initServerCards, initServiceWorker, initOrientationLock } from './modules/shell.js';
@@ -29,7 +29,7 @@ function boot() {
     initNodeCredentials, initProgressBars, initReveal, initAutoRefresh, initStream,
     initHomeWarnings, initNodeResult, initBulkStream, initManualRefresh, initActionMenus,
     initModals, initDeployModal, initLogDrawer, initDrawer, initBackToTop, initShortcuts,
-    initCollapsibles, initAdvancedToggle, initServerCards, initServiceWorker, initOrientationLock
+    initCollapsibles, initAdvancedToggle, initServerForm, initServerCards, initServiceWorker, initOrientationLock
   ].forEach(function (init) { init(); });
   renderIcons(); // pick up icons injected by the steps above
 }
@@ -56,6 +56,7 @@ window.NodexiaApp = {
     initDeployModal(root);
     initLogDrawer(root);
     initCollapsibles(root);
+    initServerForm(root);
     initServerCards(root);
     initStream(root);
     initBulkStream(root);

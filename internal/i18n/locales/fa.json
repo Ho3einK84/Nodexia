@@ -1000,6 +1000,8 @@
   "js.bulk.confirm_node_restart": "ریستارت نودهای {noun}؟ قطعی لحظه‌ای رخ می‌دهد.",
   "js.bulk.confirm_node_update": "به‌روزرسانی نودهای {noun}؟ زمان‌بر خواهد بود.",
   "js.bulk.confirm_generic": "اجرای عملیات روی {noun}؟",
+  "js.bulk.stream_reconnecting": "ارتباط استریم زنده قطع شد — در حال اتصال مجدد…",
+  "js.bulk.stream_error": "استریم زنده قطع شد. برای مشاهده آخرین وضعیت صفحه را بازخوانی کنید.",
   "js.analytics.chart_footer": "میانگین: {avg} · اوج: {peak} · {count} نقطه",
   "js.analytics.forecast_unavailable": "پیش‌بینی ممکن نیست — داده ترافیکی کافی وجود ندارد",
   "js.analytics.today": "امروز",

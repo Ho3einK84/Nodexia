@@ -87,7 +87,7 @@
     <article class="server-card server-card--{{ .AuthMode }} server-card--collapsible" data-server-card data-server-id="{{ .ID }}">
       <div class="server-card__header" data-server-toggle>
         <div class="server-card__lead">
-          <div class="server-card__checkbox-wrap" onclick="event.stopPropagation()">
+          <div class="server-card__checkbox-wrap">
             <input type="checkbox" name="server_ids" value="{{ .ID }}"
               form="bulk-form"
               class="bulk-server-checkbox"
@@ -112,6 +112,11 @@
         </div>
 
         <div class="server-card__header-end">
+          <div class="server-card__quick-actions">
+            <a class="server-card__quick-btn" href="/servers/{{ .ID }}/monitoring" aria-label="{{ t "common.monitoring" }}" title="{{ t "common.monitoring" }}"><i data-lucide="gauge" class="icon-in-button"></i><span class="server-card__quick-label">{{ t "common.monitoring" }}</span></a>
+            <a class="server-card__quick-btn" href="/servers/{{ .ID }}/nodes" aria-label="{{ t "common.nodes" }}" title="{{ t "common.nodes" }}"><i data-lucide="boxes" class="icon-in-button"></i><span class="server-card__quick-label">{{ t "common.nodes" }}</span></a>
+            <a class="server-card__quick-btn" href="/servers/{{ .ID }}/terminal" aria-label="{{ t "common.terminal" }}" title="{{ t "common.terminal" }}"><i data-lucide="terminal-square" class="icon-in-button"></i><span class="server-card__quick-label">{{ t "common.terminal" }}</span></a>
+          </div>
           <button type="button" class="server-card__toggle-btn" data-server-toggle-btn aria-expanded="false" aria-label="{{ t "servers.card.toggle_aria" "name" .Name }}" title="{{ t "servers.card.toggle_aria" "name" .Name }}">
             <i data-lucide="chevron-down" class="server-card__toggle-icon"></i>
           </button>

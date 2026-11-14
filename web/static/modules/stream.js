@@ -357,46 +357,112 @@ function initBulkStream(root) {
     try { es.close(); } catch (err) { /* best-effort */ }
   });
 
+  es.addEventListener('open', function () {
+    if (!finished) hideBulkStreamAlert(card);
+  });
+
   es.addEventListener('row', function (e) {
     var row = parseJSON(e.data);
     if (row.index == null) return;
+    hideBulkStreamAlert(card);
     updateBulkRow(card, row);
   });
 
   es.addEventListener('done', function (e) {
     finished = true;
     es.close();
+    hideBulkStreamAlert(card);
     updateBulkSummary(card, parseJSON(e.data));
   });
 
   es.addEventListener('error', function (e) {
-    if (e && e.data) { finished = true; es.close(); return; }
-    // Transient transport error → EventSource retries on its own.
+    if (e && e.data) {
+      var payload = parseJSON(e.data);
+      finished = true;
+      es.close();
+      showBulkStreamAlert(card, 'error', payload.error || I18N.t('js.bulk.stream_error'), true);
+      return;
+    }
+    if (finished) return;
+    if (es.readyState === EventSource.CLOSED) {
+      finished = true;
+      showBulkStreamAlert(card, 'error', I18N.t('js.bulk.stream_error'), true);
+      return;
+    }
+    showBulkStreamAlert(card, 'warn', I18N.t('js.bulk.stream_reconnecting'), false);
   });
 }
 
+function ensureBulkStreamAlert(card) {
+  var el = card.querySelector('[data-bulk-stream-alert]');
+  if (el) return el;
+  el = document.createElement('div');
+  el.className = 'flash-banner bulk-stream-alert';
+  el.setAttribute('data-bulk-stream-alert', '');
+  el.hidden = true;
+  var tableWrap = card.querySelector('.bulk-result-table-wrap');
+  if (tableWrap && tableWrap.parentNode === card) {
+    card.insertBefore(el, tableWrap);
+  } else {
+    card.appendChild(el);
+  }
+  return el;
+}
+
+function hideBulkStreamAlert(card) {
+  var el = card.querySelector('[data-bulk-stream-alert]');
+  if (el) el.hidden = true;
+}
+
+function showBulkStreamAlert(card, kind, message, withRetry) {
+  var el = ensureBulkStreamAlert(card);
+  el.className = 'flash-banner flash-banner--' + (kind === 'error' ? 'error' : 'warn') + ' bulk-stream-alert';
+  el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+  el.innerHTML = '';
+
+  var text = document.createElement('p');
+  text.textContent = message;
+  el.appendChild(text);
+
+  if (withRetry) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn--secondary btn--sm';
+    btn.textContent = I18N.t('js.tabs.retry');
+    btn.addEventListener('click', function () {
+      markButtonBusy(btn, I18N.t('js.loading'));
+      reloadForResult();
+    });
+    el.appendChild(btn);
+  }
+
+  el.hidden = false;
+}
+
+function normalizeBulkStatus(status) {
+  var allowed = ['ok', 'failed', 'skipped', 'pending', 'running', 'timeout'];
+  return allowed.indexOf(status) !== -1 ? status : 'unknown';
+}
+
 function updateBulkRow(card, row) {
+  var safeStatus = normalizeBulkStatus(row.status);
   card.querySelectorAll('[data-bulk-index="' + row.index + '"]').forEach(function (el) {
-    if (el.classList.contains('bulk-result-card')) {
-      el.className = 'bulk-result-card bulk-result-card--' + row.status;
-    }
     var chip = el.querySelector('[data-bulk-status]');
-    if (chip) chip.outerHTML = bulkChip(row.status);
+    if (chip && !chip.classList.contains('bulk-status--' + safeStatus)) {
+      chip.outerHTML = bulkChip(safeStatus);
+      renderIcons(el);
+    }
     var code = el.querySelector('[data-bulk-exit]');
     if (code) code.textContent = row.exitCode ? row.exitCode : '—';
     var reason = el.querySelector('[data-bulk-reason]');
     if (reason) {
-      var isCell = reason.tagName === 'TD';
-      reason.textContent = row.reason ? row.reason : (isCell ? '—' : '');
-      if (!isCell) reason.hidden = !row.reason;
+      reason.textContent = row.reason ? row.reason : '—';
     }
   });
-  renderIcons();
 }
 
 function bulkChip(status) {
-  var allowed = ['ok', 'failed', 'skipped', 'pending', 'running', 'timeout'];
-  var safeStatus = allowed.indexOf(status) !== -1 ? status : 'unknown';
+  var safeStatus = normalizeBulkStatus(status);
   var inner = {
     ok: '<i data-lucide="check-circle-2" class="icon-in-button"></i> ' + I18N.t('bulk.status_ok'),
     failed: '<i data-lucide="x-circle" class="icon-in-button"></i> ' + I18N.t('bulk.status_failed'),
@@ -416,7 +482,7 @@ function updateBulkSummary(card, done) {
   setBulkCount(card, 'ok', done.ok || 0);
   setBulkCount(card, 'failed', done.failed || 0);
   setBulkCount(card, 'skipped', done.skipped || 0);
-  renderIcons();
+  renderIcons(card);
 }
 
 function setBulkCount(card, key, value) {

@@ -25,12 +25,12 @@
     </div>
 
     {{ if not .BulkActionResult.Finished }}
-    <p class="bulk-progress-note" data-bulk-progress-note><span class="live-dot"></span> {{ t "bulk.progress_note" }}</p>
+    <p class="bulk-progress-note" data-bulk-progress-note><span class="spinner spinner--sm" aria-hidden="true"></span> {{ t "bulk.progress_note" }}</p>
     {{ end }}
+    <div class="flash-banner bulk-stream-alert" data-bulk-stream-alert hidden></div>
 
-    {{/* ── Desktop: data table ─────────────────────── */}}
     <div class="data-table-wrap bulk-result-table-wrap">
-      <table class="data-table">
+      <table class="data-table bulk-result-table">
         <thead>
           <tr>
             <th>{{ t "bulk.th_server" }}</th>
@@ -42,28 +42,14 @@
         <tbody>
           {{ range $i, $r := .BulkActionResult.Results }}
           <tr data-bulk-index="{{ $i }}">
-            <td class="bulk-result__name">{{ $r.Name }}</td>
-            <td>{{ template "bulk-status-chip" $r.Status }}</td>
-            <td class="bulk-result__code" data-bulk-exit>{{ if $r.ExitCode }}{{ $r.ExitCode }}{{ else }}—{{ end }}</td>
-            <td class="bulk-result__reason" data-bulk-reason>{{ if $r.Reason }}{{ $r.Reason }}{{ else }}—{{ end }}</td>
+            <td class="bulk-result__name" data-label="{{ t "bulk.th_server" }}">{{ $r.Name }}</td>
+            <td data-label="{{ t "common.status" }}">{{ template "bulk-status-chip" $r.Status }}</td>
+            <td class="bulk-result__code" data-bulk-exit data-label="{{ t "bulk.th_exit_code" }}">{{ if $r.ExitCode }}{{ $r.ExitCode }}{{ else }}—{{ end }}</td>
+            <td class="bulk-result__reason" data-bulk-reason data-label="{{ t "bulk.th_details" }}">{{ if $r.Reason }}{{ $r.Reason }}{{ else }}—{{ end }}</td>
           </tr>
           {{ end }}
         </tbody>
       </table>
-    </div>
-
-    {{/* ── Mobile: stacked cards ───────────────────── */}}
-    <div class="bulk-result-cards">
-      {{ range $i, $r := .BulkActionResult.Results }}
-      <div class="bulk-result-card bulk-result-card--{{ $r.Status }}" data-bulk-index="{{ $i }}">
-        <div class="bulk-result-card__header">
-          <span class="bulk-result-card__name">{{ $r.Name }}</span>
-          {{ template "bulk-status-chip" $r.Status }}
-        </div>
-        <p class="bulk-result-card__reason" data-bulk-reason {{ if not $r.Reason }}hidden{{ end }}>{{ $r.Reason }}</p>
-        <p class="bulk-result-card__code">{{ t "bulk.exit_code_label" }} <span data-bulk-exit>{{ if $r.ExitCode }}{{ $r.ExitCode }}{{ else }}—{{ end }}</span></p>
-      </div>
-      {{ end }}
     </div>
   </div>
   {{ end }}
