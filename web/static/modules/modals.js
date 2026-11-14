@@ -174,46 +174,52 @@ function initActionMenus(root) {
 }
 
 /* ── Modal dialogs (frosted backdrop) ───────────────────── */
+var modalDocWired = false;
+var lastModalFocus = null;
+function openModal(modal) {
+  if (!modal) return;
+  lastModalFocus = document.activeElement;
+  modal.hidden = false;
+  // Force reflow so the entrance transition runs from the hidden state.
+  void modal.offsetWidth;
+  modal.classList.add('is-open');
+  document.body.classList.add('modal-open');
+  var focusTarget = modal.querySelector('[data-modal-autofocus]') ||
+    modal.querySelector('input:not([type="hidden"]), select, textarea, button');
+  if (focusTarget && focusTarget.focus) {
+    try { focusTarget.focus({ preventScroll: true }); } catch (err) { focusTarget.focus(); }
+  }
+}
+function closeModal(modal) {
+  if (!modal || !modal.classList.contains('is-open')) return;
+  modal.classList.remove('is-open');
+  document.body.classList.remove('modal-open');
+  setTimeout(function () {
+    if (!modal.classList.contains('is-open')) modal.hidden = true;
+  }, prefersReducedMotion ? 0 : 240);
+  if (lastModalFocus && lastModalFocus.focus) { try { lastModalFocus.focus(); } catch (err) {} }
+}
 function initModals(root) {
   root = root || document;
   var openers = root.querySelectorAll('[data-modal-open]');
   var modals = root.querySelectorAll('[data-modal]');
-  if (!modals.length) return;
-  var lastFocus = null;
-
-  function openModal(modal) {
-    if (!modal) return;
-    lastFocus = document.activeElement;
-    modal.hidden = false;
-    // Force reflow so the entrance transition runs from the hidden state.
-    void modal.offsetWidth;
-    modal.classList.add('is-open');
-    document.body.classList.add('modal-open');
-    var focusTarget = modal.querySelector('[data-modal-autofocus]') ||
-      modal.querySelector('input:not([type="hidden"]), select, textarea, button');
-    if (focusTarget && focusTarget.focus) {
-      try { focusTarget.focus({ preventScroll: true }); } catch (err) { focusTarget.focus(); }
-    }
-  }
-  function closeModal(modal) {
-    if (!modal || !modal.classList.contains('is-open')) return;
-    modal.classList.remove('is-open');
-    document.body.classList.remove('modal-open');
-    setTimeout(function () {
-      if (!modal.classList.contains('is-open')) modal.hidden = true;
-    }, prefersReducedMotion ? 0 : 240);
-    if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (err) {} }
-  }
+  if (!modals.length && !openers.length) return;
 
   openers.forEach(function (opener) {
+    if (opener.dataset.modalOpenerReady === '1') return;
+    opener.dataset.modalOpenerReady = '1';
     opener.addEventListener('click', function (e) {
       e.preventDefault();
       var id = opener.getAttribute('data-modal-open');
-      openModal(id ? document.getElementById(id) : null);
+      var target = (id && root.querySelector ? root.querySelector('#' + id) : null) ||
+        (id ? document.getElementById(id) : null);
+      openModal(target);
     });
   });
 
   modals.forEach(function (modal) {
+    if (modal.dataset.modalReady === '1') return;
+    modal.dataset.modalReady = '1';
     modal.querySelectorAll('[data-modal-close]').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         e.preventDefault();
@@ -238,10 +244,13 @@ function initModals(root) {
     });
   });
 
-  document.addEventListener('keydown', function (e) {
-    if (e.key !== 'Escape') return;
-    document.querySelectorAll('[data-modal].is-open').forEach(closeModal);
-  });
+  if (!modalDocWired) {
+    modalDocWired = true;
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      document.querySelectorAll('[data-modal].is-open').forEach(closeModal);
+    });
+  }
 
   // Re-open a modal the server asked to surface (e.g. install form had errors).
   var initial = root.querySelector('[data-modal][data-modal-open-initial]');

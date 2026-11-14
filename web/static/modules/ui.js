@@ -42,12 +42,17 @@ function initForms() {
     }
     if (overlay && form.matches('form[method="post"]')) {
       if (submitter && submitter.hasAttribute('data-no-loading')) return;
-      overlay.style.display = 'flex';
+      overlay.hidden = false;
+      overlay.classList.add('is-active');
       // Safety net: if the overlay is still visible after 15 seconds, hide it.
       // This covers edge cases where the tab system's fetch hangs or the
       // restoreFormUI callback never fires (e.g. an unhandled promise rejection).
       setTimeout(function () {
-        if (overlay.style.display === 'flex') overlay.style.display = 'none';
+        if (!overlay.hidden || overlay.classList.contains('is-active')) {
+          overlay.hidden = true;
+          overlay.classList.remove('is-active');
+          overlay.style.display = '';
+        }
       }, 15000);
     }
   });
@@ -83,7 +88,7 @@ function initFlash(root) {
     banner.classList.add('is-visible');
 
     // Auto-dismiss success messages; keep errors until dismissed.
-    if (banner.classList.contains('flash-banner--success')) {
+    if (banner.classList.contains('flash-banner--success') || banner.classList.contains('flash-banner--ok')) {
       setTimeout(function () { dismissFlash(banner); }, 6000);
     }
   });
@@ -236,29 +241,10 @@ function initReveal(root) {
   var targets = root.querySelectorAll(
     '.card, .server-card, .stat-card, .dashboard-item, .node-card, .empty-state-card');
   if (!targets.length) return;
-  // Tab panes load with content already in place; skip the scroll-reveal
-  // observer (which doesn't fire in hidden panes) and just reveal immediately.
-  if (root !== document && root.classList && root.classList.contains('tab-pane')) {
-    targets.forEach(function (el) { el.classList.add('reveal-in'); });
-    return;
-  }
-  if (prefersReducedMotion || !('IntersectionObserver' in window)) {
-    targets.forEach(function (el) { el.classList.add('reveal-in'); });
-    return;
-  }
-  targets.forEach(function (el, i) {
-    el.classList.add('reveal');
-    el.style.setProperty('--reveal-delay', Math.min(i * 40, 320) + 'ms');
+  targets.forEach(function (el) {
+    el.classList.remove('reveal');
+    el.classList.add('reveal-in');
   });
-  var observer = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('reveal-in');
-        observer.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
-  targets.forEach(function (el) { observer.observe(el); });
 }
 
 /* ── Back-to-top button ─────────────────────────────────── */
@@ -324,37 +310,21 @@ function initShortcuts() {
 }
 
 /* ── Collapsible sections (persisted open/closed) ───────── */
-function setCollapseIcon(toggle, isOpen) {
+function setCollapseState(el, toggle, body, isOpen) {
   var icon = toggle ? toggle.querySelector('.collapsible__icon') : null;
   if (icon) icon.style.transform = isOpen ? 'rotate(90deg)' : 'rotate(0deg)';
   if (toggle) toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-}
-function collapseContent(body) {
-  body.style.maxHeight = body.scrollHeight + 'px';
-  body.style.opacity = '1';
-  requestAnimationFrame(function () {
-    body.style.maxHeight = '0px';
-    body.style.paddingTop = '0';
-    body.style.paddingBottom = '0';
-    body.style.opacity = '0';
-  });
-}
-function expandContent(body) {
-  body.style.maxHeight = '0px';
-  body.style.paddingTop = '';
-  body.style.paddingBottom = '';
-  body.style.opacity = '0';
-  requestAnimationFrame(function () {
-    body.style.maxHeight = body.scrollHeight + 'px';
-    body.style.opacity = '1';
-  });
+  el.classList.toggle('is-collapsed', !isOpen);
+  body.hidden = !isOpen;
 }
 function initCollapsibles(root) {
   root = root || document;
   root.querySelectorAll('.collapsible').forEach(function (el) {
+    if (el.dataset.collapsibleReady === '1') return;
     var toggle = el.querySelector('.collapsible__toggle');
     var body = el.querySelector('.collapsible__content');
     if (!toggle || !body) return;
+    el.dataset.collapsibleReady = '1';
 
     var key = toggle.getAttribute('data-collapse-key') || '';
     var stored = null;
@@ -364,39 +334,13 @@ function initCollapsibles(root) {
     var defaultClosed = toggle.getAttribute('data-collapse-default') === 'closed';
     var isOpen = stored ? stored !== 'closed' : !defaultClosed;
 
-    body.style.transition = 'max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease';
-    body.style.overflow = 'hidden';
-    if (!isOpen) {
-      body.style.maxHeight = '0px';
-      body.style.paddingTop = '0';
-      body.style.paddingBottom = '0';
-      body.style.opacity = '0';
-      setCollapseIcon(toggle, false);
-    } else {
-      body.style.maxHeight = body.scrollHeight + 'px';
-      body.style.opacity = '1';
-      setCollapseIcon(toggle, true);
-      requestAnimationFrame(function () { body.style.maxHeight = 'none'; });
-    }
+    setCollapseState(el, toggle, body, isOpen);
 
     toggle.setAttribute('type', 'button');
     toggle.addEventListener('click', function () {
-      var closed = body.style.maxHeight === '0px' || body.style.maxHeight === '0';
-      if (closed) {
-        expandContent(body);
-        setCollapseIcon(toggle, true);
-        if (key) { try { localStorage.setItem('collapse_' + key, 'open'); } catch (err) {} }
-      } else {
-        collapseContent(body);
-        setCollapseIcon(toggle, false);
-        if (key) { try { localStorage.setItem('collapse_' + key, 'closed'); } catch (err) {} }
-      }
-    });
-
-    body.addEventListener('transitionend', function () {
-      if (body.style.maxHeight !== '0px' && body.style.maxHeight !== '0') {
-        body.style.maxHeight = 'none';
-      }
+      var nextOpen = body.hidden || el.classList.contains('is-collapsed');
+      setCollapseState(el, toggle, body, nextOpen);
+      if (key) { try { localStorage.setItem('collapse_' + key, nextOpen ? 'open' : 'closed'); } catch (err) {} }
     });
   });
 }

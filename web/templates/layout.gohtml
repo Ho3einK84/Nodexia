@@ -4,30 +4,40 @@
 {{ template "head" . }}
 {{ if eq .ContentTemplate "content-login" }}
 {{/* The login page is an immersive, full-screen experience: it drops the app
-     shell (header / nav / footer) entirely and renders only its own animated
-     scene. Visitors here are not authenticated, so the dashboard chrome would
-     leak navigation they cannot use. */}}
+     shell (sidebar / topbar / footer) entirely and renders only its own
+     authentication view. Visitors here are not authenticated. */}}
 <body class="auth-body">
   {{ .MainHTML }}
 {{ else }}
 <body>
   <div id="shell" class="shell">
-    {{ template "shell-header" . }}
-    {{ template "shell-nav" . }}
-    {{ template "tab-bar" . }}
+    {{ template "shell-sidebar" . }}
 
-    <main id="shell-main" class="shell-main">
-      <div id="tab-content" class="tab-content" data-tab-content>
-        {{ .MainHTML }}
-      </div>
-      <div id="tab-split-root" class="tab-split-root" data-tab-split-root hidden></div>
-      <div id="loading-overlay" class="loading-overlay" style="display:none" role="status" aria-live="polite">
-        <div class="loading-spinner"></div>
-        <p class="loading-overlay__label">{{ t "shell.loading" }}</p>
-      </div>
-    </main>
+    <div class="shell-workspace">
+      <header class="shell-topbar">
+        <a href="/" class="shell-topbar__brand">
+          {{ template "brand-icon" . }}
+          <span class="shell-topbar__title">{{ .AppName }}</span>
+        </a>
+        {{ template "tab-bar" . }}
+        <button type="button" class="nav-toggle" data-drawer-open aria-label="{{ t "shell.menu.open" }}" aria-expanded="false" aria-controls="mobile-drawer">
+          <i data-lucide="menu"></i>
+        </button>
+      </header>
 
-    {{ template "footer" . }}
+      <main id="shell-main" class="shell-main">
+        <div id="tab-content" class="tab-content" data-tab-content>
+          {{ .MainHTML }}
+        </div>
+        <div id="tab-split-root" class="tab-split-root" data-tab-split-root hidden></div>
+        <div id="loading-overlay" class="loading-overlay" hidden role="status" aria-live="polite">
+          <div class="loading-spinner"></div>
+          <p class="loading-overlay__label">{{ t "shell.loading" }}</p>
+        </div>
+      </main>
+
+      {{ template "footer" . }}
+    </div>
   </div>
 
   {{ template "mobile-drawer" . }}

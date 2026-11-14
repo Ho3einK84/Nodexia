@@ -89,8 +89,8 @@ func NewManifestHandler(cfg config.Config) ManifestHandler {
 		Scope:           "/",
 		Display:         "standalone",
 		Orientation:     "portrait",
-		ThemeColor:      "#0f172a",
-		BackgroundColor: "#0f172a",
+		ThemeColor:      "#0f0f10",
+		BackgroundColor: "#0f0f10",
 		Lang:            "en",
 		Dir:             "ltr",
 		Categories:      []string{"productivity", "utilities"},
@@ -171,6 +171,8 @@ func NewServiceWorkerHandler(staticFiles fs.FS) ServiceWorkerHandler {
 		// the new worker clears out all prior cache versions so the client never gets stuck
 		// with stale CSS/JS assets.
 		digest := assets.StaticAssetsDigest()
+		body = bytes.Replace(body, []byte("__NODEXIA_CACHE_VERSION__"), []byte("nodexia-"+digest), 1)
+		body = bytes.Replace(body, []byte("var CACHE_VERSION = 'v9';"), []byte("var CACHE_VERSION = 'nodexia-"+digest+"';"), 1)
 		body = bytes.Replace(body, []byte("var CACHE_VERSION = 'v7';"), []byte("var CACHE_VERSION = 'nodexia-"+digest+"';"), 1)
 	}
 	return ServiceWorkerHandler{body: body, modTime: time.Now()}

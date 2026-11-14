@@ -46,8 +46,9 @@ function boot() {
 window.NodexiaApp = {
   rescan: function (root) {
     root = root || document;
-    renderIcons();
+    renderIcons(root);
     initFlash(root);
+    initHomeWarnings(root);
     initSecrets(root);
     initCopyButtons(root);
     initCopyTargets(root);
@@ -66,12 +67,16 @@ window.NodexiaApp = {
     initAdvancedToggle(root);
     initProgressBars(root);
     initReveal(root);
-    renderIcons();
+    renderIcons(root);
   },
   finishNavigation: function () {
     finishTopBar();
     var overlay = document.getElementById('loading-overlay');
-    if (overlay) overlay.style.display = 'none';
+    if (overlay) {
+      overlay.hidden = true;
+      overlay.classList.remove('is-active');
+      overlay.style.display = '';
+    }
   }
 };
 

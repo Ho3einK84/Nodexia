@@ -38,28 +38,33 @@ function readWarningDismissals() {
   } catch (err) { return {}; }
 }
 
-function initHomeWarnings() {
-  var wrap = document.querySelector('[data-home-warnings]');
-  if (!wrap) return;
+function initHomeWarnings(root) {
+  root = root || document;
+  var wraps = root.querySelectorAll ? root.querySelectorAll('[data-home-warnings]') : [];
+  if (!wraps.length) return;
   var dismissed = readWarningDismissals();
 
-  wrap.querySelectorAll('[data-warning-id]').forEach(function (banner) {
-    var id = banner.getAttribute('data-warning-id');
-    if (!dismissed[id]) banner.hidden = false;
+  wraps.forEach(function (wrap) {
+    wrap.querySelectorAll('[data-warning-id]').forEach(function (banner) {
+      if (banner.dataset.warnReady === '1') return;
+      banner.dataset.warnReady = '1';
+      var id = banner.getAttribute('data-warning-id');
+      if (!dismissed[id]) banner.hidden = false;
 
-    var close = banner.querySelector('[data-warning-dismiss]');
-    if (!close) return;
-    close.addEventListener('click', function () {
-      try {
-        var map = readWarningDismissals();
-        map[id] = Date.now();
-        localStorage.setItem('nodexia_warn_dismissed', JSON.stringify(map));
-      } catch (err) { /* private mode — dismiss for this view only */ }
-      banner.classList.add('is-dismissing');
-      setTimeout(function () { banner.remove(); }, prefersReducedMotion ? 0 : 200);
+      var close = banner.querySelector('[data-warning-dismiss]');
+      if (!close) return;
+      close.addEventListener('click', function () {
+        try {
+          var map = readWarningDismissals();
+          map[id] = Date.now();
+          localStorage.setItem('nodexia_warn_dismissed', JSON.stringify(map));
+        } catch (err) { /* private mode — dismiss for this view only */ }
+        banner.classList.add('is-dismissing');
+        setTimeout(function () { banner.remove(); }, prefersReducedMotion ? 0 : 200);
+      });
     });
   });
-  renderIcons();
+  renderIcons(root);
 }
 
 /* ── Live Log Drawer (Slide-over) ─────────────────────────── */
@@ -238,7 +243,7 @@ function initDrawer() {
   });
   // If the viewport grows past the mobile breakpoint, ensure it's closed.
   window.addEventListener('resize', function () {
-    if (window.innerWidth > 700) close();
+    if (window.innerWidth >= 768) close();
   });
 
   // Swipe-to-close: dragging the panel toward its off-canvas edge follows

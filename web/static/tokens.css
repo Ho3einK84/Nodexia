@@ -4,42 +4,39 @@
    Zero-build architecture: browser-native CSS custom properties.
    Loaded unconditionally first in the <head> sequence before shell and components.
    Provides:
-     1. Self-hosted variable typography (@font-face for Exo 2 & Vazirmatn)
-     2. Semantic color system, scales, dark theme tokens
-     3. Spacing, radius, shadows, elevation, z-index hierarchy
+     1. Self-hosted variable typography (@font-face for Inter, JetBrains Mono & Vazirmatn)
+     2. Dark Graphite neutral ramp, single accent, semantic status tokens
+     3. 4px spacing scale, nested border radii, elevation, z-index hierarchy
      4. Base resets, layout normalization, reduced-motion preferences
      5. Internationalization (fa font swap, RTL numeric/gauge isolation)
    ════════════════════════════════════════════════════════════════════════════ */
 
 /* ── 1. Typography: Self-hosted Fonts ──────────────────────────────────────── */
 
-/* Exo 2: Variable font covering the 400–800 weight axis.
-   See docs/typography.md for weight hierarchy and design rationale. */
 @font-face {
-  font-family: 'Exo 2';
+  font-family: 'Inter';
   font-style: normal;
-  font-weight: 400 800;
+  font-weight: 400 600;
   font-display: swap;
-  src: url('/static/fonts/exo2-latin.woff2') format('woff2');
+  src: url('/static/fonts/inter-latin.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
     U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
     U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: 'Exo 2';
+  font-family: 'JetBrains Mono';
   font-style: normal;
-  font-weight: 400 800;
+  font-weight: 400 600;
   font-display: swap;
-  src: url('/static/fonts/exo2-latin-ext.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
-    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
-    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
-    U+A720-A7FF;
+  src: url('/static/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 /* Vazirmatn: Persian typography (self-hosted under /static/fonts).
-   Five weights matching the 400–800 scale. Loaded on fa locale. */
+   Weights 400, 500, 600 matching the unslop weight cap. */
 @font-face {
   font-family: 'Vazirmatn';
   font-style: normal;
@@ -47,6 +44,7 @@
   font-display: swap;
   src: url('/static/fonts/Vazirmatn-Regular.woff2') format('woff2');
 }
+
 @font-face {
   font-family: 'Vazirmatn';
   font-style: normal;
@@ -54,26 +52,13 @@
   font-display: swap;
   src: url('/static/fonts/Vazirmatn-Medium.woff2') format('woff2');
 }
+
 @font-face {
   font-family: 'Vazirmatn';
   font-style: normal;
   font-weight: 600;
   font-display: swap;
   src: url('/static/fonts/Vazirmatn-SemiBold.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Vazirmatn';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/static/fonts/Vazirmatn-Bold.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Vazirmatn';
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-  src: url('/static/fonts/Vazirmatn-ExtraBold.woff2') format('woff2');
 }
 
 /* ── 2. Design Tokens (:root) ──────────────────────────────────────────────── */
@@ -83,15 +68,15 @@
   color-scheme: dark;
 
   /* Typography Families */
-  --font-ui: 'Exo 2', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-ui: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Typography Scale */
+  /* Typography Scale (enforces 400/500 and rare 600 weight cap) */
   --fw-regular: 400;   /* body copy, table data, descriptions, logs        */
   --fw-medium: 500;    /* buttons, inputs, secondary labels, nav default   */
-  --fw-semibold: 600;  /* table headers, badges, card titles, form labels  */
-  --fw-bold: 700;      /* section headings, KPI / metric / gauge values    */
-  --fw-extrabold: 800; /* brand wordmark + the largest hero metrics        */
+  --fw-semibold: 600;  /* rare emphasis: active states, wordmark, figures  */
+  --fw-bold: 600;
+  --fw-extrabold: 600;
 
   /* Numerical Alignment */
   --num: tabular-nums;
@@ -101,70 +86,70 @@
   --lh-normal: 1.5;
   --lh-relaxed: 1.6;
 
-  /* Neutral / Slate Palette */
-  --slate-50: #f8fafc;
-  --slate-100: #f1f5f9;
-  --slate-200: #e2e8f0;
-  --slate-300: #cbd5e1;
-  --slate-400: #94a3b8;
-  --slate-500: #64748b;
-  --slate-600: #475569;
-  --slate-700: #334155;
-  --slate-800: #1e293b;
-  --slate-900: #0f172a;
-  --slate-950: #0b1120;
+  /* Neutral Ramp Compatibility Aliases (Graphite) */
+  --slate-50: #ffffff;
+  --slate-100: #f3f3f4;
+  --slate-200: #e4e4e7;
+  --slate-300: #d4d4d8;
+  --slate-400: #93939a;
+  --slate-500: #66666d;
+  --slate-600: #52525b;
+  --slate-700: #232325;
+  --slate-800: #19191b;
+  --slate-900: #141415;
+  --slate-950: #0b0b0c;
 
-  /* Brand / Primary Accent */
+  /* Surface & Background Tokens (Dark Graphite ramp) */
+  --bg-deep: #0b0b0c;
+  --bg-canvas: #0f0f10;
+  --surface: #141415;
+  --surface-2: #19191b;
+  --surface-elevated: #232325;
+  --surface-card: #141415;
+
+  /* Border Tokens */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+
+  /* Text & Foreground Tokens */
+  --text: #f3f3f4;
+  --text-muted: #93939a;
+  --text-dim: #66666d;
+  --text-bright: #ffffff;
+
+  /* Single Brand / Primary Accent (flat, no gradients) */
   --accent: #3b82f6;
   --accent-soft: #60a5fa;
   --accent-bright: #93c5fd;
   --accent-rgb: 59, 130, 246;
 
-  /* Secondary Accent (Violet) */
-  --violet: #8b5cf6;
-  --violet-soft: #a78bfa;
-  --violet-bright: #c4b5fd;
-  --violet-rgb: 139, 92, 246;
+  /* Temporary compatibility aliases for downstream modules before Stages 5-6 */
+  --violet: var(--accent-soft); /* DEPRECATED: remove in Stage 8 */
+  --violet-soft: var(--accent-soft); /* DEPRECATED: remove in Stage 8 */
+  --violet-bright: var(--accent-bright); /* DEPRECATED: remove in Stage 8 */
+  --violet-rgb: 59, 130, 246; /* DEPRECATED: remove in Stage 8 */
 
   /* Semantic Status Colors */
-  --ok: #4ade80;
-  --ok-soft: #86efac;
-  --ok-bg: rgba(74, 222, 128, 0.1);
-  --ok-border: rgba(74, 222, 128, 0.25);
+  --ok: #4cc38a;
+  --ok-soft: #4cc38a;
+  --ok-bg: rgba(76, 195, 138, 0.10);
+  --ok-border: rgba(76, 195, 138, 0.24);
 
-  --warn: #facc15;
-  --warn-soft: #fde047;
-  --warn-bg: rgba(250, 204, 21, 0.1);
-  --warn-border: rgba(250, 204, 21, 0.25);
+  --warn: #eab308;
+  --warn-soft: #eab308;
+  --warn-bg: rgba(234, 179, 8, 0.10);
+  --warn-border: rgba(234, 179, 8, 0.24);
 
-  --crit: #f87171;
-  --crit-soft: #fca5a5;
-  --crit-bg: rgba(248, 113, 113, 0.1);
-  --crit-border: rgba(248, 113, 113, 0.25);
+  --crit: #e5484d;
+  --crit-soft: #e5484d;
+  --crit-bg: rgba(229, 72, 77, 0.10);
+  --crit-border: rgba(229, 72, 77, 0.24);
 
-  --info: #38bdf8;
-  --info-soft: #7dd3fc;
-  --info-bg: rgba(56, 189, 248, 0.1);
-  --info-border: rgba(56, 189, 248, 0.25);
-
-  /* Surface & Background Tokens */
-  --bg-canvas: #0f172a;
-  --bg-deep: #0b1120;
-  --surface: rgba(15, 23, 42, 0.6);
-  --surface-2: rgba(2, 6, 23, 0.35);
-  --surface-elevated: rgba(30, 41, 59, 0.7);
-  --surface-card: rgba(15, 23, 42, 0.75);
-
-  /* Border Tokens */
-  --border: rgba(148, 163, 184, 0.1);
-  --border-strong: rgba(148, 163, 184, 0.2);
-  --border-subtle: rgba(148, 163, 184, 0.06);
-
-  /* Text & Foreground Tokens */
-  --text: #e2e8f0;
-  --text-muted: #94a3b8;
-  --text-dim: #64748b;
-  --text-bright: #ffffff;
+  --info: #60a5fa;
+  --info-soft: #93c5fd;
+  --info-bg: rgba(96, 165, 250, 0.10);
+  --info-border: rgba(96, 165, 250, 0.24);
 
   /* Spacing Scale (4px standard grid) */
   --space-0: 0;
@@ -187,22 +172,18 @@
   --radius-xl: 20px;
   --radius-full: 9999px;
 
-  /* Shadows & Elevation */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35);
-  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.45);
-  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  /* Shadows & Elevation (quiet neutral depth, no colored glows) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.44);
+  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.56);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
-  /* Glow Effects */
-  --glow-accent: 0 0 12px rgba(96, 165, 250, 0.5);
-  --glow-crit: 0 0 12px rgba(248, 113, 113, 0.5);
-  --glow-ok: 0 0 12px rgba(74, 222, 128, 0.5);
-
-  /* Transition Tokens */
-  --transition-fast: 0.15s ease;
-  --transition-base: 0.2s ease;
-  --transition-slow: 0.3s ease;
+  /* Transition Tokens (single easing curve) */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-fast: 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-base: 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-slow: 0.32s cubic-bezier(0.22, 1, 0.36, 1);
   --transition-spring: 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 
   /* Z-Index Hierarchy */
@@ -210,8 +191,12 @@
   --z-sticky: 100;
   --z-dropdown: 500;
   --z-bottom-nav: 1100;
+  --z-fab: 1150;
   --z-drawer-backdrop: 1200;
   --z-drawer: 1300;
+  --z-tab-switcher: 1400;
+  --z-floating-menu: 1500;
+  --z-toast: 1600;
   --z-modal-backdrop: 2000;
   --z-modal: 2100;
   --z-overlay: 9999;
@@ -226,21 +211,15 @@
   box-sizing: border-box;
 }
 
-/* `hidden` must always win.
-   The UA stylesheet only gives [hidden] `display: none` at author-origin
-   priority 0, so ANY component rule that sets `display` (.btn, .field-error,
-   .deploy-block, …) silently overrides it and the element stays visible. The
-   deploy wizard relies on `hidden` to swap per-engine field groups, so without
-   this the Rebecca and PasarGuard forms render at the same time. */
+/* `hidden` must always win over author display rules. */
 [hidden] {
   display: none !important;
 }
 
 html {
-  /* Prevent horizontal spill from off-canvas elements */
   overflow-x: hidden;
   font-family: var(--font-ui);
-  line-height: var(--lh-relaxed);
+  line-height: var(--lh-normal);
   background: var(--bg-canvas);
   color: var(--text);
 }
@@ -252,21 +231,24 @@ body {
   font-family: var(--font-ui);
   font-weight: var(--fw-regular);
   color: var(--text);
-  line-height: var(--lh-relaxed);
+  line-height: var(--lh-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(59, 130, 246, 0.15), transparent 50%),
-    radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.08), transparent 40%),
-    linear-gradient(180deg, #0f172a 0%, #0b1120 100%);
+  background: var(--bg-canvas);
+}
+
+/* Consistent Lucide stroke weight across the entire application */
+svg.lucide,
+[data-lucide] svg {
+  stroke-width: 1.5;
 }
 
 /* ── 4. Internationalization & Bidirectional Typography ─────────────────────── */
 
 /* Persian locale: Swap UI font to Vazirmatn */
 html[lang="fa"] {
-  --font-ui: 'Vazirmatn', 'Exo 2', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-ui: 'Vazirmatn', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
 /* Numeric, code, and identifier surfaces stay LTR regardless of UI direction */

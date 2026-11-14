@@ -227,6 +227,10 @@ func TestServiceWorkerServedFromRoot(t *testing.T) {
 	if !strings.Contains(body, "addEventListener") {
 		t.Fatal("service worker body does not look like a worker script")
 	}
+	wantVersion := "var CACHE_VERSION = 'nodexia-" + assets.StaticAssetsDigest() + "';"
+	if !strings.Contains(body, wantVersion) {
+		t.Fatalf("service worker missing stamped digest %q", wantVersion)
+	}
 }
 
 // TestPWAAssetsPresent guards that the static PWA assets the manifest and worker

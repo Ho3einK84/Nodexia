@@ -7,7 +7,7 @@
 
   {{/* Progressive Web App: installability, theming and home-screen icons. */}}
   <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#0f172a">
+  <meta name="theme-color" content="#0f0f10">
   <meta name="color-scheme" content="dark">
   <meta name="application-name" content="{{ .AppName }}">
   <meta name="mobile-web-app-capable" content="yes">
@@ -18,11 +18,10 @@
   <link rel="icon" href="{{ asset "/static/icon-192.png" }}" sizes="192x192" type="image/png">
   <link rel="apple-touch-icon" href="{{ asset "/static/apple-touch-icon.png" }}">
 
-  {{/* Self-hosted Exo 2: preload the Latin variable WOFF2 so the download
+  {{/* Self-hosted Inter: preload the Latin variable WOFF2 so the download
        starts alongside the stylesheet instead of after the @font-face is
-       parsed. latin-ext is intentionally not preloaded — it is fetched only
-       when a non-Basic-Latin glyph is rendered. */}}
-  <link rel="preload" href="/static/fonts/exo2-latin.woff2" as="font" type="font/woff2" crossorigin>
+       parsed. */}}
+  <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
   {{ if eq .Lang "fa" }}{{/* Persian locale: preload Vazirmatn alongside the stylesheet. */}}
   <link rel="preload" href="/static/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
   {{ end }}<link rel="stylesheet" href="{{ asset "/static/tokens.css" }}">
@@ -34,29 +33,62 @@
 </head>
 {{ end }}
 
+{{ define "brand-icon" }}
+<svg class="shell-brand__icon" viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+  <g stroke="currentColor" stroke-width="1.75" stroke-linecap="round" opacity="0.7">
+    <line x1="12" y1="12" x2="12" y2="5"/>
+    <line x1="12" y1="12" x2="6" y2="17"/>
+    <line x1="12" y1="12" x2="18" y2="17"/>
+  </g>
+  <circle cx="12" cy="5" r="2.2" fill="var(--accent-soft)"/>
+  <circle cx="6" cy="17" r="2.2" fill="var(--accent-soft)"/>
+  <circle cx="18" cy="17" r="2.2" fill="var(--accent-soft)"/>
+  <circle cx="12" cy="12" r="2.8" fill="var(--accent)"/>
+</svg>
+{{ end }}
+
+{{ define "shell-sidebar" }}
+<aside class="shell-sidebar" aria-label="{{ .AppName }}">
+  <div class="shell-sidebar__top">
+    <a href="/" class="shell-brand">
+      {{ template "brand-icon" . }}
+      <h1 class="shell-brand__title">{{ .AppName }}</h1>
+    </a>
+  </div>
+
+  {{ template "shell-nav" . }}
+
+  <div class="shell-sidebar__cta">
+    <a href="/servers/new" class="btn btn--secondary btn--sm shell-sidebar__action">
+      <i data-lucide="plus" class="icon-in-button"></i>
+      <span>{{ t "drawer.add_server" }}</span>
+    </a>
+  </div>
+
+  <div class="shell-sidebar__footer">
+    <div class="shell-meta" aria-label="{{ t "drawer.session" }}">
+      <span>{{ .Environment }}</span>
+      <span class="shell-meta__sep" aria-hidden="true">·</span>
+      <span>{{ .Version }}</span>
+      <span class="shell-meta__sep" aria-hidden="true">·</span>
+      <span>{{ .DatabaseDriver }}</span>
+    </div>
+    <div class="shell-sidebar__controls">
+      {{ template "lang-switcher" . }}
+      <form action="/logout" method="post" class="inline-form">
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+        <button type="submit" class="logout-link" title="{{ t "nav.logout" }}">
+          <i data-lucide="log-out" class="icon-in-button"></i>
+          <span>{{ t "nav.logout" }}</span>
+        </button>
+      </form>
+    </div>
+  </div>
+</aside>
+{{ end }}
+
 {{ define "shell-header" }}
-<header class="shell-header">
-  <div class="shell-header__brand">
-    <p class="eyebrow">{{ t "shell.eyebrow" }}</p>
-    <h1>{{ .AppName }}</h1>
-    <p class="shell-subtitle">{{ .FooterNote }}</p>
-  </div>
-  <div class="meta">
-    <span>{{ t "shell.meta.env" "value" .Environment }}</span>
-    <span>{{ t "shell.meta.version" "value" .Version }}</span>
-    <span>{{ t "shell.meta.db" "value" .DatabaseDriver }}</span>
-    {{ template "lang-switcher" . }}
-    <form action="/logout" method="post" style="display:inline">
-      <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-      <button type="submit" class="logout-link">{{ t "nav.logout" }}</button>
-    </form>
-  </div>
-  {{ if ne .ContentTemplate "content-login" }}
-  <button type="button" class="nav-toggle" data-drawer-open aria-label="{{ t "shell.menu.open" }}" aria-expanded="false" aria-controls="mobile-drawer">
-    <i data-lucide="menu"></i>
-  </button>
-  {{ end }}
-</header>
+{{ template "shell-sidebar" . }}
 {{ end }}
 
 {{/* Language switcher: a row of root-relative links, one per supported locale,
@@ -64,7 +96,6 @@
      locale needs no template change — it is driven by .LanguageOptions. */}}
 {{ define "lang-switcher" }}
 <div class="lang-switcher" role="group" aria-label="{{ t "lang.switcher.label" }}">
-  <i data-lucide="languages" class="lang-switcher__icon" aria-hidden="true"></i>
   {{ range .LanguageOptions }}
   <a href="{{ .SwitchURL }}" hreflang="{{ .Code }}" class="lang-switcher__option{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="true"{{ end }} data-tab-bypass>{{ .Label }}</a>
   {{ end }}
@@ -75,8 +106,8 @@
 <div class="drawer-backdrop" data-drawer-backdrop></div>
 <aside id="mobile-drawer" class="drawer" role="dialog" aria-modal="true" aria-label="{{ t "shell.menu.title" }}" aria-hidden="true">
   <div class="drawer__header">
-    <div>
-      <p class="eyebrow">{{ t "shell.eyebrow" }}</p>
+    <div class="drawer__brand">
+      {{ template "brand-icon" . }}
       <span class="drawer__title">{{ .AppName }}</span>
     </div>
     <button type="button" class="drawer__close" data-drawer-close aria-label="{{ t "shell.menu.close" }}"><i data-lucide="x"></i></button>
@@ -109,7 +140,7 @@
     {{ template "lang-switcher" . }}
   </div>
 
-  <form action="/logout" method="post" style="display:inline">
+  <form action="/logout" method="post" class="drawer__logout-form">
     <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
     <button type="submit" class="btn btn--secondary drawer__logout"><i data-lucide="log-out" class="icon-in-button"></i> {{ t "nav.logout" }}</button>
   </form>
@@ -130,9 +161,9 @@
 {{ define "shell-nav" }}
 <nav class="shell-nav" aria-label="{{ t "shell.nav.primary" }}">
   {{ range .NavigationItems }}
-  <a href="{{ .Href }}" class="{{ if .Active }}is-active{{ end }}"{{ if .Active }} aria-current="page"{{ end }}>
+  <a href="{{ .Href }}" class="shell-nav__link{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="page"{{ end }}>
     <i data-lucide="{{ or .Icon "circle" }}" class="nav-icon"></i>
-    {{ t .Key }}
+    <span>{{ t .Key }}</span>
   </a>
   {{ end }}
 </nav>
@@ -141,7 +172,6 @@
 {{ define "page-header" }}
 <div class="page-header">
   <div>
-    <p class="section-label">{{ .Environment }}</p>
     <h2>{{ .PageTitle }}{{ if .PageFlag }} <span class="page-header__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}</h2>
     {{ if .PageDescription }}
     <p class="page-description">{{ .PageDescription }}</p>

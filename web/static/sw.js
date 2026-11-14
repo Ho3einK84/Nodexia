@@ -17,7 +17,7 @@
  */
 'use strict';
 
-var CACHE_VERSION = 'v9';
+var CACHE_VERSION = '__NODEXIA_CACHE_VERSION__';
 var STATIC_CACHE = 'nodexia-static-' + CACHE_VERSION;
 var OFFLINE_URL = '/static/offline.html';
 
@@ -32,7 +32,11 @@ var PRECACHE_URLS = [
   '/static/style.css',
   '/static/tabs.css',
   '/static/login.css',
-  '/static/fonts/exo2-latin.woff2',
+  '/static/fonts/inter-latin.woff2',
+  '/static/fonts/jetbrains-mono-latin.woff2',
+  '/static/fonts/Vazirmatn-Regular.woff2',
+  '/static/fonts/Vazirmatn-Medium.woff2',
+  '/static/fonts/Vazirmatn-SemiBold.woff2',
   '/static/app.js',
   '/static/modules/core.js',
   '/static/modules/ui.js',

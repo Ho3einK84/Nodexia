@@ -41,13 +41,22 @@
   function restoreFormUI(submitter) {
     try {
       var overlay = document.getElementById('loading-overlay');
-      if (overlay) overlay.style.display = 'none';
+      if (overlay) {
+        overlay.hidden = true;
+        overlay.classList.remove('is-active');
+        overlay.style.display = '';
+      }
     } catch (err) { /* overlay hide must never fail */ }
     if (submitter && submitter.dataset && submitter.dataset.busy === '1') {
       submitter.dataset.busy = '';
       submitter.classList.remove('is-busy');
-      var label = submitter.getAttribute('data-busy-label');
-      if (label) submitter.textContent = label;
+      if (submitter.dataset.busyHtml !== undefined) {
+        submitter.innerHTML = submitter.dataset.busyHtml;
+        delete submitter.dataset.busyHtml;
+      } else {
+        var label = submitter.getAttribute('data-busy-label');
+        if (label) submitter.textContent = label;
+      }
       submitter.style.minWidth = '';
     }
     finishTopBar();
@@ -249,18 +258,21 @@
   function setTabButtonActive(tab, isActive) {
     if (!tab.btn) return;
     tab.btn.classList.toggle('is-active', isActive);
-    tab.btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    var trigger = tab.tabBtn || tab.btn;
+    trigger.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    trigger.setAttribute('tabindex', isActive ? '0' : '-1');
   }
 
   function ensureStatusDot(tab) {
     if (!tab.btn) return;
-    var dot = tab.btn.querySelector('.tab__status-dot');
+    var host = tab.tabBtn || tab.btn;
+    var dot = host.querySelector('.tab__status-dot');
     if (tab.kind === 'terminal') {
       if (!dot) {
         dot = document.createElement('span');
         dot.className = 'tab__status-dot tab__status-dot--' + (tab.statusState || 'connecting');
-        var titleEl = tab.btn.querySelector('.tab__title');
-        tab.btn.insertBefore(dot, titleEl || null);
+        var titleEl = host.querySelector('.tab__title');
+        host.insertBefore(dot, titleEl || null);
       }
     } else if (dot) {
       dot.parentNode.removeChild(dot);
@@ -270,32 +282,64 @@
   function renderTabButton(tab) {
     if (!listEl || !pinnedEl) return;
     if (!tab.btn) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
+      var btn = document.createElement('div');
       btn.className = 'tab';
-      btn.setAttribute('role', 'tab');
-      btn.setAttribute('aria-selected', 'false');
+      btn.setAttribute('role', 'presentation');
       btn.setAttribute('draggable', 'true');
       btn.dataset.tabId = tab.id;
+
+      var tabBtn = document.createElement('button');
+      tabBtn.type = 'button';
+      tabBtn.className = 'tab__trigger';
+      tabBtn.id = 'tab-btn-' + tab.id;
+      tabBtn.setAttribute('role', 'tab');
+      tabBtn.setAttribute('aria-selected', 'false');
+      tabBtn.setAttribute('aria-controls', 'tab-pane-' + tab.id);
+      tabBtn.setAttribute('tabindex', '-1');
 
       var icon = document.createElement('i');
       icon.className = 'tab__icon';
       icon.setAttribute('data-lucide', tab.icon);
-      btn.appendChild(icon);
+      tabBtn.appendChild(icon);
 
       var titleSpan = document.createElement('span');
       titleSpan.className = 'tab__title';
-      btn.appendChild(titleSpan);
+      tabBtn.appendChild(titleSpan);
 
       var closeBtn = document.createElement('button');
       closeBtn.type = 'button';
       closeBtn.className = 'tab__close';
       closeBtn.setAttribute('data-tab-close', '');
+      closeBtn.setAttribute('aria-controls', 'tab-pane-' + tab.id);
       closeBtn.setAttribute('aria-label', T('js.tabs.close_tab'));
       closeBtn.innerHTML = '<i data-lucide="x"></i>';
       closeBtn.addEventListener('click', function (e) { e.stopPropagation(); close(tab.id); });
+
+      btn.appendChild(tabBtn);
       btn.appendChild(closeBtn);
 
+      tabBtn.addEventListener('click', function () {
+        activate(tab.id);
+      });
+      tabBtn.addEventListener('keydown', function (e) {
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        var list = orderedAll();
+        if (list.length < 2) return;
+        var idx = list.indexOf(tab);
+        if (idx === -1) return;
+        var isRTL = document.documentElement.getAttribute('dir') === 'rtl';
+        var nextIdx = -1;
+        if (e.key === 'ArrowRight') nextIdx = (idx + (isRTL ? -1 : 1) + list.length) % list.length;
+        else if (e.key === 'ArrowLeft') nextIdx = (idx + (isRTL ? 1 : -1) + list.length) % list.length;
+        else if (e.key === 'Home') nextIdx = 0;
+        else if (e.key === 'End') nextIdx = list.length - 1;
+        if (nextIdx !== -1) {
+          e.preventDefault();
+          var targetTab = list[nextIdx];
+          activate(targetTab.id);
+          if (targetTab.tabBtn && targetTab.tabBtn.focus) targetTab.tabBtn.focus();
+        }
+      });
       btn.addEventListener('click', function (e) {
         if (e.target.closest && e.target.closest('.tab__close')) return;
         activate(tab.id);
@@ -316,14 +360,20 @@
       });
 
       tab.btn = btn;
+      tab.tabBtn = tabBtn;
     }
     var iconEl = tab.btn.querySelector('.tab__icon');
     if (iconEl) iconEl.setAttribute('data-lucide', tab.icon);
     var titleEl = tab.btn.querySelector('.tab__title');
     if (titleEl) titleEl.textContent = tab.title;
     tab.btn.classList.toggle('is-pinned', tab.pinned);
-    if (tab.pinned) tab.btn.setAttribute('title', tab.title);
-    else tab.btn.removeAttribute('title');
+    if (tab.pinned) {
+      tab.btn.setAttribute('title', tab.title);
+      if (tab.tabBtn) tab.tabBtn.setAttribute('aria-label', tab.title);
+    } else {
+      tab.btn.removeAttribute('title');
+      if (tab.tabBtn) tab.tabBtn.removeAttribute('aria-label');
+    }
     setTabButtonActive(tab, tab.id === activeTabId);
     ensureStatusDot(tab);
     renderIcons();
@@ -383,7 +433,9 @@
   }
   function reorderTab(dragged, target, clientX) {
     var rect = target.btn.getBoundingClientRect();
-    var before = clientX < rect.left + rect.width / 2;
+    var isRTL = document.documentElement.getAttribute('dir') === 'rtl';
+    var midpoint = rect.left + rect.width / 2;
+    var before = isRTL ? clientX > midpoint : clientX < midpoint;
     var group = orderedAll().filter(function (t) { return t.pinned === target.pinned && t.id !== dragged.id; });
     var idx = group.indexOf(target);
     if (idx === -1) return;
@@ -473,16 +525,35 @@
       if (/\/static\/app\.js(\?|$)/.test(scripts[i].getAttribute('src') || '')) { appIdx = i; break; }
     }
     var after = appIdx === -1 ? scripts : scripts.slice(appIdx + 1);
+    var pendingScripts = [];
     after.forEach(function (s) {
       var src = s.getAttribute('src') || '';
       if (/\/static\/(app|tab-manager)\.js(\?|$)/.test(src)) return;
       var clone = document.createElement('script');
       clone.src = src;
       clone.async = false;
+      pendingScripts.push(new Promise(function (resolve) {
+        clone.addEventListener('load', resolve, { once: true });
+        clone.addEventListener('error', resolve, { once: true });
+      }));
       pane.appendChild(clone);
     });
 
-    return (doc.title || '').trim();
+    var scriptsReady = pendingScripts.length ? Promise.all(pendingScripts) : Promise.resolve();
+    return {
+      title: (doc.title || '').trim(),
+      scriptsReady: scriptsReady
+    };
+  }
+
+  function syncDocumentState(tab) {
+    if (!tab) return;
+    if (tab.title) {
+      document.title = tab.title;
+    }
+    try {
+      window.history.replaceState({ nodexiaTabId: tab.id }, '', tab.url);
+    } catch (err) { /* ignore */ }
   }
 
   function loadPane(tab, url, opts) {
@@ -514,7 +585,8 @@
       if (!result.resp.ok && !hasTabContent(result.text)) {
         throw new Error('http ' + result.resp.status);
       }
-      var title = extractAndInject(pane, result.text);
+      var extracted = extractAndInject(pane, result.text);
+      var title = extracted.title;
       tab.loading = false;
       tab.loaded = true;
       tab.url = pathAndSearch(finalURL);
@@ -522,11 +594,16 @@
       if (!opts.keepIcon) tab.icon = iconForURL(tab.url);
       tab.kind = kindForURL(tab.url);
       renderTabButton(tab);
-      if (window.NodexiaApp && typeof window.NodexiaApp.rescan === 'function') {
-        try { window.NodexiaApp.rescan(pane); } catch (err) { /* a module's own rescan must not break tabs */ }
+      if (tab.id === activeTabId) {
+        syncDocumentState(tab);
       }
-      renderIcons();
-      schedulePersist();
+      return extracted.scriptsReady.then(function () {
+        if (window.NodexiaApp && typeof window.NodexiaApp.rescan === 'function') {
+          try { window.NodexiaApp.rescan(pane); } catch (err) { /* a module's own rescan must not break tabs */ }
+        }
+        renderIcons();
+        schedulePersist();
+      });
     }).catch(function (err) {
       if (err && err.name === 'AbortError') return;
       tab.loading = false;
@@ -615,6 +692,9 @@
 
     var pane = document.createElement('div');
     pane.className = 'tab-pane';
+    pane.id = 'tab-pane-' + tab.id;
+    pane.setAttribute('role', 'tabpanel');
+    pane.setAttribute('aria-labelledby', 'tab-btn-' + tab.id);
     pane.setAttribute('hidden', '');
     pane.dataset.tabId = tab.id;
     tab.pane = pane;
@@ -695,6 +775,7 @@
     if (tab.btn && tab.btn.scrollIntoView) {
       try { tab.btn.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (err) { /* ignore */ }
     }
+    syncDocumentState(tab);
     updateNavHighlight(tab.url.split('?')[0]);
     fire('tab-activated', paneDetail(tab), false);
     schedulePersist();
@@ -1165,8 +1246,9 @@
 
       if (e.altKey && !e.ctrlKey && !e.metaKey) {
         if (e.shiftKey) {
-          if (e.code === 'ArrowRight') { e.preventDefault(); stepTab(1); return; }
-          if (e.code === 'ArrowLeft') { e.preventDefault(); stepTab(-1); return; }
+          var isRTL = document.documentElement.getAttribute('dir') === 'rtl';
+          if (e.code === 'ArrowRight') { e.preventDefault(); stepTab(isRTL ? -1 : 1); return; }
+          if (e.code === 'ArrowLeft') { e.preventDefault(); stepTab(isRTL ? 1 : -1); return; }
           if (e.code === 'KeyT') { e.preventDefault(); reopenClosed(); return; }
           if (e.code === 'KeyD') { e.preventDefault(); actionDuplicate(); return; }
           if (e.code === 'KeyA') { e.preventDefault(); showSwitcher(); return; }
@@ -1403,6 +1485,9 @@
       bootTab.loaded = true;
       bootTab.pane = document.createElement('div');
       bootTab.pane.className = 'tab-pane is-active';
+      bootTab.pane.id = 'tab-pane-' + bootTab.id;
+      bootTab.pane.setAttribute('role', 'tabpanel');
+      bootTab.pane.setAttribute('aria-labelledby', 'tab-btn-' + bootTab.id);
       bootTab.pane.dataset.tabId = bootTab.id;
       existingNodes.forEach(function (n) { bootTab.pane.appendChild(n); });
       contentEl.appendChild(bootTab.pane);
@@ -1421,6 +1506,9 @@
         };
         var pane = document.createElement('div');
         pane.className = 'tab-pane';
+        pane.id = 'tab-pane-' + tab.id;
+        pane.setAttribute('role', 'tabpanel');
+        pane.setAttribute('aria-labelledby', 'tab-btn-' + tab.id);
         pane.setAttribute('hidden', '');
         pane.dataset.tabId = tab.id;
         tab.pane = pane;

@@ -223,7 +223,7 @@ func TestStaticAssetCaching(t *testing.T) {
 	})
 
 	t.Run("fonts are immutable", func(t *testing.T) {
-		resp := mustGet(t, server.URL+"/static/fonts/exo2-latin.woff2")
+		resp := mustGet(t, server.URL+"/static/fonts/inter-latin.woff2")
 		defer closeResponseBody(resp)
 		if cc := resp.Header.Get("Cache-Control"); !strings.Contains(cc, "immutable") {
 			t.Fatalf("font Cache-Control = %q, want immutable", cc)

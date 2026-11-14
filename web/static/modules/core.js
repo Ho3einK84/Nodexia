@@ -76,14 +76,18 @@ var prefersReducedMotion = window.matchMedia &&
  * Lucide is vendored locally (/static/lucide.min.js, loaded with `defer`).
  * renderIcons() is safe to call repeatedly and after dynamic DOM inserts.
  */
-function renderIcons() {
+function renderIcons(root) {
   if (typeof lucide === 'undefined' || !lucide.createIcons) return;
   try {
-    // createIcons only converts <i data-lucide> elements that are still
-    // present, so calling it repeatedly is idempotent and cheap.
-    lucide.createIcons();
+    var scope = root && root.querySelector ? root : document;
+    if (!scope.querySelector('[data-lucide]')) return;
+    if (root && root !== document) {
+      lucide.createIcons({ root: root });
+    } else {
+      lucide.createIcons();
+    }
   } catch (err) {
-    /* never let an icon failure break the page */
+    try { lucide.createIcons(); } catch (e) { /* never let an icon failure break the page */ }
   }
 }
 
@@ -105,23 +109,23 @@ function startTopBar() {
   var bar = ensureTopBar();
   bar.classList.remove('is-done');
   bar.classList.add('is-active');
-  var width = 8;
-  bar.style.width = width + '%';
+  var progress = 8;
+  bar.style.transform = 'scaleX(' + (progress / 100).toFixed(3) + ')';
   clearInterval(topBarTimer);
   topBarTimer = setInterval(function () {
-    width += (90 - width) * 0.12;
-    bar.style.width = width.toFixed(1) + '%';
+    progress += (90 - progress) * 0.12;
+    bar.style.transform = 'scaleX(' + (progress / 100).toFixed(3) + ')';
   }, 220);
 }
 function finishTopBar() {
   if (!topBar) return;
   clearInterval(topBarTimer);
-  topBar.style.width = '100%';
+  topBar.style.transform = 'scaleX(1)';
   topBar.classList.add('is-done');
   setTimeout(function () {
     if (topBar) {
       topBar.classList.remove('is-active', 'is-done');
-      topBar.style.width = '0%';
+      topBar.style.transform = 'scaleX(0)';
     }
   }, 220);
 }
@@ -162,6 +166,7 @@ function markButtonBusy(btn) {
   if (!btn || btn.dataset.busy === '1') return;
   btn.dataset.busy = '1';
   btn.classList.add('is-busy');
+  btn.dataset.busyHtml = btn.innerHTML;
   var label = btn.textContent.trim();
   if (label) btn.setAttribute('data-busy-label', label);
   // Keep width stable while we swap content.
@@ -174,8 +179,15 @@ function restoreButton(btn) {
   if (!btn || btn.dataset.busy !== '1') return;
   btn.dataset.busy = '';
   btn.classList.remove('is-busy');
-  var label = btn.getAttribute('data-busy-label');
-  if (label) { btn.textContent = label; }
+  if (btn.dataset.busyHtml !== undefined) {
+    btn.innerHTML = btn.dataset.busyHtml;
+    delete btn.dataset.busyHtml;
+    renderIcons(btn);
+  } else {
+    var label = btn.getAttribute('data-busy-label');
+    if (label) { btn.textContent = label; }
+  }
+  btn.style.minWidth = '';
 }
 
 export { I18N, humanBytes, prefersReducedMotion, renderIcons, startTopBar, finishTopBar, tabNavigate, tabReload, registerCleanup, markButtonBusy, restoreButton };

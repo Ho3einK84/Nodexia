@@ -25,8 +25,8 @@ const supersample = 4
 type rgb struct{ r, g, b float64 }
 
 var (
-	bgTop     = rgb{30.0 / 255, 41.0 / 255, 59.0 / 255}    // #1e293b
-	bgBottom  = rgb{11.0 / 255, 17.0 / 255, 32.0 / 255}    // #0b1120
+	bgTop     = rgb{25.0 / 255, 25.0 / 255, 27.0 / 255}    // #19191b
+	bgBottom  = rgb{15.0 / 255, 15.0 / 255, 16.0 / 255}    // #0f0f10
 	hub       = rgb{59.0 / 255, 130.0 / 255, 246.0 / 255}  // #3b82f6 accent
 	satellite = rgb{96.0 / 255, 165.0 / 255, 250.0 / 255}  // #60a5fa accent-soft
 	link      = rgb{147.0 / 255, 197.0 / 255, 253.0 / 255} // #93c5fd accent-bright
