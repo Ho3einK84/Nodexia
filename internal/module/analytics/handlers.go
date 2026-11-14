@@ -22,10 +22,11 @@ import (
 // ── Chart data types ──────────────────────────────────────────────────────────
 
 type ChartSeries struct {
-	Label string    `json:"label"`
-	Color string    `json:"color"`
-	Fill  string    `json:"fill,omitempty"`
-	Data  []float64 `json:"data"`
+	Metric string    `json:"metric,omitempty"`
+	Label  string    `json:"label"`
+	Color  string    `json:"color,omitempty"`
+	Fill   string    `json:"fill,omitempty"`
+	Data   []float64 `json:"data"`
 }
 
 type ChartDataResponse struct {
@@ -430,7 +431,7 @@ func (h DataHandler) buildSystemChart(r *http.Request, serverID int64, metric st
 		Range:  rangeLabel,
 		Unit:   "%",
 		Labels: labels,
-		Series: []ChartSeries{{Label: label, Color: color, Fill: color + "22", Data: values}},
+		Series: []ChartSeries{{Metric: metric, Label: label, Color: color, Data: values}},
 		Min:    0,
 		Max:    100,
 	}, nil
@@ -470,9 +471,9 @@ func (h DataHandler) buildLoadChart(r *http.Request, serverID int64, since time.
 		Unit:   "",
 		Labels: labels,
 		Series: []ChartSeries{
-			{Label: "Load 1m", Color: "#3b82f6", Data: load1},
-			{Label: "Load 5m", Color: "#8b5cf6", Data: load5},
-			{Label: "Load 15m", Color: "#64748b", Data: load15},
+			{Metric: "load1", Label: "Load 1m", Color: "--accent", Data: load1},
+			{Metric: "load5", Label: "Load 5m", Color: "--ok", Data: load5},
+			{Metric: "load15", Label: "Load 15m", Color: "--text-muted", Data: load15},
 		},
 		Min: 0,
 		Max: autoMax(load1, load5, load15),
@@ -517,8 +518,8 @@ func (h DataHandler) buildTrafficChart(r *http.Request, serverID int64) (ChartDa
 		Unit:   "GB",
 		Labels: labels,
 		Series: []ChartSeries{
-			{Label: "Download", Color: "#3b82f6", Fill: "#3b82f622", Data: rxData},
-			{Label: "Upload", Color: "#8b5cf6", Fill: "#8b5cf622", Data: txData},
+			{Metric: "rx", Label: "Download", Color: "--accent", Data: rxData},
+			{Metric: "tx", Label: "Upload", Color: "--ok", Data: txData},
 		},
 		Min: 0,
 		Max: ceilToNice(maxVal),
@@ -872,15 +873,15 @@ func extractHourlyMetric(rp HourlyRollup, metric string) float64 {
 func metricStyle(metric string) (color, label string) {
 	switch metric {
 	case "cpu":
-		return "#3b82f6", "CPU %"
+		return "--accent", "CPU %"
 	case "ram":
-		return "#8b5cf6", "RAM %"
+		return "--ok", "RAM %"
 	case "disk":
-		return "#f59e0b", "Disk %"
+		return "--warn", "Disk %"
 	case "swap":
-		return "#ec4899", "Swap %"
+		return "--text-muted", "Swap %"
 	default:
-		return "#64748b", metric
+		return "--text-muted", metric
 	}
 }
 

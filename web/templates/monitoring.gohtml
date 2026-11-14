@@ -78,37 +78,43 @@
     {{ if or .MonitoringSnapshot.Available .MonitoringLive.Enabled }}
     <div class="gauge-grid">
       <div class="gauge" data-gauge="{{ if .MonitoringSnapshot.Available }}{{ trimSuffix .MonitoringSnapshot.CPUUsage "%" }}{{ else }}0{{ end }}" data-gauge-metric="cpu" role="img" aria-label="{{ t "monitoring.cpu_usage" }}">
-        <svg class="gauge__svg" viewBox="0 0 200 118" preserveAspectRatio="xMidYMid meet">
-          <path class="gauge__track" d="M20 100 A 80 80 0 0 1 180 100"></path>
-          <path class="gauge__arc" d="M20 100 A 80 80 0 0 1 180 100"></path>
-        </svg>
-        <div class="gauge__center">
-          <span class="gauge__value" data-gauge-value>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.CPUUsage }}{{ else }}–{{ end }}</span>
-          <span class="gauge__label"><i data-lucide="cpu"></i> {{ t "home.metric.cpu" }}</span>
+        <div class="gauge__dial">
+          <svg class="gauge__svg" viewBox="0 0 200 118" preserveAspectRatio="xMidYMid meet">
+            <path class="gauge__track" d="M20 100 A 80 80 0 0 1 180 100"></path>
+            <path class="gauge__arc" d="M20 100 A 80 80 0 0 1 180 100"></path>
+          </svg>
+          <div class="gauge__center">
+            <span class="gauge__value" data-gauge-value>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.CPUUsage }}{{ else }}–{{ end }}</span>
+            <span class="gauge__label"><i data-lucide="cpu"></i> {{ t "home.metric.cpu" }}</span>
+          </div>
         </div>
         <div class="gauge__scale"><span>0</span><span>100</span></div>
         <span class="gauge__detail" data-live-cpu-detail></span>
       </div>
       <div class="gauge" data-gauge="{{ if .MonitoringSnapshot.Available }}{{ trimSuffix .MonitoringSnapshot.RAMUsage "%" }}{{ else }}0{{ end }}" data-gauge-metric="ram" role="img" aria-label="{{ t "monitoring.ram_usage" }}">
-        <svg class="gauge__svg" viewBox="0 0 200 118" preserveAspectRatio="xMidYMid meet">
-          <path class="gauge__track" d="M20 100 A 80 80 0 0 1 180 100"></path>
-          <path class="gauge__arc" d="M20 100 A 80 80 0 0 1 180 100"></path>
-        </svg>
-        <div class="gauge__center">
-          <span class="gauge__value" data-gauge-value>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.RAMUsage }}{{ else }}–{{ end }}</span>
-          <span class="gauge__label"><i data-lucide="memory-stick"></i> {{ t "home.metric.ram" }}</span>
+        <div class="gauge__dial">
+          <svg class="gauge__svg" viewBox="0 0 200 118" preserveAspectRatio="xMidYMid meet">
+            <path class="gauge__track" d="M20 100 A 80 80 0 0 1 180 100"></path>
+            <path class="gauge__arc" d="M20 100 A 80 80 0 0 1 180 100"></path>
+          </svg>
+          <div class="gauge__center">
+            <span class="gauge__value" data-gauge-value>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.RAMUsage }}{{ else }}–{{ end }}</span>
+            <span class="gauge__label"><i data-lucide="memory-stick"></i> {{ t "home.metric.ram" }}</span>
+          </div>
         </div>
         <div class="gauge__scale"><span>0</span><span>100</span></div>
         <span class="gauge__detail" data-live-mem-detail></span>
       </div>
       <div class="gauge" data-gauge="{{ if .MonitoringSnapshot.Available }}{{ trimSuffix .MonitoringSnapshot.DiskUsage "%" }}{{ else }}0{{ end }}" data-gauge-metric="disk" role="img" aria-label="{{ t "monitoring.disk_usage" }}">
-        <svg class="gauge__svg" viewBox="0 0 200 118" preserveAspectRatio="xMidYMid meet">
-          <path class="gauge__track" d="M20 100 A 80 80 0 0 1 180 100"></path>
-          <path class="gauge__arc" d="M20 100 A 80 80 0 0 1 180 100"></path>
-        </svg>
-        <div class="gauge__center">
-          <span class="gauge__value" data-gauge-value>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.DiskUsage }}{{ else }}–{{ end }}</span>
-          <span class="gauge__label"><i data-lucide="hard-drive"></i> {{ t "home.metric.disk" }}</span>
+        <div class="gauge__dial">
+          <svg class="gauge__svg" viewBox="0 0 200 118" preserveAspectRatio="xMidYMid meet">
+            <path class="gauge__track" d="M20 100 A 80 80 0 0 1 180 100"></path>
+            <path class="gauge__arc" d="M20 100 A 80 80 0 0 1 180 100"></path>
+          </svg>
+          <div class="gauge__center">
+            <span class="gauge__value" data-gauge-value>{{ if .MonitoringSnapshot.Available }}{{ .MonitoringSnapshot.DiskUsage }}{{ else }}–{{ end }}</span>
+            <span class="gauge__label"><i data-lucide="hard-drive"></i> {{ t "home.metric.disk" }}</span>
+          </div>
         </div>
         <div class="gauge__scale"><span>0</span><span>100</span></div>
         <span class="gauge__detail" data-live-disk-detail></span>
@@ -130,7 +136,7 @@
       </div>
       <div class="metric-strip__item">
         <span class="metric-strip__label"><i data-lucide="gauge"></i> {{ t "monitoring.bandwidth" }}</span>
-        <span class="metric-strip__value" data-live-bandwidth>{{ if .MonitoringLive.Enabled }}–{{ else }}n/a{{ end }}</span>
+        <span class="metric-strip__value" data-live-bandwidth>–</span>
       </div>
       <div class="metric-strip__item">
         <span class="metric-strip__label"><i data-lucide="clock"></i> {{ t "system.uptime" }}</span>

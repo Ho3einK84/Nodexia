@@ -18,6 +18,46 @@ import { I18N, prefersReducedMotion, renderIcons, startTopBar, tabNavigate, tabR
 import { initCopyButtons } from './ui.js';
 
 /* ── Auto-refresh with live countdown ───────────────────── */
+function navigateOwningPane(pane, targetURL) {
+  if (!pane) {
+    startTopBar();
+    window.location.href = targetURL;
+    return;
+  }
+  if (!pane.hidden) {
+    startTopBar();
+  }
+  if (window.NodexiaTabs && typeof window.NodexiaTabs.navigatePane === 'function') {
+    window.NodexiaTabs.navigatePane(pane, targetURL);
+    return;
+  }
+  try {
+    var parsed = new URL(targetURL, window.location.origin);
+    var form = document.createElement('form');
+    form.method = 'get';
+    form.action = parsed.pathname;
+    form.hidden = true;
+    parsed.searchParams.forEach(function (val, k) {
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = k;
+      input.value = val;
+      form.appendChild(input);
+    });
+    pane.appendChild(form);
+    var ev = new Event('submit', { bubbles: true, cancelable: true });
+    var notCancelled = form.dispatchEvent(ev);
+    form.remove();
+    if (notCancelled && !pane.hidden) {
+      window.location.href = targetURL;
+    }
+  } catch (e) {
+    if (!pane.hidden) {
+      window.location.href = targetURL;
+    }
+  }
+}
+
 function initAutoRefresh(root) {
   root = root || document;
   var select = root.querySelector('#auto-refresh-select');
@@ -26,11 +66,20 @@ function initAutoRefresh(root) {
   if (!url) return;
   var refreshURL = url + (url.indexOf('?') === -1 ? '?' : '&') + 'refresh=1';
   var key = 'nodexia_auto_refresh_v2_' + (select.getAttribute('data-refresh-key') || url);
+  var owningPane = select.closest('.tab-pane');
 
   var pill = document.createElement('span');
   pill.className = 'refresh-countdown';
   pill.hidden = true;
+  var iconEl = document.createElement('i');
+  iconEl.setAttribute('data-lucide', 'refresh-cw');
+  var textSpan = document.createElement('span');
+  textSpan.className = 'refresh-countdown__text';
+  pill.appendChild(iconEl);
+  pill.appendChild(document.createTextNode(' '));
+  pill.appendChild(textSpan);
   select.parentNode.appendChild(pill);
+  renderIcons(pill);
 
   var tickTimer = null;
   var deadline = 0;
@@ -47,8 +96,7 @@ function initAutoRefresh(root) {
     tickTimer = setInterval(function () {
       if (Date.now() >= deadline) {
         stop();
-        startTopBar();
-        tabNavigate(refreshURL);
+        navigateOwningPane(owningPane, refreshURL);
         return;
       }
       updatePill();
@@ -56,9 +104,7 @@ function initAutoRefresh(root) {
   }
   function updatePill() {
     var remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-    pill.innerHTML = '<i data-lucide="refresh-cw"></i> ' +
-      escapeHTML(I18N.t('js.refresh.next_in', { seconds: remaining }));
-    renderIcons();
+    textSpan.textContent = I18N.t('js.refresh.next_in', { seconds: remaining });
   }
   function apply() {
     var ms = parseInt(select.value, 10);
@@ -85,7 +131,7 @@ function initAutoRefresh(root) {
   }
   select.addEventListener('change', apply);
   apply();
-  registerCleanup(root, stop);
+  registerCleanup(owningPane || root, stop);
 }
 
 /* ── Live output stream (Server-Sent Events) ────────────────

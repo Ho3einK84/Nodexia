@@ -56,7 +56,7 @@
               <span class="traffic-row__tx"><i data-lucide="arrow-up"></i>{{ .TX }}</span>
               <span class="traffic-row__total">{{ .Total }}</span>
             </div>
-            <div class="traffic-row__bar"><div class="traffic-row__bar-fill" style="width:{{ .Bar }}%"></div></div>
+            <div class="traffic-row__bar"><div class="traffic-row__bar-fill" style="--pct:{{ .Bar }}"></div></div>
           </div>
           {{ end }}
         </div>
@@ -88,7 +88,7 @@
               <span class="traffic-row__tx"><i data-lucide="arrow-up"></i>{{ .TX }}</span>
               <span class="traffic-row__total">{{ .Total }}</span>
             </div>
-            <div class="traffic-row__bar"><div class="traffic-row__bar-fill" style="width:{{ .Bar }}%"></div></div>
+            <div class="traffic-row__bar"><div class="traffic-row__bar-fill" style="--pct:{{ .Bar }}"></div></div>
           </div>
           {{ end }}
         </div>

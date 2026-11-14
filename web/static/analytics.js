@@ -2,6 +2,13 @@
 (function () {
   'use strict';
 
+  var scriptPane = document.currentScript && document.currentScript.closest('.tab-pane');
+  var rootScope = scriptPane || document;
+
+  function byId(id) {
+    return rootScope.querySelector ? rootScope.querySelector('#' + id) : document.getElementById(id);
+  }
+
   // Localization helper (see app.js for window.nxT). Falls back to the key.
   function T(key, params) { return window.nxT ? window.nxT(key, params) : key; }
 
@@ -13,15 +20,61 @@
     });
   }
 
-  // Only accept hex color values; fall back to a safe default otherwise.
+  // Resolve chart series colors strictly from CSS custom properties on :root
+  // (--accent, --ok, --warn, --text-muted), never competing purple/violet hues.
+  const SERIES_TOKEN_MAP = {
+    cpu: '--accent',
+    ram: '--ok',
+    disk: '--warn',
+    swap: '--text-muted',
+    load1: '--accent',
+    load5: '--ok',
+    load15: '--text-muted',
+    rx: '--accent',
+    tx: '--ok',
+  };
+  const ALLOWED_TOKENS = new Set(['--accent', '--ok', '--warn', '--crit', '--text-muted', '--text-dim']);
   const COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
-  function validColor(color) {
-    return COLOR_RE.test(color) ? color : '#3b82f6';
+
+  function readCSSToken(tokenName, fallback) {
+    try {
+      const val = getComputedStyle(document.documentElement).getPropertyValue(tokenName).trim();
+      if (val) return val;
+    } catch (e) {}
+    return fallback;
+  }
+
+  function resolveSeriesColor(series, fallbackMetric) {
+    const metricKey = (series && series.metric) || fallbackMetric || '';
+    let token = SERIES_TOKEN_MAP[metricKey] || '';
+    if (!token && series && typeof series.color === 'string') {
+      if (ALLOWED_TOKENS.has(series.color)) {
+        token = series.color;
+      } else if (series.color.startsWith('var(')) {
+        const inner = series.color.slice(4, -1).trim();
+        if (ALLOWED_TOKENS.has(inner)) token = inner;
+      }
+    }
+    if (token) {
+      const defaults = {
+        '--accent': '#3b82f6',
+        '--ok': '#4cc38a',
+        '--warn': '#eab308',
+        '--crit': '#e5484d',
+        '--text-muted': '#93939a',
+        '--text-dim': '#66666d',
+      };
+      return readCSSToken(token, defaults[token] || '#3b82f6');
+    }
+    if (series && COLOR_RE.test(series.color)) {
+      return series.color;
+    }
+    return readCSSToken('--accent', '#3b82f6');
   }
 
   // ── SVG chart renderer ────────────────────────────────────────────────────
 
-  const CHART_PAD = { top: 12, right: 16, bottom: 28, left: 42 };
+  const CHART_PAD = { top: 12, right: 16, bottom: 28, left: 44 };
 
   function createSVGEl(tag, attrs) {
     const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -30,13 +83,23 @@
   }
 
   function buildChart(container, data) {
-    container.innerHTML = '';
-    const w = container.clientWidth || 400;
-    const h = container.clientHeight || 180;
-    const pw = w - CHART_PAD.left - CHART_PAD.right;
-    const ph = h - CHART_PAD.top - CHART_PAD.bottom;
+    if (!container || !data) return;
+    container.__chartData = data;
+    const w = Math.max(120, Math.round(container.clientWidth || 400));
+    const h = Math.max(80, Math.round(container.clientHeight || 200));
+    container.__lastW = w;
+    container.__lastH = h;
 
-    const svg = createSVGEl('svg', { viewBox: `0 0 ${w} ${h}`, preserveAspectRatio: 'none' });
+    container.innerHTML = '';
+    const pw = Math.max(10, w - CHART_PAD.left - CHART_PAD.right);
+    const ph = Math.max(10, h - CHART_PAD.top - CHART_PAD.bottom);
+
+    // Exact container aspect ratio viewBox with uniform preserveAspectRatio
+    // so axis labels and text never stretch or distort on resize.
+    const svg = createSVGEl('svg', {
+      viewBox: `0 0 ${w} ${h}`,
+      preserveAspectRatio: 'xMidYMid meet',
+    });
     const plotG = createSVGEl('g', { transform: `translate(${CHART_PAD.left},${CHART_PAD.top})` });
     svg.appendChild(plotG);
 
@@ -57,7 +120,7 @@
       }));
       const axisLabel = createSVGEl('text', {
         class: 'chart-axis-label',
-        x: -6, y: y + 4,
+        x: -8, y: y + 4,
         'text-anchor': 'end',
       });
       axisLabel.textContent = formatAxisValue(tick, unit);
@@ -66,7 +129,7 @@
 
     // X-axis labels (sparse)
     const xLabelCount = Math.min(6, labels.length);
-    const xStep = labels.length > 1 ? (labels.length - 1) / (xLabelCount - 1) : 1;
+    const xStep = labels.length > 1 ? (labels.length - 1) / Math.max(xLabelCount - 1, 1) : 1;
     for (let i = 0; i < xLabelCount; i++) {
       const idx = Math.round(i * xStep);
       if (idx >= labels.length) continue;
@@ -84,6 +147,7 @@
     // Draw each series
     for (const s of series) {
       if (!s.data || s.data.length === 0) continue;
+      const strokeColor = resolveSeriesColor(s, data.metric);
       const pts = s.data.map((v, i) => ({
         x: (i / Math.max(s.data.length - 1, 1)) * pw,
         y: ph - ((v - yMin) / yRange) * ph,
@@ -95,7 +159,7 @@
       plotG.appendChild(createSVGEl('path', {
         class: 'chart-area',
         d: areaD,
-        fill: validColor(s.color),
+        fill: strokeColor,
       }));
 
       // Line
@@ -103,19 +167,40 @@
       plotG.appendChild(createSVGEl('path', {
         class: 'chart-path',
         d: lineD,
-        stroke: validColor(s.color),
+        stroke: strokeColor,
       }));
     }
 
     // Interaction overlay
-    const overlay = buildInteractionOverlay(container, plotG, pw, ph, labels, series, yMin, yRange, unit);
+    const overlay = buildInteractionOverlay(container, plotG, pw, ph, labels, series, yMin, yRange, unit, data.metric);
     plotG.appendChild(overlay);
 
     container.appendChild(svg);
+    ensureResizeObserver(container);
   }
 
-  function buildInteractionOverlay(container, plotG, pw, ph, labels, series, yMin, yRange, unit) {
-    // Transparent rect to capture mouse events
+  function ensureResizeObserver(container) {
+    if (container.__ro || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const nw = Math.round(entry.contentRect.width);
+        const nh = Math.round(entry.contentRect.height);
+        if (nw > 0 && nh > 0 && (nw !== container.__lastW || nh !== container.__lastH)) {
+          if (container.__chartData && !container.hidden) {
+            buildChart(container, container.__chartData);
+          }
+        }
+      }
+    });
+    ro.observe(container);
+    container.__ro = ro;
+    if (scriptPane) {
+      if (!scriptPane.__nxCleanups) scriptPane.__nxCleanups = [];
+      scriptPane.__nxCleanups.push(() => ro.disconnect());
+    }
+  }
+
+  function buildInteractionOverlay(container, plotG, pw, ph, labels, series, yMin, yRange, unit, metricName) {
     const rect = createSVGEl('rect', {
       x: 0, y: 0, width: pw, height: ph,
       fill: 'transparent', cursor: 'crosshair',
@@ -126,12 +211,13 @@
     let dots = [];
 
     function showTooltip(x, clientX, clientY) {
-      const idx = Math.round((x / pw) * (labels.length - 1));
+      if (!labels.length) return;
+      const clampedX = Math.max(0, Math.min(pw, x));
+      const idx = Math.round((clampedX / pw) * Math.max(labels.length - 1, 0));
       if (idx < 0 || idx >= labels.length) return;
 
       const xPos = (idx / Math.max(labels.length - 1, 1)) * pw;
 
-      // Vertical line
       if (!vline) {
         vline = createSVGEl('line', {
           class: 'chart-tooltip-line',
@@ -143,28 +229,25 @@
       vline.setAttribute('x2', xPos);
       vline.style.display = '';
 
-      // Dots
       dots.forEach(d => d.remove());
       dots = [];
       for (const s of series) {
         if (!s.data || idx >= s.data.length) continue;
         const v = s.data[idx];
         const y = ph - ((v - yMin) / yRange) * ph;
+        const color = resolveSeriesColor(s, metricName);
         const dot = createSVGEl('circle', {
           class: 'chart-tooltip-dot',
           cx: xPos, cy: y, r: 4,
-          fill: s.color || '#3b82f6',
-          stroke: '#0f172a', 'stroke-width': 2,
+          fill: color,
         });
         plotG.appendChild(dot);
         dots.push(dot);
       }
 
-      // Tooltip div
       if (!tooltipEl) {
         tooltipEl = document.createElement('div');
         tooltipEl.className = 'chart-tooltip';
-        container.style.position = 'relative';
         container.appendChild(tooltipEl);
       }
 
@@ -172,24 +255,36 @@
       for (const s of series) {
         if (!s.data || idx >= s.data.length) continue;
         const v = s.data[idx];
+        const color = resolveSeriesColor(s, metricName);
         const formatted = unit === '%' ? v.toFixed(1) + '%'
           : unit === 'GB' ? v.toFixed(3) + ' GB'
           : v.toFixed(2) + (unit ? ' ' + unit : '');
         html += `<div class="chart-tooltip__row">
-          <span class="chart-tooltip__dot" style="background:${validColor(s.color)}"></span>
-          <span>${escapeHTML(s.label)}</span>
+          <span class="chart-tooltip__series">
+            <span class="chart-tooltip__dot" style="background:${color}"></span>
+            <span>${escapeHTML(s.label)}</span>
+          </span>
           <span class="chart-tooltip__value">${formatted}</span>
         </div>`;
       }
       tooltipEl.innerHTML = html;
 
-      // Position tooltip
+      // Position tooltip cleanly inside container bounds regardless of document dir (LTR/RTL)
       const cRect = container.getBoundingClientRect();
-      let tx = clientX - cRect.left + 12;
-      let ty = clientY - cRect.top - 12;
+      const pointerX = clientX - cRect.left;
+      const pointerY = clientY - cRect.top;
       const tWidth = tooltipEl.offsetWidth || 150;
-      if (tx + tWidth > cRect.width - 8) tx = clientX - cRect.left - tWidth - 12;
+      const tHeight = tooltipEl.offsetHeight || 56;
+      let tx = pointerX + 12;
+      if (tx + tWidth > cRect.width - 8) {
+        tx = pointerX - tWidth - 12;
+      }
+      tx = Math.max(8, Math.min(tx, Math.max(8, cRect.width - tWidth - 8)));
+      let ty = pointerY - 12;
+      ty = Math.max(4, Math.min(ty, Math.max(4, cRect.height - tHeight - 4)));
+
       tooltipEl.style.left = tx + 'px';
+      tooltipEl.style.right = 'auto';
       tooltipEl.style.top = ty + 'px';
       tooltipEl.style.opacity = '1';
     }
@@ -203,8 +298,11 @@
 
     rect.addEventListener('mousemove', (e) => {
       const svgEl = rect.closest('svg');
+      if (!svgEl) return;
       const svgRect = svgEl.getBoundingClientRect();
-      const scaleX = (svgEl.viewBox.baseVal.width || svgRect.width) / svgRect.width;
+      if (!svgRect.width) return;
+      const vbWidth = (svgEl.viewBox && svgEl.viewBox.baseVal && svgEl.viewBox.baseVal.width) || svgRect.width;
+      const scaleX = vbWidth / svgRect.width;
       const localX = (e.clientX - svgRect.left) * scaleX - CHART_PAD.left;
       showTooltip(localX, e.clientX, e.clientY);
     });
@@ -251,56 +349,56 @@
     return v.toFixed(v < 10 ? 1 : 0);
   }
 
-  // ── Chart loading ─────────────────────────────────────────────────────────
+  // ── Chart loading (semantic [hidden] toggling) ────────────────────────────
 
-  function showSkeleton(metric) {
-    const sk = document.getElementById('skeleton-' + metric);
-    const ct = document.getElementById('chart-' + metric);
-    const em = document.getElementById('empty-' + metric);
-    const er = document.getElementById('error-' + metric);
-    if (sk) sk.style.display = '';
-    if (ct) ct.style.display = 'none';
-    if (em) em.style.display = 'none';
-    if (er) er.style.display = 'none';
+  function setCardState(metric, activeState) {
+    const sk = byId('skeleton-' + metric);
+    const ct = byId('chart-' + metric);
+    const em = byId('empty-' + metric);
+    const er = byId('error-' + metric);
+    if (sk) sk.hidden = activeState !== 'skeleton';
+    if (ct) ct.hidden = activeState !== 'chart';
+    if (em) em.hidden = activeState !== 'empty';
+    if (er) er.hidden = activeState !== 'error';
   }
 
-  function showChart(metric) {
-    const sk = document.getElementById('skeleton-' + metric);
-    const ct = document.getElementById('chart-' + metric);
-    if (sk) sk.style.display = 'none';
-    if (ct) ct.style.display = '';
-  }
-
-  function showEmpty(metric) {
-    const sk = document.getElementById('skeleton-' + metric);
-    const ct = document.getElementById('chart-' + metric);
-    const em = document.getElementById('empty-' + metric);
-    if (sk) sk.style.display = 'none';
-    if (ct) ct.style.display = 'none';
-    if (em) em.style.display = '';
-  }
-
-  function showError(metric) {
-    const sk = document.getElementById('skeleton-' + metric);
-    const ct = document.getElementById('chart-' + metric);
-    const er = document.getElementById('error-' + metric);
-    if (sk) sk.style.display = 'none';
-    if (ct) ct.style.display = 'none';
-    if (er) er.style.display = '';
-  }
+  function showSkeleton(metric) { setCardState(metric, 'skeleton'); }
+  function showChart(metric) { setCardState(metric, 'chart'); }
+  function showEmpty(metric) { setCardState(metric, 'empty'); }
+  function showError(metric) { setCardState(metric, 'error'); }
 
   function updateFooter(metric, data) {
-    const footer = document.getElementById('footer-' + metric);
-    if (!footer || !data || !data.series || !data.series[0]) return;
-    const values = data.series[0].data;
-    if (!values || values.length === 0) return;
-    const avg = values.reduce((a, b) => a + b, 0) / values.length;
-    const max = Math.max(...values);
+    const footer = byId('footer-' + metric);
+    if (!footer || !data || !Array.isArray(data.series) || data.series.length === 0) return;
+
     const unit = data.unit || '';
     const fmt = (v) => unit === '%' ? v.toFixed(1) + '%' : v.toFixed(2) + (unit ? ' ' + unit : '');
-    footer.textContent = window.nxT
-      ? window.nxT('js.analytics.chart_footer', { avg: fmt(avg), peak: fmt(max), count: values.length })
-      : `Avg: ${fmt(avg)} · Peak: ${fmt(max)} · ${values.length} points`;
+    const nonEmpty = data.series.filter(s => Array.isArray(s.data) && s.data.length > 0);
+    if (nonEmpty.length === 0) return;
+
+    if (nonEmpty.length === 1) {
+      const values = nonEmpty[0].data;
+      const avg = values.reduce((a, b) => a + b, 0) / values.length;
+      const max = Math.max(...values);
+      footer.textContent = window.nxT
+        ? window.nxT('js.analytics.chart_footer', { avg: fmt(avg), peak: fmt(max), count: values.length })
+        : `Avg: ${fmt(avg)} · Peak: ${fmt(max)} · ${values.length} points`;
+      return;
+    }
+
+    // Multi-series (e.g. Load 1m / 5m / 15m): render per-series Avg / Peak / Current
+    footer.innerHTML = `<div class="chart-footer-series">${nonEmpty.map(s => {
+      const vals = s.data;
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const max = Math.max(...vals);
+      const cur = vals[vals.length - 1];
+      const color = resolveSeriesColor(s, data.metric);
+      return `<span class="chart-footer-item">
+        <span class="legend-dot" style="background:${color}"></span>
+        <span class="chart-footer-item__label">${escapeHTML(s.label)}</span>
+        <span>${fmt(cur)} (avg ${fmt(avg)} · peak ${fmt(max)})</span>
+      </span>`;
+    }).join('')}</div>`;
   }
 
   async function loadChart(serverID, metric, range) {
@@ -309,34 +407,32 @@
       const resp = await fetch(`/servers/${serverID}/analytics/data?metric=${metric}&range=${range}`);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const data = await resp.json();
-      if (!data.series || data.series.length === 0 || (data.series[0].data && data.series[0].data.length === 0)) {
+      if (!data.series || data.series.length === 0 || !data.series.some(s => s.data && s.data.length > 0)) {
         showEmpty(metric);
         return;
       }
       showChart(metric);
-      const ct = document.getElementById('chart-' + metric);
+      const ct = byId('chart-' + metric);
       if (ct) {
-        // Wait for DOM paint to get accurate dimensions
         requestAnimationFrame(() => {
           buildChart(ct, data);
           updateFooter(metric, data);
         });
       }
-      // Build legend for traffic
       if (metric === 'traffic') {
-        buildLegend('legend-traffic', data.series);
+        buildLegend('legend-traffic', data.series, data.metric);
       }
     } catch (e) {
       showError(metric);
     }
   }
 
-  function buildLegend(containerId, series) {
-    const legend = document.getElementById(containerId);
+  function buildLegend(containerId, series, fallbackMetric) {
+    const legend = byId(containerId);
     if (!legend) return;
     legend.innerHTML = series.map(s => `
       <div class="legend-item">
-        <span class="legend-dot" style="background:${validColor(s.color)}"></span>
+        <span class="legend-dot" style="background:${resolveSeriesColor(s, fallbackMetric)}"></span>
         ${escapeHTML(s.label)}
       </div>
     `).join('');
@@ -345,7 +441,7 @@
   // ── Forecast UI ───────────────────────────────────────────────────────────
 
   async function loadForecast(serverID) {
-    const grid = document.getElementById('forecastGrid');
+    const grid = byId('forecastGrid');
     if (!grid) return;
 
     try {
@@ -365,15 +461,13 @@
   }
 
   function renderForecast(f) {
-    const grid = document.getElementById('forecastGrid');
+    const grid = byId('forecastGrid');
     if (!grid) return;
 
     const trendHTML = renderTrend(f.trend);
     const confidenceHTML = renderConfidence(f.confidence);
     const risksHTML = renderRisks(f.risks);
 
-    // The forecast follows the limited series (download by default); an anchored
-    // billing period annotates the month card with its actual date range.
     const scope = seriesScopeLabel(f.series);
     const periodNote = anchoredPeriodNote(f.period_start, f.period_end);
     grid.innerHTML = `
@@ -382,8 +476,7 @@
       ${renderPeriodCard(T('js.analytics.this_month'), f.this_month, f.this_month.pct_elapsed, scope, periodNote)}
     `;
 
-    // Show metadata below grid
-    let meta = document.getElementById('forecastMeta');
+    let meta = byId('forecastMeta');
     if (!meta) {
       meta = document.createElement('div');
       meta.id = 'forecastMeta';
@@ -401,57 +494,48 @@
     if (window.lucide) lucide.createIcons();
   }
 
-  // seriesScopeLabel maps the forecast series onto its badge label. The series
-  // follows the configured limit kind; download is the default.
   function seriesScopeLabel(series) {
     if (series === 'tx') return T('js.analytics.upload_scope');
     if (series === 'total') return T('js.analytics.total_scope');
     return T('js.analytics.download_scope');
   }
 
-  // anchoredPeriodNote renders the billing-period date range, but only when the
-  // period is anchored off the calendar month (start day != 1) — the default
-  // calendar month needs no explanation.
   function anchoredPeriodNote(start, end) {
     if (!start || !end || start.slice(-2) === '01') return '';
-    const endInclusive = end; // exclusive bound; show as-is to stay unambiguous
-    return T('js.analytics.period_range', { start: start, end: endInclusive });
+    return T('js.analytics.period_range', { start: start, end: end });
   }
 
   function renderPeriodCard(label, period, pct, scopeLabel, periodNote) {
-    const progressClass = pct > 90 ? 'forecast-progress__bar--danger'
-      : pct > 70 ? 'forecast-progress__bar--warn'
+    const clampedPct = Math.min(100, Math.max(0, pct || 0));
+    const scaleVal = (clampedPct / 100).toFixed(3);
+    const progressClass = clampedPct > 90 ? 'forecast-progress__bar--danger'
+      : clampedPct > 70 ? 'forecast-progress__bar--warn'
       : '';
     return `
       <div class="forecast-card">
-        <div class="forecast-card__label">${escapeHTML(label)} <span class="forecast-card__scope">${escapeHTML(scopeLabel)}</span></div>
+        <div class="forecast-card__label"><span>${escapeHTML(label)}</span> <span class="forecast-card__scope">${escapeHTML(scopeLabel)}</span></div>
         <div class="forecast-card__current">${escapeHTML(period.current_human)}</div>
         <div class="forecast-card__predicted">
           ${escapeHTML(T('js.analytics.predicted_end'))} <strong>${escapeHTML(period.predicted_human)}</strong>
         </div>
         <div class="forecast-progress">
-          <div class="forecast-progress__bar ${progressClass}" style="width:${Math.min(100, pct)}%"></div>
+          <div class="forecast-progress__bar ${progressClass}" style="--pct:${scaleVal}"></div>
         </div>
-        <div class="forecast-progress__label">${escapeHTML(T('js.analytics.period_elapsed', { pct: pct }))}${periodNote ? ` · ${escapeHTML(periodNote)}` : ''}</div>
+        <div class="forecast-progress__label">${escapeHTML(T('js.analytics.period_elapsed', { pct: clampedPct }))}${periodNote ? ` · ${escapeHTML(periodNote)}` : ''}</div>
       </div>
     `;
   }
 
-  // Tn pluralizes by count (see app.js window.nxTn); falls back to nxT.
   function Tn(key, count, params) {
     if (window.nxTn) return window.nxTn(key, count, params);
     return T(key, params);
   }
 
-  // renderExhaustion draws the days-to-limit panel. It is hidden entirely for
-  // servers without a configured monthly limit, and switches copy + severity
-  // across the four states: already over, exhausts today, exhausts in N days,
-  // and comfortably under all month.
   function renderExhaustion(ex) {
-    const panel = document.getElementById('forecastExhaustion');
+    const panel = byId('forecastExhaustion');
     if (!panel) return;
     if (!ex || !ex.has_limit) {
-      panel.style.display = 'none';
+      panel.hidden = true;
       panel.innerHTML = '';
       return;
     }
@@ -483,7 +567,7 @@
       message = T('js.analytics.exhaustion_safe', { limit: ex.limit_human, projected: ex.projected_month_human });
     }
 
-    panel.style.display = '';
+    panel.hidden = false;
     panel.className = 'forecast-exhaustion forecast-exhaustion--' + level;
     panel.innerHTML = `
       <i data-lucide="${icon}" class="forecast-exhaustion__icon"></i>
@@ -497,12 +581,12 @@
 
   function renderTrend(trend) {
     const map = {
-      increasing: { cls: 'trend-indicator--increasing', icon: '↑', label: T('js.analytics.trend_increasing') },
-      decreasing: { cls: 'trend-indicator--decreasing', icon: '↓', label: T('js.analytics.trend_decreasing') },
-      stable:     { cls: 'trend-indicator--stable',     icon: '→', label: T('js.analytics.trend_stable') },
+      increasing: { cls: 'trend-indicator--increasing', icon: 'trending-up', label: T('js.analytics.trend_increasing') },
+      decreasing: { cls: 'trend-indicator--decreasing', icon: 'trending-down', label: T('js.analytics.trend_decreasing') },
+      stable:     { cls: 'trend-indicator--stable',     icon: 'minus', label: T('js.analytics.trend_stable') },
     };
     const t = map[trend] || map.stable;
-    return `<span class="trend-indicator ${t.cls}">${t.icon} ${escapeHTML(t.label)}</span>`;
+    return `<span class="trend-indicator ${t.cls}"><i data-lucide="${t.icon}"></i> ${escapeHTML(t.label)}</span>`;
   }
 
   function renderConfidence(confidence) {
@@ -533,10 +617,9 @@
   // ── Range tabs ────────────────────────────────────────────────────────────
 
   let currentRange = '24h';
-  let currentServerID = null;
 
   function initRangeTabs(serverID) {
-    const tabs = document.getElementById('globalRangeTabs');
+    const tabs = byId('globalRangeTabs');
     if (!tabs) return;
 
     tabs.addEventListener('click', (e) => {
@@ -553,14 +636,18 @@
       btn.setAttribute('aria-selected', 'true');
 
       currentRange = range;
-      loadAllCharts(serverID, range);
+      loadResourceCharts(serverID, range);
     });
   }
 
-  function loadAllCharts(serverID, range) {
+  function loadResourceCharts(serverID, range) {
     for (const metric of ['cpu', 'ram', 'disk', 'load']) {
       loadChart(serverID, metric, range);
     }
+  }
+
+  function loadAllCharts(serverID, range) {
+    loadResourceCharts(serverID, range);
     // Traffic is always 30d (vnstat provides daily totals)
     loadChart(serverID, 'traffic', '30d');
   }
@@ -568,26 +655,15 @@
   // ── Init ──────────────────────────────────────────────────────────────────
 
   function init() {
-    // Per-server analytics page
-    const firstChart = document.querySelector('[data-metric][data-server]');
+    const firstChart = rootScope.querySelector('[data-metric][data-server]');
     if (!firstChart) return;
 
     const serverID = firstChart.dataset.server;
     if (!serverID) return;
 
-    currentServerID = serverID;
     initRangeTabs(serverID);
     loadAllCharts(serverID, currentRange);
     loadForecast(serverID);
-
-    // Re-render charts on window resize (debounced)
-    let resizeTimer;
-    window.addEventListener('resize', () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        loadAllCharts(serverID, currentRange);
-      }, 250);
-    });
   }
 
   if (document.readyState === 'loading') {

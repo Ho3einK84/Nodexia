@@ -53,30 +53,32 @@
       {{ end }}
     </div>
     <p class="analytics-limit__hint">{{ t "analytics.limits.global_hint" }}</p>
-    <form class="limit-form" method="post" action="{{ .GlobalAction }}">
-      <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-      <label class="limit-form__field limit-form__field--value">
-        <span>{{ t "analytics.limit.value_label" }}</span>
-        <input type="number" name="limit_value" step="any" min="0"
-               inputmode="decimal" value="{{ .GlobalValue }}"
-               placeholder="{{ t "analytics.limit.placeholder" }}">
-      </label>
-      <label class="limit-form__field">
-        <span>{{ t "analytics.limit.unit_label" }}</span>
-        <select name="limit_unit">
-          {{ $gunit := .GlobalUnit }}
-          {{ range .UnitOptions }}<option value="{{ . }}"{{ if eq . $gunit }} selected{{ end }}>{{ . }}</option>{{ end }}
-        </select>
-      </label>
-      <button type="submit" class="btn btn--primary btn--sm limit-form__submit"><i data-lucide="save" class="icon-in-button"></i> {{ t "analytics.limit.save" }}</button>
-    </form>
-    {{ if .HasGlobal }}
-    <form method="post" action="{{ .GlobalAction }}" class="inline-form limit-remove">
-      <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-      <input type="hidden" name="limit_value" value="">
-      <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" data-confirm="{{ t "analytics.limits.remove_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "analytics.limit.remove" }}</button>
-    </form>
-    {{ end }}
+    <div class="limit-form-row">
+      <form class="limit-form" method="post" action="{{ .GlobalAction }}">
+        <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+        <label class="limit-form__field limit-form__field--value">
+          <span>{{ t "analytics.limit.value_label" }}</span>
+          <input type="number" name="limit_value" step="any" min="0"
+                 inputmode="decimal" value="{{ .GlobalValue }}"
+                 placeholder="{{ t "analytics.limit.placeholder" }}">
+        </label>
+        <label class="limit-form__field">
+          <span>{{ t "analytics.limit.unit_label" }}</span>
+          <select name="limit_unit">
+            {{ $gunit := .GlobalUnit }}
+            {{ range .UnitOptions }}<option value="{{ . }}"{{ if eq . $gunit }} selected{{ end }}>{{ . }}</option>{{ end }}
+          </select>
+        </label>
+        <button type="submit" class="btn btn--primary btn--sm limit-form__submit"><i data-lucide="save" class="icon-in-button"></i> {{ t "analytics.limit.save" }}</button>
+      </form>
+      {{ if .HasGlobal }}
+      <form method="post" action="{{ .GlobalAction }}" class="inline-form limit-remove">
+        <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+        <input type="hidden" name="limit_value" value="">
+        <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" data-confirm="{{ t "analytics.limits.remove_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "analytics.limit.remove" }}</button>
+      </form>
+      {{ end }}
+    </div>
   </article>
 
   <!-- Per-tag caps -->

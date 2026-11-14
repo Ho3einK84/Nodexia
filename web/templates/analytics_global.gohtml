@@ -47,14 +47,17 @@
         </thead>
         <tbody>
           {{ range .GlobalAnalytics.TopMetrics }}
+          {{- $cpu := float64 (trimSuffix .CPU "%") -}}
+          {{- $ram := float64 (trimSuffix .RAM "%") -}}
+          {{- $disk := float64 (trimSuffix .Disk "%") -}}
           <tr>
             <td class="server-name-cell">
               <i data-lucide="server" class="table-icon"></i>
               {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}
             </td>
-            <td class="text-right"><span class="metric-badge metric-badge--cpu">{{ .CPU }}</span></td>
-            <td class="text-right"><span class="metric-badge metric-badge--ram">{{ .RAM }}</span></td>
-            <td class="text-right"><span class="metric-badge metric-badge--disk">{{ .Disk }}</span></td>
+            <td class="text-right"><span class="metric-badge{{ if gt $cpu 80.0 }} metric-badge--crit{{ else if gt $cpu 60.0 }} metric-badge--warn{{ end }}">{{ .CPU }}</span></td>
+            <td class="text-right"><span class="metric-badge{{ if gt $ram 80.0 }} metric-badge--crit{{ else if gt $ram 60.0 }} metric-badge--warn{{ end }}">{{ .RAM }}</span></td>
+            <td class="text-right"><span class="metric-badge{{ if gt $disk 80.0 }} metric-badge--crit{{ else if gt $disk 60.0 }} metric-badge--warn{{ end }}">{{ .Disk }}</span></td>
             <td class="text-right">
               <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics">
                 <i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}
@@ -76,8 +79,8 @@
         <thead>
           <tr>
             <th>{{ t "common.server" }}</th>
-            <th class="text-right"><i data-lucide="arrow-down" class="th-icon th-icon--dl"></i> {{ t "analytics.download" }}</th>
-            <th class="text-right"><i data-lucide="arrow-up" class="th-icon th-icon--ul"></i> {{ t "analytics.upload" }}</th>
+            <th class="text-right"><i data-lucide="arrow-down" class="th-icon"></i> {{ t "analytics.download" }}</th>
+            <th class="text-right"><i data-lucide="arrow-up" class="th-icon"></i> {{ t "analytics.upload" }}</th>
             <th class="text-right">{{ t "analytics.total_month" "label" (index .GlobalAnalytics.TopTraffic 0).MonthLabel }}</th>
             <th></th>
           </tr>
@@ -90,13 +93,13 @@
               {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}
             </td>
             <td class="text-right">
-              <span class="traffic-badge traffic-badge--dl">{{ .Download }}</span>
+              <span class="traffic-badge">{{ .Download }}</span>
             </td>
             <td class="text-right">
-              <span class="traffic-badge traffic-badge--ul">{{ .Upload }}</span>
+              <span class="traffic-badge">{{ .Upload }}</span>
             </td>
             <td class="text-right">
-              <span class="traffic-badge">{{ .MonthBytes }}</span>
+              <span class="traffic-badge traffic-badge--total">{{ .MonthBytes }}</span>
             </td>
             <td class="text-right">
               <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics">

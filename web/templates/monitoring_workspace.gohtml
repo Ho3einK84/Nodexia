@@ -71,9 +71,6 @@
               <i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "monitoring.refresh_now" }}
             </button>
             {{ if .MonitoringForm.StoredCredentialsAvailable }}
-            <button type="button" class="btn btn--ghost" data-refresh-now="{{ .MonitoringForm.RefreshURL }}?refresh=1">
-              <i data-lucide="zap" class="icon-in-button"></i> {{ t "system.quick_refresh" }}
-            </button>
             <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="mon-advanced" aria-expanded="false">
               <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
             </button>

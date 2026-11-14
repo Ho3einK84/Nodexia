@@ -51,11 +51,16 @@
 
   function clampPct(value) { return Math.max(0, Math.min(100, value || 0)); }
 
-  // Bucketed color matching the gauge palette: green / amber / red.
-  function gaugeColor(value) {
-    if (value <= 60) return { stroke: '#4ade80', glow: 'rgba(74, 222, 128, 0.45)' };
-    if (value <= 80) return { stroke: '#facc15', glow: 'rgba(250, 204, 21, 0.45)' };
-    return { stroke: '#f87171', glow: 'rgba(248, 113, 113, 0.5)' };
+  function resolveGaugeColor(value) {
+    if (typeof window.nxGaugeColor === 'function') {
+      return window.nxGaugeColor(value);
+    }
+    var token = value <= 60 ? '--ok' : (value <= 80 ? '--warn' : '--crit');
+    if (typeof window.getComputedStyle === 'function' && document.documentElement) {
+      var resolved = window.getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+      if (resolved) return resolved;
+    }
+    return 'var(' + token + ')';
   }
 
   // setGauge animates one arc gauge to value and recolors it, matching the
@@ -64,18 +69,41 @@
     var gauge = card.querySelector('[data-gauge-metric="' + metric + '"]');
     if (!gauge) return;
     var v = clampPct(value);
-    var arc = gauge.querySelector('.gauge__arc');
-    if (arc) {
-      var length = arc.getTotalLength();
-      arc.style.strokeDasharray = length;
-      arc.style.strokeDashoffset = length * (1 - v / 100);
-      var color = gaugeColor(v);
-      gauge.style.setProperty('--gauge-color', color.stroke);
-      gauge.style.setProperty('--gauge-glow', color.glow);
+    if (typeof window.nxApplyGauge === 'function') {
+      window.nxApplyGauge(gauge, v, false);
+    } else {
+      var arc = gauge.querySelector('.gauge__arc');
+      if (arc) {
+        var length = arc.getTotalLength();
+        arc.style.strokeDasharray = length;
+        arc.style.strokeDashoffset = length * (1 - v / 100);
+        gauge.style.setProperty('--gauge-color', resolveGaugeColor(v));
+      }
     }
     var valEl = gauge.querySelector('[data-gauge-value]');
     if (valEl) valEl.textContent = v.toFixed(0) + '%';
     gauge.setAttribute('data-gauge', v.toFixed(2));
+  }
+
+  function setBandwidth(rxStr, txStr) {
+    var bwEl = q('[data-live-bandwidth]');
+    if (!bwEl) return;
+    var rxNode = bwEl.querySelector('[data-live-bw-rx]');
+    var txNode = bwEl.querySelector('[data-live-bw-tx]');
+    if (!rxNode || !txNode) {
+      bwEl.innerHTML =
+        '<span class="live-bw-pair">' +
+          '<span class="live-bw-item live-bw-item--rx"><i data-lucide="arrow-down"></i><span data-live-bw-rx></span></span>' +
+          '<span class="live-bw-item live-bw-item--tx"><i data-lucide="arrow-up"></i><span data-live-bw-tx></span></span>' +
+        '</span>';
+      if (typeof lucide !== 'undefined' && lucide.createIcons) {
+        try { lucide.createIcons({ nodes: [bwEl] }); } catch (e) {}
+      }
+      rxNode = bwEl.querySelector('[data-live-bw-rx]');
+      txNode = bwEl.querySelector('[data-live-bw-tx]');
+    }
+    if (rxNode) rxNode.textContent = rxStr;
+    if (txNode) txNode.textContent = txStr + ' Mbps';
   }
 
   function humanUptime(seconds) {
@@ -138,7 +166,7 @@
         var rxMbps = (drx * 8) / 1e6 / dtSec;
         var txMbps = (dtx * 8) / 1e6 / dtSec;
         var digits = Math.max(rxMbps, txMbps) >= 100 ? 0 : (Math.max(rxMbps, txMbps) >= 10 ? 1 : 2);
-        setText('[data-live-bandwidth]', '↓ ' + rxMbps.toFixed(digits) + '  ↑ ' + txMbps.toFixed(digits) + ' Mbps');
+        setBandwidth(rxMbps.toFixed(digits), txMbps.toFixed(digits));
       }
     }
     prevNet = { rx: m.netRxBytes, tx: m.netTxBytes, t: nowMs };
