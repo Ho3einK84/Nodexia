@@ -421,12 +421,14 @@ function startNodeResultCountdown(card, cleanURL) {
 }
 
 // dismissNodeCard slides the card out (honoring reduced-motion) then navigates
-// to the clean nodes URL.
+// to the clean nodes URL in its owning tab pane so background tabs never
+// hijack the active view.
 function dismissNodeCard(card, cleanURL) {
-  startTopBar();
-  if (prefersReducedMotion) { tabNavigate(cleanURL); return; }
+  var pane = card.closest('.tab-pane');
+  if (!pane || !pane.hidden) startTopBar();
+  if (prefersReducedMotion) { navigateOwningPane(pane, cleanURL); return; }
   var navigated = false;
-  function go() { if (navigated) return; navigated = true; tabNavigate(cleanURL); }
+  function go() { if (navigated) return; navigated = true; navigateOwningPane(pane, cleanURL); }
   card.classList.add('is-dismissing');
   card.addEventListener('transitionend', go, { once: true });
   setTimeout(go, 600); // fallback when transitionend does not fire

@@ -10,7 +10,7 @@
  * targets no-op, and the ones that accept `root` can be re-run against a
  * freshly injected tab pane by window.NodexiaApp.rescan().
  */
-import { I18N, renderIcons, prefersReducedMotion, finishTopBar } from './core.js';
+import { I18N, renderIcons, prefersReducedMotion, finishTopBar, registerCleanup } from './core.js';
 import { copyText } from './ui.js';
 
 /* ── Home fleet warnings: reveal undismissed, dismiss to localStorage ─────
@@ -68,115 +68,139 @@ function initHomeWarnings(root) {
 }
 
 /* ── Live Log Drawer (Slide-over) ─────────────────────────── */
-function initLogDrawer(root) {
-  root = root || document;
-  var drawer = document.getElementById('node-log-drawer');
-  if (!drawer || drawer.dataset.drawerReady === '1') return;
-  drawer.dataset.drawerReady = '1';
+function wireLogDrawerInstance(drawer, scope) {
+  var openFn = drawer._openLogDrawer;
 
-  var cmdEl = drawer.querySelector('[data-log-command]');
-  var outEl = drawer.querySelector('[data-log-stdout]');
-  var errEl = drawer.querySelector('[data-log-stderr]');
-  var statusEl = drawer.querySelector('[data-log-status]');
-  var autoScrollCb = drawer.querySelector('[data-log-autoscroll]');
-  var copyBtn = drawer.querySelector('[data-log-copy]');
-  var activeES = null;
+  if (drawer.dataset.logDrawerReady !== '1') {
+    drawer.dataset.logDrawerReady = '1';
 
-  function openDrawer(sseUrl, isRunning) {
-    drawer.hidden = false;
-    void drawer.offsetWidth;
-    drawer.classList.add('is-open');
-    document.body.classList.add('modal-open');
+    var cmdEl = drawer.querySelector('[data-log-command]');
+    var outEl = drawer.querySelector('[data-log-stdout]');
+    var errEl = drawer.querySelector('[data-log-stderr]');
+    var statusEl = drawer.querySelector('[data-log-status]');
+    var autoScrollCb = drawer.querySelector('[data-log-autoscroll]');
+    var copyBtn = drawer.querySelector('[data-log-copy]');
+    var activeES = null;
 
-    if (!sseUrl) return;
-    if (activeES) activeES.close();
+    openFn = function (sseUrl, isRunning) {
+      drawer.hidden = false;
+      void drawer.offsetWidth;
+      drawer.classList.add('is-open');
+      document.body.classList.add('modal-open');
 
-    if (outEl) outEl.textContent = '';
-    if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
-    if (statusEl) {
-      statusEl.className = 'log-drawer__foot is-live';
-      statusEl.innerHTML = '<span class="live-dot"></span> ' + (I18N.t('nodes.runner_conn_wait') || 'Connecting to live stream…');
+      if (!sseUrl) return;
+      if (activeES) activeES.close();
+
+      if (outEl) outEl.textContent = '';
+      if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
+      if (statusEl) {
+        statusEl.className = 'log-drawer__foot is-live';
+        statusEl.innerHTML = '<span class="live-dot"></span> ' + (I18N.t('nodes.runner_conn_wait') || 'Connecting to live stream…');
+      }
+
+      activeES = new EventSource(sseUrl);
+      activeES.addEventListener('chunk', function (e) {
+        try {
+          var payload = JSON.parse(e.data);
+          if (payload.stdout && outEl) {
+            outEl.textContent += payload.stdout;
+            if (!autoScrollCb || autoScrollCb.checked) outEl.scrollTop = outEl.scrollHeight;
+          }
+          if (payload.stderr && errEl) {
+            errEl.hidden = false;
+            errEl.textContent += payload.stderr;
+            if (!autoScrollCb || autoScrollCb.checked) errEl.scrollTop = errEl.scrollHeight;
+          }
+          if (payload.command && cmdEl) {
+            cmdEl.textContent = payload.command;
+          }
+        } catch (err) {}
+      });
+
+      activeES.addEventListener('done', function () {
+        if (activeES) { activeES.close(); activeES = null; }
+        if (statusEl) {
+          statusEl.className = 'log-drawer__foot';
+          statusEl.innerHTML = '<i data-lucide="check-circle"></i> ' + (I18N.t('nodes.stage_ready') || 'Ready');
+          renderIcons(drawer);
+        }
+      });
+
+      activeES.onerror = function () {
+        if (activeES) { activeES.close(); activeES = null; }
+        if (statusEl) {
+          statusEl.className = 'log-drawer__foot';
+          statusEl.innerHTML = '<i data-lucide="info"></i> ' + (I18N.t('nodes.stage_ready') || 'Completed');
+          renderIcons(drawer);
+        }
+      };
+    };
+
+    drawer._openLogDrawer = openFn;
+
+    function closeDrawer() {
+      if (!drawer.classList.contains('is-open')) return;
+      drawer.classList.remove('is-open');
+      document.body.classList.remove('modal-open');
+      if (activeES) { activeES.close(); activeES = null; }
+      setTimeout(function () {
+        if (!drawer.classList.contains('is-open')) drawer.hidden = true;
+      }, prefersReducedMotion ? 0 : 240);
     }
 
-    activeES = new EventSource(sseUrl);
-    activeES.addEventListener('chunk', function (e) {
-      try {
-        var payload = JSON.parse(e.data);
-        if (payload.stdout && outEl) {
-          outEl.textContent += payload.stdout;
-          if (!autoScrollCb || autoScrollCb.checked) outEl.scrollTop = outEl.scrollHeight;
-        }
-        if (payload.stderr && errEl) {
-          errEl.hidden = false;
-          errEl.textContent += payload.stderr;
-          if (!autoScrollCb || autoScrollCb.checked) errEl.scrollTop = errEl.scrollHeight;
-        }
-        if (payload.command && cmdEl) {
-          cmdEl.textContent = payload.command;
-        }
-      } catch (err) {}
+    drawer.querySelectorAll('[data-log-drawer-close]').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        e.preventDefault();
+        closeDrawer();
+      });
     });
 
-    activeES.addEventListener('done', function () {
+    if (copyBtn) {
+      copyBtn.addEventListener('click', function () {
+        var text = (outEl ? outEl.textContent : '') + (errEl && !errEl.hidden ? '\n' + errEl.textContent : '');
+        copyText(text).then(function (ok) {
+          copyBtn.innerHTML = ok
+            ? '<i data-lucide="check"></i> ' + (I18N.t('nodes.copy_toast') || 'Copied')
+            : '<i data-lucide="x"></i> ' + (I18N.t('js.failed') || 'Failed');
+          renderIcons(drawer);
+          setTimeout(function () {
+            copyBtn.innerHTML = '<i data-lucide="copy" class="icon-in-button"></i> ' + (I18N.t('nodes.runner_copy_log') || 'Copy log');
+            renderIcons(drawer);
+          }, 1500);
+        });
+      });
+    }
+
+    registerCleanup(drawer.closest('.tab-pane') || scope || document, function () {
       if (activeES) { activeES.close(); activeES = null; }
-      if (statusEl) {
-        statusEl.className = 'log-drawer__foot';
-        statusEl.innerHTML = '<i data-lucide="check-circle"></i> ' + (I18N.t('nodes.stage_ready') || 'Ready');
-        renderIcons();
+      if (drawer.classList.contains('is-open')) {
+        drawer.classList.remove('is-open');
+        drawer.hidden = true;
+        document.body.classList.remove('modal-open');
       }
     });
-
-    activeES.onerror = function () {
-      if (activeES) { activeES.close(); activeES = null; }
-      if (statusEl) {
-        statusEl.className = 'log-drawer__foot';
-        statusEl.innerHTML = '<i data-lucide="info"></i> ' + (I18N.t('nodes.stage_ready') || 'Completed');
-        renderIcons();
-      }
-    };
   }
 
-  function closeDrawer() {
-    if (!drawer.classList.contains('is-open')) return;
-    drawer.classList.remove('is-open');
-    document.body.classList.remove('modal-open');
-    if (activeES) { activeES.close(); activeES = null; }
-    setTimeout(function () {
-      if (!drawer.classList.contains('is-open')) drawer.hidden = true;
-    }, 240);
-  }
-
-  drawer.querySelectorAll('[data-log-drawer-close]').forEach(function (el) {
-    el.addEventListener('click', function (e) {
-      e.preventDefault();
-      closeDrawer();
-    });
-  });
-
-  document.querySelectorAll('[data-log-drawer-open]').forEach(function (btn) {
+  (scope || document).querySelectorAll('[data-log-drawer-open]').forEach(function (btn) {
+    if (btn.dataset.logDrawerOpenReady === '1') return;
+    btn.dataset.logDrawerOpenReady = '1';
     btn.addEventListener('click', function (e) {
       e.preventDefault();
       var sseUrl = btn.getAttribute('data-log-sse-url');
       var isRunning = btn.getAttribute('data-log-running') === '1';
-      openDrawer(sseUrl, isRunning);
+      if (openFn) openFn(sseUrl, isRunning);
     });
   });
+}
 
-  if (copyBtn) {
-    copyBtn.addEventListener('click', function () {
-      var text = (outEl ? outEl.textContent : '') + (errEl && !errEl.hidden ? '\n' + errEl.textContent : '');
-      copyText(text).then(function (ok) {
-        copyBtn.innerHTML = ok
-          ? '<i data-lucide="check"></i> ' + (I18N.t('nodes.copy_toast') || 'Copied')
-          : '<i data-lucide="x"></i> ' + (I18N.t('js.failed') || 'Failed');
-        renderIcons();
-        setTimeout(function () {
-          copyBtn.innerHTML = '<i data-lucide="copy" class="icon-in-button"></i> ' + (I18N.t('nodes.runner_copy_log') || 'Copy log');
-          renderIcons();
-        }, 1500);
-      });
-    });
-  }
+function initLogDrawer(root) {
+  root = root || document;
+  var drawers = root.querySelectorAll('[data-log-drawer]');
+  if (!drawers.length) return;
+  drawers.forEach(function (drawer) {
+    var scope = (root === document) ? (drawer.closest('.tab-pane') || document) : root;
+    wireLogDrawerInstance(drawer, scope);
+  });
 }
 
 /* ── Mobile drawer (hamburger menu) ─────────────────────── */

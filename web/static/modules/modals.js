@@ -260,7 +260,12 @@ function initModals(root) {
 /* ── Unified Deploy Node Wizard ───────────────────────────── */
 function initDeployModal(root) {
   root = root || document;
-  var modal = root.querySelector('[data-deploy-modal]');
+  root.querySelectorAll('[data-deploy-modal]').forEach(function (modal) {
+    wireDeployModal(modal, root);
+  });
+}
+
+function wireDeployModal(modal, root) {
   if (!modal || modal.dataset.deployWizardReady === '1') return;
   modal.dataset.deployWizardReady = '1';
 
@@ -391,6 +396,20 @@ function initDeployModal(root) {
     validateBundle();
   }
 
+  function setBundleIcon(iconName) {
+    if (!bundleState || bundleState.dataset.iconState === iconName) return;
+    bundleState.dataset.iconState = iconName;
+    var cur = bundleState.querySelector('.deploy-status__icon');
+    if (cur) {
+      var fresh = document.createElement('i');
+      fresh.setAttribute('data-lucide', iconName);
+      fresh.className = 'deploy-status__icon';
+      fresh.setAttribute('aria-hidden', 'true');
+      cur.replaceWith(fresh);
+      renderIcons(bundleState);
+    }
+  }
+
   function validateBundle() {
     if (!bundleInput || !bundleState) return;
     var val = bundleInput.value.trim();
@@ -398,6 +417,7 @@ function initDeployModal(root) {
 
     if (!val) {
       bundleState.className = 'deploy-status is-idle';
+      setBundleIcon('circle-alert');
       if (bundleStateText) {
         bundleStateText.textContent = (I18N && I18N.t ? I18N.t('nodes.bundle_waiting') : '') || 'Waiting for registration bundle...';
       }
@@ -409,13 +429,15 @@ function initDeployModal(root) {
 
     if (hasCert && hasKey) {
       bundleState.className = 'deploy-status is-ok';
+      setBundleIcon('check-circle-2');
       if (bundleStateText) {
-        bundleStateText.textContent = '✓ ' + ((I18N && I18N.t ? I18N.t('nodes.bundle_valid') : '') || 'Certificate and private key detected.');
+        bundleStateText.textContent = (I18N && I18N.t ? I18N.t('nodes.bundle_valid') : '') || 'Certificate and private key detected.';
       }
     } else {
       bundleState.className = 'deploy-status is-bad';
+      setBundleIcon('alert-triangle');
       if (bundleStateText) {
-        bundleStateText.textContent = '⚠ ' + ((I18N && I18N.t ? I18N.t('nodes.bundle_invalid') : '') || 'Paste the certificate and its private key.');
+        bundleStateText.textContent = (I18N && I18N.t ? I18N.t('nodes.bundle_invalid') : '') || 'Paste the certificate and its private key.';
       }
     }
   }
@@ -465,7 +487,7 @@ function initDeployModal(root) {
       var bundleVal = bundleInput ? bundleInput.value.trim() : '';
       var hasCert = bundleVal.indexOf('-----BEGIN CERTIFICATE-----') !== -1;
       var hasKey = bundleVal.indexOf('KEY-----') !== -1;
-      setReview('bundle', (hasCert && hasKey) ? '✓ ' + ((I18N && I18N.t ? I18N.t('nodes.bundle_valid') : '') || 'Valid Bundle') : '—');
+      setReview('bundle', (hasCert && hasKey) ? ((I18N && I18N.t ? I18N.t('nodes.bundle_valid') : '') || 'Valid Bundle') : '—');
     }
 
     if (btnSubmit) {
@@ -501,7 +523,7 @@ function initDeployModal(root) {
 
     if (progressBar) {
       var pct = currentStep === 0 ? 0 : (currentStep === 1 ? 50 : 100);
-      progressBar.style.width = pct + '%';
+      progressBar.style.inlineSize = pct + '%';
     }
 
     panes.forEach(function (p, i) {
@@ -701,7 +723,10 @@ function initDeployModal(root) {
     }
   });
 
-  document.querySelectorAll('[data-engine-preselect]').forEach(function (btn) {
+  var btnScope = modal.closest('.tab-pane') || root;
+  btnScope.querySelectorAll('[data-engine-preselect]').forEach(function (btn) {
+    if (btn.dataset.preselectReady === '1') return;
+    btn.dataset.preselectReady = '1';
     btn.addEventListener('click', function () {
       var eng = btn.getAttribute('data-engine-preselect');
       var prevEngine = getSelectedEngine();
@@ -714,8 +739,10 @@ function initDeployModal(root) {
     });
   });
 
-  document.querySelectorAll('[data-modal-open="deploy-node-modal"]').forEach(function (btn) {
+  btnScope.querySelectorAll('[data-modal-open="deploy-node-modal"]').forEach(function (btn) {
     if (!btn.hasAttribute('data-engine-preselect')) {
+      if (btn.dataset.deployOpenReady === '1') return;
+      btn.dataset.deployOpenReady = '1';
       btn.addEventListener('click', function () {
         setStep(0);
       });

@@ -11,7 +11,7 @@
     <div class="modal__dialog modal__dialog--wide" role="dialog" aria-modal="true" aria-labelledby="deploy-node-modal-title">
       <header class="modal__header deploy-modal__header">
         <div class="deploy-modal__heading">
-          <h3 class="modal__title" id="deploy-node-modal-title"><i data-lucide="rocket"></i> {{ t "nodes.deploy_title" }}</h3>
+          <h3 class="modal__title" id="deploy-node-modal-title"><i data-lucide="plus-circle"></i> {{ t "nodes.deploy_title" }}</h3>
           <p class="deploy-modal__subtitle">{{ t "nodes.deploy_subtitle" "server" .NodeTarget.Name }}</p>
         </div>
         <button type="button" class="modal__close" data-modal-close aria-label="{{ t "nodes.close_install" }}">
@@ -93,7 +93,7 @@
               </div>
               {{ with index $form.Errors "node_type" }}<small class="field-error">{{ . }}</small>{{ end }}
               {{ with index $form.Errors "engine" }}<small class="field-error">{{ . }}</small>{{ end }}
-              <small class="field-error" data-deploy-error="engine" hidden></small>
+              <small class="field-error" data-field-error="engine" hidden></small>
             </fieldset>
           </section>
 
@@ -327,7 +327,7 @@
                 {{ t "nodes.deploy_next" }} <i data-lucide="arrow-right" aria-hidden="true"></i>
               </button>
               <button type="submit" class="btn btn--primary deploy-actions__submit" data-deploy-submit hidden data-confirm="">
-                <i data-lucide="rocket" aria-hidden="true"></i> {{ t "nodes.deploy_submit" }}
+                <i data-lucide="check" aria-hidden="true"></i> {{ t "nodes.deploy_submit" }}
               </button>
             </div>
           </div>

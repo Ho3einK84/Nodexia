@@ -203,13 +203,22 @@ var clientI18nKeys = []string{
 	"js.tabs.open_in_new_tab",
 	"js.tabs.shortcut_hint",
 
-	// Node install wizard
+	// Node install wizard, log drawer & result actions
 	"nodes.bundle_valid",
 	"nodes.bundle_invalid",
+	"nodes.bundle_waiting",
+	"nodes.copy_toast",
 	"nodes.deploy_confirm",
+	"nodes.err_api_port",
+	"nodes.err_engine_required",
+	"nodes.err_node_name",
 	"nodes.err_ports_equal",
 	"nodes.err_port_range",
+	"nodes.err_service_port",
 	"nodes.optional_placeholder",
+	"nodes.runner_conn_wait",
+	"nodes.runner_copy_log",
+	"nodes.stage_ready",
 
 	// Commands workspace (commands.js)
 	"js.commands.confirm_replace",
