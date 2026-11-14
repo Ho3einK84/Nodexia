@@ -2,23 +2,29 @@
 <section class="hero">
   {{ template "page-header" . }}
 
-  <div class="grid">
+  <div class="module-placeholder">
     <article class="card">
-      <h3>{{ t "module.route_group" }}</h3>
-      <p><code>{{ .ModuleRouteGroup }}</code></p>
-    </article>
-
-    <article class="card">
-      <h3>{{ t "module.current_state" }}</h3>
-      <p>{{ t "module.current_state_desc" }}</p>
-    </article>
-
-    <article class="card">
-      <h3>{{ t "common.runtime" }}</h3>
-      <ul>
-        <li>{{ t "common.environment" }}: <code>{{ .Environment }}</code></li>
-        <li>{{ t "common.version" }}: <code>{{ .Version }}</code></li>
-        <li>{{ t "module.database_driver" }}: <code>{{ .DatabaseDriver }}</code></li>
+      <div class="card__header">
+        <h3>{{ t "module.current_state" }}</h3>
+      </div>
+      <p class="module-placeholder__desc">{{ t "module.current_state_desc" }}</p>
+      <ul class="fact-list">
+        <li>
+          <span class="fact-list__key"><i data-lucide="route" aria-hidden="true"></i> {{ t "module.route_group" }}</span>
+          <code>{{ .ModuleRouteGroup }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="layers" aria-hidden="true"></i> {{ t "common.environment" }}</span>
+          <code>{{ .Environment }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="tag" aria-hidden="true"></i> {{ t "common.version" }}</span>
+          <code>{{ .Version }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="database" aria-hidden="true"></i> {{ t "module.database_driver" }}</span>
+          <code>{{ .DatabaseDriver }}</code>
+        </li>
       </ul>
     </article>
   </div>

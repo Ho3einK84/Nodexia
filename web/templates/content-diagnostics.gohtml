@@ -8,34 +8,22 @@
   </div>
   {{ end }}
 
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <span class="kpi-card__icon"><i data-lucide="timer"></i></span>
-      <div class="kpi-card__body">
-        <span class="kpi-card__value">{{ .Diagnostics.Uptime }}</span>
-        <span class="kpi-card__label">{{ t "diagnostics.process_uptime" }}</span>
-      </div>
+  <div class="fleet-strip" role="region" aria-label="{{ t "diagnostics.title" }}">
+    <div class="fleet-strip__item">
+      <span class="fleet-strip__label"><i data-lucide="timer" aria-hidden="true"></i> {{ t "diagnostics.process_uptime" }}</span>
+      <span class="fleet-strip__value">{{ .Diagnostics.Uptime }}</span>
     </div>
-    <div class="kpi-card">
-      <span class="kpi-card__icon"><i data-lucide="cpu"></i></span>
-      <div class="kpi-card__body">
-        <span class="kpi-card__value">{{ .Diagnostics.Goroutines }}</span>
-        <span class="kpi-card__label">{{ t "diagnostics.goroutines" }}</span>
-      </div>
+    <div class="fleet-strip__item">
+      <span class="fleet-strip__label"><i data-lucide="cpu" aria-hidden="true"></i> {{ t "diagnostics.goroutines" }}</span>
+      <span class="fleet-strip__value">{{ .Diagnostics.Goroutines }}</span>
     </div>
-    <div class="kpi-card{{ if eq .Diagnostics.DatabaseStatus "ok" }} kpi-card--ok{{ else }} kpi-card--warn{{ end }}">
-      <span class="kpi-card__icon"><i data-lucide="database"></i></span>
-      <div class="kpi-card__body">
-        <span class="kpi-card__value">{{ .Diagnostics.DatabaseStatus }}</span>
-        <span class="kpi-card__label">{{ t "diagnostics.database_status" }}</span>
-      </div>
+    <div class="fleet-strip__item{{ if eq .Diagnostics.DatabaseStatus "ok" }} fleet-strip__item--ok{{ else }} fleet-strip__item--warn{{ end }}">
+      <span class="fleet-strip__label"><i data-lucide="database" aria-hidden="true"></i> {{ t "diagnostics.database_status" }}</span>
+      <span class="fleet-strip__value">{{ .Diagnostics.DatabaseStatus }}</span>
     </div>
-    <div class="kpi-card{{ if .SchedulerOverview.Enabled }} kpi-card--ok{{ else }} kpi-card--warn{{ end }}">
-      <span class="kpi-card__icon"><i data-lucide="calendar-clock"></i></span>
-      <div class="kpi-card__body">
-        <span class="kpi-card__value">{{ if .SchedulerOverview.Enabled }}{{ t "common.active" }}{{ else }}{{ t "common.off" }}{{ end }}</span>
-        <span class="kpi-card__label">{{ t "diagnostics.scheduler" }}</span>
-      </div>
+    <div class="fleet-strip__item{{ if .SchedulerOverview.Enabled }} fleet-strip__item--ok{{ else }} fleet-strip__item--warn{{ end }}">
+      <span class="fleet-strip__label"><i data-lucide="calendar-clock" aria-hidden="true"></i> {{ t "diagnostics.scheduler" }}</span>
+      <span class="fleet-strip__value">{{ if .SchedulerOverview.Enabled }}{{ t "common.active" }}{{ else }}{{ t "common.off" }}{{ end }}</span>
     </div>
   </div>
 
@@ -153,7 +141,7 @@
         </a>
       </div>
     </div>
-    <p class="field-hint" style="margin-top:12px">{{ tsafe "diagnostics.health_hint" }}</p>
+    <p class="field-hint card__footnote">{{ tsafe "diagnostics.health_hint" }}</p>
   </article>
 
   <p class="dash-section"><i data-lucide="clock"></i> {{ t "diagnostics.section.scheduler" }}</p>
@@ -162,27 +150,18 @@
       <h3><i data-lucide="calendar-clock"></i> {{ t "diagnostics.scheduler" }}</h3>
       <span class="status-pill status-pill--{{ if .SchedulerOverview.Enabled }}ok{{ else }}idle{{ end }}">{{ if .SchedulerOverview.Enabled }}{{ t "common.active" }}{{ else }}{{ t "common.off" }}{{ end }}</span>
     </div>
-    <div class="kpi-grid" style="margin-bottom: 16px">
-      <div class="kpi-card">
-        <span class="kpi-card__icon"><i data-lucide="circle-check"></i></span>
-        <div class="kpi-card__body">
-          <span class="kpi-card__value">{{ .SchedulerOverview.EligibleJobs }}</span>
-          <span class="kpi-card__label">{{ t "diagnostics.eligible" }}</span>
-        </div>
+    <div class="inline-stats" role="group" aria-label="{{ t "diagnostics.scheduler" }}">
+      <div class="inline-stats__item">
+        <span class="inline-stats__label"><i data-lucide="circle-check" aria-hidden="true"></i> {{ t "diagnostics.eligible" }}</span>
+        <span class="inline-stats__value">{{ .SchedulerOverview.EligibleJobs }}</span>
       </div>
-      <div class="kpi-card{{ if gt .SchedulerOverview.BlockedJobs 0 }} kpi-card--warn{{ end }}">
-        <span class="kpi-card__icon"><i data-lucide="circle-alert"></i></span>
-        <div class="kpi-card__body">
-          <span class="kpi-card__value">{{ .SchedulerOverview.BlockedJobs }}</span>
-          <span class="kpi-card__label">{{ t "diagnostics.blocked" }}</span>
-        </div>
+      <div class="inline-stats__item{{ if gt .SchedulerOverview.BlockedJobs 0 }} inline-stats__item--warn{{ end }}">
+        <span class="inline-stats__label"><i data-lucide="circle-alert" aria-hidden="true"></i> {{ t "diagnostics.blocked" }}</span>
+        <span class="inline-stats__value">{{ .SchedulerOverview.BlockedJobs }}</span>
       </div>
-      <div class="kpi-card{{ if gt .SchedulerOverview.RunningJobs 0 }} kpi-card--ok{{ end }}">
-        <span class="kpi-card__icon"><i data-lucide="activity"></i></span>
-        <div class="kpi-card__body">
-          <span class="kpi-card__value">{{ .SchedulerOverview.RunningJobs }}</span>
-          <span class="kpi-card__label">{{ t "diagnostics.running" }}</span>
-        </div>
+      <div class="inline-stats__item{{ if gt .SchedulerOverview.RunningJobs 0 }} inline-stats__item--ok{{ end }}">
+        <span class="inline-stats__label"><i data-lucide="activity" aria-hidden="true"></i> {{ t "diagnostics.running" }}</span>
+        <span class="inline-stats__value">{{ .SchedulerOverview.RunningJobs }}</span>
       </div>
     </div>
     {{ if .SchedulerOverview.Jobs }}
@@ -190,8 +169,8 @@
       {{ range .SchedulerOverview.Jobs }}
       <article class="dashboard-item">
         <div class="server-item__header">
-          <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }} &middot; <span style="font-weight:400; color: var(--text-dim)">{{ .JobType }}</span></h4>
-          <div style="display:flex;align-items:center;gap:8px">
+          <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }} &middot; <span class="dashboard-item__sub">{{ .JobType }}</span></h4>
+          <div class="dashboard-item__actions">
             {{ if .Paused }}
             <span class="status-pill status-pill--idle">{{ t "common.paused" }}</span>
             {{ else }}
@@ -207,7 +186,7 @@
             </form>
           </div>
         </div>
-        {{ if .Detail }}<p style="margin:4px 0 0; font-size:0.85rem; color:var(--text-muted)">{{ .Detail }}</p>{{ end }}
+        {{ if .Detail }}<p class="dashboard-item__detail">{{ .Detail }}</p>{{ end }}
         {{ if .LastError }}<p class="error-inline">{{ .LastError }}</p>{{ end }}
       </article>
       {{ end }}
@@ -275,7 +254,7 @@
       </summary>
       <div class="card__collapsible-body">
         <p class="field-hint">{{ t "backup.export.description" }}</p>
-        <div class="flash-banner flash-banner--ok" style="margin:12px 0">
+        <div class="inline-notice flash-banner--ok">
           <p>{{ t "backup.export.warning" }}</p>
         </div>
         <form method="post" action="/ops/backup/export" class="server-form">
@@ -306,7 +285,7 @@
       </summary>
       <div class="card__collapsible-body">
         <p class="field-hint">{{ t "backup.restore.description" }}</p>
-        <div class="flash-banner flash-banner--warn" style="margin:12px 0">
+        <div class="inline-notice flash-banner--warn">
           <p>{{ t "backup.restore.warning" }}</p>
         </div>
         {{/* The CSRF token also rides in the query string: the CSRF middleware

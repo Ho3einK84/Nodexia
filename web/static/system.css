@@ -1,4 +1,4 @@
-/* ── System facts card ───────────────────────────────────────────────────── */
+/* ── System facts card — Matte Graphite ──────────────────────────────────── */
 
 .sys-facts-card {
   padding: 0;
@@ -6,12 +6,12 @@
 }
 
 .sys-facts-header {
-  padding: 14px 20px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  padding: var(--space-3) var(--space-5);
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
 
@@ -19,159 +19,182 @@
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-size: 1rem;
+  font-weight: var(--fw-semibold);
 }
 
 .sys-facts-header .live-head__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
   margin-inline-start: auto;
 }
 
 .sys-facts-primary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border-block-start: 1px solid var(--border);
 }
 
 .sys-fact-hero {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 22px 24px;
-  border-inline-end: 1px solid rgba(148, 163, 184, 0.1);
-  transition: background 0.15s ease;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface);
+  transition: background-color var(--transition-fast);
 }
 
 .sys-fact-hero:hover {
-  background: rgba(148, 163, 184, 0.03);
+  background: var(--surface-2);
 }
 
 .sys-fact-hero__label {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 0.68rem;
-  font-weight: var(--fw-bold);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text-muted, #94a3b8);
+  gap: var(--space-1);
+  font-size: 0.75rem;
+  font-weight: var(--fw-medium);
+  letter-spacing: 0;
+  color: var(--text-muted);
 }
 
 .sys-fact-hero__label svg {
-  width: 12px;
-  height: 12px;
-  color: var(--accent, #38bdf8);
+  width: 14px;
+  height: 14px;
+  color: var(--accent-soft);
   flex-shrink: 0;
 }
 
 .sys-fact-hero__value {
   font-variant-numeric: var(--num);
-  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
-  font-size: 0.95rem;
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
   font-weight: var(--fw-semibold);
-  color: var(--text, #f1f5f9);
-  line-height: 1.3;
+  color: var(--text-bright);
+  line-height: 1.35;
   word-break: break-word;
 }
 
 .sys-fact-version {
   font-weight: var(--fw-regular);
-  color: var(--text-dim, #64748b);
-  font-size: 0.82rem;
+  color: var(--text-dim);
+  font-size: 0.8125rem;
 }
 
-/* ── Secondary metadata strip ───────────────────────────────────────────── */
+/* ── Secondary metadata grid (CPU wide + 5 cells: 6-col balanced rows) ─── */
 
 .sys-facts-secondary {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border-block-start: 1px solid var(--border);
 }
 
 .sys-fact-item {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 14px 24px;
-  border-inline-end: 1px solid rgba(148, 163, 184, 0.1);
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-5);
+  background: var(--surface);
 }
 
-.sys-fact-item:last-child {
-  border-inline-end: none;
-}
-
-/* The CPU model can be long, so it spans the full secondary row. */
+/* CPU model spans full width on row 1. */
 .sys-fact-item--wide {
   grid-column: 1 / -1;
-  border-inline-end: none;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+/* Memory, Disk, Uptime fill row 2 evenly (3 x 2 cols = 6). */
+.sys-fact-item:nth-child(2),
+.sys-fact-item:nth-child(3),
+.sys-fact-item:nth-child(4) {
+  grid-column: span 2;
+}
+
+/* Last package update and Collected fill row 3 evenly (2 x 3 cols = 6). */
+.sys-fact-item:nth-child(5),
+.sys-fact-item:nth-child(6) {
+  grid-column: span 3;
 }
 
 .sys-fact-item__label {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 0.68rem;
-  font-weight: var(--fw-bold);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text-muted, #94a3b8);
+  gap: var(--space-1);
+  font-size: 0.75rem;
+  font-weight: var(--fw-medium);
+  letter-spacing: 0;
+  color: var(--text-muted);
 }
 
 .sys-fact-item__label svg {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   flex-shrink: 0;
-  color: var(--accent-soft, #7dd3fc);
+  color: var(--text-dim);
 }
 
 .sys-fact-item__value {
   font-variant-numeric: var(--num);
-  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
-  font-size: 0.85rem;
-  color: var(--text, #e2e8f0);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: var(--fw-medium);
+  color: var(--text);
+  line-height: 1.4;
   word-break: break-word;
 }
 
-/* ── Responsive ──────────────────────────────────────────────────────────── */
+.sys-form__cred-note {
+  color: var(--ok);
+  background: var(--ok-bg);
+  border-color: var(--ok-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-block-end: var(--space-4);
+}
+
+.sys-form__cred-note svg {
+  color: var(--ok);
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
 
 @media (max-width: 800px) {
   .sys-facts-primary {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
   .sys-facts-secondary {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .sys-fact-item:nth-child(2) {
-    border-inline-end: none;
+
+  .sys-fact-item:nth-child(n) {
+    grid-column: auto;
   }
+
+  .sys-fact-item--wide,
   .sys-fact-item:last-child {
-    grid-column: span 2;
-    border-inline-end: none;
-    border-top: 1px solid rgba(148, 163, 184, 0.1);
+    grid-column: 1 / -1;
   }
 }
 
 @media (max-width: 520px) {
-  .sys-facts-primary {
-    grid-template-columns: 1fr 1fr;
+  .sys-facts-header,
+  .sys-fact-hero,
+  .sys-fact-item {
+    padding: var(--space-3) var(--space-4);
   }
-  .sys-fact-hero {
-    padding: 16px;
-  }
+
   .sys-facts-secondary {
     grid-template-columns: 1fr;
   }
-  .sys-fact-item {
-    border-inline-end: none;
-    border-top: 1px solid rgba(148, 163, 184, 0.1);
-  }
-  .sys-fact-item:first-child {
-    border-top: none;
-  }
+
+  .sys-fact-item--wide,
   .sys-fact-item:last-child {
     grid-column: auto;
   }

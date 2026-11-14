@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0f172a">
+  <meta name="theme-color" content="#0f0f10">
   <title>Offline · Nodexia</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/tokens.css">
@@ -11,23 +11,19 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="shell">
-    <main class="shell-main">
+  <div class="shell shell--standalone">
+    <main class="shell-main shell-main--centered">
       <section class="hero">
-        <article class="card empty-state-card" style="max-width:520px;margin:8vh auto 0;text-align:center">
-          <span class="empty-state-icon"><i data-lucide="wifi-off"></i></span>
-          <h2 style="margin:12px 0 6px">You're offline</h2>
-          <p class="page-description">
-            Nodexia couldn't reach the server. It needs a live connection to your
-            control plane to show server status, metrics, and node actions.
+        <article class="card empty-state-card empty-state-card--offline">
+          <span class="empty-state-icon"><i data-lucide="wifi-off" aria-hidden="true"></i></span>
+          <h1 class="empty-state-title offline-card__title">Offline</h1>
+          <p class="empty-state-desc offline-card__desc">
+            Unable to reach the Nodexia control plane. Status, metrics, and node
+            actions resume automatically once your connection returns.
           </p>
-          <p class="page-description">
-            Check your connection — the page will work again as soon as you're
-            back online.
-          </p>
-          <div class="form-actions" style="justify-content:center">
+          <div class="form-actions form-actions--center">
             <button type="button" class="btn btn--primary" data-offline-retry>
-              <i data-lucide="refresh-cw" class="icon-in-button"></i> Try again
+              <i data-lucide="refresh-cw" class="icon-in-button" aria-hidden="true"></i> Try again
             </button>
           </div>
         </article>
