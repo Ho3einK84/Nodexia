@@ -338,3 +338,50 @@ func TestNodeFleetHeaderRendersAggregates(t *testing.T) {
 		}
 	}
 }
+
+func TestServerCardKeepsActionsInHeaderWithoutDuplicates(t *testing.T) {
+	body := renderUIBehaviorFixture(t, PageData{
+		AppName:         "Nodexia",
+		ContentTemplate: "content-servers-list",
+		ServerCount:     1,
+		Servers: []ServerSummary{{
+			ID: 7, Name: "edge-nl", Host: "203.0.113.10", Port: 22, Username: "root",
+			AuthMode: "password", CredentialStrategy: "stored", Status: "up", JustNow: true,
+			CreatedAt: "2026-01-01", FlagEmoji: "\U0001F1F3\U0001F1F1", CountryCode: "NL", CountryName: "Netherlands",
+		}},
+	})
+
+	cardStart := strings.Index(body, `<article class="server-card server-card--collapsible"`)
+	if cardStart < 0 {
+		t.Fatal("rendered servers page is missing the collapsible server card")
+	}
+	cardEnd := strings.Index(body[cardStart:], "</article>")
+	if cardEnd < 0 {
+		t.Fatal("rendered server card has no closing article tag")
+	}
+	card := body[cardStart : cardStart+cardEnd]
+
+	bodyIndex := strings.Index(card, `class="server-card__collapsible-body"`)
+	menuIndex := strings.Index(card, `data-action-menu`)
+	headerEndIndex := strings.Index(card, `class="server-card__header-end"`)
+	if bodyIndex < 0 || headerEndIndex < 0 {
+		t.Fatalf("server card is missing its header-end or collapsible body:\n%s", card)
+	}
+	if menuIndex < headerEndIndex || menuIndex > bodyIndex {
+		t.Error("server action menu must live in the always-visible header, not the collapsed body")
+	}
+	for _, path := range []string{"/servers/7/monitoring", "/servers/7/nodes", "/servers/7/terminal"} {
+		if n := strings.Count(card, `href="`+path+`"`); n != 1 {
+			t.Errorf("%s must appear exactly once per card (header quick action), got %d", path, n)
+		}
+	}
+	if !strings.Contains(card, `<code class="server-card__country" title="Netherlands">NL</code>`) {
+		t.Error("server card must show the ISO country code tag")
+	}
+	if strings.Contains(card, "\U0001F1F3\U0001F1F1") {
+		t.Error("server card must not render the flag emoji")
+	}
+	if strings.Contains(card, "server-card--password") {
+		t.Error("auth mode must not drive a card-level visual modifier")
+	}
+}

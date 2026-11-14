@@ -24,10 +24,12 @@
       {{ end }}
     </form>
     <div class="server-toolbar__aside">
-      <span class="server-toolbar__count"><i data-lucide="server"></i> {{ t "servers.toolbar_registered" "count" .ServerCount }}</span>
-      <span class="server-toolbar__count" title="{{ t "servers.toolbar_nodes_title" }}"><i data-lucide="boxes"></i> {{ tn "servers.toolbar_nodes" .TotalNodeCount }}</span>
+      <p class="server-toolbar__counts">
+        <span class="server-toolbar__count">{{ t "servers.toolbar_registered" "count" .ServerCount }}</span>
+        <span class="server-toolbar__count" title="{{ t "servers.toolbar_nodes_title" }}">{{ tn "servers.toolbar_nodes" .TotalNodeCount }}</span>
+      </p>
       {{ if .Servers }}
-      <button type="button" class="btn btn--ghost btn--sm server-toggle-all-btn" id="server-toggle-all" data-collapse-label="{{ t "servers.collapse_all" }}" data-expand-label="{{ t "servers.expand_all" }}" aria-label="{{ t "servers.expand_all" }}" title="{{ t "servers.expand_all" }}">
+      <button type="button" class="btn btn--ghost server-toggle-all-btn" id="server-toggle-all" data-collapse-label="{{ t "servers.collapse_all" }}" data-expand-label="{{ t "servers.expand_all" }}" aria-label="{{ t "servers.expand_all" }}" title="{{ t "servers.expand_all" }}">
         <i data-lucide="chevrons-up-down" class="icon-in-button"></i> <span class="btn-label" id="server-toggle-all-label">{{ t "servers.expand_all" }}</span>
       </button>
       {{ end }}
@@ -84,7 +86,7 @@
 
   <div class="server-list">
     {{ range .Servers }}
-    <article class="server-card server-card--{{ .AuthMode }} server-card--collapsible" data-server-card data-server-id="{{ .ID }}">
+    <article class="server-card server-card--collapsible" data-server-card data-server-id="{{ .ID }}">
       <div class="server-card__header" data-server-toggle>
         <div class="server-card__lead">
           <div class="server-card__checkbox-wrap">
@@ -94,7 +96,7 @@
               aria-label="{{ t "servers.card.select_aria" "name" .Name }}">
           </div>
           <div class="server-card__identity">
-            <h4 class="server-card__name"><i data-lucide="server" class="icon-in-button"></i> {{ .Name }}{{ if .FlagEmoji }} <span class="server-card__flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</h4>
+            <h4 class="server-card__name">{{ .Name }}{{ if .CountryCode }}<code class="server-card__country" title="{{ .CountryName }}">{{ .CountryCode }}</code>{{ end }}</h4>
             <span class="server-card__host">{{ .Username }}@{{ .Host }}:{{ .Port }}</span>
             <span class="server-card__status">
               {{ if eq .Status "up" }}
@@ -117,14 +119,29 @@
             <a class="server-card__quick-btn" href="/servers/{{ .ID }}/nodes" aria-label="{{ t "common.nodes" }}" title="{{ t "common.nodes" }}"><i data-lucide="boxes" class="icon-in-button"></i><span class="server-card__quick-label">{{ t "common.nodes" }}</span></a>
             <a class="server-card__quick-btn" href="/servers/{{ .ID }}/terminal" aria-label="{{ t "common.terminal" }}" title="{{ t "common.terminal" }}"><i data-lucide="terminal-square" class="icon-in-button"></i><span class="server-card__quick-label">{{ t "common.terminal" }}</span></a>
           </div>
-          <button type="button" class="server-card__toggle-btn" data-server-toggle-btn aria-expanded="false" aria-label="{{ t "servers.card.toggle_aria" "name" .Name }}" title="{{ t "servers.card.toggle_aria" "name" .Name }}">
+          <div class="action-menu server-card__menu" data-action-menu>
+            <button type="button" class="server-card__icon-btn action-menu__toggle" aria-haspopup="true" aria-expanded="false" aria-label="{{ t "servers.card.more_aria" "name" .Name }}" title="{{ t "common.more" }}"><i data-lucide="ellipsis" class="icon-in-button"></i></button>
+            <div class="action-menu__panel" role="menu">
+              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> {{ t "common.edit" }}</a>
+              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
+              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
+              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
+              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}</a>
+              <div class="action-menu__divider" role="separator"></div>
+              <form method="post" action="/servers/{{ .ID }}/delete" class="action-menu__form">
+                <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+                <button type="submit" class="action-menu__item action-menu__item--danger" role="menuitem" data-confirm="{{ t "servers.card.delete_confirm" "name" .Name }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "common.delete" }}</button>
+              </form>
+            </div>
+          </div>
+          <button type="button" class="server-card__icon-btn server-card__toggle-btn" data-server-toggle-btn aria-expanded="false" aria-label="{{ t "servers.card.toggle_aria" "name" .Name }}" title="{{ t "servers.card.toggle_aria" "name" .Name }}">
             <i data-lucide="chevron-down" class="server-card__toggle-icon"></i>
           </button>
         </div>
       </div>
 
       <div class="server-card__collapsible-body" data-server-body hidden>
-        <div class="server-card__badges">
+        <div class="server-card__meta">
           <span class="badge badge--auth-{{ .AuthMode }}">{{ .AuthMode }}</span>
           <span class="badge badge--strat-{{ .CredentialStrategy }}">{{ .CredentialStrategy }}</span>
           <span class="badge badge--id">#{{ .ID }}</span>
@@ -135,27 +152,9 @@
         <p class="server-card__note">{{ .Note }}</p>
         {{ end }}
 
-        <div class="server-card__actions">
-          <a class="btn btn--primary" href="/servers/{{ .ID }}/monitoring" aria-label="{{ t "common.monitoring" }}"><i data-lucide="gauge" class="icon-in-button"></i><span class="btn-label"> {{ t "common.monitoring" }}</span></a>
-          <a class="btn btn--secondary" href="/servers/{{ .ID }}/nodes" aria-label="{{ t "common.nodes" }}"><i data-lucide="boxes" class="icon-in-button"></i><span class="btn-label"> {{ t "common.nodes" }}</span></a>
-          <a class="btn btn--secondary" href="/servers/{{ .ID }}/terminal" aria-label="{{ t "common.terminal" }}"><i data-lucide="terminal-square" class="icon-in-button"></i><span class="btn-label"> {{ t "common.terminal" }}</span></a>
-          <div class="action-menu" data-action-menu>
-            <button type="button" class="btn btn--ghost action-menu__toggle" aria-haspopup="true" aria-expanded="false" aria-label="{{ t "servers.card.more_aria" "name" .Name }}"><i data-lucide="ellipsis-vertical" class="icon-in-button"></i><span class="action-menu__label"> {{ t "common.more" }}</span></button>
-            <div class="action-menu__panel" role="menu">
-              <span class="action-menu__caption"><i data-lucide="calendar"></i> {{ t "servers.card.created" "value" .CreatedAt }}</span>
-              <div class="action-menu__divider" role="separator"></div>
-              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
-              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
-              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
-              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}</a>
-              <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> {{ t "common.edit" }}</a>
-              <div class="action-menu__divider" role="separator"></div>
-              <form method="post" action="/servers/{{ .ID }}/delete" class="action-menu__form">
-                <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-                <button type="submit" class="action-menu__item action-menu__item--danger" role="menuitem" data-confirm="{{ t "servers.card.delete_confirm" "name" .Name }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "common.delete" }}</button>
-              </form>
-            </div>
-          </div>
+        <div class="server-card__footer">
+          <span class="server-card__created">{{ t "servers.card.created" "value" .CreatedAt }}</span>
+          <a class="server-card__footer-link" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> {{ t "common.edit" }}</a>
         </div>
       </div>
     </article>

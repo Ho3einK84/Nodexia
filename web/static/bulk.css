@@ -1,30 +1,63 @@
 /* ── Bulk action toolbar ─────────────────────────────── */
 
 .bulk-form {
-  margin: 0 0 var(--space-3);
+  margin: 0;
 }
 
+/* Inline padding matches .server-card so the select-all box lines up with
+   every card checkbox below it. */
 .bulk-toolbar {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
   flex-wrap: wrap;
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
+  min-height: 52px;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-5);
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
+/* At least one server selected: the same quiet accent cue as a checked card. */
+.bulk-toolbar.is-active {
+  border-color: var(--info-border);
+}
+
+/* Nothing selected (state set only by bulk.js): collapse to a slim, chrome-
+   less row. Select-all and the live count stay; the action picker and submit
+   are hidden until a server is checked. Without JS this class is never
+   applied, so the full form remains usable. */
 .bulk-toolbar.is-empty {
-  background: var(--surface);
-  border-color: var(--border);
-  padding: var(--space-2) var(--space-3);
+  min-height: 0;
+  background: transparent;
+  border-color: transparent;
+  padding-block: 0;
 }
 
 .bulk-toolbar.is-empty .bulk-action-select,
 .bulk-toolbar.is-empty #bulk-submit {
-  opacity: 0.6;
+  display: none;
+}
+
+.bulk-toolbar.is-empty .bulk-count {
+  color: var(--text-dim);
+}
+
+.bulk-toolbar .bulk-action-select {
+  margin-inline-start: auto;
+}
+
+@media (max-width: 767px) {
+  .bulk-toolbar {
+    padding-inline: var(--space-4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bulk-toolbar {
+    transition: none;
+  }
 }
 
 #bulk-submit:disabled {
@@ -35,8 +68,8 @@
 .bulk-select-all {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  font-size: 0.875rem;
+  gap: var(--space-3);
+  font-size: 0.8125rem;
   color: var(--text-muted);
   cursor: pointer;
   white-space: nowrap;
@@ -83,19 +116,14 @@
 
 .server-card__checkbox-wrap {
   display: flex;
-  align-items: flex-start;
-  padding-top: var(--space-1);
   flex-shrink: 0;
+  /* Optically centre the 16px box on the first (name) line. */
+  padding-block-start: 2px;
 }
 
-/* Highlight a card while it is selected for a bulk action. */
+/* Selected for a bulk action: one quiet accent cue on the border, no fill. */
 .server-card:has(.bulk-server-checkbox:checked) {
-  border-color: var(--accent);
-  background: var(--surface-2);
-}
-
-.server-card:has(.bulk-server-checkbox:checked)::before {
-  background: var(--accent);
+  border-color: var(--info-border);
 }
 
 /* ── Bulk result summary ───────────────────────────────── */

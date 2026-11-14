@@ -353,7 +353,9 @@ function initServerCards(root) {
     var pane = cardScrollBounds(menu);
     var spaceAbove = rect.top - pane.top;
     var spaceBelow = pane.bottom - rect.bottom;
-    var openBelow = spaceAbove < (panelH + 12) && (spaceBelow >= (panelH + 12) || spaceBelow > spaceAbove);
+    // The kebab lives in the card header, so prefer dropping down over the
+    // card body; flip upward only when the viewport bottom would clip it.
+    var openBelow = spaceBelow >= (panelH + 12) || spaceBelow >= spaceAbove;
     menu.classList.toggle('action-menu--below', openBelow);
   }
 

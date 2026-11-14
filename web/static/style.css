@@ -273,6 +273,10 @@ details.card--collapsible[open] .card__collapse-icon {
   gap: var(--space-3);
 }
 
+/* ── Server card ─────────────────────────────────────────
+   Neutral Graphite chrome: auth mode is metadata, not a warning, so the card
+   carries no colored rail. Health lives solely in .server-status-badge. */
+
 .server-card {
   position: relative;
   background: var(--surface);
@@ -280,58 +284,33 @@ details.card--collapsible[open] .card__collapse-icon {
   border-radius: var(--radius-md);
   padding: var(--space-4) var(--space-5);
   overflow: visible;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
   min-width: 0;
-}
-
-.server-card::before {
-  content: '';
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  width: 3px;
-  background: var(--border-strong);
-  border-start-start-radius: var(--radius-md);
-  border-end-start-radius: var(--radius-md);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .server-card:hover {
   border-color: var(--border-strong);
-  background: var(--surface-2);
-  box-shadow: var(--shadow-sm);
+}
+
+.server-card--expanded {
+  border-color: var(--border-strong);
 }
 
 .server-card__header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
+  min-width: 0;
   cursor: pointer;
   user-select: none;
-  border-radius: var(--radius-sm);
-  transition: opacity var(--transition-fast);
-  min-width: 0;
-}
-
-.server-card--expanded .server-card__header {
-  margin-bottom: var(--space-3);
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.server-card__top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-4);
-  margin-bottom: var(--space-3);
 }
 
 /* Checkbox + identity travel together at header start as one unit, so the
-   quick actions stay pinned to the trailing edge. */
+   actions stay pinned to the trailing edge. */
 .server-card__lead {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-3);
   min-width: 0;
   flex: 1 1 auto;
@@ -346,46 +325,51 @@ details.card--collapsible[open] .card__collapse-icon {
 
 .server-card__name {
   margin: 0;
-  font-size: 1rem;
-  font-weight: var(--fw-semibold);
-  color: var(--text);
-  word-break: break-word;
-  overflow-wrap: anywhere;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
-  line-height: 1.3;
   min-width: 0;
-}
-
-.server-card__host {
-  font-size: 0.8125rem;
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-variant-numeric: var(--num);
-  direction: ltr;
-  unicode-bidi: isolate;
-  text-align: start;
-  word-break: break-all;
+  font-size: 0.9375rem;
+  font-weight: var(--fw-medium);
+  line-height: 1.3;
+  color: var(--text);
   overflow-wrap: anywhere;
 }
 
-/* Country flag badge next to the server name. The glyph is a regional-indicator
-   emoji; on platforms without flag-emoji support (e.g. most Windows builds) the
-   browser renders the two letters of the ISO code instead, which is an
-   acceptable text fallback. */
-.server-card__flag {
-  font-size: 1rem;
+/* ISO 3166-1 alpha-2 tag; the full country name is in the title tooltip. */
+.server-card__country {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.04em;
   line-height: 1;
-  vertical-align: middle;
   cursor: default;
+}
+
+.server-card__host {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-variant-numeric: var(--num);
+  color: var(--text-dim);
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: start;
+  overflow-wrap: anywhere;
 }
 
 .server-card__header-end {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   flex-shrink: 0;
   margin-inline-start: auto;
 }
@@ -396,140 +380,146 @@ details.card--collapsible[open] .card__collapse-icon {
   gap: var(--space-1);
 }
 
-.server-card__quick-btn {
+/* Quick links, overflow toggle and expand chevron share one quiet 32px
+   control language so the trailing edge reads as a single toolbar. */
+.server-card__quick-btn,
+.server-card__icon-btn {
   height: 32px;
-  padding-inline: var(--space-2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-1);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: var(--surface-2);
+  background: transparent;
   color: var(--text-muted);
+  font: inherit;
   font-size: 0.75rem;
   font-weight: var(--fw-medium);
   text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
   transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
-.server-card__quick-btn:hover {
-  color: var(--text-bright);
-  background: var(--surface-elevated);
-  border-color: var(--border-strong);
+.server-card__quick-btn {
+  padding-inline: var(--space-2);
 }
 
-.server-card__quick-btn svg {
-  width: 15px;
-  height: 15px;
-  stroke-width: 1.5;
-}
-
-.server-card__toggle-btn {
-  width: 36px;
-  height: 36px;
+.server-card__icon-btn {
+  width: 32px;
   padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
+}
+
+.server-card__quick-btn:hover,
+.server-card__icon-btn:hover,
+.server-card__icon-btn[aria-expanded="true"] {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: transform var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
-}
-
-.server-card__toggle-btn:hover {
-  background: var(--surface-elevated);
   border-color: var(--border-strong);
-  color: var(--text-bright);
-}
-
-.server-card__toggle-btn svg,
-.server-card__toggle-icon {
-  width: 18px !important;
-  height: 18px !important;
-  stroke-width: 1.5px;
-  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), color var(--transition-fast);
-}
-
-.server-card--expanded .server-card__toggle-icon,
-.server-card--expanded .server-card__toggle-btn svg {
-  transform: rotate(180deg);
-  color: var(--accent-bright, #38bdf8);
-}
-
-.server-card__collapsible-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  animation: serverCardSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.server-card__collapsible-body[hidden] {
-  display: none !important;
-}
-
-@keyframes serverCardSlideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.server-toggle-all-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  padding: 5px 10px;
-  border-radius: 8px;
-  background: rgba(148, 163, 184, 0.08);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-}
-
-.server-toggle-all-btn:hover {
-  background: rgba(148, 163, 184, 0.16);
   color: var(--text);
 }
 
-.server-card__badges {
+.server-card__quick-btn svg,
+.server-card__icon-btn svg {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  stroke-width: 1.5;
+  flex-shrink: 0;
+}
+
+.server-card__toggle-icon {
+  transition: transform var(--transition-fast), color var(--transition-fast);
+}
+
+.server-card--expanded .server-card__toggle-icon {
+  transform: rotate(180deg);
+  color: var(--accent-bright);
+}
+
+.server-card__menu {
+  margin-inline-start: 0;
+}
+
+/* Expanded body: metadata, note, quiet footer. Fades in on reveal where the
+   browser supports @starting-style; otherwise it simply appears. */
+.server-card__collapsible-body {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  opacity: 1;
+  transition: opacity var(--transition-fast);
+}
+
+@starting-style {
+  .server-card__collapsible-body {
+    opacity: 0;
+  }
+}
+
+.server-card__collapsible-body[hidden] {
+  display: none;
+}
+
+.server-card__meta {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: var(--space-2);
 }
 
 .server-card__note {
   margin: 0;
-  font-size: 0.88rem;
-  color: var(--text-muted);
+  font-size: 0.875rem;
   line-height: 1.5;
+  color: var(--text-muted);
 }
 
-.server-card__actions {
+.server-card__footer {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
   align-items: center;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-subtle);
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  font-size: 0.75rem;
+  font-variant-numeric: var(--num);
+  color: var(--text-dim);
 }
 
-.server-card__actions-right {
-  margin-inline-start: auto;
-  display: flex;
-  gap: 8px;
+.server-card__footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+  transition: color var(--transition-fast);
 }
 
-/* ── Server card action overflow menu ───────────────── */
+.server-card__footer-link:hover {
+  color: var(--text);
+}
+
+.server-card__footer-link svg {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .server-card,
+  .server-card__quick-btn,
+  .server-card__icon-btn,
+  .server-card__toggle-icon,
+  .server-card__collapsible-body {
+    transition: none;
+  }
+}
+
+/* ── Action overflow menu (server cards, node cards, monitoring) ── */
 
 .action-menu {
   position: relative;
@@ -543,33 +533,42 @@ details.card--collapsible[open] .card__collapse-icon {
 
 .action-menu__panel {
   position: absolute;
-  bottom: calc(100% + var(--space-2));
+  bottom: calc(100% + var(--space-1));
   inset-inline-end: 0;
-  z-index: 40;
-  min-width: 188px;
+  z-index: var(--z-dropdown);
+  min-width: 192px;
   padding: var(--space-1);
   display: none;
   flex-direction: column;
   gap: 2px;
   background: var(--surface-elevated);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
 }
 
-.action-menu.action-menu--below .action-menu__panel {
-  top: calc(100% + var(--space-2));
+/* Open below the toggle (header kebabs, or when there is no room above). */
+.action-menu--below .action-menu__panel {
+  top: calc(100% + var(--space-1));
   bottom: auto;
 }
 
 .action-menu.is-open .action-menu__panel {
   display: flex;
-  animation: action-menu-in 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 1;
+  transition: opacity var(--transition-fast);
 }
 
-@keyframes action-menu-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+@starting-style {
+  .action-menu.is-open .action-menu__panel {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-menu.is-open .action-menu__panel {
+    transition: none;
+  }
 }
 
 .action-menu__form {
@@ -579,76 +578,78 @@ details.card--collapsible[open] .card__collapse-icon {
 .action-menu__item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   width: 100%;
-  padding: 8px 10px;
+  min-height: 32px;
+  padding: var(--space-1) var(--space-2);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text);
-  font-size: 0.85rem;
-  font-weight: var(--fw-medium);
-  font-family: inherit;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: var(--fw-regular);
   text-align: start;
   text-decoration: none;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.action-menu__item svg {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+  color: var(--text-muted);
 }
 
 .action-menu__item:hover,
 .action-menu__item:focus-visible {
-  background: rgba(148, 163, 184, 0.1);
-  color: var(--text);
+  background: var(--border);
+  color: var(--text-bright);
   outline: none;
 }
 
-.action-menu__item--danger {
-  color: #f87171;
+.action-menu__item--danger,
+.action-menu__item--danger svg {
+  color: var(--crit);
 }
 
 .action-menu__item--danger:hover,
 .action-menu__item--danger:focus-visible {
-  background: rgba(239, 68, 68, 0.12);
-  color: #fca5a5;
+  background: var(--crit-bg);
+  color: var(--crit);
 }
 
 .action-menu__divider {
   height: 1px;
-  margin: 4px 2px;
+  margin: var(--space-1) 0;
   background: var(--border);
 }
 
 .action-menu__caption {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px 4px;
-  font-size: 0.74rem;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.75rem;
   color: var(--text-dim);
   white-space: nowrap;
 }
 
 .action-menu__caption svg {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
-}
-
-/* Variant: open the panel below the toggle (header kebabs) instead of above. */
-.action-menu--below .action-menu__panel {
-  top: calc(100% + 6px);
-  bottom: auto;
-  inset-inline-end: 0;
-  inset-inline-start: auto;
 }
 
 /* Non-actionable note rendered in place of items (e.g. missing credentials). */
 .action-menu__note {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 6px 10px 8px;
-  font-size: 0.78rem;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  font-size: 0.75rem;
   line-height: 1.4;
   color: var(--text-muted);
 }
@@ -661,13 +662,13 @@ details.card--collapsible[open] .card__collapse-icon {
   color: var(--text-dim);
 }
 
-/* ── Servers toolbar: search + actions ──────────────── */
+/* ── Servers toolbar: search · counts · expand · add ──── */
 
 .server-toolbar {
   display: flex;
   align-items: center;
-  gap: 14px;
   flex-wrap: wrap;
+  gap: var(--space-3);
 }
 
 .server-search {
@@ -689,21 +690,24 @@ details.card--collapsible[open] .card__collapse-icon {
 
 .server-search input {
   width: 100%;
-  min-height: 40px;
-  padding-block: var(--space-2);
-  padding-inline-start: var(--space-10);
-  padding-inline-end: var(--space-9);
-  border-radius: var(--radius-md);
+  min-height: 36px;
+  padding-block: var(--space-1);
+  padding-inline: calc(var(--space-8) + var(--space-1)) var(--space-8);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  font-size: 0.9rem;
-  font-family: inherit;
+  font: inherit;
+  font-size: 0.875rem;
   transition: border-color var(--transition-fast);
 }
 
 .server-search input::placeholder {
   color: var(--text-dim);
+}
+
+.server-search input:hover {
+  border-color: var(--border-strong);
 }
 
 .server-search input:focus {
@@ -720,55 +724,80 @@ details.card--collapsible[open] .card__collapse-icon {
 
 .server-search__clear {
   position: absolute;
-  inset-inline-end: 8px;
+  inset-inline-end: var(--space-1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-xs);
   color: var(--text-dim);
   text-decoration: none;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .server-search__clear:hover {
-  background: rgba(148, 163, 184, 0.12);
+  background: var(--surface-2);
   color: var(--text);
 }
 
 .server-search__clear svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 
 .server-toolbar__aside {
   display: flex;
   align-items: center;
-  gap: 10px;
   flex-wrap: wrap;
+  gap: var(--space-3);
 }
 
-.server-toolbar__count {
-  font-variant-numeric: var(--num);
+.server-toolbar__counts {
+  margin: 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-  font-weight: var(--fw-semibold);
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: var(--fw-regular);
+  font-variant-numeric: var(--num);
   color: var(--text-muted);
   white-space: nowrap;
 }
 
-.server-toolbar__count svg {
-  width: 15px;
-  height: 15px;
+.server-toolbar__count + .server-toolbar__count::before {
+  content: '·';
+  margin-inline-end: var(--space-2);
   color: var(--text-dim);
+}
+
+.btn.server-toggle-all-btn {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  gap: var(--space-2);
+  border-radius: var(--radius-sm);
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.btn.server-toggle-all-btn:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.btn.server-toggle-all-btn svg {
+  width: 16px;
+  height: 16px;
+  margin: 0;
 }
 
 .server-result-note {
   margin: 0;
-  font-size: 0.84rem;
+  font-size: 0.8125rem;
   color: var(--text-muted);
 }
 
@@ -976,28 +1005,73 @@ details.card--collapsible[open] .card__collapse-icon {
 
 /* ── Forms ──────────────────────────────────────────── */
 
+/* ── Server add/edit: asymmetric layout ─────────────────
+   Fields get the wide column; the credential reference rides along as a
+   quiet sticky panel. Collapses to one column below 900px. */
+
+.server-form-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.server-form-layout__main,
+.server-form-layout__aside {
+  min-width: 0;
+}
+
+.server-form-layout__aside {
+  position: sticky;
+  top: calc(52px + var(--space-4));
+  padding: var(--space-5);
+  background: transparent;
+  border-color: var(--border);
+}
+
+.server-form-layout__aside:hover {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.server-form-layout__aside .card__header h3 {
+  font-size: 0.875rem;
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
+}
+
+@media (max-width: 900px) {
+  .server-form-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .server-form-layout__aside {
+    position: static;
+  }
+}
+
 .server-form {
   display: grid;
-  gap: 18px;
-  margin-top: 4px;
+  gap: var(--space-5);
+  margin-top: var(--space-1);
 }
 
 .form-grid {
   display: grid;
-  gap: 16px;
+  gap: var(--space-4);
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .form-field {
   display: grid;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .form-field > span {
   display: block;
   color: var(--text);
-  font-weight: var(--fw-semibold);
-  font-size: 0.88rem;
+  font-weight: var(--fw-medium);
+  font-size: 0.875rem;
 }
 
 .form-field input,
@@ -1008,10 +1082,15 @@ details.card--collapsible[open] .card__collapse-icon {
   border: 1px solid var(--border-strong);
   background: var(--bg-deep);
   color: var(--text);
-  padding: 11px 14px;
+  padding: var(--space-2) var(--space-3);
   font: inherit;
-  font-size: 0.92rem;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  font-size: 0.875rem;
+  transition: border-color var(--transition-fast);
+}
+
+.form-field input:not([type="checkbox"]):not([type="radio"]),
+.form-field select {
+  min-height: 40px;
 }
 
 .form-field input:focus,
@@ -1112,7 +1191,7 @@ textarea.cmd-textarea:focus-visible,
 
 .auto-refresh-toggle select:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: var(--accent);
 }
 
 /* ── Credential info list ───────────────────────────── */
@@ -1126,15 +1205,34 @@ textarea.cmd-textarea:focus-visible,
 }
 
 .credential-info li {
+  display: grid;
+  gap: var(--space-1);
   padding-inline-start: var(--space-3);
-  border-inline-start: 2px solid var(--border-strong);
-  font-size: 0.875rem;
+  border-inline-start: 1px solid var(--border-strong);
+  font-size: 0.8125rem;
   color: var(--text-muted);
   line-height: 1.5;
 }
 
 .credential-info li strong {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   color: var(--text);
+  font-weight: var(--fw-medium);
+}
+
+.credential-info li strong svg {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  color: var(--text-dim);
+}
+
+/* Calm inline metadata in place of repeated status badges. */
+.credential-info__meta {
+  font-size: 0.75rem;
+  color: var(--text-dim);
 }
 
 .credential-info code {
@@ -1152,26 +1250,39 @@ textarea.cmd-textarea:focus-visible,
 .server-quick-links {
   margin-top: var(--space-6);
   padding-top: var(--space-5);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .server-quick-links__title {
-  margin: 0 0 var(--space-3);
-  font-size: 0.85rem;
-  font-weight: var(--fw-semibold);
-  color: var(--text-muted);
+  margin: 0 0 var(--space-2);
+  font-size: 0.75rem;
+  font-weight: var(--fw-medium);
+  color: var(--text-dim);
+}
+
+.server-quick-links__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-inline-start: calc(-1 * var(--space-2));
+}
+
+.server-quick-links__nav .btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .danger-zone {
   margin-top: var(--space-5);
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--crit-border);
   border-radius: var(--radius-sm);
-  background: var(--crit-bg);
+  background: transparent;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
   align-items: center;
+  justify-content: space-between;
 }
 
 .danger-zone p {
@@ -1405,7 +1516,6 @@ textarea.cmd-textarea:focus-visible,
 
 /* ── List items (shared) ────────────────────────────── */
 
-.server-item,
 .dashboard-item {
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -1498,62 +1608,21 @@ code {
   }
 
   .server-card {
-    padding: 14px 16px;
+    padding: var(--space-3) var(--space-4);
   }
 
-  .server-card__header {
-    gap: 10px;
+  /* Larger touch targets for the card's trailing controls. */
+  .server-card__quick-btn,
+  .server-card__icon-btn {
+    height: 36px;
   }
 
-  .server-card__top {
-    flex-direction: column;
-    gap: 8px;
+  .server-card .server-card__icon-btn {
+    width: 36px;
+    min-height: 36px;
   }
 
-  .server-card__actions {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    gap: 6px;
-  }
-
-  /* Three primary buttons share available width equally */
-  .server-card__actions > .btn {
-    flex: 1 1 0;
-    min-width: 0;
-    padding: 0 6px;
-    font-size: 0.74rem;
-    min-height: 40px;
-    justify-content: center;
-  }
-
-  /* Larger, clearer icons on touch targets */
-  .server-card__actions > .btn .icon-in-button {
-    width: 18px;
-    height: 18px;
-    margin-inline-end: 5px;
-  }
-
-  /* When the three equal-width buttons get tight, truncate the label with an
-     ellipsis rather than letting the (longest) label crush its icon. */
-  .server-card__actions > .btn .btn-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-  }
-
-  /* Kebab wrapper: fixed size, does not grow */
-  .server-card__actions > .action-menu {
-    flex: 0 0 auto;
-    margin-inline-start: 0;
-  }
-
-  /* Keep kebab icon-only on mobile, but show labels on primary buttons */
-  .action-menu__label {
-    display: none;
-  }
-
-  /* Square icon-only toggle for kebab */
+  /* Square icon-only kebab on other cards (nodes, monitoring). */
   .action-menu__toggle {
     width: 40px;
     min-height: 40px;
@@ -1566,26 +1635,22 @@ code {
     margin-inline-end: 0;
   }
 
-  /* Toolbar stacks: search on top, count + add button below */
+  /* Toolbar stacks: search on top, counts left / controls right below. */
   .server-toolbar__aside {
     flex: 1 1 100%;
-    flex-wrap: wrap;
-    gap: 8px;
     justify-content: space-between;
+    gap: var(--space-2);
   }
 
-  /* Dropdown anchored to right edge of toggle */
+  .server-toolbar__counts {
+    margin-inline-end: auto;
+  }
+
   .action-menu__panel {
     inset-inline-start: auto;
     inset-inline-end: 0;
-    min-width: 188px;
   }
 
-  .server-card__actions-right {
-    margin-inline-start: 0;
-  }
-
-  .server-item__actions,
   .form-actions {
     flex-direction: column;
     align-items: stretch;
@@ -1605,53 +1670,63 @@ code {
 
 }
 
-@media (max-width: 640px) {
+/* Quick actions collapse to icons before they crowd the server identity. */
+@media (max-width: 900px) {
   .server-card__quick-label {
     display: none;
   }
 
+  /* Square at whatever height the breakpoint sets (32px, or 36px on touch). */
   .server-card__quick-btn {
-    width: 32px;
+    width: auto;
+    aspect-ratio: 1;
     padding-inline: 0;
   }
 }
 
+/* Narrow phones: two-row card header. Row 1 = checkbox + identity with the
+   expand chevron; row 2 = quick actions (indented to the name column) with
+   the overflow menu, so both trailing controls share one column. Grid areas
+   follow the writing direction, so RTL mirrors without extra rules. */
 @media (max-width: 520px) {
-  .server-card {
-    padding: var(--space-3) var(--space-4);
-  }
-
   .server-card__header {
-    gap: var(--space-2);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "lead  toggle"
+      "quick menu";
+    align-items: center;
+    gap: var(--space-3) var(--space-2);
   }
 
   .server-card__lead {
-    gap: var(--space-2);
+    grid-area: lead;
   }
 
   .server-card__header-end {
-    gap: var(--space-1);
+    display: contents;
   }
 
-  .server-card__quick-btn {
-    width: 28px;
-    height: 28px;
+  .server-card__quick-actions {
+    grid-area: quick;
+    padding-inline-start: calc(16px + var(--space-3));
   }
 
-  .server-card__quick-btn svg {
-    width: 14px;
-    height: 14px;
+  .server-card__menu {
+    grid-area: menu;
   }
 
   .server-card__toggle-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-sm);
+    grid-area: toggle;
   }
 
-  .server-card__toggle-icon {
-    width: 18px;
-    height: 18px;
+  .btn.server-toggle-all-btn {
+    width: 36px;
+    padding: 0;
+  }
+
+  .server-toggle-all-btn .btn-label {
+    display: none;
   }
 }
 
@@ -1782,7 +1857,6 @@ h4 svg {
 
 /* ── Table alternating rows ──────────────────────────── */
 
-.server-item:hover,
 .dashboard-item:hover {
   border-color: var(--border-strong);
   background: var(--bg-deep);
@@ -3186,19 +3260,13 @@ body.modal-open {
   word-break: break-all;
 }
 
-/* Server card auth-mode accent strips */
-.server-card--key::before      { background: var(--ok); }
-.server-card--password::before { background: var(--warn); }
-.server-card--hybrid::before   { background: var(--accent-soft); }
-
 /* ── Server status indicator ─────────────────────────── */
 
 .server-card__status {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 4px;
+  gap: var(--space-2);
 }
 
 /* Up/Down/Unknown status badge with neutral Graphite/semantic tokens. */
@@ -3208,9 +3276,8 @@ body.modal-open {
   gap: var(--space-1);
   padding: 2px var(--space-2);
   border-radius: var(--radius-xs);
-  font-size: 0.72rem;
-  font-weight: var(--fw-semibold);
-  letter-spacing: 0.02em;
+  font-size: 0.75rem;
+  font-weight: var(--fw-medium);
   border: 1px solid transparent;
 }
 
@@ -3234,7 +3301,7 @@ body.modal-open {
 
 /* The freshness line ("Just now" / "Last checked 4h ago"). */
 .server-card__seen {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-variant-numeric: var(--num);
   color: var(--text-dim);
 }

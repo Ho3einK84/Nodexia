@@ -8,8 +8,8 @@
   </div>
   {{ end }}
 
-  <div class="grid">
-    <article class="card">
+  <div class="server-form-layout">
+    <article class="card server-form-layout__main">
       <h3><i data-lucide="{{ if .IsEditingServer }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingServer }}{{ t "servers.form.title_edit" }}{{ else }}{{ t "servers.form.title_new" }}{{ end }}</h3>
       <form method="post" action="{{ .ServerFormAction }}" class="server-form" id="server-form">
         <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
@@ -140,13 +140,13 @@
       {{ if .IsEditingServer }}
       <div class="server-quick-links">
         <p class="server-quick-links__title">{{ t "servers.form.quick_access" }}</p>
-        <div class="form-actions">
-          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "common.monitoring" }}</a>
-          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "common.nodes" }}</a>
-          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
-          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
-          <a class="btn btn--secondary" href="/servers/{{ .ServerForm.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
-        </div>
+        <nav class="server-quick-links__nav" aria-label="{{ t "servers.form.quick_access" }}">
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "common.monitoring" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "common.nodes" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
+        </nav>
       </div>
 
       <div class="danger-zone">
@@ -162,7 +162,7 @@
       {{ end }}
     </article>
 
-    <article class="card card--info">
+    <aside class="card card--info server-form-layout__aside">
       <div class="card__header">
         <h3><i data-lucide="calendar-clock"></i> {{ t "servers.form.info_title" }}</h3>
       </div>
@@ -170,7 +170,7 @@
         <li>
           <strong><i data-lucide="shield-check" class="icon-in-button"></i> {{ t "servers.form.info_stored_title" }}</strong>
           {{ tsafe "servers.form.info_stored_desc" }}
-          <span class="badge badge--ok badge--inline">{{ t "servers.form.scheduler_ok" }}</span>
+          <span class="credential-info__meta">{{ t "servers.form.scheduler_ok" }}</span>
         </li>
         <li>
           <strong><i data-lucide="play" class="icon-in-button"></i> {{ t "servers.form.info_runtime_title" }}</strong>
@@ -179,15 +179,15 @@
         <li>
           <strong><i data-lucide="external-link" class="icon-in-button"></i> {{ t "servers.form.info_external_title" }}</strong>
           {{ tsafe "servers.form.info_external_desc" }}
-          <span class="badge badge--ok badge--inline">{{ t "servers.form.scheduler_ok" }}</span>
+          <span class="credential-info__meta">{{ t "servers.form.scheduler_ok" }}</span>
         </li>
         <li>
           <strong><i data-lucide="bot" class="icon-in-button"></i> {{ t "servers.form.info_agent_title" }}</strong>
           {{ tsafe "servers.form.info_agent_desc" }}
-          <span class="badge badge--ok badge--inline">{{ t "servers.form.scheduler_ok" }}</span>
+          <span class="credential-info__meta">{{ t "servers.form.scheduler_ok" }}</span>
         </li>
       </ul>
-    </article>
+    </aside>
   </div>
 </section>
 {{ end }}
