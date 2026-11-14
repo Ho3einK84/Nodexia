@@ -35,7 +35,10 @@
           {{ range .Rules }}
           <tr>
             <td>{{ if .IsGlobal }}<span class="badge badge--id">{{ t "alerts.all_servers" }}</span>{{ else }}{{ .ServerLabel }}{{ end }}</td>
-            <td>{{ t (printf "alerts.metric.%s" .Metric) }}</td>
+            <td>
+              <div>{{ t (printf "alerts.metric.%s" .Metric) }}</div>
+              {{ if .Note }}<div class="rule-note"><i data-lucide="sticky-note" class="icon-in-button"></i> {{ .Note }}</div>{{ end }}
+            </td>
             <td>{{ if eq .ConditionKind "boolean" }}<span class="badge badge--id">{{ t "alerts.condition_on_detection" }}</span>{{ else }}<code>{{ .ComparatorSymbol }} {{ .ThresholdDisplay }}</code>{{ end }}</td>
             <td><span class="severity-badge severity-badge--{{ .Severity }}">{{ t (printf "alerts.severity.%s" .Severity) }}</span></td>
             <td>{{ .ConsecutiveHits }}{{ if .StreakSummary }} <span class="badge badge--warn" title="{{ t "alerts.streak_title" "count" .ConsecutiveHits }}">{{ .StreakSummary }}</span>{{ end }}</td>
@@ -50,9 +53,6 @@
               </form>
             </td>
           </tr>
-          {{ if .Note }}
-          <tr class="data-table__note-row"><td colspan="9"><span class="data-table__note"><i data-lucide="sticky-note" class="icon-in-button"></i> {{ .Note }}</span></td></tr>
-          {{ end }}
           {{ end }}
         </tbody>
       </table>
@@ -150,7 +150,7 @@
         </label>
       </div>
       <label class="form-field">
-        <span><i data-lucide="message-square" class="icon-in-button"></i> {{ t "alerts.reason" }} <span class="badge badge--warn">{{ t "common.optional" }}</span></span>
+        <span><i data-lucide="message-square" class="icon-in-button"></i> {{ t "alerts.reason" }}</span>
         <input type="text" name="reason" value="{{ .SilenceForm.Reason }}" placeholder="{{ t "alerts.reason_placeholder" }}">
         {{ with index .SilenceForm.Errors "reason" }}<small class="field-error">{{ . }}</small>{{ end }}
       </label>
@@ -200,27 +200,39 @@
     </div>
 
     {{ if .Events }}
+    <div class="history-toolbar" data-history-filter>
+      <label class="history-toolbar__search">
+        <i data-lucide="search" class="icon-in-button" aria-hidden="true"></i>
+        <input type="search" data-history-query placeholder="{{ t "alerts.filter_placeholder" }}" aria-label="{{ t "alerts.filter_aria" }}">
+      </label>
+      <div class="history-filter-tabs" role="group" aria-label="{{ t "alerts.th_state" }}">
+        <button type="button" class="history-filter-tab is-active" data-history-state="all" aria-pressed="true">{{ t "alerts.filter_all" }}</button>
+        <button type="button" class="history-filter-tab" data-history-state="firing" aria-pressed="false">{{ t "alerts.state_firing" }}</button>
+        <button type="button" class="history-filter-tab" data-history-state="resolved" aria-pressed="false">{{ t "alerts.state_resolved" }}</button>
+      </div>
+    </div>
     <div class="data-table-wrap">
-      <table class="data-table">
+      <table class="data-table history-table">
         <thead>
           <tr><th>{{ t "common.server" }}</th><th>{{ t "alerts.th_metric" }}</th><th>{{ t "alerts.th_observed" }}</th><th>{{ t "alerts.th_threshold" }}</th><th>{{ t "alerts.th_severity" }}</th><th>{{ t "alerts.th_state" }}</th><th>{{ t "alerts.th_fired" }}</th><th>{{ t "alerts.th_resolved" }}</th></tr>
         </thead>
         <tbody>
           {{ range .Events }}
-          <tr>
-            <td>{{ .ServerLabel }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</td>
+          <tr data-history-row data-state="{{ .State }}">
+            <td>{{ .ServerLabel }}</td>
             <td>{{ t (printf "alerts.metric.%s" .Metric) }}</td>
             <td><code>{{ .Value }}</code></td>
             <td><code>{{ .Threshold }}</code></td>
             <td><span class="severity-badge severity-badge--{{ .Severity }}">{{ t (printf "alerts.severity.%s" .Severity) }}</span></td>
             <td>{{ if eq .State "firing" }}<span class="badge badge--warn">{{ t "alerts.state_firing" }}</span>{{ else }}<span class="badge badge--ok">{{ t "alerts.state_resolved" }}</span>{{ end }}</td>
-            <td>{{ .FiredAt }}</td>
-            <td>{{ if .ResolvedAt }}{{ .ResolvedAt }}{{ else }}<span class="muted">—</span>{{ end }}</td>
+            <td class="history-time">{{ .FiredAt }}</td>
+            <td class="history-time">{{ if .ResolvedAt }}{{ .ResolvedAt }}{{ else }}<span class="muted">—</span>{{ end }}</td>
           </tr>
           {{ end }}
         </tbody>
       </table>
     </div>
+    <p class="empty-state" data-history-empty hidden>{{ t "alerts.filter_empty" }}</p>
     {{ template "pagination" .EventsPagination }}
     {{ else }}
     <p class="empty-state">{{ t "alerts.no_events" }}</p>

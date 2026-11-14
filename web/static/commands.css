@@ -1,9 +1,14 @@
+/* ════════════════════════════════════════════════════════
+   Commands — command runner, preset chips & compact history
+   Builds on tokens.css and shared primitives in style.css.
+   ════════════════════════════════════════════════════════ */
+
 /* ── Preset chips ────────────────────────────────────────────────────────── */
 
 .preset-chips {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -11,46 +16,50 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.72rem;
-  font-weight: var(--fw-bold);
-  color: var(--text-muted, #94a3b8);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 0.8rem;
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .preset-chips__label svg {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
 }
 
 .preset-chip {
   display: inline-flex;
   align-items: center;
-  padding: 5px 12px;
-  border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  background: rgba(30, 41, 59, 0.5);
-  color: #94a3b8;
+  min-height: 28px;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
   font-size: 0.8rem;
   font-weight: var(--fw-medium);
-  cursor: pointer;
-  transition: all 0.15s ease;
   font-family: inherit;
   white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
 }
 
 .preset-chip:hover {
-  border-color: rgba(96, 165, 250, 0.35);
-  background: rgba(59, 130, 246, 0.08);
-  color: #93c5fd;
+  border-color: var(--border-strong);
+  background: var(--surface-elevated);
+  color: var(--text);
 }
 
 .preset-chip.is-active {
-  border-color: rgba(96, 165, 250, 0.4);
-  background: rgba(59, 130, 246, 0.1);
-  color: #93c5fd;
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  color: var(--accent-bright);
+}
+
+.preset-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ── Command workspace ───────────────────────────────────────────────────── */
@@ -78,7 +87,7 @@
 
 .cmd-form {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .cmd-label-row {
@@ -89,8 +98,8 @@
 }
 
 .cmd-hint {
-  font-size: 0.73rem;
-  color: var(--text-muted, #94a3b8);
+  font-size: 0.78rem;
+  color: var(--text-muted);
   font-weight: var(--fw-regular);
 }
 
@@ -110,9 +119,9 @@
 
 .cmd-advanced {
   display: grid;
-  gap: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(148, 163, 184, 0.07);
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
 
 .cmd-advanced[hidden] {
@@ -122,134 +131,200 @@
 /* ── Command result cards ────────────────────────────────────────────────── */
 
 .cmd-result-card {
-  border-color: rgba(148, 163, 184, 0.12);
+  border-color: var(--border);
 }
 
 .cmd-result-card--ok {
-  border-color: rgba(74, 222, 128, 0.2);
-  background: rgba(21, 128, 61, 0.04);
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
 }
 
 .cmd-result-card--error {
-  border-color: rgba(248, 113, 113, 0.18);
+  border-color: var(--crit-border);
 }
 
 .cmd-result-card--live {
-  border-color: rgba(59, 130, 246, 0.2);
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.08);
+  border-color: var(--border-strong);
 }
 
 /* ── Compact history ─────────────────────────────────────────────────────── */
 
 .history-compact {
   display: grid;
-  gap: 1px;
+  gap: 4px;
   max-height: 540px;
   overflow-y: auto;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .history-row {
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
-  cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
-.history-row:hover {
-  background: rgba(30, 41, 59, 0.35);
-  border-color: rgba(148, 163, 184, 0.1);
+.history-row:hover,
+.history-row:focus-within {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.history-row__header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+}
+
+.history-row__toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.history-row__toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .history-row__top {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 10px 3px;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
   min-width: 0;
 }
 
 .history-row__cmd {
   flex: 1;
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
-  font-size: 0.76rem;
-  color: #94a3b8;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
 }
 
-.history-row__right {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+.history-row__exit {
+  font-size: 0.72rem;
+  font-weight: var(--fw-semibold);
+  padding: 4px 8px;
+  line-height: 1;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--num);
   flex-shrink: 0;
 }
 
-.history-row__exit {
-  font-size: 0.68rem;
-  font-weight: var(--fw-bold);
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
-}
-
-.history-row__exit--ok  { background: rgba(34, 197, 94, 0.1);  color: #4ade80; }
-.history-row__exit--err { background: rgba(248, 113, 113, 0.1); color: #f87171; }
-.history-row__exit--na  { background: rgba(100, 116, 139, 0.1); color: var(--text-dim, #64748b); }
+.history-row__exit--ok  { background: var(--ok-bg); color: var(--ok); }
+.history-row__exit--err { background: var(--crit-bg); color: var(--crit); }
+.history-row__exit--na  { background: var(--surface-elevated); color: var(--text-dim); }
 
 .history-row__time {
-  padding: 1px 10px 7px;
-  font-size: 0.68rem;
-  color: var(--text-muted, #94a3b8);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: var(--num);
 }
 
 .history-row__detail {
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.history-row__detail[hidden] {
   display: none;
-  padding: 6px 10px 10px;
-  border-top: 1px solid rgba(148, 163, 184, 0.06);
 }
 
-.history-row.is-expanded .history-row__detail {
-  display: block;
-}
-
-.output-block--sm {
-  font-size: 0.77rem !important;
-  padding: 8px 10px !important;
-  max-height: 140px !important;
-  margin: 4px 0 0 !important;
+.history-row__detail .output-block.output-block--sm {
+  font-size: 0.78rem;
+  padding: 8px 12px;
+  max-height: 144px;
+  margin: 4px 0 0;
 }
 
 .rerun-btn {
-  display: none;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid rgba(96, 165, 250, 0.2);
-  border-radius: 4px;
-  background: transparent;
-  color: #60a5fa;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  color: var(--text-muted);
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-  transition: all 0.12s ease;
+  transition: opacity var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
 }
 
 .rerun-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
 }
 
-.history-row:hover .rerun-btn {
-  display: inline-flex;
+@media (hover: hover) and (pointer: fine) {
+  .rerun-btn {
+    opacity: 0.45;
+  }
+
+  .history-row:hover .rerun-btn,
+  .history-row:focus-within .rerun-btn,
+  .rerun-btn:focus-visible {
+    opacity: 1;
+  }
 }
 
 .rerun-btn:hover {
-  background: rgba(59, 130, 246, 0.1);
-  border-color: rgba(96, 165, 250, 0.4);
+  background: var(--surface-elevated);
+  border-color: var(--border-strong);
+  color: var(--accent-bright);
+}
+
+.rerun-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Interactive-command terminal hint ───────────────────────────────────── */
+
+.cmd-terminal-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.cmd-terminal-note svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--info);
+}
+
+/* Emphasise the terminal button cleanly while an interactive command is typed. */
+.cmd-terminal-btn--suggested {
+  border-color: var(--accent);
+  background: var(--info-bg);
+  color: var(--accent-bright);
 }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
@@ -258,6 +333,7 @@
   .cmd-workspace {
     grid-template-columns: 1fr;
   }
+
   .cmd-sidebar {
     position: static;
   }
@@ -268,38 +344,12 @@
     flex-direction: column;
     align-items: stretch;
   }
+
   .cmd-actions__primary {
     flex-direction: column;
   }
+
   .preset-chips {
     gap: 4px;
   }
-}
-
-/* ── Interactive-command terminal hint ───────────────────────────────────── */
-
-.cmd-terminal-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 10px 0 0;
-  padding: 8px 12px;
-  background: rgba(59, 130, 246, 0.08);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  border-radius: var(--radius-sm);
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.cmd-terminal-note svg {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-  color: var(--accent);
-}
-
-/* Emphasise the terminal button while an interactive command is typed. */
-.cmd-terminal-btn--suggested {
-  border-color: rgba(59, 130, 246, 0.55);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }

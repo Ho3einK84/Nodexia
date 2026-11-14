@@ -26,12 +26,12 @@
       <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
 
       {{/* ── 1 · Scope ──────────────────────────────────── */}}
-      <fieldset class="rule-section">
-        <legend class="rule-section__legend">
+      <section class="rule-section" aria-labelledby="rule-sec-1">
+        <div class="rule-section__header">
           <span class="rule-section__step" aria-hidden="true">1</span>
-          <span class="rule-section__title">{{ t "alerts.section_scope" }}</span>
+          <span id="rule-sec-1" class="rule-section__title">{{ t "alerts.section_scope" }}</span>
           <span class="rule-section__hint">{{ t "alerts.section_scope_hint" }}</span>
-        </legend>
+        </div>
 
         <label class="form-field">
           <span><i data-lucide="server" class="icon-in-button"></i> {{ t "alerts.server_scope" }}</span>
@@ -42,15 +42,15 @@
           </select>
           {{ with index $f.Errors "server_id" }}<small class="field-error">{{ . }}</small>{{ end }}
         </label>
-      </fieldset>
+      </section>
 
       {{/* ── 2 · Condition ──────────────────────────────── */}}
-      <fieldset class="rule-section">
-        <legend class="rule-section__legend">
+      <section class="rule-section" aria-labelledby="rule-sec-2">
+        <div class="rule-section__header">
           <span class="rule-section__step" aria-hidden="true">2</span>
-          <span class="rule-section__title">{{ t "alerts.section_condition" }}</span>
+          <span id="rule-sec-2" class="rule-section__title">{{ t "alerts.section_condition" }}</span>
           <span class="rule-section__hint">{{ t "alerts.section_condition_hint" }}</span>
-        </legend>
+        </div>
 
         <label class="form-field">
           <span><i data-lucide="activity" class="icon-in-button"></i> {{ t "alerts.th_metric" }}</span>
@@ -109,15 +109,15 @@
             {{ with index $f.Errors "threshold" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
         </div>
-      </fieldset>
+      </section>
 
       {{/* ── 3 · Timing & noise control ─────────────────── */}}
-      <fieldset class="rule-section">
-        <legend class="rule-section__legend">
+      <section class="rule-section" aria-labelledby="rule-sec-3">
+        <div class="rule-section__header">
           <span class="rule-section__step" aria-hidden="true">3</span>
-          <span class="rule-section__title">{{ t "alerts.section_behavior" }}</span>
+          <span id="rule-sec-3" class="rule-section__title">{{ t "alerts.section_behavior" }}</span>
           <span class="rule-section__hint">{{ t "alerts.section_behavior_hint" }}</span>
-        </legend>
+        </div>
 
         <div class="form-grid">
           <label class="form-field">
@@ -143,15 +143,15 @@
             {{ with index $f.Errors "cooldown_seconds" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
         </div>
-      </fieldset>
+      </section>
 
       {{/* ── 4 · Delivery ───────────────────────────────── */}}
-      <fieldset class="rule-section">
-        <legend class="rule-section__legend">
+      <section class="rule-section" aria-labelledby="rule-sec-4">
+        <div class="rule-section__header">
           <span class="rule-section__step" aria-hidden="true">4</span>
-          <span class="rule-section__title">{{ t "alerts.section_delivery" }}</span>
+          <span id="rule-sec-4" class="rule-section__title">{{ t "alerts.section_delivery" }}</span>
           <span class="rule-section__hint">{{ t "alerts.section_delivery_hint" }}</span>
-        </legend>
+        </div>
 
         <div class="form-field">
           <span class="form-field__label"><i data-lucide="shield-alert" class="icon-in-button"></i> {{ t "alerts.th_severity" }}</span>
@@ -193,12 +193,12 @@
           </label>
 
           <label class="form-field">
-            <span><i data-lucide="file-text" class="icon-in-button"></i> {{ t "common.note" }} <span class="badge badge--warn">{{ t "common.optional" }}</span></span>
+            <span><i data-lucide="file-text" class="icon-in-button"></i> {{ t "common.note" }}</span>
             <textarea name="note" rows="2" placeholder="{{ t "alerts.note_placeholder" }}">{{ $f.Note }}</textarea>
             {{ with index $f.Errors "note" }}<small class="field-error">{{ . }}</small>{{ end }}
           </label>
         </div>
-      </fieldset>
+      </section>
 
       {{/* Live summary — populated by alerts.js; hidden without JS. */}}
       <div class="rule-preview" data-rule-preview hidden>

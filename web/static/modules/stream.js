@@ -96,6 +96,53 @@ function initAutoRefresh(root) {
  * offset 0 on every connect, we reset the output on each (re)open so a
  * reconnect never duplicates lines.
  */
+function createStreamTrack(el) {
+  var track = {
+    el: el,
+    autoScroll: true,
+    received: el ? el.textContent.length : 0,
+    connOffset: 0
+  };
+  if (el) {
+    el.addEventListener('scroll', function () {
+      track.autoScroll = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+    }, { passive: true });
+  }
+  return track;
+}
+
+function appendStreamChunk(track, chunk) {
+  if (!track.el || !chunk) return;
+  var start = track.connOffset;
+  track.connOffset += chunk.length;
+  if (track.connOffset <= track.received) return;
+  var unseen = start < track.received ? chunk.slice(track.received - start) : chunk;
+  if (!unseen) return;
+  if (track.el.hidden) track.el.hidden = false;
+  track.el.textContent += unseen;
+  track.received += unseen.length;
+  if (track.autoScroll) track.el.scrollTop = track.el.scrollHeight;
+}
+
+function setReconnectingState(card, active) {
+  if (!card) return;
+  if (active) {
+    card.classList.add('is-reconnecting');
+    var statusLine = card.querySelector('[data-stream-status]');
+    if (statusLine && !statusLine.querySelector('[data-stream-reconnect]')) {
+      var note = document.createElement('span');
+      note.className = 'stream-reconnect-note';
+      note.setAttribute('data-stream-reconnect', '');
+      note.textContent = ' — ' + I18N.t('js.live.reconnecting');
+      statusLine.appendChild(note);
+    }
+    return;
+  }
+  card.classList.remove('is-reconnecting');
+  var existing = card.querySelector('[data-stream-reconnect]');
+  if (existing) existing.remove();
+}
+
 function initStream(root) {
   root = root || document;
   var card = root.querySelector('[data-stream-sse-url]');
@@ -112,16 +159,10 @@ function initStream(root) {
     return;
   }
 
-  // Auto-scroll the output to the bottom unless the user scrolled up to read.
-  var autoScroll = true;
-  if (stdout) {
-    stdout.addEventListener('scroll', function () {
-      autoScroll = stdout.scrollHeight - stdout.scrollTop - stdout.clientHeight < 24;
-    }, { passive: true });
-  }
-  function scrollPinned(el) {
-    if (el && autoScroll) el.scrollTop = el.scrollHeight;
-  }
+  // Track independent scroll pinning and deduplicate offset-0 replays on SSE reconnect
+  // so transient network drops never clear accumulated output or duplicate lines.
+  var outTrack = createStreamTrack(stdout);
+  var errTrack = createStreamTrack(stderr);
 
   var finished = false;
   card.classList.add('is-connecting');
@@ -132,23 +173,18 @@ function initStream(root) {
   });
 
   es.addEventListener('open', function () {
-    card.classList.remove('is-connecting', 'is-reconnecting');
-    // Server resends from offset 0 on each connect → reset before re-streaming.
-    if (stdout) stdout.textContent = '';
-    if (stderr) { stderr.textContent = ''; stderr.hidden = true; }
+    card.classList.remove('is-connecting');
+    setReconnectingState(card, false);
+    outTrack.connOffset = 0;
+    errTrack.connOffset = 0;
   });
 
   es.addEventListener('output', function (e) {
-    if (!stdout) return;
-    stdout.textContent += e.data;
-    scrollPinned(stdout);
+    appendStreamChunk(outTrack, e.data);
   });
 
   es.addEventListener('stderr', function (e) {
-    if (!stderr) return;
-    stderr.hidden = false;
-    stderr.textContent += e.data;
-    scrollPinned(stderr);
+    appendStreamChunk(errTrack, e.data);
   });
 
   es.addEventListener('done', function (e) {
@@ -173,16 +209,18 @@ function initStream(root) {
     card.classList.remove('is-connecting');
     if (finished) return;
     if (es.readyState === EventSource.CLOSED) {
+      setReconnectingState(card, false);
       streamFallback(card);
     } else {
-      card.classList.add('is-reconnecting');
+      setReconnectingState(card, true);
     }
   });
 }
 
 function finishStreamCard(card, payload, isError) {
   payload = payload || {};
-  card.classList.remove('is-connecting', 'is-reconnecting', 'cmd-result-card--live');
+  card.classList.remove('is-connecting', 'cmd-result-card--live');
+  setReconnectingState(card, false);
   card.removeAttribute('data-stream-sse-url');
 
   var status = String(payload.status || (isError ? 'failed' : 'completed'));
@@ -225,10 +263,19 @@ function finishStreamCard(card, payload, isError) {
     }
   }
 
+  var doneStdout = card.querySelector('[data-stream-stdout]');
+  var doneStderr = card.querySelector('[data-stream-stderr]');
+  if (doneStdout) doneStdout.hidden = !doneStdout.textContent;
+  if (doneStderr) doneStderr.hidden = !doneStderr.textContent;
+  var emptyNote = card.querySelector('[data-stream-empty]');
+  if (emptyNote) {
+    var hasOut = Boolean((doneStdout && doneStdout.textContent) || (doneStderr && doneStderr.textContent));
+    emptyNote.hidden = hasOut;
+  }
+
   // A node-action card self-dismisses on success / exposes a manual close on
   // failure, and stderr that arrived on a clean exit is no longer styled red.
   if (card.hasAttribute('data-node-result')) {
-    var doneStderr = card.querySelector('[data-stream-stderr]');
     if (doneStderr && !failed) doneStderr.classList.remove('output-block--error');
     scheduleNodeResultDismiss(card, failed);
   }
@@ -240,6 +287,7 @@ function finishStreamCard(card, payload, isError) {
 
 function streamFallback(card) {
   card.classList.remove('is-connecting');
+  setReconnectingState(card, false);
   var status = card.querySelector('[data-stream-status]');
   var url = card.getAttribute('data-stream-page-url') || window.location.href;
   if (status) {

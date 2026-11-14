@@ -1033,6 +1033,39 @@ details.card--collapsible[open] .card__collapse-icon {
   min-height: 80px;
 }
 
+textarea.cmd-textarea,
+.cmd-textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 80px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  resize: vertical;
+  transition: border-color var(--transition-fast);
+}
+
+textarea.cmd-textarea::placeholder,
+.cmd-textarea::placeholder {
+  color: var(--text-dim);
+}
+
+textarea.cmd-textarea:focus,
+textarea.cmd-textarea:focus-visible,
+.cmd-textarea:focus,
+.cmd-textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+  box-shadow: none;
+}
+
 .field-hint {
   display: block;
   color: var(--text-dim);
@@ -3327,14 +3360,21 @@ body.modal-open {
   justify-content: flex-end;
 }
 
-.data-table__note-row td {
-  padding-top: 0;
-  border-bottom: 1px solid var(--border);
+.rule-note {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 
-.data-table__note {
-  color: var(--text-muted);
-  font-size: 0.82rem;
+.rule-note .icon-in-button {
+  width: 16px;
+  height: 16px;
+  margin-inline-end: 0;
+  color: var(--text-dim);
 }
 
 .muted {
@@ -3344,49 +3384,131 @@ body.modal-open {
 .severity-badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 0.74rem;
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 0.75rem;
   font-weight: var(--fw-semibold);
-  text-transform: capitalize;
+  line-height: 1;
   border: 1px solid transparent;
 }
 
 .severity-badge--info {
-  color: var(--accent-soft);
-  background: rgba(96, 165, 250, 0.12);
-  border-color: rgba(96, 165, 250, 0.3);
+  color: var(--info);
+  background: var(--info-bg);
+  border-color: var(--info-border);
 }
 
 .severity-badge--warning {
   color: var(--warn);
-  background: rgba(250, 204, 21, 0.12);
-  border-color: rgba(250, 204, 21, 0.3);
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
 }
 
 .severity-badge--critical {
   color: var(--crit);
-  background: rgba(248, 113, 113, 0.14);
-  border-color: rgba(248, 113, 113, 0.35);
+  background: var(--crit-bg);
+  border-color: var(--crit-border);
 }
 
 .badge--ok {
   color: var(--ok);
-  background: rgba(74, 222, 128, 0.12);
-  border: 1px solid rgba(74, 222, 128, 0.3);
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-border);
 }
 
 .badge--warn {
   color: var(--warn);
-  background: rgba(250, 204, 21, 0.12);
-  border: 1px solid rgba(250, 204, 21, 0.3);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+}
+
+.switch-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color var(--transition-fast);
+}
+
+.switch-field:hover {
+  border-color: var(--border-strong);
+}
+
+.switch-field input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.switch-field__track {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--surface-elevated);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.switch-field__track::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  inset-inline-start: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--text-muted);
+  transition: transform var(--transition-fast), background var(--transition-fast);
+}
+
+.switch-field input:checked ~ .switch-field__track {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.switch-field input:checked ~ .switch-field__track::after {
+  transform: translateX(20px);
+  background: var(--text-bright);
+}
+
+[dir="rtl"] .switch-field input:checked ~ .switch-field__track::after {
+  transform: translateX(-20px);
+}
+
+.switch-field input:focus-visible ~ .switch-field__track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.switch-field__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: var(--fw-medium);
+  font-size: 0.9rem;
+}
+
+.switch-field__text small {
+  font-weight: var(--fw-regular);
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
 .checkbox-field {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 6px 0 4px;
+  gap: 8px;
+  margin: 8px 0 4px;
   cursor: pointer;
   user-select: none;
 }
@@ -3398,7 +3520,7 @@ body.modal-open {
 }
 
 .silence-form {
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .btn--danger-ghost:hover {
@@ -3412,8 +3534,8 @@ body.modal-open {
 }
 
 .silence-quick select {
-  height: 30px;
-  padding: 2px 6px;
+  height: 32px;
+  padding: 4px 8px;
   font-size: 0.8rem;
   border-radius: var(--radius-sm);
 }
@@ -3421,7 +3543,7 @@ body.modal-open {
 /* ── Alerts responsive ───────────────────────────────── */
 
 @media (max-width: 767px) {
-  /* Collapse the single-card grid wrapper used on alert rule / channel forms */
+  /* Collapse multi-column grid on small screens (e.g. server form) */
   .grid {
     grid-template-columns: 1fr;
   }
@@ -3472,26 +3594,11 @@ body.modal-open {
   position: relative;
 }
 
-/* Animated border glow while output streams live. */
 .stream-card.cmd-result-card--live {
-  border-color: rgba(59, 130, 246, 0.35);
+  border-color: var(--border-strong);
 }
 
-.stream-card.cmd-result-card--live::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  animation: stream-live-pulse 2s ease-in-out infinite;
-}
-
-@keyframes stream-live-pulse {
-  0%, 100% { box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12), 0 0 12px rgba(59, 130, 246, 0.04); }
-  50%      { box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.38), 0 0 20px rgba(59, 130, 246, 0.16); }
-}
-
-/* Brief overlay while the EventSource connection is being established. */
+/* Brief overlay while the EventSource connection is being established (used by nodes modal). */
 .stream-connecting {
   position: absolute;
   inset: 0;
@@ -3500,39 +3607,35 @@ body.modal-open {
   align-items: center;
   justify-content: center;
   border-radius: inherit;
-  background: var(--surface);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: rgba(20, 20, 21, 0.88);
 }
 
 .stream-card.is-connecting .stream-connecting {
   display: flex;
 }
 
-/* Network drop: amber border + an inline "reconnecting" note on the status. */
-.stream-card.is-reconnecting.cmd-result-card--live::after {
-  animation: none;
-  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.45), 0 0 16px rgba(250, 204, 21, 0.12);
+/* Network drop: amber hairline border + localized JS status note. */
+.stream-card.is-reconnecting {
+  border-color: var(--warn-border);
 }
 
 .stream-card.is-reconnecting [data-stream-status] .live-dot {
   background: var(--warn);
 }
 
-.stream-card.is-reconnecting [data-stream-status]::after {
-  content: " — reconnecting…";
+.stream-reconnect-note {
   color: var(--warn);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-medium);
 }
 
-/* Completion state fades in smoothly when the done event lands. */
+/* Completion state fades in cleanly when the done event lands. */
 .stream-fade-in {
-  animation: stream-fade-in 0.3s ease;
+  animation: stream-fade-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes stream-fade-in {
-  from { opacity: 0; transform: translateY(-2px); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .result-message--error {
@@ -3546,7 +3649,6 @@ body.modal-open {
   .refresh-countdown svg,
   .status-pulse,
   .live-dot,
-  .stream-card.cmd-result-card--live::after,
   .stream-fade-in {
     animation: none !important;
     transition: none !important;

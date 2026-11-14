@@ -13,7 +13,7 @@
   <div class="preset-chips">
     <span class="preset-chips__label"><i data-lucide="zap"></i> {{ t "commands.quick" }}</span>
     {{ range .CommandPresets }}
-    <button type="button" class="preset-chip" data-preset-cmd="{{ .Command }}" title="{{ .Description }}">{{ .Label }}</button>
+    <button type="button" class="preset-chip" data-preset-cmd="{{ .Command }}" title="{{ .Description }}" aria-pressed="false">{{ .Label }}</button>
     {{ end }}
   </div>
   {{ end }}
@@ -114,7 +114,7 @@
       >
         <div class="result-header">
           <span class="result-header__label" data-stream-label>
-            {{ if .CommandStream.IsRunning }}<span class="spinner"></span> {{ t "commands.live_stream" }}{{ else }}<i data-lucide="terminal" class="icon-in-button"></i> {{ t "commands.stream_complete" }}{{ end }}
+            <i data-lucide="terminal" class="icon-in-button"></i> {{ if .CommandStream.IsRunning }}{{ t "commands.live_stream" }}{{ else }}{{ t "commands.stream_complete" }}{{ end }}
           </span>
           <div class="result-header__meta" data-stream-meta>
             {{ if not .CommandStream.IsRunning }}
@@ -126,10 +126,10 @@
         <div class="result-cmd"><code>{{ .CommandStream.Command }}</code></div>
         {{ if .CommandStream.Error }}<pre class="output-block output-block--error">{{ .CommandStream.Error }}</pre>{{ end }}
         {{ if .CommandStream.IsRunning }}
-        <pre class="output-block scrollable" data-stream-stdout>{{ .CommandStream.Stdout }}</pre>
+        <pre class="output-block scrollable" data-stream-stdout{{ if not .CommandStream.Stdout }} hidden{{ end }}>{{ .CommandStream.Stdout }}</pre>
         <pre class="output-block output-block--error scrollable" data-stream-stderr{{ if not .CommandStream.Stderr }} hidden{{ end }}>{{ .CommandStream.Stderr }}</pre>
+        <p class="empty-state" data-stream-empty hidden>{{ t "commands.no_stdout" }}</p>
         <p class="result-message" data-stream-status><span class="live-dot"></span> {{ t "commands.streaming" }}</p>
-        <div class="stream-connecting" aria-hidden="true"><span class="spinner spinner--lg"></span></div>
         {{ else }}
         {{ if .CommandStream.Stdout }}
         <pre class="output-block scrollable">{{ .CommandStream.Stdout }}</pre>
@@ -187,19 +187,21 @@
         </div>
         {{ if .CommandHistory }}
         <div class="history-compact">
-          {{ range .CommandHistory }}
+          {{ range $i, $_ := .CommandHistory }}
           <div class="history-row" data-history-cmd="{{ .Command }}">
-            <div class="history-row__top">
-              <span class="history-row__cmd">{{ .Command }}</span>
-              <div class="history-row__right">
-                <button type="button" class="rerun-btn" data-cmd="{{ .Command }}" title="{{ t "commands.load_into_editor" }}" aria-label="{{ t "commands.load_into_editor" }}">
-                  <i data-lucide="corner-up-left"></i>
-                </button>
-                <span class="history-row__exit {{ if eq .ExitCode "0" }}history-row__exit--ok{{ else if eq .ExitCode "n/a" }}history-row__exit--na{{ else }}history-row__exit--err{{ end }}">{{ .ExitCode }}</span>
-              </div>
+            <div class="history-row__header">
+              <button type="button" class="history-row__toggle" aria-expanded="false" aria-controls="cmd-hist-{{ $.CommandTarget.ID }}-{{ $i }}" aria-label="{{ t "commands.history_toggle_aria" }}: {{ .Command }}">
+                <span class="history-row__top">
+                  <span class="history-row__cmd">{{ .Command }}</span>
+                  <span class="history-row__exit {{ if eq .ExitCode "0" }}history-row__exit--ok{{ else if eq .ExitCode "n/a" }}history-row__exit--na{{ else }}history-row__exit--err{{ end }}">{{ .ExitCode }}</span>
+                </span>
+                <span class="history-row__time">{{ .ExecutedAt }}</span>
+              </button>
+              <button type="button" class="rerun-btn" data-cmd="{{ .Command }}" title="{{ t "commands.load_into_editor" }}" aria-label="{{ t "commands.load_into_editor" }}">
+                <i data-lucide="corner-up-left"></i>
+              </button>
             </div>
-            <div class="history-row__time">{{ .ExecutedAt }}</div>
-            <div class="history-row__detail">
+            <div class="history-row__detail" id="cmd-hist-{{ $.CommandTarget.ID }}-{{ $i }}" hidden>
               {{ if .Stdout }}<pre class="output-block output-block--sm scrollable--sm">{{ .Stdout }}</pre>{{ end }}
               {{ if .Stderr }}<pre class="output-block output-block--error output-block--sm scrollable--sm">{{ .Stderr }}</pre>{{ end }}
               {{ if and (not .Stdout) (not .Stderr) }}<p class="empty-state">{{ t "commands.no_output" }}</p>{{ end }}

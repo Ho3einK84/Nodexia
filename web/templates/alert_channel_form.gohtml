@@ -8,52 +8,53 @@
   </div>
   {{ end }}
 
-  <div class="grid">
-    <article class="card">
-      <h3><i data-lucide="{{ if .IsEditingAlertChannel }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingAlertChannel }}{{ t "alerts.channel_form_edit" }}{{ else }}{{ t "alerts.channel_form_new" }}{{ end }}</h3>
-      <form method="post" action="{{ .AlertChannelForm.Action }}" class="server-form">
-        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-        <input type="hidden" name="kind" value="telegram">
+  <article class="card channel-form-card">
+    <h3><i data-lucide="{{ if .IsEditingAlertChannel }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingAlertChannel }}{{ t "alerts.channel_form_edit" }}{{ else }}{{ t "alerts.channel_form_new" }}{{ end }}</h3>
+    <form method="post" action="{{ .AlertChannelForm.Action }}" class="server-form">
+      <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+      <input type="hidden" name="kind" value="telegram">
 
-        <label class="form-field">
-          <span><i data-lucide="tag" class="icon-in-button"></i> {{ t "common.name" }}</span>
-          <input type="text" name="name" value="{{ .AlertChannelForm.Name }}" placeholder="{{ t "alerts.channel_name_placeholder" }}">
-          {{ with index .AlertChannelForm.Errors "name" }}<small class="field-error">{{ . }}</small>{{ end }}
-        </label>
+      <label class="form-field">
+        <span><i data-lucide="tag" class="icon-in-button"></i> {{ t "common.name" }}</span>
+        <input type="text" name="name" value="{{ .AlertChannelForm.Name }}" placeholder="{{ t "alerts.channel_name_placeholder" }}">
+        {{ with index .AlertChannelForm.Errors "name" }}<small class="field-error">{{ . }}</small>{{ end }}
+      </label>
 
-        <label class="form-field">
-          <span><i data-lucide="hash" class="icon-in-button"></i> {{ t "alerts.chat_id" }}</span>
-          <input type="text" name="chat_id" value="{{ .AlertChannelForm.ChatID }}" placeholder="-1001234567890">
-          <small class="field-hint">{{ tsafe "alerts.chat_id_hint" }}</small>
-          {{ with index .AlertChannelForm.Errors "chat_id" }}<small class="field-error">{{ . }}</small>{{ end }}
-        </label>
+      <label class="form-field">
+        <span><i data-lucide="hash" class="icon-in-button"></i> {{ t "alerts.chat_id" }}</span>
+        <input type="text" name="chat_id" value="{{ .AlertChannelForm.ChatID }}" placeholder="-1001234567890">
+        <small class="field-hint">{{ tsafe "alerts.chat_id_hint" }}</small>
+        {{ with index .AlertChannelForm.Errors "chat_id" }}<small class="field-error">{{ . }}</small>{{ end }}
+      </label>
 
-        <label class="form-field">
-          <span><i data-lucide="file-code" class="icon-in-button"></i> {{ t "alerts.message_template" }} <span class="badge badge--warn">{{ t "common.optional" }}</span></span>
-          <textarea name="message_template" rows="4" class="cmd-textarea" placeholder="{{ t "alerts.message_template_placeholder" }}">{{ .AlertChannelForm.MessageTemplate }}</textarea>
-          {{ with index .AlertChannelForm.Errors "message_template" }}<small class="field-error">{{ . }}</small>{{ end }}
-        </label>
+      <label class="form-field">
+        <span><i data-lucide="file-code" class="icon-in-button"></i> {{ t "alerts.message_template" }}</span>
+        <textarea name="message_template" rows="4" class="cmd-textarea" placeholder="{{ t "alerts.message_template_placeholder" }}">{{ .AlertChannelForm.MessageTemplate }}</textarea>
+        {{ with index .AlertChannelForm.Errors "message_template" }}<small class="field-error">{{ . }}</small>{{ end }}
+      </label>
 
-        <label class="checkbox-field">
-          <input type="checkbox" name="enabled" {{ if .AlertChannelForm.Enabled }}checked{{ end }}>
+      <label class="switch-field">
+        <input type="checkbox" name="enabled" role="switch" {{ if .AlertChannelForm.Enabled }}checked{{ end }}>
+        <span class="switch-field__track" aria-hidden="true"></span>
+        <span class="switch-field__text">
           <span>{{ t "alerts.channel_enabled" }}</span>
-        </label>
+        </span>
+      </label>
 
-        <div class="form-actions">
-          <button type="submit" class="btn btn--primary"><i data-lucide="check" class="icon-in-button"></i> {{ if .IsEditingAlertChannel }}{{ t "common.save_changes" }}{{ else }}{{ t "alerts.create_channel_btn" }}{{ end }}</button>
-          <a class="btn btn--secondary" href="/alerts"><i data-lucide="list" class="icon-in-button"></i> {{ t "alerts.back_to_alerts" }}</a>
-        </div>
-      </form>
-
-      {{ if .IsEditingAlertChannel }}
-      <div class="danger-zone">
-        <form method="post" action="{{ .AlertChannelForm.DeleteAction }}" class="inline-form">
-          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-          <button type="submit" class="btn btn--danger" data-confirm="{{ t "alerts.delete_channel_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "alerts.delete_channel_btn" }}</button>
-        </form>
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary"><i data-lucide="check" class="icon-in-button"></i> {{ if .IsEditingAlertChannel }}{{ t "common.save_changes" }}{{ else }}{{ t "alerts.create_channel_btn" }}{{ end }}</button>
+        <a class="btn btn--secondary" href="/alerts"><i data-lucide="list" class="icon-in-button"></i> {{ t "alerts.back_to_alerts" }}</a>
       </div>
-      {{ end }}
-    </article>
-  </div>
+    </form>
+
+    {{ if .IsEditingAlertChannel }}
+    <div class="danger-zone">
+      <form method="post" action="{{ .AlertChannelForm.DeleteAction }}" class="inline-form">
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+        <button type="submit" class="btn btn--danger" data-confirm="{{ t "alerts.delete_channel_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "alerts.delete_channel_btn" }}</button>
+      </form>
+    </div>
+    {{ end }}
+  </article>
 </section>
 {{ end }}

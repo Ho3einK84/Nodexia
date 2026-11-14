@@ -210,6 +210,9 @@ var clientI18nKeys = []string{
 	"nodes.err_ports_equal",
 	"nodes.err_port_range",
 	"nodes.optional_placeholder",
+
+	// Commands workspace (commands.js)
+	"js.commands.confirm_replace",
 }
 
 // clientI18nJSON serialises the client-needed translations for loc into a JSON

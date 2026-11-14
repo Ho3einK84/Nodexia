@@ -47,6 +47,8 @@ func renderOverview(
 	page.AlertsOverview = overview
 	page.FlashKind = flashKind
 	page.FlashMessage = page.T(flashMessage)
+	page.PageStyles = []string{"/static/alerts.css"}
+	page.PageScripts = []string{"/static/alerts.js"}
 
 	if err := deps.Renderer.Render(w, statusCode, page); err != nil {
 		http.Error(w, "render alerts page", http.StatusInternalServerError)
@@ -99,6 +101,7 @@ func renderChannelForm(
 	page.AlertChannelForm = form
 	page.FlashKind = flashKind
 	page.FlashMessage = page.T(flashMessage)
+	page.PageStyles = []string{"/static/alerts.css"}
 
 	if err := deps.Renderer.Render(w, statusCode, page); err != nil {
 		http.Error(w, "render alert channel form", http.StatusInternalServerError)
