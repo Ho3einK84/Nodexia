@@ -1,0 +1,132 @@
+{{- define "node-log-drawer" -}}
+  <div class="log-drawer" data-log-drawer hidden>
+    <div class="log-drawer__backdrop" data-log-drawer-close></div>
+    <aside class="log-drawer__panel" role="dialog" aria-modal="true" aria-label="{{ t "nodes.card_quick_logs" }}">
+      <div class="log-drawer__handle" aria-hidden="true"></div>
+
+      <header class="log-drawer__head">
+        <div class="log-drawer__title-wrap">
+          <span class="log-drawer__icon"><i data-lucide="terminal" aria-hidden="true"></i></span>
+          <span class="log-drawer__title" data-log-title-text>{{ t "nodes.drawer_title_default" }}</span>
+        </div>
+        <button type="button" class="btn btn--ghost btn--xs log-drawer__close" data-log-drawer-close aria-label="{{ t "nodes.drawer_close" }}">
+          <i data-lucide="x" aria-hidden="true"></i>
+        </button>
+      </header>
+
+      <div class="log-drawer__toolbar">
+        <div class="log-drawer__search-bar">
+          <i data-lucide="search" class="log-drawer__search-icon" aria-hidden="true"></i>
+          <input type="search" class="log-drawer__search-input" data-log-search
+                 placeholder="{{ t "nodes.drawer_search_placeholder" }}"
+                 aria-label="{{ t "nodes.drawer_search_placeholder" }}" autocomplete="off">
+          <span class="log-drawer__search-count" data-log-search-count hidden></span>
+        </div>
+        <div class="log-drawer__tools">
+          <label class="log-drawer__autoscroll" title="{{ t "nodes.drawer_autoscroll" }}">
+            <input type="checkbox" data-log-autoscroll checked>
+            <span>{{ t "nodes.drawer_autoscroll" }}</span>
+          </label>
+          <button type="button" class="btn btn--ghost btn--xs" data-log-pause aria-pressed="false" title="{{ t "nodes.drawer_pause" }}">
+            <i data-lucide="pause" class="icon-in-button" aria-hidden="true"></i>
+            <span data-log-pause-label>{{ t "nodes.drawer_pause" }}</span>
+          </button>
+          <button type="button" class="btn btn--ghost btn--xs" data-log-clear title="{{ t "nodes.drawer_clear" }}">
+            <i data-lucide="trash-2" class="icon-in-button" aria-hidden="true"></i>
+            <span>{{ t "nodes.drawer_clear" }}</span>
+          </button>
+          <button type="button" class="btn btn--ghost btn--xs" data-log-copy title="{{ t "nodes.drawer_copy" }}">
+            <i data-lucide="copy" class="icon-in-button" aria-hidden="true"></i>
+            <span>{{ t "nodes.drawer_copy" }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="log-drawer__reconnect" data-log-reconnect hidden role="status">
+        <span class="spinner spinner--sm" aria-hidden="true"></span>
+        <span>{{ t "nodes.drawer_reconnecting" }}</span>
+      </div>
+
+      <div class="log-drawer__cmd" data-log-cmd-wrap hidden><code data-log-command>—</code></div>
+
+      <div class="log-drawer__console">
+        <div class="output-block scrollable log-drawer__out" data-log-output data-log-stdout role="log" aria-live="off"></div>
+        <pre class="output-block output-block--error scrollable log-drawer__err" data-log-stderr hidden></pre>
+      </div>
+
+      <footer class="log-drawer__foot">
+        <div class="log-drawer__status-wrap" data-log-status aria-live="polite">
+          <span class="live-dot" aria-hidden="true"></span> {{ t "nodes.runner_conn_wait" }}
+        </div>
+        <button type="button" class="btn btn--secondary btn--xs log-drawer__foot-close" data-log-drawer-close>
+          {{ t "nodes.drawer_close" }}
+        </button>
+      </footer>
+    </aside>
+  </div>
+{{- end -}}
+
+{{- define "node-config-modal" -}}
+  <div class="modal" data-modal data-nodes-config-modal data-modal-id="nodes-config-modal" hidden>
+    <div class="modal__backdrop" data-modal-close></div>
+    <div class="modal__dialog nodes-config-modal__dialog" role="dialog" aria-modal="true" aria-label="{{ t "nodes.config_path" }}">
+      <header class="modal__header config-modal__header">
+        <div class="config-modal__heading">
+          <div class="config-modal__title-row">
+            <span class="config-modal__icon"><i data-lucide="file-code" aria-hidden="true"></i></span>
+            <h3 class="modal__title" data-config-modal-title>{{ t "nodes.config_path" }}</h3>
+          </div>
+          <div class="config-modal__path-pill">
+            <code class="config-modal__path-code" data-config-modal-path>—</code>
+            <button type="button" class="config-modal__path-copy" data-config-copy-path title="{{ t "nodes.config_copy_path" }}" aria-label="{{ t "nodes.config_copy_path" }}">
+              <i data-lucide="copy" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+        <button type="button" class="modal__close" data-modal-close aria-label="{{ t "nodes.config_close" }}">
+          <i data-lucide="x" aria-hidden="true"></i>
+        </button>
+      </header>
+
+      <div class="config-modal__toolbar">
+        <div class="config-modal__search-wrap">
+          <i data-lucide="search" class="config-modal__search-icon" aria-hidden="true"></i>
+          <input type="search" class="config-modal__search" data-config-search placeholder="{{ t "nodes.config_search_placeholder" }}" aria-label="{{ t "nodes.config_search_placeholder" }}" autocomplete="off">
+        </div>
+        <div class="config-modal__actions">
+          <span class="config-modal__count" data-config-count></span>
+          <button type="button" class="btn btn--secondary btn--xs config-modal__copy-all" data-config-copy-all>
+            <i data-lucide="copy" class="icon-in-button" aria-hidden="true"></i>
+            <span data-config-copy-all-text>{{ t "nodes.config_copy_all" }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="modal__body config-modal__body" data-config-modal-body></div>
+    </div>
+  </div>
+{{- end -}}
+
+{{- define "node-confirm-modal" -}}
+  <div class="modal" data-modal data-nodes-confirm-modal data-modal-id="nodes-confirm-modal" hidden>
+    <div class="modal__backdrop" data-modal-close></div>
+    <div class="modal__dialog nodes-confirm-modal__dialog" role="dialog" aria-modal="true" aria-label="{{ t "nodes.confirm_action_title" }}">
+      <header class="modal__header confirm-modal__header">
+        <div class="confirm-modal__heading">
+          <span class="confirm-modal__icon confirm-modal__icon--danger"><i data-lucide="alert-triangle" aria-hidden="true"></i></span>
+          <h3 class="modal__title">{{ t "nodes.confirm_action_title" }}</h3>
+        </div>
+        <button type="button" class="modal__close" data-modal-close aria-label="{{ t "nodes.close_install" }}">
+          <i data-lucide="x" aria-hidden="true"></i>
+        </button>
+      </header>
+      <div class="modal__body nodes-confirm-modal__body">
+        <p class="nodes-confirm-modal__lead" data-confirm-message>{{ t "js.confirm_irreversible" }}</p>
+        <div class="nodes-confirm-modal__actions">
+          <button type="button" class="btn btn--ghost" data-modal-close>{{ t "common.cancel" }}</button>
+          <button type="button" class="btn btn--danger" data-confirm-proceed data-modal-autofocus>{{ t "nodes.confirm_action_proceed" }}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{{- end -}}

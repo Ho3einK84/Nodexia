@@ -1,0 +1,258 @@
+{{- define "node-grid" -}}
+  <div class="node-grid" data-node-grid{{ if not .NodeFleet.Total }} hidden{{ end }}>
+    {{ range .NodeSnapshots }}
+    {{ if ne .NodeType "none" }}
+    <div class="node-card-slot"
+         data-node-slot
+         data-node-name="{{ .Name }}"
+         data-node-type="{{ .NodeType }}"
+         data-node-health="{{ .HealthStatus }}"
+         data-node-uptime="{{ if .UptimeKnown }}{{ .UptimePct }}{{ else }}-1{{ end }}"
+         data-node-latency="{{ .LatencyMS }}"
+         data-node-search="{{ .Name }} {{ .NodeType }} {{ .TypeLabel }} {{ .Version }} {{ .ServicePort }} {{ .APIPort }} {{ .Protocol }} {{ range .ActivePorts }}{{ . }} {{ end }}">
+      <article class="node-card node-card--{{ .NodeType }} collapsible">
+
+        <header class="node-card__head">
+          <span class="node-card__icon">
+            <i data-lucide="{{ template "node-icon" .NodeType }}" aria-hidden="true"></i>
+          </span>
+          <div class="node-card__title">
+            <div class="node-card__title-row">
+              <span class="node-card__name">{{ .Name }}</span>
+              {{ if and (ne .ServicePort "-") (ne .ServicePort "") }}
+              <code class="node-card__port-tag">:{{ .ServicePort }}</code>
+              {{ end }}
+            </div>
+            <span class="node-card__type">{{ .TypeLabel }}</span>
+          </div>
+          <div class="node-card__head-end">
+            <button type="button"
+                    class="collapsible__toggle node-card__body-toggle"
+                    data-collapse-key="node_body_{{ .NodeType }}_{{ .Name }}"
+                    data-collapse-default="closed"
+                    aria-label="{{ t "nodes.details_aria" "name" .Name }}"
+                    title="{{ t "nodes.details_aria" "name" .Name }}">
+              <i data-lucide="chevron-right" class="collapsible__icon" aria-hidden="true"></i>
+            </button>
+
+            {{ if .Actions }}
+            <div class="action-menu action-menu--below node-card__menu" data-action-menu>
+              <button type="button" class="btn btn--ghost btn--sm action-menu__toggle node-card__menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="{{ t "nodes.actions_aria" "name" .Name }}">
+                <i data-lucide="ellipsis-vertical" aria-hidden="true"></i>
+              </button>
+              <div class="action-menu__panel" role="menu">
+                <div class="action-menu__handle" aria-hidden="true"></div>
+                <div class="action-menu__head">
+                  <span class="action-menu__caption"><i data-lucide="wrench" aria-hidden="true"></i> {{ t "nodes.node_actions" }}</span>
+                  <button type="button" class="action-menu__close" data-action-menu-close aria-label="{{ t "nodes.action_menu_close" }}">
+                    <i data-lucide="x" aria-hidden="true"></i>
+                  </button>
+                </div>
+                <div class="action-menu__divider" role="separator"></div>
+                {{ if .ActionsEnabled }}
+                <form method="post" action="/servers/{{ $.NodeTarget.ID }}/nodes/actions" class="action-menu__form">
+                  <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+                  <input type="hidden" name="node_type" value="{{ .NodeType }}">
+                  <input type="hidden" name="node_name" value="{{ .Name }}">
+                  {{ $node := . }}
+                  {{ range .Actions }}
+                  <button
+                    type="submit"
+                    name="action"
+                    value="{{ .Key }}"
+                    role="menuitem"
+                    class="action-menu__item{{ if .Danger }} action-menu__item--danger{{ end }}"
+                    {{ if .Danger }}data-confirm="{{ t "nodes.action_confirm" "action" .Label "name" $node.Name }}"{{ end }}
+                  >
+                    <i data-lucide="{{ .Icon }}" class="icon-in-button" aria-hidden="true"></i> {{ .Label }}
+                  </button>
+                  {{ end }}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    class="action-menu__item"
+                    data-node-config
+                    data-node-type="{{ .NodeType }}"
+                    data-node-name="{{ .Name }}"
+                  >
+                    <i data-lucide="file-code" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.action_view_config" }}
+                  </button>
+                </form>
+                {{ else }}
+                <span class="action-menu__note"><i data-lucide="key-round" aria-hidden="true"></i> {{ t "nodes.store_creds_manage" }}</span>
+                {{ end }}
+              </div>
+            </div>
+            {{ end }}
+          </div>
+        </header>
+
+        <div class="node-status-row">
+          <span class="node-pill node-pill--health-{{ .HealthStatus }}">
+            <span class="node-pill__dot"></span>{{ template "node-health-label" .HealthStatus }}
+          </span>
+          <span class="node-pill node-pill--mode-{{ .InstallMode }}">
+            <i data-lucide="{{ if eq .InstallMode "docker" }}container{{ else if eq .InstallMode "binary" }}package{{ else }}help-circle{{ end }}" aria-hidden="true"></i>{{ .InstallMode }}
+          </span>
+          {{ if and (ne .Protocol "-") (ne .Protocol "") }}
+          <span class="node-pill node-pill--proto-{{ .Protocol }}">
+            <i data-lucide="{{ if eq .Protocol "grpc" }}layers{{ else }}globe{{ end }}" aria-hidden="true"></i>{{ .Protocol }}
+          </span>
+          {{ end }}
+          <div class="node-confidence node-confidence--{{ .Confidence }}" title="{{ t "nodes.confidence_title" "level" .Confidence }}">
+            <span class="node-confidence__meter">
+              <span class="node-confidence__seg"></span>
+              <span class="node-confidence__seg"></span>
+              <span class="node-confidence__seg"></span>
+            </span>
+            <span class="node-confidence__label">{{ .Confidence }}</span>
+          </div>
+        </div>
+
+        <div class="node-telemetry">
+          <span class="node-telemetry__item" title="{{ t "nodes.last_seen" }}">
+            <i data-lucide="clock" aria-hidden="true"></i>
+            <span class="node-telemetry__val--ltr">{{ .LastSeenAt }}</span>
+          </span>
+          {{ if gt .LatencyMS 0 }}
+          <span class="node-telemetry__item node-telemetry__item--latency" title="{{ t "nodes.latency_label" }}">
+            <i data-lucide="gauge" aria-hidden="true"></i>
+            <span class="node-telemetry__val--ltr">{{ .LatencyLabel }}</span>
+          </span>
+          {{ end }}
+        </div>
+
+        {{ if .UptimeDays }}
+        <div class="node-uptime-block">
+          <div class="node-uptime-block__head">
+            <span class="node-uptime-block__title"><i data-lucide="activity" aria-hidden="true"></i> {{ t "nodes.uptime_30d" }}</span>
+            <span class="node-uptime-block__meta">
+              {{ if .UptimeDetail }}<span class="node-uptime-block__checks" title="{{ t "nodes.uptime_checks" "detail" .UptimeDetail }}">{{ .UptimeDetail }}</span>{{ end }}
+              <span class="node-uptime-block__pct">{{ if .UptimeKnown }}{{ .UptimePct }}%{{ else }}—{{ end }}</span>
+            </span>
+          </div>
+          <div class="node-uptime-strip" role="group" aria-label="{{ t "nodes.uptime_strip_aria" }}">
+            {{ range .UptimeDays }}
+            <button type="button" class="node-uptime-bar node-uptime-bar--{{ .Status }}" aria-label="{{ .Tooltip }}">
+              <span class="node-uptime-bar__fill"></span>
+              <span class="node-uptime-bar__tip" aria-hidden="true"><span class="node-uptime-bar__tip-date">{{ .Tooltip }}</span></span>
+            </button>
+            {{ end }}
+          </div>
+          <div class="node-uptime-block__foot" data-uptime-foot hidden>
+            <span data-uptime-active-tip aria-live="polite" hidden></span>
+          </div>
+        </div>
+        {{ end }}
+
+        <div class="collapsible__content node-card__body">
+        {{ if .ActionsEnabled }}
+        <div class="node-card__quick-tools">
+          <button type="button" class="btn btn--ghost btn--xs" data-node-quick-logs data-node-type="{{ .NodeType }}" data-node-name="{{ .Name }}">
+            <i data-lucide="terminal" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.card_quick_logs" }}
+          </button>
+          <button type="button" class="btn btn--ghost btn--xs" data-node-config data-node-type="{{ .NodeType }}" data-node-name="{{ .Name }}">
+            <i data-lucide="file-code" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.action_view_config" }}
+          </button>
+        </div>
+        {{ end }}
+
+        <div class="node-facts">
+          <div class="node-fact">
+            <span class="node-fact__label"><i data-lucide="tag" aria-hidden="true"></i> {{ t "common.version" }}</span>
+            <span class="node-fact__value">{{ .Version }}</span>
+          </div>
+          <div class="node-fact">
+            <span class="node-fact__label"><i data-lucide="plug" aria-hidden="true"></i> {{ t "nodes.service_port" }}</span>
+            <span class="node-fact__value">
+              {{ if and (ne .ServicePort "-") (ne .ServicePort "") }}
+              <code class="node-port node-port--service">{{ .ServicePort }}</code>
+              {{ else }}-{{ end }}
+            </span>
+          </div>
+          <div class="node-fact">
+            <span class="node-fact__label"><i data-lucide="webhook" aria-hidden="true"></i> {{ t "nodes.api_port" }}</span>
+            <span class="node-fact__value">
+              {{ if and (ne .APIPort "-") (ne .APIPort "") }}
+              <code class="node-port node-port--api">{{ .APIPort }}</code>
+              {{ else }}-{{ end }}
+            </span>
+          </div>
+          <div class="node-fact node-fact--wide">
+            <span class="node-fact__label"><i data-lucide="folder" aria-hidden="true"></i> {{ t "nodes.data_directory" }}</span>
+            <span class="node-fact__value"><code class="node-path">{{ .DataDir }}</code></span>
+          </div>
+        </div>
+
+        {{ if eq .NodeType "pasarguard-node" }}
+        <div class="node-section node-credentials">
+          <span class="node-section__label"><i data-lucide="key-round" aria-hidden="true"></i> {{ t "nodes.credentials" }}</span>
+          {{ if .ActionsEnabled }}
+          <button type="button" class="btn btn--ghost btn--sm node-credentials__btn"
+                  data-node-credentials
+                  data-url="/servers/{{ $.NodeTarget.ID }}/nodes/credentials?type={{ .NodeType }}&amp;name={{ .Name }}">
+            <i data-lucide="key-round" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.show_api_cert" }}
+          </button>
+          <div class="node-credentials__out" hidden></div>
+          {{ else }}
+          <p class="node-actions-note"><i data-lucide="key-round" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.store_creds_view" }}</p>
+          {{ end }}
+        </div>
+        {{ end }}
+
+        {{ if .ActivePorts }}
+        {{ $apiPort := .APIPort }}{{ $servicePort := .ServicePort }}
+        <div class="node-section">
+          <span class="node-section__label"><i data-lucide="network" aria-hidden="true"></i> {{ t "nodes.active_ports" }}</span>
+          <div class="node-chips">
+            {{ range .ActivePorts }}
+            <code class="node-port{{ if eq . $apiPort }} node-port--api{{ else if eq . $servicePort }} node-port--service{{ end }}">{{ . }}</code>
+            {{ end }}
+          </div>
+        </div>
+        {{ end }}
+
+        {{ if .XrayPorts }}
+        <div class="node-section">
+          <span class="node-section__label"><i data-lucide="arrow-left-right" aria-hidden="true"></i> {{ t "nodes.xray_ports" }}</span>
+          <div class="node-chips">
+            {{ range .XrayPorts }}<code class="node-port node-port--xray">{{ . }}</code>{{ end }}
+          </div>
+        </div>
+        {{ end }}
+
+        {{ if .Dependencies }}
+        <div class="node-section">
+          <span class="node-section__label"><i data-lucide="package-check" aria-hidden="true"></i> {{ t "nodes.dependencies" }}</span>
+          <div class="node-chips">
+            {{ range .Dependencies }}<code class="node-dep{{ if hasSuffix . ":missing" }} node-dep--missing{{ end }}">{{ . }}</code>{{ end }}
+          </div>
+        </div>
+        {{ end }}
+
+        {{ if .Evidence }}
+        <div class="node-evidence collapsible">
+          <button class="collapsible__toggle" data-collapse-key="evidence_{{ .NodeType }}_{{ .Name }}" data-collapse-default="closed">
+            <i data-lucide="chevron-right" class="collapsible__icon" aria-hidden="true"></i>
+            <span>{{ t "nodes.evidence" }}</span>
+            <span class="node-evidence__count">{{ len .Evidence }}</span>
+          </button>
+          <div class="collapsible__content">
+            <ul class="node-evidence__list">
+              {{ range .Evidence }}<li><i data-lucide="check" class="node-evidence__check" aria-hidden="true"></i><span>{{ . }}</span></li>{{ end }}
+            </ul>
+          </div>
+        </div>
+        {{ end }}
+
+        <div class="node-card__footer">
+          <span><i data-lucide="calendar" aria-hidden="true"></i> {{ .CollectedAt }}</span>
+        </div>
+        </div>
+
+      </article>
+    </div>
+    {{ end }}
+    {{ end }}
+  </div>
+{{- end -}}

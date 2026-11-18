@@ -1,0 +1,475 @@
+{{ define "content-diagnostics" }}
+<section class="hero" data-diagnostics-root>
+  {{ template "page-header" . }}
+
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
+  <div class="fleet-strip" role="region" aria-label="{{ t "diagnostics.title" }}">
+    <div class="fleet-strip__item">
+      <span class="fleet-strip__label"><i data-lucide="timer" aria-hidden="true"></i> {{ t "diagnostics.process_uptime" }}</span>
+      <span class="fleet-strip__value">{{ .Diagnostics.Uptime }}</span>
+    </div>
+    <div class="fleet-strip__item">
+      <span class="fleet-strip__label"><i data-lucide="cpu" aria-hidden="true"></i> {{ t "diagnostics.goroutines" }}</span>
+      <span class="fleet-strip__value">{{ .Diagnostics.Goroutines }}</span>
+    </div>
+    <div class="fleet-strip__item{{ if eq .Diagnostics.DatabaseStatus "ok" }} fleet-strip__item--ok{{ else }} fleet-strip__item--warn{{ end }}">
+      <span class="fleet-strip__label"><i data-lucide="database" aria-hidden="true"></i> {{ t "diagnostics.database_status" }}</span>
+      <span class="fleet-strip__value">{{ .Diagnostics.DatabaseStatus }}</span>
+    </div>
+    <div class="fleet-strip__item{{ if .SchedulerOverview.Enabled }} fleet-strip__item--ok{{ else }} fleet-strip__item--warn{{ end }}">
+      <span class="fleet-strip__label"><i data-lucide="calendar-clock" aria-hidden="true"></i> {{ t "diagnostics.scheduler" }}</span>
+      <span class="fleet-strip__value">{{ if .SchedulerOverview.Enabled }}{{ t "common.active" }}{{ else }}{{ t "common.off" }}{{ end }}</span>
+    </div>
+  </div>
+
+  <p class="dash-section"><i data-lucide="layers"></i> {{ t "diagnostics.section.process_runtime" }}</p>
+  <div class="dashboard-meta">
+    <article class="card">
+      <div class="card__header">
+        <h3><i data-lucide="monitor"></i> {{ t "diagnostics.process" }}</h3>
+      </div>
+      <ul class="fact-list">
+        <li>
+          <span class="fact-list__key"><i data-lucide="play" class="icon-in-button"></i> {{ t "diagnostics.started_at" }}</span>
+          <code>{{ .Diagnostics.StartedAt }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="timer" class="icon-in-button"></i> {{ t "diagnostics.uptime" }}</span>
+          <code>{{ .Diagnostics.Uptime }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="code" class="icon-in-button"></i> {{ t "diagnostics.go_runtime" }}</span>
+          <code>{{ .Diagnostics.GoVersion }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="cpu" class="icon-in-button"></i> {{ t "diagnostics.cpus" }}</span>
+          <code>{{ .Diagnostics.NumCPU }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="git-branch" class="icon-in-button"></i> {{ t "diagnostics.goroutines" }}</span>
+          <code>{{ .Diagnostics.Goroutines }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "diagnostics.active_streams" }}</span>
+          <code>{{ .Diagnostics.CommandStreamCount }}</code>
+        </li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <div class="card__header">
+        <h3><i data-lucide="database"></i> {{ t "common.database" }}</h3>
+        <span class="status-pill status-pill--{{ if eq .Diagnostics.DatabaseStatus "ok" }}ok{{ else }}warn{{ end }}">{{ .Diagnostics.DatabaseStatus }}</span>
+      </div>
+      <ul class="fact-list">
+        <li>
+          <span class="fact-list__key"><i data-lucide="info" class="icon-in-button"></i> {{ t "diagnostics.detail" }}</span>
+          <code>{{ .Diagnostics.DatabaseDetail }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="layers" class="icon-in-button"></i> {{ t "common.driver" }}</span>
+          <code>{{ .DatabaseDriver }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="hard-drive" class="icon-in-button"></i> {{ t "diagnostics.target" }}</span>
+          <code>{{ .DatabaseTarget }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="list-checks" class="icon-in-button"></i> {{ t "common.migrations" }}</span>
+          <code>{{ .Diagnostics.MigrationCount }}</code>
+        </li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <div class="card__header">
+        <h3><i data-lucide="shield"></i> {{ t "diagnostics.security_proxy" }}</h3>
+      </div>
+      <ul class="fact-list">
+        <li>
+          <span class="fact-list__key"><i data-lucide="key" class="icon-in-button"></i> {{ t "diagnostics.ssh_host_key_policy" }}</span>
+          <code>{{ .Diagnostics.SSHHostKeyPolicy }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="globe" class="icon-in-button"></i> {{ t "diagnostics.behind_proxy" }}</span>
+          <code>{{ .Diagnostics.BehindReverseProxy }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="calendar-clock" class="icon-in-button"></i> {{ t "diagnostics.scheduler_enabled" }}</span>
+          <code>{{ .Diagnostics.SchedulerEnabled }}</code>
+        </li>
+      </ul>
+    </article>
+  </div>
+
+  <p class="dash-section"><i data-lucide="heart-pulse"></i> {{ t "diagnostics.section.health" }}</p>
+  <article class="card">
+    <div class="card__header">
+      <h3><i data-lucide="heart"></i> {{ t "diagnostics.health_probes" }}</h3>
+    </div>
+    <div class="dashboard-list">
+      <div class="health-ep">
+        <div>
+          <p class="health-ep__label">{{ t "diagnostics.liveness_text" }}</p>
+          <code>GET /healthz</code>
+        </div>
+        <a class="health-ep__link" href="/healthz" target="_blank" rel="noopener noreferrer">
+          <i data-lucide="external-link"></i> {{ t "common.open" }}
+        </a>
+      </div>
+      <div class="health-ep">
+        <div>
+          <p class="health-ep__label">{{ t "diagnostics.liveness_json" }}</p>
+          <code>GET {{ .Diagnostics.HealthLiveURL }}</code>
+        </div>
+        <a class="health-ep__link" href="{{ .Diagnostics.HealthLiveURL }}" target="_blank" rel="noopener noreferrer">
+          <i data-lucide="external-link"></i> {{ t "common.open" }}
+        </a>
+      </div>
+      <div class="health-ep">
+        <div>
+          <p class="health-ep__label">{{ t "diagnostics.readiness_json" }}</p>
+          <code>GET {{ .Diagnostics.HealthReadyURL }}</code>
+        </div>
+        <a class="health-ep__link" href="{{ .Diagnostics.HealthReadyURL }}" target="_blank" rel="noopener noreferrer">
+          <i data-lucide="external-link"></i> {{ t "common.open" }}
+        </a>
+      </div>
+    </div>
+    <p class="field-hint card__footnote">{{ tsafe "diagnostics.health_hint" }}</p>
+  </article>
+
+  <p class="dash-section"><i data-lucide="clock"></i> {{ t "diagnostics.section.scheduler" }}</p>
+  <article class="card">
+    <div class="card__header">
+      <h3><i data-lucide="calendar-clock"></i> {{ t "diagnostics.scheduler" }}</h3>
+      <span class="status-pill status-pill--{{ if .SchedulerOverview.Enabled }}ok{{ else }}idle{{ end }}">{{ if .SchedulerOverview.Enabled }}{{ t "common.active" }}{{ else }}{{ t "common.off" }}{{ end }}</span>
+    </div>
+    <div class="inline-stats" role="group" aria-label="{{ t "diagnostics.scheduler" }}">
+      <div class="inline-stats__item">
+        <span class="inline-stats__label"><i data-lucide="circle-check" aria-hidden="true"></i> {{ t "diagnostics.eligible" }}</span>
+        <span class="inline-stats__value">{{ .SchedulerOverview.EligibleJobs }}</span>
+      </div>
+      <div class="inline-stats__item{{ if gt .SchedulerOverview.BlockedJobs 0 }} inline-stats__item--warn{{ end }}">
+        <span class="inline-stats__label"><i data-lucide="circle-alert" aria-hidden="true"></i> {{ t "diagnostics.blocked" }}</span>
+        <span class="inline-stats__value">{{ .SchedulerOverview.BlockedJobs }}</span>
+      </div>
+      <div class="inline-stats__item{{ if gt .SchedulerOverview.RunningJobs 0 }} inline-stats__item--ok{{ end }}">
+        <span class="inline-stats__label"><i data-lucide="activity" aria-hidden="true"></i> {{ t "diagnostics.running" }}</span>
+        <span class="inline-stats__value">{{ .SchedulerOverview.RunningJobs }}</span>
+      </div>
+    </div>
+    {{ if .SchedulerOverview.Jobs }}
+    <div class="dashboard-list">
+      {{ range .SchedulerOverview.Jobs }}
+      <article class="dashboard-item">
+        <div class="server-item__header">
+          <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }} &middot; <span class="dashboard-item__sub">{{ .JobType }}</span></h4>
+          <div class="dashboard-item__actions">
+            {{ if .Paused }}
+            <span class="status-pill status-pill--idle">{{ t "common.paused" }}</span>
+            {{ else }}
+            <span class="status-pill status-pill--{{ if or (eq .Status "running") (eq .Status "scheduled") }}ok{{ else if eq .Status "retrying" }}crit{{ else if eq .Status "blocked" }}warn{{ else }}idle{{ end }}">{{ .Status }}</span>
+            {{ end }}
+            <form method="post" action="{{ .ToggleURL }}" class="inline-form">
+              <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+              {{ if .Paused }}
+              <button type="submit" class="btn btn--ghost btn--sm" title="{{ t "diagnostics.resume_title" }}"><i data-lucide="play" class="icon-in-button"></i> {{ t "common.enable" }}</button>
+              {{ else }}
+              <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" title="{{ t "diagnostics.pause_title" }}"><i data-lucide="pause" class="icon-in-button"></i> {{ t "common.disable" }}</button>
+              {{ end }}
+            </form>
+          </div>
+        </div>
+        {{ if .Detail }}<p class="dashboard-item__detail">{{ .Detail }}</p>{{ end }}
+        {{ if .LastError }}<p class="error-inline">{{ .LastError }}</p>{{ end }}
+      </article>
+      {{ end }}
+    </div>
+    {{ template "pagination" .SchedulerOverview.Pagination }}
+    {{ else }}
+    <p class="field-hint">{{ t "diagnostics.no_jobs" }}</p>
+    {{ end }}
+  </article>
+
+  {{ if .SchedulerOverview.RecentRuns }}
+  <details class="card card--collapsible">
+    <summary class="card__header card__header--collapsible">
+      <div class="card__title-group">
+        <h3><i data-lucide="history"></i> {{ t "diagnostics.recent_runs" }}</h3>
+        <span class="badge badge--id">{{ len .SchedulerOverview.RecentRuns }}</span>
+      </div>
+      <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+    </summary>
+    <div class="card__collapsible-body">
+      <p class="field-hint">{{ t "diagnostics.recent_runs_hint" }}</p>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>{{ t "diagnostics.run_server" }}</th>
+              <th>{{ t "diagnostics.run_job" }}</th>
+              <th>{{ t "diagnostics.run_result" }}</th>
+              <th>{{ t "diagnostics.run_started" }}</th>
+              <th class="text-right">{{ t "diagnostics.run_duration" }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{ range .SchedulerOverview.RecentRuns }}
+            <tr>
+              <td>{{ .ServerName }}</td>
+              <td><code>{{ .JobType }}</code></td>
+              <td>
+                {{ if .Success }}
+                <span class="status-pill status-pill--ok">{{ t "diagnostics.run_ok" }}</span>
+                {{ else }}
+                <span class="status-pill status-pill--crit" {{ with .Detail }}title="{{ . }}"{{ end }}>{{ t "diagnostics.run_failed" }}</span>
+                {{ end }}
+              </td>
+              <td><code>{{ .StartedAt }}</code></td>
+              <td class="text-right"><code>{{ .Duration }}</code></td>
+            </tr>
+            {{ end }}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+  {{ end }}
+
+  <p class="dash-section"><i data-lucide="archive"></i> {{ t "backup.section" }}</p>
+  {{ if .BackupCanRun }}
+  <div class="backup-summary-strip" role="region" aria-label="{{ t "backup.section" }}">
+    <div class="backup-summary-strip__item">
+      <span class="backup-summary-strip__label"><i data-lucide="server" aria-hidden="true"></i> {{ t "backup.summary.servers" }}</span>
+      <span class="backup-summary-strip__value">{{ .BackupOverview.Servers }}</span>
+    </div>
+    <div class="backup-summary-strip__item">
+      <span class="backup-summary-strip__label"><i data-lucide="tags" aria-hidden="true"></i> {{ t "backup.summary.tags" }}</span>
+      <span class="backup-summary-strip__value">{{ .BackupOverview.ServerTags }}</span>
+    </div>
+    <div class="backup-summary-strip__item">
+      <span class="backup-summary-strip__label"><i data-lucide="gauge" aria-hidden="true"></i> {{ t "backup.summary.limits" }}</span>
+      <span class="backup-summary-strip__value">{{ .BackupOverview.ServerTrafficLimits }} / {{ .BackupOverview.TrafficLimitRules }}</span>
+    </div>
+    <div class="backup-summary-strip__item">
+      <span class="backup-summary-strip__label"><i data-lucide="send" aria-hidden="true"></i> {{ t "backup.summary.channels" }}</span>
+      <span class="backup-summary-strip__value">{{ .BackupOverview.AlertChannels }}</span>
+    </div>
+    <div class="backup-summary-strip__item">
+      <span class="backup-summary-strip__label"><i data-lucide="bell-ring" aria-hidden="true"></i> {{ t "backup.summary.rules" }}</span>
+      <span class="backup-summary-strip__value">{{ .BackupOverview.AlertRules }}</span>
+    </div>
+    <div class="backup-summary-strip__item">
+      <span class="backup-summary-strip__label"><i data-lucide="bell-off" aria-hidden="true"></i> {{ t "backup.summary.silences" }}</span>
+      <span class="backup-summary-strip__value">{{ .BackupOverview.AlertSilences }}</span>
+    </div>
+    <div class="backup-summary-strip__item">
+      <span class="backup-summary-strip__label"><i data-lucide="key-round" aria-hidden="true"></i> {{ t "backup.summary.env_secrets" }}</span>
+      <span class="backup-summary-strip__value">{{ .BackupOverview.SecretEnvCount }}</span>
+    </div>
+  </div>
+
+  <div class="backup-grid">
+    <details class="card card--collapsible backup-card backup-card--export" open>
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <h3><i data-lucide="download"></i> {{ t "backup.export.title" }}</h3>
+          <span class="badge">{{ t "backup.export.badge" }}</span>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
+      <div class="card__collapsible-body">
+        <p class="field-hint">{{ t "backup.export.description" }}</p>
+        <div class="inline-notice flash-banner--ok">
+          <p>{{ t "backup.export.warning" }}</p>
+        </div>
+        <form method="post" action="/ops/backup/export" class="server-form" data-download-form data-backup-export-form>
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+          <label class="switch-field">
+            <input type="checkbox" name="include_secrets" value="on" data-export-secrets>
+            <span class="switch-field__track" aria-hidden="true"></span>
+            <span class="switch-field__text">
+              <span><i data-lucide="key" class="icon-in-button"></i> {{ t "backup.export.include_secrets" }}</span>
+              <small>{{ t "backup.export.include_secrets_hint" }}</small>
+            </span>
+          </label>
+          <div class="inline-notice flash-banner--warn" data-secrets-risk-notice hidden>
+            <p data-secrets-risk-text></p>
+          </div>
+          <label class="form-field">
+            <span><i data-lucide="lock" class="icon-in-button"></i> {{ t "backup.export.passphrase" }}</span>
+            <div class="backup-input-wrap">
+              <input type="password" name="passphrase" autocomplete="new-password" placeholder="{{ t "backup.export.passphrase_placeholder" }}" data-export-passphrase>
+              <button type="button" class="backup-eye-btn" data-toggle-visibility aria-label="{{ t "backup.export.toggle_passphrase" }}" aria-pressed="false">
+                <i data-lucide="eye" aria-hidden="true"></i>
+              </button>
+            </div>
+          </label>
+          <div data-export-confirm-wrap hidden>
+            <label class="form-field">
+              <span><i data-lucide="shield-check" class="icon-in-button"></i> {{ t "backup.export.passphrase_confirm" }}</span>
+              <div class="backup-input-wrap">
+                <input type="password" autocomplete="new-password" placeholder="{{ t "backup.export.passphrase_confirm_placeholder" }}" data-export-passphrase-confirm>
+                <button type="button" class="backup-eye-btn" data-toggle-visibility aria-label="{{ t "backup.export.toggle_passphrase" }}" aria-pressed="false">
+                  <i data-lucide="eye" aria-hidden="true"></i>
+                </button>
+              </div>
+            </label>
+            <p class="error-inline" data-export-mismatch hidden>{{ t "js.backup.passphrase_mismatch" }}</p>
+          </div>
+          <p class="field-hint">{{ t "backup.export.passphrase_hint" }}</p>
+          <div class="inline-notice flash-banner--ok" data-export-result hidden>
+            <p data-export-result-text></p>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn--primary"><i data-lucide="download" class="icon-in-button"></i> {{ t "backup.export.button" }}</button>
+          </div>
+        </form>
+      </div>
+    </details>
+
+    <details class="card card--collapsible backup-card backup-card--restore" open>
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <h3><i data-lucide="upload"></i> {{ t "backup.restore.title" }}</h3>
+          <span class="badge">{{ t "backup.restore.badge" }}</span>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
+      <div class="card__collapsible-body">
+        <p class="field-hint">{{ t "backup.restore.description" }}</p>
+        <div class="inline-notice flash-banner--warn">
+          <p>{{ t "backup.restore.warning" }}</p>
+        </div>
+        <form method="post" action="/ops/backup/import" enctype="multipart/form-data" class="server-form" data-backup-import-form>
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+          <div class="form-field">
+            <span><i data-lucide="file-up" class="icon-in-button"></i> {{ t "backup.restore.file" }}</span>
+            <div class="backup-dropzone" data-backup-dropzone>
+              <input type="file" name="backup_file" accept=".json,.enc,application/json" required class="backup-dropzone__input" data-backup-file-input aria-label="{{ t "backup.restore.file" }}">
+              <div class="backup-dropzone__empty" data-dropzone-empty>
+                <i data-lucide="upload-cloud" class="backup-dropzone__icon" aria-hidden="true"></i>
+                <p class="backup-dropzone__title">{{ t "backup.restore.drop_title" }}</p>
+                <p class="backup-dropzone__hint">{{ t "backup.restore.drop_hint" }}</p>
+              </div>
+              <div class="backup-dropzone__selected" data-dropzone-selected hidden>
+                <div class="backup-file-chip">
+                  <i data-lucide="file-code" class="backup-file-chip__icon" aria-hidden="true"></i>
+                  <div class="backup-file-chip__meta">
+                    <code class="backup-file-chip__name" data-file-name></code>
+                    <span class="backup-file-chip__size" data-file-size></span>
+                  </div>
+                </div>
+                <button type="button" class="btn btn--ghost btn--sm backup-file-clear" data-file-clear title="{{ t "backup.restore.file_clear" }}" aria-label="{{ t "backup.restore.file_clear" }}">
+                  <i data-lucide="x" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+            <p class="error-inline" data-file-error hidden></p>
+          </div>
+
+          <label class="form-field" data-restore-passphrase-wrap>
+            <span><i data-lucide="lock" class="icon-in-button"></i> {{ t "backup.restore.passphrase" }}</span>
+            <div class="backup-input-wrap">
+              <input type="password" name="passphrase" autocomplete="new-password" placeholder="{{ t "backup.restore.passphrase_placeholder" }}" data-restore-passphrase>
+              <button type="button" class="backup-eye-btn" data-toggle-visibility aria-label="{{ t "backup.export.toggle_passphrase" }}" aria-pressed="false">
+                <i data-lucide="eye" aria-hidden="true"></i>
+              </button>
+            </div>
+          </label>
+          <p class="field-hint">{{ t "backup.restore.passphrase_hint" }}</p>
+
+          <div class="backup-inspect-bar">
+            <button type="button" class="btn btn--secondary btn--sm" data-backup-inspect-btn disabled>
+              <i data-lucide="search-check" class="icon-in-button"></i> {{ t "backup.restore.inspect_button" }}
+            </button>
+          </div>
+
+          <div class="inline-notice backup-inspect-status" data-inspect-status hidden></div>
+
+          <div class="backup-preview" data-inspect-preview hidden>
+            <div class="backup-preview__header">
+              <span class="backup-preview__title"><i data-lucide="file-check-2" class="icon-in-button"></i> {{ t "backup.restore.preview_title" }}</span>
+              <div class="backup-preview__badges">
+                <span class="status-pill" data-preview-encrypted></span>
+                <span class="status-pill" data-preview-secrets-badge></span>
+              </div>
+            </div>
+            <div class="inline-notice flash-banner--warn" data-preview-secrets-warning hidden>
+              <p>{{ t "js.backup.secrets_redacted_warning" }}</p>
+            </div>
+            <dl class="backup-meta-list">
+              <div>
+                <dt>{{ t "backup.restore.meta_version" }}</dt>
+                <dd><code data-preview-version>—</code></dd>
+              </div>
+              <div>
+                <dt>{{ t "backup.restore.meta_driver" }}</dt>
+                <dd><code data-preview-driver>—</code></dd>
+              </div>
+              <div>
+                <dt>{{ t "backup.restore.meta_created" }}</dt>
+                <dd><code data-preview-created>—</code></dd>
+              </div>
+            </dl>
+            <div class="backup-counts-grid">
+              <div class="backup-count-tile">
+                <span class="backup-count-tile__label">{{ t "backup.summary.servers" }}</span>
+                <span class="backup-count-tile__val" data-preview-count="servers">0</span>
+              </div>
+              <div class="backup-count-tile">
+                <span class="backup-count-tile__label">{{ t "backup.summary.tags" }}</span>
+                <span class="backup-count-tile__val" data-preview-count="server_tags">0</span>
+              </div>
+              <div class="backup-count-tile">
+                <span class="backup-count-tile__label">{{ t "backup.summary.limits" }}</span>
+                <span class="backup-count-tile__val" data-preview-count="limits">0</span>
+              </div>
+              <div class="backup-count-tile">
+                <span class="backup-count-tile__label">{{ t "backup.summary.channels" }}</span>
+                <span class="backup-count-tile__val" data-preview-count="alert_channels">0</span>
+              </div>
+              <div class="backup-count-tile">
+                <span class="backup-count-tile__label">{{ t "backup.summary.rules" }}</span>
+                <span class="backup-count-tile__val" data-preview-count="alert_rules">0</span>
+              </div>
+              <div class="backup-count-tile">
+                <span class="backup-count-tile__label">{{ t "backup.summary.silences" }}</span>
+                <span class="backup-count-tile__val" data-preview-count="alert_silences">0</span>
+              </div>
+              <div class="backup-count-tile">
+                <span class="backup-count-tile__label">{{ t "backup.summary.meta" }}</span>
+                <span class="backup-count-tile__val" data-preview-count="install_metadata">0</span>
+              </div>
+              <div class="backup-count-tile">
+                <span class="backup-count-tile__label">{{ t "backup.summary.env_secrets" }}</span>
+                <span class="backup-count-tile__val" data-preview-count="env_keys">0</span>
+              </div>
+            </div>
+          </div>
+
+          <label class="checkbox-field backup-confirm-gate">
+            <input type="checkbox" name="confirm" value="on" required data-confirm-checkbox>
+            <span><i data-lucide="triangle-alert" class="icon-in-button"></i> {{ t "backup.restore.confirm" }}</span>
+          </label>
+          <p class="error-inline" data-confirm-error hidden></p>
+          <div class="form-actions">
+            <button type="submit" class="btn btn--danger" data-restore-submit data-confirm="{{ t "backup.restore.confirm_prompt" }}"><i data-lucide="upload" class="icon-in-button"></i> {{ t "backup.restore.button" }}</button>
+          </div>
+        </form>
+      </div>
+    </details>
+  </div>
+  {{ else }}
+  <article class="card">
+    <p class="field-hint">{{ t "backup.flash.unavailable" }}</p>
+  </article>
+  {{ end }}
+</section>
+{{ end }}

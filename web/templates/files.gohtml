@@ -1,0 +1,631 @@
+{{ define "content-files" }}
+<section class="hero">
+
+  {{ template "server-header" . }}
+
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
+  <article
+    class="card file-browser-card"
+    id="file-browser-card"
+    data-server-id="{{ .FileTarget.ID }}"
+    data-stored-creds="{{ if .FileForm.StoredCredentialsAvailable }}1{{ else }}0{{ end }}"
+    data-home-dir="{{ .FileListing.HomeDir }}"
+    data-max-upload="{{ .FileForm.MaxUploadBytes }}"
+    data-max-edit="{{ .FileForm.MaxEditBytes }}"
+  >
+    <div class="file-dropzone" id="file-dropzone" hidden aria-hidden="true">
+      <div class="file-dropzone__inner">
+        <i data-lucide="cloud-upload" class="file-dropzone__icon"></i>
+        <p class="file-dropzone__title">{{ t "files.drop_title" }}</p>
+        <p class="file-dropzone__hint">{{ t "files.drop_hint" }}</p>
+      </div>
+    </div>
+
+    <form method="post" action="{{ .FileForm.Action }}" class="file-form" id="file-form">
+      <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+
+      <div class="file-nav{{ if .FileListing.Available }} is-path-ready{{ end }}" id="file-nav">
+        <div class="file-nav__controls" role="group" aria-label="{{ t "files.path_aria" }}">
+          <button type="button" class="file-icon-btn" id="file-back-btn" title="{{ t "files.back" }}" aria-label="{{ t "files.back" }}" disabled>
+            <i data-lucide="arrow-left" class="file-nav__dir-icon"></i>
+          </button>
+          <button type="button" class="file-icon-btn" id="file-forward-btn" title="{{ t "files.forward" }}" aria-label="{{ t "files.forward" }}" disabled>
+            <i data-lucide="arrow-right" class="file-nav__dir-icon"></i>
+          </button>
+          <button type="button" class="file-icon-btn" id="file-up-btn" title="{{ t "files.up" }}" aria-label="{{ t "files.up" }}" {{ if not .FileListing.Parent }}disabled{{ end }}>
+            <i data-lucide="arrow-up"></i>
+          </button>
+          <button type="button" class="file-icon-btn" id="file-home-btn" title="{{ t "files.home" }}" aria-label="{{ t "files.home" }}">
+            <i data-lucide="home"></i>
+          </button>
+        </div>
+
+        <div class="file-nav__pathbar" id="file-nav-pathbar">
+          <div class="breadcrumb" id="file-breadcrumb" data-horizontal-scroll aria-label="{{ t "files.path_aria" }}"></div>
+          <button type="button" class="file-icon-btn file-nav__edit-btn" id="file-path-edit-btn" title="{{ t "files.remote_path_aria" }}" aria-label="{{ t "files.remote_path_aria" }}" aria-expanded="false">
+            <i data-lucide="pencil"></i>
+          </button>
+        </div>
+
+        <div class="file-nav__tail">
+          <button type="button" class="file-icon-btn" id="file-copy-cwd-btn" title="{{ t "files.copy_cwd" }}" aria-label="{{ t "files.copy_cwd" }}">
+            <i data-lucide="copy"></i>
+          </button>
+          <button type="button" class="file-icon-btn" id="file-bookmarks-btn" title="{{ t "files.bookmarks" }}" aria-label="{{ t "files.bookmarks" }}" aria-expanded="true">
+            <i data-lucide="bookmark"></i>
+          </button>
+          <div class="file-path-input" id="file-path-input-wrap">
+            <input
+              type="text"
+              name="path"
+              id="file-path"
+              dir="ltr"
+              value="{{ .FileForm.Path }}"
+              placeholder="/var/log"
+              spellcheck="false"
+              autocomplete="off"
+              aria-label="{{ t "files.remote_path_aria" }}"
+            >
+            <button type="submit" name="intent" value="browse" class="btn btn--secondary btn--sm" id="file-browse-btn">
+              <i data-lucide="folder-search" class="icon-in-button"></i>
+              <span>{{ if .FileForm.StoredCredentialsAvailable }}{{ t "files.browse" }}{{ else }}{{ t "files.connect" }}{{ end }}</span>
+            </button>
+            <button type="button" class="file-icon-btn file-nav__cancel-edit-btn" id="file-path-cancel-btn" title="{{ t "common.cancel" }}" aria-label="{{ t "common.cancel" }}">
+              <i data-lucide="x"></i>
+            </button>
+          </div>
+        </div>
+        {{ with index .FileForm.Errors "path" }}<small class="field-error">{{ . }}</small>{{ end }}
+      </div>
+
+      <div class="file-bookmarks-bar" id="file-bookmarks-bar" data-horizontal-scroll>
+        <span class="file-bookmarks-bar__label" aria-hidden="true"><i data-lucide="bookmark"></i> <span class="file-bookmarks-bar__label-text">{{ t "files.bookmarks" }}</span></span>
+        <div class="file-bookmarks-bar__list" id="file-bookmarks-list" data-horizontal-scroll></div>
+        <button type="button" class="btn btn--ghost btn--xs file-bookmarks-bar__pin" id="file-pin-bookmark-btn">
+          <i data-lucide="pin" class="icon-in-button"></i>
+          <span>{{ t "files.bookmark_pin" }}</span>
+        </button>
+      </div>
+
+      {{ if not .FileForm.StoredCredentialsAvailable }}
+      <div class="file-creds" id="file-creds">
+        <div class="file-creds__header">
+          <div class="file-creds__heading">
+            <span class="file-creds__title"><i data-lucide="key" class="icon-in-button"></i> {{ t "files.ssh_credentials" }}</span>
+            <span class="file-creds__hint">{{ t "files.creds_hint" }}</span>
+          </div>
+          <div class="file-creds__actions">
+            <span class="file-creds__session-badge" id="file-creds-status" hidden>{{ t "files.creds_session_active" }}</span>
+            <button type="button" class="btn btn--ghost btn--xs file-creds__toggle" id="file-creds-toggle-btn" hidden aria-expanded="true">
+              <i data-lucide="chevron-up" class="icon-in-button"></i>
+              <span>{{ t "files.creds_toggle" }}</span>
+            </button>
+            <button type="button" class="btn btn--ghost btn--xs file-creds__clear" id="file-clear-creds-btn" disabled>
+              <i data-lucide="eraser" class="icon-in-button"></i>
+              <span>{{ t "files.clear_creds" }}</span>
+            </button>
+          </div>
+        </div>
+        <div class="file-creds__body" id="file-creds-body">
+          <div class="form-grid">
+            <label class="form-field">
+              <span>{{ t "common.password" }}</span>
+              <input type="password" name="password" id="file-password" placeholder="{{ t "files.password_placeholder" }}" autocomplete="current-password">
+              {{ with index .FileForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>{{ t "files.passphrase" }}</span>
+              <input type="password" name="key_passphrase" id="file-passphrase" placeholder="{{ t "files.optional_placeholder" }}">
+            </label>
+          </div>
+          <label class="form-field">
+            <span>{{ t "files.private_key" }}</span>
+            <textarea name="private_key" id="file-key" rows="3" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+            {{ with index .FileForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+        </div>
+        {{ with index .FileForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+        <input type="hidden" name="connect_timeout" value="{{ .FileForm.ConnectTimeout }}">
+      </div>
+      {{ end }}
+
+      {{ with index .FileForm.Errors "intent" }}<small class="field-error">{{ . }}</small>{{ end }}
+    </form>
+
+    {{ if .FileDownload.Available }}
+    <div class="file-result {{ if .FileDownload.Error }}file-result--error{{ else }}file-result--ok{{ end }}" id="file-ssr-result">
+      <div class="file-result__header">
+        <i data-lucide="{{ if .FileDownload.Error }}alert-circle{{ else }}download{{ end }}" class="icon-in-button"></i>
+        <span>{{ if .FileDownload.Error }}{{ t "files.download_failed" }}{{ else if .FileDownload.Name }}{{ .FileDownload.Name }}{{ else }}{{ t "files.result" }}{{ end }}</span>
+        {{ if .FileDownload.Size }}<code class="result-duration">{{ .FileDownload.Size }}</code>{{ end }}
+      </div>
+      {{ if .FileDownload.Error }}<pre class="output-block output-block--error">{{ .FileDownload.Error }}</pre>{{ end }}
+      {{ if .FileDownload.Message }}<p class="result-message">{{ .FileDownload.Message }}</p>{{ end }}
+    </div>
+    {{ end }}
+
+    <div class="file-listing" id="file-listing" data-current-path="{{ .FileListing.Path }}" data-parent-path="{{ .FileListing.Parent }}">
+      <div class="file-workspace" id="file-workspace" {{ if not .FileListing.Available }}hidden{{ end }}>
+
+        <div class="file-statusbar" id="file-statusbar">
+          <div
+            class="file-statusbar__counts"
+            id="file-dir-stats"
+            data-dirs="{{ .FileListing.DirCount }}"
+            data-files="{{ .FileListing.FileCount }}"
+            data-hidden="{{ .FileListing.HiddenCount }}"
+            data-total-size="{{ .FileListing.TotalSize }}"
+          >
+            {{ if .FileListing.Available }}
+            <span class="file-stat-pill">{{ .FileListing.DirCount }} · {{ .FileListing.FileCount }} · {{ .FileListing.TotalSize }}</span>
+            {{ end }}
+          </div>
+          <div
+            class="file-vfs"
+            id="file-vfs"
+            data-used="{{ .FileListing.VFS.Used }}"
+            data-total="{{ .FileListing.VFS.Total }}"
+            data-pct="{{ .FileListing.VFS.UsedPercent }}"
+            data-free="{{ .FileListing.VFS.Free }}"
+            {{ if not .FileListing.VFS.Available }}hidden{{ end }}
+          >
+            <span class="file-vfs__label" id="file-vfs-label">
+              {{ if .FileListing.VFS.Available }}{{ .FileListing.VFS.Used }} / {{ .FileListing.VFS.Total }} ({{ .FileListing.VFS.UsedPercent }}%){{ end }}
+            </span>
+            <div class="file-vfs__bar">
+              <div class="file-vfs__fill file-vfs__fill--{{ or .FileListing.VFS.Severity "ok" }}" id="file-vfs-fill" data-pct="{{ .FileListing.VFS.UsedPercent }}"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="file-toolbar">
+          <div class="file-toolbar__search-row">
+            <div class="file-search">
+              <i data-lucide="search" class="file-search__icon"></i>
+              <input type="text" id="file-filter" placeholder="{{ t "files.filter_placeholder" }}" autocomplete="off" spellcheck="false" aria-label="{{ t "files.filter_aria" }}">
+            </div>
+            <button type="button" class="btn btn--ghost btn--sm file-deep-search-trigger" id="file-deep-search-btn" title="{{ t "files.deep_search" }}" aria-expanded="false">
+              <i data-lucide="radar" class="icon-in-button"></i>
+              <span class="file-btn-label--sm">{{ t "files.deep_search" }}</span>
+            </button>
+          </div>
+
+          <div class="file-toolbar__group">
+            <div class="file-clipboard-pill" id="file-clipboard-pill" hidden>
+              <button type="button" class="btn btn--primary btn--sm" id="file-paste-btn">
+                <i data-lucide="clipboard-paste" class="icon-in-button"></i>
+                <span id="file-paste-label">{{ t "files.paste" }}</span>
+              </button>
+              <button type="button" class="file-icon-btn file-icon-btn--compact" id="file-paste-clear-btn" title="{{ t "files.clear_selection" }}" aria-label="{{ t "files.clear_selection" }}">
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+
+            <div class="file-toolbar__controls">
+              <div class="file-view-switch" role="group" aria-label="{{ t "files.view_list" }}">
+                <button type="button" class="file-icon-btn is-active" id="file-view-list" title="{{ t "files.view_list" }}" aria-label="{{ t "files.view_list" }}" aria-pressed="true">
+                  <i data-lucide="list"></i>
+                </button>
+                <button type="button" class="file-icon-btn" id="file-view-grid" title="{{ t "files.view_grid" }}" aria-label="{{ t "files.view_grid" }}" aria-pressed="false">
+                  <i data-lucide="layout-grid"></i>
+                </button>
+              </div>
+
+              <button type="button" class="file-icon-btn" id="file-hidden-btn" title="{{ t "files.hidden_toggle" }}" aria-label="{{ t "files.hidden_toggle" }}" aria-pressed="true">
+                <i data-lucide="eye"></i>
+              </button>
+
+              <label class="file-sort">
+                <span class="file-sort__label">{{ t "files.sort" }}</span>
+                <select id="file-sort" aria-label="{{ t "files.sort_aria" }}">
+                  <option value="name">{{ t "common.name" }}</option>
+                  <option value="size">{{ t "files.th_size" }}</option>
+                  <option value="date">{{ t "files.th_modified" }}</option>
+                  <option value="type">{{ t "files.sort_type" }}</option>
+                </select>
+              </label>
+              <button type="button" class="file-sort__dir" id="file-sort-dir" data-dir="asc" aria-label="{{ t "files.sort_dir_aria" }}" title="{{ t "files.ascending" }}">
+                <i data-lucide="arrow-up-narrow-wide"></i>
+              </button>
+
+              <button type="button" class="btn btn--ghost btn--sm file-action-btn" id="file-refresh-btn" title="{{ t "common.refresh" }}">
+                <i data-lucide="refresh-cw" class="icon-in-button"></i>
+                <span class="file-btn-label">{{ t "common.refresh" }}</span>
+              </button>
+            </div>
+
+            <div class="file-toolbar__actions">
+              <button type="button" class="btn btn--ghost btn--sm file-action-btn" id="file-newfile-btn" title="{{ t "files.new_file" }}">
+                <i data-lucide="file-plus" class="icon-in-button"></i>
+                <span class="file-btn-label">{{ t "files.new_file" }}</span>
+              </button>
+              <button type="button" class="btn btn--ghost btn--sm file-action-btn" id="file-mkdir-btn" title="{{ t "files.new_folder" }}">
+                <i data-lucide="folder-plus" class="icon-in-button"></i>
+                <span class="file-btn-label">{{ t "files.new_folder" }}</span>
+              </button>
+              <button type="button" class="btn btn--ghost btn--sm file-action-btn" id="file-symlink-btn" title="{{ t "files.new_symlink" }}">
+                <i data-lucide="link" class="icon-in-button"></i>
+                <span class="file-btn-label--lg">{{ t "files.new_symlink" }}</span>
+              </button>
+              <div class="file-upload-group">
+                <button type="button" class="btn btn--secondary btn--sm file-upload-main-btn" id="file-upload-btn" title="{{ t "files.upload_files" }}">
+                  <i data-lucide="upload" class="icon-in-button"></i>
+                  <span>{{ t "files.upload" }}</span>
+                </button>
+                <button type="button" class="btn btn--secondary btn--sm file-upload-folder-btn" id="file-upload-dir-btn" title="{{ t "files.upload_folder" }}" aria-label="{{ t "files.upload_folder" }}">
+                  <i data-lucide="folder-up" class="icon-in-button"></i>
+                </button>
+              </div>
+              <input type="file" id="file-upload-input" multiple hidden aria-hidden="true">
+              <input type="file" id="file-upload-dir-input" webkitdirectory directory multiple hidden aria-hidden="true">
+            </div>
+          </div>
+        </div>
+
+        <div class="file-deep-search" id="file-deep-search-panel" hidden>
+          <div class="file-deep-search__form">
+            <div class="file-deep-search__input-wrap">
+              <i data-lucide="radar" class="file-search__icon"></i>
+              <input type="text" id="file-deep-query" placeholder="{{ t "files.deep_search_placeholder" }}" autocomplete="off" spellcheck="false">
+            </div>
+            <label class="file-check-label">
+              <input type="checkbox" id="file-deep-content">
+              <span>{{ t "files.search_content" }}</span>
+            </label>
+            <button type="button" class="btn btn--primary btn--sm" id="file-deep-run-btn">
+              <i data-lucide="search" class="icon-in-button"></i> {{ t "files.search_run" }}
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm" id="file-deep-close-btn" aria-label="{{ t "files.search_close" }}">
+              <i data-lucide="x" class="icon-in-button"></i>
+            </button>
+          </div>
+          <div class="file-deep-search__meta" id="file-deep-meta" hidden></div>
+          <div class="file-deep-search__results" id="file-deep-results"></div>
+        </div>
+
+        <div class="file-selection-bar" id="file-selection-bar" hidden aria-live="polite">
+          <div class="file-selection-bar__info">
+            <span class="file-selection-bar__count" id="file-sel-summary"></span>
+            <button type="button" class="btn btn--ghost btn--xs" id="file-sel-clear-btn">{{ t "files.clear_selection" }}</button>
+          </div>
+          <div class="file-selection-bar__actions">
+            <button type="button" class="btn btn--secondary btn--xs" id="file-sel-download-btn">
+              <i data-lucide="file-archive" class="icon-in-button"></i> {{ t "files.download_zip" }}
+            </button>
+            <button type="button" class="btn btn--ghost btn--xs" id="file-sel-copy-btn">
+              <i data-lucide="copy" class="icon-in-button"></i> {{ t "files.copy" }}
+            </button>
+            <button type="button" class="btn btn--ghost btn--xs" id="file-sel-cut-btn">
+              <i data-lucide="scissors" class="icon-in-button"></i> {{ t "files.cut" }}
+            </button>
+            <button type="button" class="btn btn--ghost btn--xs" id="file-sel-compress-btn">
+              <i data-lucide="archive" class="icon-in-button"></i> {{ t "files.compress" }}
+            </button>
+            <button type="button" class="btn btn--ghost btn--xs" id="file-sel-chmod-btn">
+              <i data-lucide="shield" class="icon-in-button"></i> {{ t "files.permissions" }}
+            </button>
+            <button type="button" class="btn btn--danger btn--xs" id="file-sel-delete-btn">
+              <i data-lucide="trash-2" class="icon-in-button"></i> {{ t "common.delete" }}
+            </button>
+          </div>
+        </div>
+
+        <div class="file-uploads" id="file-uploads" hidden aria-live="polite">
+          <div class="file-uploads__head">
+            <span class="file-uploads__title" id="file-uploads-title"></span>
+            <button type="button" class="btn btn--ghost btn--xs" id="file-uploads-clear-btn"></button>
+          </div>
+          <div class="file-uploads__list" id="file-uploads-list"></div>
+        </div>
+
+        <div class="file-table-wrap" id="file-table-wrap" data-horizontal-scroll>
+          <div class="file-table" id="file-table">
+            <div class="file-table__head">
+              <span class="file-table__check-cell">
+                <input type="checkbox" class="file-check" id="file-select-all" aria-label="{{ t "files.select_all" }}">
+              </span>
+              <span class="file-th" data-sort-key="name">{{ t "common.name" }}</span>
+              <span>{{ t "files.th_mode" }}</span>
+              <span class="file-th" data-sort-key="size">{{ t "files.th_size" }}</span>
+              <span class="file-th" data-sort-key="date">{{ t "files.th_modified" }}</span>
+              <span></span>
+            </div>
+
+            {{ if .FileListing.Parent }}
+            <div class="file-row file-row--dir file-row--parent" data-nav-path="{{ .FileListing.Parent }}" title="{{ t "files.go_up" "path" .FileListing.Parent }}">
+              <div class="file-row__check-cell"></div>
+              <div class="file-row__name">
+                <i data-lucide="arrow-up" class="file-row__icon"></i>
+                <span class="file-row__name-text" dir="ltr">..</span>
+              </div>
+              <div class="file-row__meta">
+                <span class="file-row__mode"></span>
+                <span class="file-row__size">—</span>
+                <span class="file-row__date">—</span>
+              </div>
+              <div class="file-row__actions"></div>
+            </div>
+            {{ end }}
+
+            {{ range .FileListing.Entries }}
+            <div
+              class="file-row {{ if or (eq .Kind "directory") .LinkIsDir }}file-row--dir{{ else }}file-row--file{{ end }}{{ if .IsSymlink }} file-row--symlink{{ end }}{{ if .BrokenLink }} file-row--broken{{ end }}{{ if .IsHidden }} file-row--hidden{{ end }}"
+              {{ if or (eq .Kind "directory") .LinkIsDir }}data-nav-path="{{ .Path }}"{{ else }}data-file-path="{{ .Path }}"{{ end }}
+              data-entry-kind="{{ .Kind }}"
+              data-entry-name="{{ .Name }}"
+              data-entry-path="{{ .Path }}"
+              data-entry-size="{{ .SizeBytes }}"
+              data-entry-mtime="{{ .ModUnix }}"
+              data-entry-mode="{{ .Mode }}"
+              data-entry-octal="{{ .ModeOctal }}"
+              data-entry-uid="{{ .UID }}"
+              data-entry-gid="{{ .GID }}"
+              data-entry-symlink="{{ if .IsSymlink }}1{{ else }}0{{ end }}"
+              data-entry-link-target="{{ .LinkTarget }}"
+              data-entry-link-dir="{{ if .LinkIsDir }}1{{ else }}0{{ end }}"
+              data-entry-broken="{{ if .BrokenLink }}1{{ else }}0{{ end }}"
+              data-entry-hidden="{{ if .IsHidden }}1{{ else }}0{{ end }}"
+              data-entry-ext="{{ .Ext }}"
+              title="{{ .Path }}"
+            >
+              <div class="file-row__check-cell">
+                <input type="checkbox" class="file-check file-row__check" data-row-check aria-label="{{ t "files.select_item" "name" .Name }}">
+              </div>
+              <div class="file-row__name">
+                <i data-lucide="{{ if eq .Kind "directory" }}folder{{ else if .IsSymlink }}{{ if .LinkIsDir }}folder-symlink{{ else }}file-symlink{{ end }}{{ else if eq .Ext ".log" }}scroll-text{{ else if or (eq .Ext ".conf") (eq .Ext ".ini") (eq .Ext ".env") (eq .Ext ".cfg") (eq .Ext ".toml") }}settings{{ else if or (eq .Ext ".sh") (eq .Ext ".bash") (eq .Ext ".zsh") }}terminal{{ else if eq .Ext ".json" }}braces{{ else if or (eq .Ext ".yaml") (eq .Ext ".yml") (eq .Ext ".xml") (eq .Ext ".go") (eq .Ext ".py") (eq .Ext ".js") (eq .Ext ".ts") (eq .Ext ".css") (eq .Ext ".html") (eq .Ext ".sql") }}file-code{{ else if or (eq .Ext ".gz") (eq .Ext ".zip") (eq .Ext ".tar") (eq .Ext ".tgz") (eq .Ext ".xz") }}archive{{ else if or (eq .Ext ".png") (eq .Ext ".jpg") (eq .Ext ".jpeg") (eq .Ext ".gif") (eq .Ext ".webp") (eq .Ext ".svg") (eq .Ext ".ico") }}image{{ else if or (eq .Ext ".key") (eq .Ext ".pem") (eq .Ext ".crt") }}key-round{{ else }}file{{ end }}" class="file-row__icon"></i>
+                <span class="file-row__name-text" dir="ltr" title="{{ .Name }}">{{ .Name }}</span>
+                {{ if .IsSymlink }}
+                <span class="file-row__symlink-target{{ if .BrokenLink }} is-broken{{ end }}" dir="ltr" title="{{ .LinkTarget }}">→ {{ .LinkTarget }}</span>
+                {{ end }}
+              </div>
+              <div class="file-row__meta">
+                <span class="file-row__mode" dir="ltr" title="{{ .ModeOctal }} ({{ .UID }}:{{ .GID }})">{{ .Mode }}{{ if .ModeOctal }} <em class="file-row__octal">{{ .ModeOctal }}</em>{{ end }}</span>
+                <span class="file-row__size" dir="ltr">{{ .Size }}</span>
+                <span class="file-row__date" dir="ltr">{{ .ModifiedAt }}</span>
+              </div>
+              <div class="file-row__actions">
+                <button type="button" class="file-row__menu-btn" data-menu-trigger
+                  aria-label="{{ t "files.actions_aria" "name" .Name }}" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="more-vertical"></i>
+                </button>
+              </div>
+            </div>
+            {{ end }}
+
+            <p class="file-no-match" id="file-no-match" hidden>{{ t "files.no_match" }}</p>
+            <p class="empty-state file-empty-dir" id="file-empty-dir" {{ if .FileListing.Entries }}hidden{{ end }}>
+              <i data-lucide="folder-open" class="icon-in-button"></i> {{ t "files.empty_dir" }}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {{ if and (not .FileListing.Available) (not .FileDownload.Available) }}
+      <p class="empty-state" id="file-connect-hint">{{ t "files.browse_hint" }}</p>
+      {{ end }}
+    </div>
+  </article>
+
+  {{/* ── File Viewer & Code/Config/Log Editor Modal ────────────────────────── */}}
+  <div class="modal file-editor-modal" id="file-editor-modal" hidden>
+    <div class="modal__backdrop" data-editor-close></div>
+    <div class="modal__dialog file-editor-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="file-editor-title">
+      <header class="modal__header file-editor__header">
+        <div class="file-editor__title-wrap">
+          <i data-lucide="file-code" class="file-editor__icon" id="file-editor-icon"></i>
+          <div class="file-editor__heading">
+            <div class="file-editor__title-row">
+              <h3 class="modal__title file-editor__title" id="file-editor-title" dir="ltr"></h3>
+              <span class="file-editor__dirty" id="file-editor-dirty" hidden>{{ t "files.editor_unsaved" }}</span>
+            </div>
+            <div class="file-editor__sub" id="file-editor-path" dir="ltr"></div>
+          </div>
+        </div>
+        <div class="file-editor__toolbar">
+          <button type="button" class="btn btn--ghost btn--xs" id="file-editor-find-btn" title="Ctrl+F">
+            <i data-lucide="search" class="icon-in-button"></i>
+          </button>
+          <button type="button" class="btn btn--ghost btn--xs" id="file-editor-wrap-btn" aria-pressed="false">
+            <i data-lucide="wrap-text" class="icon-in-button"></i>
+            <span class="file-btn-label">{{ t "files.editor_wrap" }}</span>
+          </button>
+          <button type="button" class="btn btn--ghost btn--xs" id="file-editor-tail-btn">
+            <i data-lucide="scroll-text" class="icon-in-button"></i>
+            <span class="file-btn-label">{{ t "files.editor_tail" }}</span>
+          </button>
+          <label class="file-check-label file-editor__autotail" id="file-editor-autotail-wrap" hidden>
+            <input type="checkbox" id="file-editor-autotail">
+            <span>{{ t "files.editor_autotail" }}</span>
+          </label>
+          <button type="button" class="btn btn--secondary btn--xs" id="file-editor-download-btn">
+            <i data-lucide="download" class="icon-in-button"></i>
+            <span class="file-btn-label">{{ t "js.files.menu_download" }}</span>
+          </button>
+          <button type="button" class="btn btn--primary btn--xs" id="file-editor-save-btn" disabled>
+            <i data-lucide="save" class="icon-in-button"></i>
+            <span>{{ t "files.editor_save" }}</span>
+          </button>
+          <button type="button" class="modal__close" data-editor-close aria-label="{{ t "files.dialog_close" }}">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+      </header>
+
+      <div class="file-editor__find-bar" id="file-editor-find-bar" hidden>
+        <input type="text" id="file-editor-find-input" placeholder="{{ t "files.editor_find_placeholder" }}" autocomplete="off" spellcheck="false">
+        <span class="file-editor__find-count" id="file-editor-find-count"></span>
+        <button type="button" class="btn btn--ghost btn--xs" id="file-editor-find-prev" aria-label="{{ t "files.back" }}"><i data-lucide="chevron-up"></i></button>
+        <button type="button" class="btn btn--ghost btn--xs" id="file-editor-find-next" aria-label="{{ t "files.forward" }}"><i data-lucide="chevron-down"></i></button>
+        <button type="button" class="btn btn--ghost btn--xs" id="file-editor-find-close" aria-label="{{ t "files.dialog_close" }}"><i data-lucide="x"></i></button>
+      </div>
+
+      <div class="file-editor__banner" id="file-editor-banner" hidden>
+        <span id="file-editor-banner-text"></span>
+        <button type="button" class="btn btn--secondary btn--xs" id="file-editor-banner-action" hidden></button>
+      </div>
+
+      <div class="file-editor__body">
+        <div class="file-editor__loading" id="file-editor-loading" hidden>
+          <span class="spinner"></span>
+        </div>
+        <div class="file-editor__text-wrap" id="file-editor-text-wrap" hidden>
+          <pre class="file-editor__gutter" id="file-editor-gutter" aria-hidden="true"></pre>
+          <textarea class="file-editor__textarea" id="file-editor-textarea" dir="ltr" spellcheck="false" wrap="off"></textarea>
+        </div>
+        <div class="file-editor__image-wrap" id="file-editor-image-wrap" hidden>
+          <img id="file-editor-image" alt="">
+        </div>
+        <div class="file-editor__binary-wrap" id="file-editor-binary-wrap" hidden>
+          <i data-lucide="file-warning" class="file-editor__binary-icon"></i>
+          <p id="file-editor-binary-msg"></p>
+          <div class="file-editor__binary-actions">
+            <button type="button" class="btn btn--secondary btn--sm" id="file-editor-force-tail-btn"></button>
+            <button type="button" class="btn btn--primary btn--sm" id="file-editor-binary-dl-btn"></button>
+          </div>
+        </div>
+      </div>
+
+      <footer class="file-editor__footer">
+        <span id="file-editor-cursor" dir="ltr"></span>
+        <span class="file-editor__meta" id="file-editor-meta" dir="ltr"></span>
+      </footer>
+    </div>
+  </div>
+
+  {{/* ── Permissions (chmod) Modal ─────────────────────────────────────────── */}}
+  <div class="modal file-chmod-modal" id="file-chmod-modal" hidden>
+    <div class="modal__backdrop" data-chmod-close></div>
+    <div class="modal__dialog file-chmod-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="file-chmod-title">
+      <header class="modal__header">
+        <h3 class="modal__title" id="file-chmod-title"><i data-lucide="shield"></i> {{ t "files.chmod_title" }}</h3>
+        <button type="button" class="modal__close" data-chmod-close aria-label="{{ t "files.dialog_close" }}">
+          <i data-lucide="x"></i>
+        </button>
+      </header>
+      <div class="modal__body file-chmod__body">
+        <p class="file-dialog__desc" id="file-chmod-target" dir="ltr"></p>
+
+        <div class="file-chmod__matrix">
+          <div class="file-chmod__row file-chmod__row--head">
+            <span></span>
+            <span>{{ t "files.chmod_read" }} (4)</span>
+            <span>{{ t "files.chmod_write" }} (2)</span>
+            <span>{{ t "files.chmod_exec" }} (1)</span>
+          </div>
+          <div class="file-chmod__row">
+            <span class="file-chmod__role">{{ t "files.chmod_owner" }}</span>
+            <label class="file-chmod__cell"><input type="checkbox" data-chmod-bit="0400"></label>
+            <label class="file-chmod__cell"><input type="checkbox" data-chmod-bit="0200"></label>
+            <label class="file-chmod__cell"><input type="checkbox" data-chmod-bit="0100"></label>
+          </div>
+          <div class="file-chmod__row">
+            <span class="file-chmod__role">{{ t "files.chmod_group" }}</span>
+            <label class="file-chmod__cell"><input type="checkbox" data-chmod-bit="0040"></label>
+            <label class="file-chmod__cell"><input type="checkbox" data-chmod-bit="0020"></label>
+            <label class="file-chmod__cell"><input type="checkbox" data-chmod-bit="0010"></label>
+          </div>
+          <div class="file-chmod__row">
+            <span class="file-chmod__role">{{ t "files.chmod_others" }}</span>
+            <label class="file-chmod__cell"><input type="checkbox" data-chmod-bit="0004"></label>
+            <label class="file-chmod__cell"><input type="checkbox" data-chmod-bit="0002"></label>
+            <label class="file-chmod__cell"><input type="checkbox" data-chmod-bit="0001"></label>
+          </div>
+        </div>
+
+        <div class="file-chmod__special">
+          <label class="file-check-label"><input type="checkbox" data-chmod-bit="4000"> <code>setuid</code></label>
+          <label class="file-check-label"><input type="checkbox" data-chmod-bit="2000"> <code>setgid</code></label>
+          <label class="file-check-label"><input type="checkbox" data-chmod-bit="1000"> <code>sticky</code></label>
+        </div>
+
+        <div class="file-chmod__octal-row">
+          <label class="form-field file-chmod__octal-field">
+            <span>{{ t "files.chmod_octal" }}</span>
+            <input type="text" id="file-chmod-octal" dir="ltr" maxlength="4" pattern="[0-7]{3,4}" autocomplete="off" spellcheck="false">
+          </label>
+          <code class="file-chmod__symbolic" id="file-chmod-symbolic" dir="ltr">-rw-r--r--</code>
+        </div>
+
+        <div class="file-chmod__presets">
+          <button type="button" class="btn btn--ghost btn--xs" data-chmod-preset="0644"><code>0644</code></button>
+          <button type="button" class="btn btn--ghost btn--xs" data-chmod-preset="0755"><code>0755</code></button>
+          <button type="button" class="btn btn--ghost btn--xs" data-chmod-preset="0600"><code>0600</code></button>
+          <button type="button" class="btn btn--ghost btn--xs" data-chmod-preset="0700"><code>0700</code></button>
+        </div>
+
+        <label class="file-check-label" id="file-chmod-recursive-wrap" hidden>
+          <input type="checkbox" id="file-chmod-recursive">
+          <span>{{ t "files.chmod_recursive" }}</span>
+        </label>
+
+        <p class="field-error file-dialog__error" id="file-chmod-error" role="alert" hidden></p>
+
+        <div class="file-dialog__actions">
+          <button type="button" class="btn btn--secondary btn--sm" data-chmod-close>{{ t "common.cancel" }}</button>
+          <button type="button" class="btn btn--primary btn--sm" id="file-chmod-apply">{{ t "files.chmod_apply" }}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {{/* ── Properties Modal ──────────────────────────────────────────────────── */}}
+  <div class="modal file-props-modal" id="file-props-modal" hidden>
+    <div class="modal__backdrop" data-props-close></div>
+    <div class="modal__dialog file-props-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="file-props-title">
+      <header class="modal__header">
+        <h3 class="modal__title" id="file-props-title"><i data-lucide="info"></i> {{ t "files.props_title" }}</h3>
+        <button type="button" class="modal__close" data-props-close aria-label="{{ t "files.dialog_close" }}">
+          <i data-lucide="x"></i>
+        </button>
+      </header>
+      <div class="modal__body file-props__body">
+        <dl class="file-props__list" id="file-props-list"></dl>
+        <div class="file-dialog__actions">
+          <button type="button" class="btn btn--secondary btn--sm" id="file-props-calc-btn" hidden>
+            <i data-lucide="calculator" class="icon-in-button"></i> {{ t "files.props_calc_size" }}
+          </button>
+          <button type="button" class="btn btn--primary btn--sm" data-props-close>{{ t "files.dialog_close" }}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {{/* ── General Action Prompt / Confirm Modal (last so it stacks above editor) */}}
+  <div class="modal file-dialog" id="file-dialog" data-file-dialog hidden>
+    <div class="modal__backdrop" data-file-dialog-close></div>
+    <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="file-dialog-title" aria-describedby="file-dialog-desc">
+      <header class="modal__header file-dialog__header">
+        <h3 class="modal__title" id="file-dialog-title" data-file-dialog-title></h3>
+        <button type="button" class="modal__close" data-file-dialog-close aria-label="{{ t "files.dialog_close" }}">
+          <i data-lucide="x"></i>
+        </button>
+      </header>
+      <div class="modal__body file-dialog__body">
+        <p class="file-dialog__desc" id="file-dialog-desc" data-file-dialog-desc></p>
+        <ul class="file-dialog__list" data-file-dialog-list hidden></ul>
+        <div class="file-dialog__field" data-file-dialog-field hidden>
+          <input type="text" id="file-dialog-input" class="file-dialog__input" dir="ltr" data-file-dialog-input aria-labelledby="file-dialog-title" autocomplete="off" spellcheck="false" />
+          <p class="file-dialog__hint" data-file-dialog-hint hidden></p>
+        </div>
+        <div class="file-dialog__field" data-file-dialog-field2 hidden>
+          <input type="text" id="file-dialog-input2" class="file-dialog__input" dir="ltr" data-file-dialog-input2 autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="file-dialog__field" data-file-dialog-select-wrap hidden>
+          <select id="file-dialog-select" class="file-dialog__select" data-file-dialog-select></select>
+        </div>
+        <p class="field-error file-dialog__error" data-file-dialog-error role="alert" hidden></p>
+        <div class="file-dialog__actions">
+          <button type="button" class="btn btn--secondary btn--sm" data-file-dialog-close>{{ t "common.cancel" }}</button>
+          <button type="button" class="btn btn--primary btn--sm" data-file-dialog-confirm></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
+{{ end }}

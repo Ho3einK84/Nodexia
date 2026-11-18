@@ -1,0 +1,702 @@
+package nodes
+
+import (
+	"strings"
+	"testing"
+	"time"
+)
+
+// pgDiscoveryFixture mirrors what a real server produces. The install dirs and
+// their containers have DIFFERENT names: /opt/pg-node (the default, no --name)
+// runs container "node" (its compose service name), and /opt/node2 runs "node2".
+// The probe resolves each container name via =CONTAINER= so the install links to
+// its container instead of producing a ghost duplicate. "orphan" is a PasarGuard
+// container with no /opt directory (a manual install) and is surfaced on its own.
+const pgDiscoveryFixture = `=DOCKER=
+node	pasarguard/node:latest	Up 2 hours	0.0.0.0:443->443/tcp, 0.0.0.0:62050->62050/tcp
+node2	pasarguard/node:v0.5.0	Exited (0) 3 hours ago
+caddy	caddy:2	Up 5 hours
+orphan	pasarguard/node:latest	Up 1 hour
+=DOCKEREND=
+=PGNODE=pg-node=
+=CONTAINER=node=
+=IMAGE=    image: pasarguard/node:latest=
+=DATADIR=/var/lib/pg-node=
+=STATE=running=
+=ENVSTART=
+SERVICE_PORT = 62050
+API_KEY = "11111111-2222-3333-4444-555555555555"
+SERVICE_PROTOCOL = grpc
+=ENVEND=
+=PGNODEEND=
+=PGNODE=node2=
+=CONTAINER=node2=
+=IMAGE=image: "pasarguard/node:v0.5.0"=
+=STATE=exited=
+=ENVSTART=
+SERVICE_PORT=5000
+=ENVEND=
+=PGNODEEND=
+`
+
+func TestPasarGuardParseDiscovery(t *testing.T) {
+	collectedAt := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	snapshots := PasarGuardProvider{}.ParseDiscovery(pgDiscoveryFixture, collectedAt)
+
+	if len(snapshots) != 3 {
+		t.Fatalf("len(snapshots) = %d, want 3 (pg-node, node2, orphan)", len(snapshots))
+	}
+
+	byName := map[string]Snapshot{}
+	for _, snapshot := range snapshots {
+		byName[snapshot.ServiceName] = snapshot
+		if snapshot.NodeType != "pasarguard-node" {
+			t.Fatalf("NodeType = %q, want pasarguard-node", snapshot.NodeType)
+		}
+	}
+
+	// The default install: directory /opt/pg-node, container "node". It must be a
+	// single entry named for its directory and linked to the "node" container
+	// (health/version/ports come from that container) — never two entries.
+	pgNode := byName["pg-node"]
+	if pgNode.HealthStatus != "running" {
+		t.Errorf("pg-node HealthStatus = %q, want running", pgNode.HealthStatus)
+	}
+	if pgNode.ServicePort != "62050" {
+		t.Errorf("pg-node ServicePort = %q, want 62050", pgNode.ServicePort)
+	}
+	if pgNode.Protocol != "grpc" {
+		t.Errorf("pg-node Protocol = %q, want grpc", pgNode.Protocol)
+	}
+	if pgNode.Version != pasarguardUnresolvedVersion {
+		t.Errorf("pg-node Version = %q, want %q when the only image tag is latest", pgNode.Version, pasarguardUnresolvedVersion)
+	}
+	if pgNode.DataDir != "/var/lib/pg-node" {
+		t.Errorf("pg-node DataDir = %q, want /var/lib/pg-node", pgNode.DataDir)
+	}
+	if pgNode.Confidence != "high" {
+		t.Errorf("pg-node Confidence = %q, want high", pgNode.Confidence)
+	}
+	if !containsString(pgNode.XrayPorts, "443") {
+		t.Errorf("pg-node XrayPorts = %v, want to contain 443", pgNode.XrayPorts)
+	}
+	if containsString(pgNode.XrayPorts, "62050") {
+		t.Errorf("pg-node XrayPorts = %v, must not contain the service port", pgNode.XrayPorts)
+	}
+	if !containsSubstring(pgNode.Evidence, "Docker container: node") {
+		t.Errorf("pg-node Evidence = %v, want it linked to container \"node\"", pgNode.Evidence)
+	}
+
+	// The bug: container "node" must NOT also appear as its own snapshot — it is
+	// claimed by the /opt/pg-node install above.
+	if _, dup := byName["node"]; dup {
+		t.Fatalf("container \"node\" must not produce a separate snapshot; it belongs to /opt/pg-node")
+	}
+
+	node2 := byName["node2"]
+	if node2.HealthStatus != "stopped" {
+		t.Errorf("node2 HealthStatus = %q, want stopped", node2.HealthStatus)
+	}
+	if node2.ServicePort != "5000" {
+		t.Errorf("node2 ServicePort = %q, want 5000", node2.ServicePort)
+	}
+	if node2.Version != "v0.5.0" {
+		t.Errorf("node2 Version = %q, want v0.5.0", node2.Version)
+	}
+	// No =DATADIR= was emitted (/var/lib/node2 does not exist), so DataDir must be
+	// empty rather than a guessed path that is not on the host.
+	if node2.DataDir != "" {
+		t.Errorf("node2 DataDir = %q, want empty (no =DATADIR= probe marker)", node2.DataDir)
+	}
+	// Protocol falls back to the PasarGuard default when .env omits it.
+	if node2.Protocol != "grpc" {
+		t.Errorf("node2 Protocol = %q, want grpc default", node2.Protocol)
+	}
+
+	orphan, ok := byName["orphan"]
+	if !ok {
+		t.Fatalf("expected a snapshot for the orphan container without /opt directory")
+	}
+	if orphan.HealthStatus != "running" {
+		t.Errorf("orphan HealthStatus = %q, want running", orphan.HealthStatus)
+	}
+	if orphan.Confidence != "medium" {
+		t.Errorf("orphan Confidence = %q, want medium (no .env evidence)", orphan.Confidence)
+	}
+	if orphan.Version != pasarguardUnresolvedVersion {
+		t.Errorf("orphan Version = %q, want %q when startup logs are unavailable and the image tag is latest", orphan.Version, pasarguardUnresolvedVersion)
+	}
+
+	if _, found := byName["caddy"]; found {
+		t.Fatalf("non-PasarGuard container must not produce a snapshot")
+	}
+}
+
+// containsSubstring reports whether any element of values contains sub.
+func containsSubstring(values []string, sub string) bool {
+	for _, v := range values {
+		if strings.Contains(v, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestPasarGuardResolveVersions(t *testing.T) {
+	base := []Snapshot{
+		{NodeType: pasarguardType, ServiceName: "pg-node", Version: pasarguardUnresolvedVersion},
+		// A valid startup-log version must override even a meaningful pinned
+		// image-tag fallback because the process log is authoritative.
+		{NodeType: pasarguardType, ServiceName: "node2", Version: "v0.5.0"},
+		// The optional resolver must never touch another provider's snapshots.
+		{NodeType: rebeccaType, ServiceName: "rebecca-node", Version: "v0.2.1"},
+	}
+
+	tests := []struct {
+		name       string
+		output     string
+		wantPGNode string
+		wantNode2  string
+	}{
+		{
+			name: "startup log present",
+			output: `=PGVERSIONS=
+pg-node	Starting Node: v0.5.3
+node2	Starting Node: v0.6.1
+=PGVERSIONSEND=`,
+			wantPGNode: "v0.5.3",
+			wantNode2:  "v0.6.1",
+		},
+		{
+			name: "startup log absent uses graceful fallback",
+			output: `=PGVERSIONS=
+=PGVERSIONSEND=`,
+			wantPGNode: pasarguardUnresolvedVersion,
+			wantNode2:  "v0.5.0",
+		},
+		{
+			name: "malformed startup logs are ignored",
+			output: `=PGVERSIONS=
+pg-node	Starting Node: v0..5
+node2	Starting Node: v0.6.1-beta
+other	random output
+=PGVERSIONSEND=`,
+			wantPGNode: pasarguardUnresolvedVersion,
+			wantNode2:  "v0.5.0",
+		},
+	}
+
+	provider := PasarGuardProvider{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := provider.ResolveVersions(base, tt.output)
+			if got[0].Version != tt.wantPGNode {
+				t.Errorf("pg-node Version = %q, want %q", got[0].Version, tt.wantPGNode)
+			}
+			if got[1].Version != tt.wantNode2 {
+				t.Errorf("node2 Version = %q, want %q", got[1].Version, tt.wantNode2)
+			}
+			if got[2].Version != "v0.2.1" {
+				t.Errorf("Rebecca Version = %q, want unchanged v0.2.1", got[2].Version)
+			}
+			// ResolveVersions must not mutate the caller's baseline slice.
+			if base[0].Version != pasarguardUnresolvedVersion || base[1].Version != "v0.5.0" {
+				t.Fatalf("ResolveVersions mutated its input: %+v", base)
+			}
+		})
+	}
+}
+
+func TestParsePasarguardStartupVersion(t *testing.T) {
+	tests := map[string]string{
+		"Starting Node: v0.5.3":        "v0.5.3",
+		"  Starting Node: v12.0  ":     "v12.0",
+		"Starting Node: v0..5":         "",
+		"Starting Node: v0.5.":         "",
+		"Starting Node: v0.5.3-beta":   "",
+		"Starting Node: latest":        "",
+		"prefix Starting Node: v0.5.3": "",
+		"":                             "",
+	}
+	for line, want := range tests {
+		if got := parsePasarguardStartupVersion(line); got != want {
+			t.Errorf("parsePasarguardStartupVersion(%q) = %q, want %q", line, got, want)
+		}
+	}
+}
+
+func TestPasarGuardVersionDiscoveryCommand(t *testing.T) {
+	command := PasarGuardProvider{}.VersionDiscoveryCommand(pgDiscoveryFixture)
+	for _, containerName := range []string{"node", "node2", "orphan"} {
+		if !strings.Contains(command, `docker logs --tail 250 "`+containerName+`" 2>&1`) {
+			t.Errorf("version command must read bounded startup logs for container %q:\n%s", containerName, command)
+		}
+	}
+	if !strings.Contains(command, `tail -n 1`) {
+		t.Errorf("version command must pick the latest startup version line:\n%s", command)
+	}
+	if strings.Contains(command, `docker logs --tail 250 "caddy"`) {
+		t.Errorf("version command must not read unrelated container logs:\n%s", command)
+	}
+	if !strings.Contains(command, `grep -o "Starting Node: v[0-9][0-9.]*"`) {
+		t.Errorf("version command is missing the constrained startup-version match:\n%s", command)
+	}
+	if !strings.Contains(command, `"pg-node" "$line"`) {
+		t.Errorf("version command must associate /opt/pg-node with its real container node:\n%s", command)
+	}
+}
+
+func TestPasarGuardImageVersionFallback(t *testing.T) {
+	tests := map[string]string{
+		"pasarguard/node:v0.5.3":                         "v0.5.3",
+		"pasarguard/node:edge":                           "edge",
+		"pasarguard/node:latest":                         "",
+		"pasarguard/node:LATEST":                         "",
+		"pasarguard/node":                                "",
+		"registry:5000/pasarguard/node":                  "",
+		"pasarguard/node@sha256:0123456789abcdef":        "",
+		"pasarguard/node:v0.5.3@sha256:0123456789abcdef": "v0.5.3",
+		"pasarguard/node:${NODE_VERSION:-latest}":        "",
+		"": "",
+	}
+	for image, want := range tests {
+		if got := pasarguardImageVersion(image); got != want {
+			t.Errorf("pasarguardImageVersion(%q) = %q, want %q", image, got, want)
+		}
+	}
+}
+
+// TestPasarGuardDiscoveryNoGhostDuplicate reproduces the exact reported server
+// state: `docker ps` shows containers "node2" and "node", the default install is
+// /opt/pg-node (whose container is "node") and a named install is /opt/node2.
+// Before the fix the default install appeared twice — as "pg-node" (dir scan,
+// inspect by "pg-node" found nothing) and as "node" (orphan fallback). It must
+// now collapse to exactly one "pg-node" entry linked to the "node" container.
+func TestPasarGuardDiscoveryNoGhostDuplicate(t *testing.T) {
+	const fixture = `=DOCKER=
+node2	pasarguard/node:latest	Up 1 hour	0.0.0.0:62051->62051/tcp
+node	pasarguard/node:latest	Up 2 hours	0.0.0.0:62050->62050/tcp
+=DOCKEREND=
+=PGNODE=pg-node=
+=CONTAINER=node=
+=IMAGE=    image: pasarguard/node:latest=
+=DATADIR=/var/lib/pg-node=
+=STATE=running=
+=ENVSTART=
+SERVICE_PORT = 62050
+=ENVEND=
+=PGNODEEND=
+=PGNODE=node2=
+=CONTAINER=node2=
+=IMAGE=    image: pasarguard/node:latest=
+=STATE=running=
+=ENVSTART=
+SERVICE_PORT = 62051
+=ENVEND=
+=PGNODEEND=
+`
+	snapshots := PasarGuardProvider{}.ParseDiscovery(fixture, time.Now())
+	if len(snapshots) != 2 {
+		names := make([]string, len(snapshots))
+		for i, s := range snapshots {
+			names[i] = s.ServiceName
+		}
+		t.Fatalf("len(snapshots) = %d %v, want 2 (pg-node, node2) with no ghost duplicate", len(snapshots), names)
+	}
+
+	byName := map[string]Snapshot{}
+	for _, s := range snapshots {
+		byName[s.ServiceName] = s
+	}
+	if _, dup := byName["node"]; dup {
+		t.Errorf("container \"node\" produced a separate snapshot; it belongs to the /opt/pg-node install")
+	}
+	pgNode, ok := byName["pg-node"]
+	if !ok {
+		t.Fatalf("missing pg-node snapshot; got %v", byName)
+	}
+	if pgNode.HealthStatus != "running" {
+		t.Errorf("pg-node HealthStatus = %q, want running (from linked \"node\" container)", pgNode.HealthStatus)
+	}
+	if !containsString(pgNode.ActivePorts, "62050") {
+		t.Errorf("pg-node ActivePorts = %v, want service port 62050", pgNode.ActivePorts)
+	}
+}
+
+func TestIsPasarguardNodeImage(t *testing.T) {
+	cases := map[string]bool{
+		"pasarguard/node:latest":       true,
+		"ghcr.io/pasarguard/node:v1":   true,
+		"PasarGuard/Node:latest":       true, // case-insensitive
+		"some-registry/pg-node:edge":   true,
+		"pasarguard/pasarguard:latest": false, // the panel, not a node
+		"node:18":                      false, // unrelated Node.js image
+		"caddy:2":                      false,
+		"":                             false,
+	}
+	for image, want := range cases {
+		if got := isPasarguardNodeImage(image); got != want {
+			t.Errorf("isPasarguardNodeImage(%q) = %v, want %v", image, got, want)
+		}
+	}
+}
+
+// TestPasarGuardDiscoveryIgnoresPanel reproduces the reported environment: the
+// PasarGuard PANEL is installed alongside a node. docker ps lists the panel
+// container "pasarguard-pasarguard-1" (image pasarguard/pasarguard); discovery
+// must surface only the node and never mistake the panel for one.
+func TestPasarGuardDiscoveryIgnoresPanel(t *testing.T) {
+	const fixture = `=DOCKER=
+pasarguard-pasarguard-1	pasarguard/pasarguard:latest	Up 3 hours	0.0.0.0:8000->8000/tcp
+node	pasarguard/node:latest	Up 2 hours	0.0.0.0:62050->62050/tcp
+=DOCKEREND=
+=PGNODE=pg-node=
+=CONTAINER=node=
+=IMAGE=    image: pasarguard/node:latest=
+=STATE=running=
+=ENVSTART=
+SERVICE_PORT = 62050
+=ENVEND=
+=PGNODEEND=
+`
+	snapshots := PasarGuardProvider{}.ParseDiscovery(fixture, time.Now())
+
+	names := make([]string, 0, len(snapshots))
+	byName := map[string]Snapshot{}
+	for _, s := range snapshots {
+		byName[s.ServiceName] = s
+		names = append(names, s.ServiceName)
+	}
+	if _, ok := byName["pasarguard-pasarguard-1"]; ok {
+		t.Error("the PasarGuard panel container must not be reported as a node")
+	}
+	if _, ok := byName["pasarguard"]; ok {
+		t.Error("the PasarGuard panel must not be reported as a node")
+	}
+	if _, ok := byName["pg-node"]; !ok {
+		t.Errorf("expected the real node to be discovered; got %v", names)
+	}
+	if len(snapshots) != 1 {
+		t.Fatalf("len(snapshots) = %d %v, want 1 (only the node, not the panel)", len(snapshots), names)
+	}
+}
+
+// TestPasarGuardDiscoveryCommandTargetsNodeImage guards the shell-side dir scan
+// against the regression: it must match the node image specifically, not a bare
+// "pasarguard" (which also matches the panel at /opt/pasarguard).
+func TestPasarGuardDiscoveryCommandTargetsNodeImage(t *testing.T) {
+	cmd := PasarGuardProvider{}.DiscoveryCommand()
+	if !strings.Contains(cmd, "pasarguard/node|pg-node") {
+		t.Errorf("discovery dir scan must match the node image specifically:\n%s", cmd)
+	}
+	if strings.Contains(cmd, `"pasarguard|pg-node"`) {
+		t.Errorf("discovery must not use the broad pasarguard match (it catches the panel):\n%s", cmd)
+	}
+}
+
+func TestPGHealth(t *testing.T) {
+	cases := []struct {
+		name            string
+		state           string
+		healthCheck     string
+		hasContainer    bool
+		containerStatus string
+		want            string
+	}{
+		{"inspect running", "running", "", false, "", "running"},
+		{"inspect running unhealthy check", "running", "unhealthy", false, "", "degraded"},
+		{"inspect running unhealthy ps", "running", "", true, "Up 1h (unhealthy)", "degraded"},
+		{"inspect restarting", "restarting", "", false, "", "restarting"},
+		{"inspect exited", "exited", "", true, "Up 1h", "stopped"}, // inspect wins over stale ps
+		{"inspect paused", "paused", "", false, "", "stopped"},
+		{"no inspect, ps up", "", "", true, "Up 2 hours", "running"},
+		{"no inspect, ps restarting", "", "", true, "Restarting (1) 5s ago", "restarting"},
+		{"no inspect, ps exited", "", "", true, "Exited (0) ago", "stopped"},
+		{"no signal at all", "", "", false, "", "unknown"},
+	}
+	for _, tc := range cases {
+		if got := pgHealthWithCheck(tc.state, tc.healthCheck, tc.hasContainer, tc.containerStatus); got != tc.want {
+			t.Errorf("%s: pgHealthWithCheck(%q,%q,%v,%q) = %q, want %q", tc.name, tc.state, tc.healthCheck, tc.hasContainer, tc.containerStatus, got, tc.want)
+		}
+	}
+}
+
+func TestPasarGuardContainerPortsAndOrphanMetadata(t *testing.T) {
+	// Container-only EXPOSE entries (no "->") must be ignored; port ranges expand cleanly.
+	gotPorts := containerXrayPorts("443/tcp, 0.0.0.0:62050->62050/tcp, 0.0.0.0:8000-8002->8000-8002/tcp, [::]:8443->8443/tcp", []string{"62050"})
+	wantPorts := []string{"8000", "8001", "8002", "8443"}
+	if strings.Join(gotPorts, ",") != strings.Join(wantPorts, ",") {
+		t.Fatalf("containerXrayPorts = %v, want %v", gotPorts, wantPorts)
+	}
+
+	const orphanFixture = `=DOCKER=
+manual-pg	ghcr.io/pasarguard/node:0.6.0	Up 1 hour (unhealthy)	0.0.0.0:2083->2083/tcp, 80/tcp
+=DOCKEREND=
+=PGORPHAN=manual-pg=
+=STATE=running=
+=HEALTH=unhealthy=
+=DATADIR=/var/lib/manual-pg=
+=ENVSTART=
+SERVICE_PORT=62099
+SERVICE_PROTOCOL=rest
+=ENVEND=
+=PGORPHANEND=
+`
+	snaps := PasarGuardProvider{}.ParseDiscovery(orphanFixture, time.Now())
+	if len(snaps) != 1 {
+		t.Fatalf("len(snaps) = %d, want 1", len(snaps))
+	}
+	s := snaps[0]
+	if s.HealthStatus != "degraded" {
+		t.Errorf("HealthStatus = %q, want degraded", s.HealthStatus)
+	}
+	if s.ServicePort != "62099" || s.Protocol != "rest" {
+		t.Errorf("port/protocol = %s/%s, want 62099/rest", s.ServicePort, s.Protocol)
+	}
+	if s.DataDir != "/var/lib/manual-pg" || s.Version != "v0.6.0" {
+		t.Errorf("DataDir=%q Version=%q", s.DataDir, s.Version)
+	}
+	if strings.Join(s.XrayPorts, ",") != "2083" {
+		t.Errorf("XrayPorts = %v, want [2083]", s.XrayPorts)
+	}
+}
+
+func TestPasarGuardParseDiscoveryEmpty(t *testing.T) {
+	if snapshots := (PasarGuardProvider{}).ParseDiscovery("", time.Now()); len(snapshots) != 0 {
+		t.Fatalf("len(snapshots) = %d, want 0", len(snapshots))
+	}
+}
+
+func TestPasarGuardActionCommand(t *testing.T) {
+	provider := PasarGuardProvider{}
+
+	command, timeout, err := provider.ActionCommand("node2", "restart")
+	if err != nil {
+		t.Fatalf("ActionCommand: %v", err)
+	}
+	if !strings.Contains(command, "--name node2 restart -n") {
+		t.Errorf("restart command = %q, want pg-node restart with --name and -n", command)
+	}
+	if timeout <= 0 {
+		t.Errorf("restart timeout = %v, want > 0", timeout)
+	}
+
+	command, _, err = provider.ActionCommand("node", "uninstall")
+	if err != nil {
+		t.Fatalf("ActionCommand uninstall: %v", err)
+	}
+	// uninstall must NOT use --yes (the script's confirm is broken under --yes);
+	// instead it pipes "y" to the uninstall + remove-data prompts.
+	if strings.Contains(command, "--yes") {
+		t.Errorf("uninstall command = %q, must not use --yes", command)
+	}
+	if !strings.Contains(command, `printf "y\ny\n" |`) || !strings.Contains(command, "--name node uninstall") {
+		t.Errorf("uninstall command = %q, want piped y answers to uninstall", command)
+	}
+
+	if _, _, err := provider.ActionCommand("node; rm -rf /", "status"); err == nil {
+		t.Fatalf("ActionCommand must reject shell metacharacters in node names")
+	}
+	if _, _, err := provider.ActionCommand("node", "format-disk"); err == nil {
+		t.Fatalf("ActionCommand must reject unknown actions")
+	}
+}
+
+func TestPasarGuardInstallCommand(t *testing.T) {
+	command, err := PasarGuardProvider{}.InstallCommand(InstallConfig{
+		NodeName: "node3", ServicePort: "62011", Protocol: "grpc",
+	})
+	if err != nil {
+		t.Fatalf("InstallCommand: %v", err)
+	}
+	for _, want := range []string{pasarguardScriptURL, "install --name node3", "timeout", "62011"} {
+		if !strings.Contains(command, want) {
+			t.Errorf("install command missing %q:\n%s", want, command)
+		}
+	}
+	// Every choice must be a native CLI flag: no positional stdin answers remain.
+	if strings.Contains(command, `printf "\n\n`) {
+		t.Errorf("install command must not feed positional stdin answers anymore:\n%s", command)
+	}
+	for _, want := range []string{"-y", "--self-signed", "--use-grpc", "exit 87"} {
+		if !strings.Contains(command, want) {
+			t.Errorf("install command missing %q:\n%s", want, command)
+		}
+	}
+	if strings.Contains(command, "--override") {
+		t.Errorf("new install without ConfirmOverride must not implicitly pass --override:\n%s", command)
+	}
+
+	overrideCmd, err := PasarGuardProvider{}.InstallCommand(InstallConfig{
+		NodeName: "node3", ServicePort: "62011", Protocol: "grpc", ConfirmOverride: true,
+	})
+	if err != nil || !strings.Contains(overrideCmd, "--override") {
+		t.Errorf("explicit ConfirmOverride install must include --override (err=%v):\n%s", err, overrideCmd)
+	}
+
+	if _, err := (PasarGuardProvider{}).InstallCommand(InstallConfig{NodeName: "$(reboot)"}); err == nil {
+		t.Fatalf("InstallCommand must reject unsafe node names")
+	}
+}
+
+// TestPasarGuardInstallFlags pins the flag mapping, including the API-port rule:
+// upstream only reads API_PORT on the systemd service path, so asking for one
+// must also install the service unit, and asking for none must skip it.
+func TestPasarGuardInstallFlags(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     InstallConfig
+		want    []string
+		notWant []string
+	}{
+		{
+			name: "api port installs the service",
+			cfg:  InstallConfig{NodeName: "n", ServicePort: "62050", APIPort: "62051"},
+			want: []string{"--install-service", "--api-port 62051"},
+			notWant: []string{"--no-install-service"},
+		},
+		{
+			name: "no api port skips the service",
+			cfg:  InstallConfig{NodeName: "n", ServicePort: "62050"},
+			want: []string{"--no-install-service"},
+			notWant: []string{"--api-port", "--install-service"},
+		},
+		{
+			name: "rest protocol",
+			cfg:  InstallConfig{NodeName: "n", ServicePort: "62050", Protocol: "rest"},
+			want: []string{"--use-rest"},
+			notWant: []string{"--use-grpc"},
+		},
+		{
+			name: "dev channel",
+			cfg:  InstallConfig{NodeName: "n", ServicePort: "62050", Channel: channelDev},
+			want: []string{"--dev"},
+		},
+		{
+			name: "pinned api key and quoted sans",
+			cfg: InstallConfig{
+				NodeName: "n", ServicePort: "62050",
+				APIKey: "11111111-2222-3333-4444-555555555555", SANEntries: "*.example.com,1.2.3.4",
+			},
+			want: []string{"--api-key 11111111-2222-3333-4444-555555555555", `--san-entries "*.example.com,1.2.3.4"`},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			command, err := PasarGuardProvider{}.InstallCommand(tc.cfg)
+			if err != nil {
+				t.Fatalf("InstallCommand: %v", err)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(command, want) {
+					t.Errorf("missing %q in:\n%s", want, command)
+				}
+			}
+			for _, notWant := range tc.notWant {
+				if strings.Contains(command, notWant) {
+					t.Errorf("unexpected %q in:\n%s", notWant, command)
+				}
+			}
+		})
+	}
+}
+
+// TestPasarGuardInstallStableChannel asserts the stable channel adds no flag
+// (a pinned release is the script default).
+func TestPasarGuardInstallStableChannel(t *testing.T) {
+	command, err := PasarGuardProvider{}.InstallCommand(InstallConfig{NodeName: "n", ServicePort: "62050", Channel: channelStable})
+	if err != nil {
+		t.Fatalf("InstallCommand: %v", err)
+	}
+	if strings.Contains(command, "--dev") {
+		t.Errorf("stable channel must not pass --dev:\n%s", command)
+	}
+}
+
+func TestParseRegistrationInfo(t *testing.T) {
+	output := `=ENVSTART=
+SERVICE_PORT = 62050
+API_KEY = "11111111-2222-3333-4444-555555555555"
+SERVICE_PROTOCOL = grpc
+=ENVEND=
+=CERTSTART=
+-----BEGIN CERTIFICATE-----
+MIIBxTCCAWugAwIBAgIUO
+-----END CERTIFICATE-----
+=CERTEND=
+`
+	info, found := ParseRegistrationInfo("node", output)
+	if !found {
+		t.Fatalf("ParseRegistrationInfo found = false, want true")
+	}
+	if info.APIKey != "11111111-2222-3333-4444-555555555555" {
+		t.Errorf("APIKey = %q", info.APIKey)
+	}
+	if info.ServicePort != "62050" {
+		t.Errorf("ServicePort = %q, want 62050", info.ServicePort)
+	}
+	if info.Protocol != "grpc" {
+		t.Errorf("Protocol = %q, want grpc", info.Protocol)
+	}
+	if !strings.Contains(info.Certificate, "BEGIN CERTIFICATE") {
+		t.Errorf("Certificate = %q, want PEM block", info.Certificate)
+	}
+
+	if _, found := ParseRegistrationInfo("node", "=ENVSTART=\n=ENVEND=\n"); found {
+		t.Fatalf("ParseRegistrationInfo must report not-found without an API key")
+	}
+}
+
+func TestInstallConfigNormalize(t *testing.T) {
+	// Defaults fill in when empty.
+	cfg, err := InstallConfig{}.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize empty: %v", err)
+	}
+	if cfg.ServicePort != "62050" || cfg.Protocol != "grpc" {
+		t.Errorf("defaults = %+v, want port 62050 / grpc", cfg)
+	}
+
+	if _, err := (InstallConfig{ServicePort: "70000"}).Normalize(); err == nil {
+		t.Errorf("Normalize must reject out-of-range service port")
+	}
+	if _, err := (InstallConfig{Protocol: "udp"}).Normalize(); err == nil {
+		t.Errorf("Normalize must reject unknown protocol")
+	}
+	if _, err := (InstallConfig{APIKey: "not-a-uuid"}).Normalize(); err == nil {
+		t.Errorf("Normalize must reject malformed API key")
+	}
+	if _, err := (InstallConfig{APIKey: "11111111-2222-3333-4444-555555555555"}).Normalize(); err != nil {
+		t.Errorf("Normalize must accept a valid UUID: %v", err)
+	}
+}
+
+func TestNormalizeInstallInput(t *testing.T) {
+	provider := PasarGuardProvider{}
+
+	cfg, errs := provider.normalizeInstallInput(InstallFormInput{
+		NodeName: "node2", ServicePort: "62055", Protocol: "rest",
+	})
+	if errs.HasAny() {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if cfg.ServicePort != "62055" || cfg.Protocol != "rest" {
+		t.Errorf("cfg = %+v", cfg)
+	}
+
+	_, errs = provider.normalizeInstallInput(InstallFormInput{
+		ServicePort: "abc", APIPort: "99999", Protocol: "udp", APIKey: "x", Channel: "nightly",
+	})
+	for _, field := range []string{"service_port", "api_port", "protocol", "api_key", "channel"} {
+		if _, ok := errs[field]; !ok {
+			t.Errorf("expected validation error for %q, got %v", field, errs)
+		}
+	}
+
+	// APIPort == default 62050 while ServicePort is omitted must attribute the
+	// collision error cleanly onto api_port rather than false service_port range error.
+	_, errs = provider.normalizeInstallInput(InstallFormInput{APIPort: "62050"})
+	if errs["api_port"] != "nodes.err_ports_equal" {
+		t.Errorf("APIPort==default ServicePort error = %#v, want api_port=nodes.err_ports_equal", errs)
+	}
+}

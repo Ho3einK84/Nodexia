@@ -1,0 +1,19 @@
+[Unit]
+Description=Nodexia Docker Compose stack
+Documentation=https://github.com/Ho3einK84/Nodexia/blob/main/docs/deployment.md
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/nodexia
+Environment=COMPOSE_FILE=compose.production.yml
+ExecStart=/usr/bin/docker compose build
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

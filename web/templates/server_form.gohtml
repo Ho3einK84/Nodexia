@@ -1,0 +1,195 @@
+{{ define "content-server-form" }}
+<section class="hero">
+  {{ template "page-header" . }}
+
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
+  <div class="server-form-layout">
+    <article class="card server-form-layout__main">
+      <h3><i data-lucide="{{ if .IsEditingServer }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingServer }}{{ t "servers.form.title_edit" }}{{ else }}{{ t "servers.form.title_new" }}{{ end }}</h3>
+      <form method="post" action="{{ .ServerFormAction }}" class="server-form" id="server-form">
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+
+        <label class="form-field">
+          <span>{{ t "common.name" }}</span>
+          <input type="text" name="name" value="{{ .ServerForm.Name }}" placeholder="{{ t "servers.form.name_placeholder" }}">
+          {{ with index .ServerForm.Errors "name" }}<small class="field-error">{{ . }}</small>{{ end }}
+        </label>
+
+        <div class="form-grid">
+          <label class="form-field">
+            <span>{{ t "common.host" }}</span>
+            <input type="text" name="host" value="{{ .ServerForm.Host }}" placeholder="203.0.113.10">
+            {{ with index .ServerForm.Errors "host" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+
+          <label class="form-field">
+            <span>{{ t "common.port" }}</span>
+            <input type="number" name="port" min="1" max="65535" value="{{ .ServerForm.Port }}">
+            {{ with index .ServerForm.Errors "port" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+        </div>
+
+        <div class="form-grid">
+          <label class="form-field">
+            <span>{{ t "servers.form.auth_mode" }}</span>
+            <select name="auth_mode">
+              <option value="password" {{ if eq .ServerForm.AuthMode "password" }}selected{{ end }}>{{ t "servers.form.auth_password" }}</option>
+              <option value="key" {{ if eq .ServerForm.AuthMode "key" }}selected{{ end }}>{{ t "servers.form.auth_key" }}</option>
+              <option value="hybrid" {{ if eq .ServerForm.AuthMode "hybrid" }}selected{{ end }}>{{ t "servers.form.auth_hybrid" }}</option>
+            </select>
+            {{ with index .ServerForm.Errors "auth_mode" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+
+          <label class="form-field">
+            <span>{{ t "common.username" }}</span>
+            <input type="text" name="username" value="{{ .ServerForm.Username }}" placeholder="root">
+            {{ with index .ServerForm.Errors "username" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+        </div>
+
+        {{/* ── Credential strategy ─────────────────────────────── */}}
+        <label class="form-field">
+          <span>{{ t "servers.form.cred_strategy" }}</span>
+          <select name="credential_strategy" id="cred-strategy">
+            <option value="stored"      {{ if or (eq .ServerForm.CredentialStrategy "stored") (eq .ServerForm.CredentialStrategy "") }}selected{{ end }}>{{ t "servers.form.cred_stored" }}</option>
+            <option value="runtime"     {{ if eq .ServerForm.CredentialStrategy "runtime" }}selected{{ end }}>{{ t "servers.form.cred_runtime" }}</option>
+            <option value="external_ref"{{ if eq .ServerForm.CredentialStrategy "external_ref" }}selected{{ end }}>{{ t "servers.form.cred_external" }}</option>
+            <option value="agent_ready" {{ if eq .ServerForm.CredentialStrategy "agent_ready" }}selected{{ end }}>{{ t "servers.form.cred_agent" }}</option>
+          </select>
+          {{ with index .ServerForm.Errors "credential_strategy" }}<small class="field-error">{{ . }}</small>{{ end }}
+        </label>
+
+        {{/* Stored: show a password field */}}
+        <div id="cred-section-stored" class="cred-section"{{ if and (ne .ServerForm.CredentialStrategy "stored") (ne .ServerForm.CredentialStrategy "") }} hidden{{ end }}>
+          <label class="form-field">
+            <span>{{ t "servers.form.ssh_password" }}</span>
+            <input type="password" name="credential_ref" id="cred-ref-stored"
+                   value=""
+                   placeholder="{{ if .ServerForm.HasStoredCredential }}{{ t "servers.form.ssh_password_keep_placeholder" }}{{ else }}{{ t "servers.form.ssh_password_placeholder" }}{{ end }}"
+                   autocomplete="new-password">
+            <small class="field-hint">{{ t "servers.form.stored_hint" }}</small>
+            {{ with index .ServerForm.Errors "credential_ref" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+        </div>
+
+        {{/* External reference: key=value textarea */}}
+        <div id="cred-section-external_ref" class="cred-section"{{ if ne .ServerForm.CredentialStrategy "external_ref" }} hidden{{ end }}>
+          <label class="form-field">
+            <span>{{ t "servers.form.cred_ref" }}</span>
+            <textarea name="credential_ref_ext" id="cred-ref-ext" rows="3"
+                      class="cmd-textarea"
+                      placeholder="password_env=MY_SSH_PASS&#10;traffic_interface=eth0">{{ if eq .ServerForm.CredentialStrategy "external_ref" }}{{ .ServerForm.CredentialRef }}{{ end }}</textarea>
+            <small class="field-hint">{{ t "servers.form.extref_hint" }}
+              {{ t "servers.form.supported_keys" }} <code>password_env</code>, <code>password_file</code>,
+              <code>key_env</code>, <code>key_file</code>, <code>passphrase_env</code>,
+              <code>passphrase_file</code>, <code>traffic_interface</code>.
+            </small>
+            {{ with index .ServerForm.Errors "credential_ref" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+        </div>
+
+        {{/* Agent-ready: no credential field needed */}}
+        <div id="cred-section-agent_ready" class="cred-section"{{ if ne .ServerForm.CredentialStrategy "agent_ready" }} hidden{{ end }}>
+          <p class="cred-note"><i data-lucide="bot" class="icon-in-button"></i>
+            {{ tsafe "servers.form.agent_note" }}
+          </p>
+        </div>
+
+        {{/* Runtime-only password (optional) */}}
+        <div id="cred-section-runtime" class="cred-section"{{ if ne .ServerForm.CredentialStrategy "runtime" }} hidden{{ end }}>
+          <label class="form-field">
+            <span>{{ t "servers.form.ssh_password" }} <span class="badge badge--warn badge--inline">{{ t "common.optional" }}</span></span>
+            <input type="password" name="credential_ref" id="cred-ref-runtime"
+                   value=""
+                   placeholder="{{ if .ServerForm.HasStoredCredential }}{{ t "servers.form.ssh_password_keep_placeholder" }}{{ else }}{{ t "servers.form.ssh_password_optional_placeholder" }}{{ end }}"
+                   autocomplete="new-password">
+            <small class="field-hint">{{ t "servers.form.runtime_hint" }}</small>
+            {{ with index .ServerForm.Errors "credential_ref" }}<small class="field-error">{{ . }}</small>{{ end }}
+          </label>
+        </div>
+
+        <label class="form-field">
+          <span>{{ t "servers.form.labels" }}</span>
+          <input type="text" name="tags" value="{{ .ServerForm.Tags }}" placeholder="prod, eu, rebecca">
+          {{ with index .ServerForm.Errors "tags" }}<small class="field-error">{{ . }}</small>{{ end }}
+        </label>
+
+        <label class="form-field">
+          <span>{{ t "servers.form.traffic_reset_day" }}</span>
+          <input type="number" name="traffic_reset_day" min="1" max="28" value="{{ .ServerForm.TrafficResetDay }}">
+          <small class="field-hint">{{ t "servers.form.traffic_reset_day_hint" }}</small>
+          {{ with index .ServerForm.Errors "traffic_reset_day" }}<small class="field-error">{{ . }}</small>{{ end }}
+        </label>
+
+        <label class="form-field">
+          <span>{{ t "servers.form.notes" }}</span>
+          <textarea name="note" rows="4" placeholder="{{ t "servers.form.notes_placeholder" }}">{{ .ServerForm.Note }}</textarea>
+        </label>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary">{{ if .IsEditingServer }}{{ t "servers.form.save" }}{{ else }}{{ t "servers.form.create" }}{{ end }}</button>
+          <a class="btn btn--secondary" href="/servers"><i data-lucide="list" class="icon-in-button"></i> {{ t "servers.form.back_to_list" }}</a>
+        </div>
+      </form>
+
+      {{ if .IsEditingServer }}
+      <div class="server-quick-links">
+        <p class="server-quick-links__title">{{ t "servers.form.quick_access" }}</p>
+        <nav class="server-quick-links__nav" aria-label="{{ t "servers.form.quick_access" }}">
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "common.monitoring" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "common.nodes" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/terminal"><i data-lucide="terminal-square" class="icon-in-button"></i> {{ t "common.terminal" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
+        </nav>
+      </div>
+
+      <div class="danger-zone">
+        <form method="post" action="/servers/{{ .ServerForm.ID }}/forget-host-key" class="inline-form">
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+          <button type="submit" class="btn btn--ghost" data-confirm="{{ t "servers.form.forget_host_key_confirm" }}"><i data-lucide="key" class="icon-in-button"></i> {{ t "servers.form.forget_host_key" }}</button>
+        </form>
+        <form method="post" action="{{ .ServerDeleteAction }}" class="inline-form">
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+          <button type="submit" class="btn btn--danger" data-confirm="{{ t "servers.card.delete_confirm" "name" .ServerForm.Name }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "servers.form.delete_server" }}</button>
+        </form>
+      </div>
+      {{ end }}
+    </article>
+
+    <aside class="card card--info server-form-layout__aside">
+      <div class="card__header">
+        <h3><i data-lucide="calendar-clock"></i> {{ t "servers.form.info_title" }}</h3>
+      </div>
+      <ul class="credential-info">
+        <li>
+          <strong><i data-lucide="shield-check" class="icon-in-button"></i> {{ t "servers.form.info_stored_title" }}</strong>
+          {{ tsafe "servers.form.info_stored_desc" }}
+          <span class="credential-info__meta">{{ t "servers.form.scheduler_ok" }}</span>
+        </li>
+        <li>
+          <strong><i data-lucide="play" class="icon-in-button"></i> {{ t "servers.form.info_runtime_title" }}</strong>
+          {{ t "servers.form.info_runtime_desc" }}
+        </li>
+        <li>
+          <strong><i data-lucide="external-link" class="icon-in-button"></i> {{ t "servers.form.info_external_title" }}</strong>
+          {{ tsafe "servers.form.info_external_desc" }}
+          <span class="credential-info__meta">{{ t "servers.form.scheduler_ok" }}</span>
+        </li>
+        <li>
+          <strong><i data-lucide="bot" class="icon-in-button"></i> {{ t "servers.form.info_agent_title" }}</strong>
+          {{ tsafe "servers.form.info_agent_desc" }}
+          <span class="credential-info__meta">{{ t "servers.form.scheduler_ok" }}</span>
+        </li>
+      </ul>
+    </aside>
+  </div>
+</section>
+{{ end }}

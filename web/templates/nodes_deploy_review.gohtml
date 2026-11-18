@@ -1,0 +1,107 @@
+{{- define "node-deploy-review" -}}
+  <section class="deploy-pane" data-deploy-pane="2" role="group" aria-label="{{ t "nodes.deploy_step_review" }}" hidden>
+    <article class="deploy-manifest" data-deploy-review>
+      <header class="deploy-manifest__head">
+        <span class="deploy-manifest__icon" aria-hidden="true">
+          <i data-lucide="container" data-review-icon="docker"></i>
+          <i data-lucide="package" data-review-icon="binary" hidden></i>
+        </span>
+        <span class="deploy-manifest__titles">
+          <span class="deploy-manifest__kicker">{{ t "nodes.deploy_manifest_title" }}</span>
+          <span class="deploy-manifest__engine">
+            <strong data-review="engine">—</strong>
+            <span class="deploy-engine__kind" data-review="engine_kind">—</span>
+          </span>
+        </span>
+        <span class="deploy-manifest__target">
+          <i data-lucide="server" aria-hidden="true"></i>
+          <span class="deploy-manifest__target-name">{{ .NodeTarget.Name }}</span>
+        </span>
+      </header>
+
+      <dl class="deploy-specs">
+        <div class="deploy-spec">
+          <dt><i data-lucide="hash" aria-hidden="true"></i> {{ t "nodes.node_name" }}</dt>
+          <dd data-review="node_name">—</dd>
+        </div>
+        <div class="deploy-spec">
+          <dt><i data-lucide="network" aria-hidden="true"></i> {{ t "nodes.service_port" }}</dt>
+          <dd><span class="node-port node-port--service" data-review="service_port">—</span></dd>
+        </div>
+        <div class="deploy-spec">
+          <dt><i data-lucide="plug-zap" aria-hidden="true"></i> {{ t "nodes.api_port" }}</dt>
+          <dd><span class="node-port node-port--api" data-review="api_port">—</span></dd>
+        </div>
+        <div class="deploy-spec">
+          <dt><i data-lucide="git-branch" aria-hidden="true"></i> {{ t "nodes.channel" }}</dt>
+          <dd><span class="deploy-spec__pill" data-review="channel">—</span></dd>
+        </div>
+        <div class="deploy-spec" data-review-row="protocol">
+          <dt><i data-lucide="layers" aria-hidden="true"></i> {{ t "nodes.protocol" }}</dt>
+          <dd><span class="deploy-spec__pill" data-review="protocol">—</span></dd>
+        </div>
+        <div class="deploy-spec" data-review-row="override">
+          <dt><i data-lucide="shield-alert" aria-hidden="true"></i> {{ t "nodes.deploy_manifest_override" }}</dt>
+          <dd><span class="deploy-spec__pill" data-review="override">—</span></dd>
+        </div>
+        <div class="deploy-spec deploy-spec--wide" data-review-row="bundle" hidden>
+          <dt><i data-lucide="file-badge" aria-hidden="true"></i> {{ t "nodes.bundle" }}</dt>
+          <dd><span class="deploy-spec__pill deploy-spec__pill--ok" data-review="bundle">—</span></dd>
+        </div>
+      </dl>
+
+      <footer class="deploy-manifest__foot">
+        <p class="node-install-note" data-install-note="docker">{{ tsafe "nodes.install_note" }}</p>
+        <p class="node-install-note" data-install-note="binary" hidden>{{ tsafe "nodes.rebecca_install_note" }}</p>
+        <p class="deploy-manifest__preflight">
+          <i data-lucide="shield-check" aria-hidden="true"></i>
+          <span>{{ t "nodes.deploy_preflight_ok" }}</span>
+        </p>
+      </footer>
+    </article>
+  </section>
+
+  <section class="deploy-pane" data-deploy-pane="3" role="group" aria-label="{{ t "nodes.deploy_starting" }}" hidden>
+    <div class="deploy-live-head">
+      <span class="deploy-live-status" data-deploy-live-badge>
+        <span class="live-dot" aria-hidden="true"></span>
+        <span data-deploy-live-status aria-live="polite">{{ t "nodes.deploy_starting" }}</span>
+      </span>
+      <div class="deploy-live-tools">
+        <button type="button" class="btn btn--secondary btn--sm" data-deploy-scroll-toggle aria-pressed="false">
+          {{ t "nodes.deploy_pause_scroll" }}
+        </button>
+        <button type="button" class="btn btn--danger btn--sm" data-deploy-cancel-job>
+          <i data-lucide="square" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.deploy_cancel_job" }}
+        </button>
+      </div>
+    </div>
+
+    <div class="deploy-stages-bar" data-deploy-stages aria-live="polite"></div>
+    <pre class="deploy-live-log" data-deploy-live-log></pre>
+
+    <div class="deploy-end-card deploy-end-card--ok" data-deploy-end="ok" hidden>
+      <h4 class="deploy-end-card__title">
+        <i data-lucide="check-circle-2" aria-hidden="true"></i> {{ t "nodes.deploy_success_title" }}
+      </h4>
+      <div data-deploy-reg-info></div>
+      <div class="nodes-confirm-modal__actions">
+        <button type="button" class="btn btn--primary" data-deploy-done-refresh>
+          <i data-lucide="refresh-cw" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.deploy_refresh_fleet" }}
+        </button>
+      </div>
+    </div>
+
+    <div class="deploy-end-card deploy-end-card--error" data-deploy-end="error" hidden>
+      <h4 class="deploy-end-card__title">
+        <i data-lucide="x-circle" aria-hidden="true"></i> {{ t "nodes.deploy_failed_title" }}
+      </h4>
+      <p class="nodes-confirm-modal__lead" data-deploy-end-error></p>
+      <div class="nodes-confirm-modal__actions">
+        <button type="button" class="btn btn--secondary" data-deploy-retry-btn>
+          <i data-lucide="rotate-ccw" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.deploy_retry" }}
+        </button>
+      </div>
+    </div>
+  </section>
+{{- end -}}

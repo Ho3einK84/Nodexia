@@ -1,0 +1,303 @@
+{{ define "content-home" }}
+<section class="hero overview-page">
+  <header class="overview-hero">
+    <div class="overview-hero__top">
+      <div class="overview-hero__title-row">
+        <span class="overview-hero__emblem" aria-hidden="true">
+          <i data-lucide="layout-dashboard"></i>
+        </span>
+        <div class="overview-hero__copy">
+          <p class="overview-hero__eyebrow"><span class="overview-hero__dot" aria-hidden="true"></span> {{ t "shell.eyebrow" }}</p>
+          <div class="overview-hero__heading">
+            <h2 class="overview-hero__title">{{ .PageTitle }}</h2>
+            {{ template "page-info" . }}
+          </div>
+        </div>
+      </div>
+      <div class="overview-hero__actions">
+        <a class="btn btn--secondary btn--sm overview-hero__btn" href="/servers">
+          <i data-lucide="server" class="icon-in-button" aria-hidden="true"></i>
+          <span>{{ t "nav.servers" }}</span>
+        </a>
+        <a class="btn btn--ghost btn--sm overview-hero__btn" href="/ops/diagnostics">
+          <i data-lucide="stethoscope" class="icon-in-button" aria-hidden="true"></i>
+          <span>{{ t "nav.diagnostics" }}</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="fleet-strip overview-kpis" role="region" aria-label="{{ t "home.kpi.monitored_servers" }}">
+      <div class="fleet-strip__item">
+        <span class="fleet-strip__label"><i data-lucide="server" aria-hidden="true"></i> {{ t "home.kpi.monitored_servers" }}</span>
+        <span class="fleet-strip__value">{{ .DashboardSnapshotTotal }}</span>
+      </div>
+      <div class="fleet-strip__item">
+        <span class="fleet-strip__label"><i data-lucide="calendar-clock" aria-hidden="true"></i> {{ t "home.kpi.scheduled_jobs" }}</span>
+        <span class="fleet-strip__value">{{ .SchedulerOverview.EligibleJobs }}</span>
+      </div>
+      <div class="fleet-strip__item{{ if gt .SchedulerOverview.RunningJobs 0 }} fleet-strip__item--ok{{ end }}">
+        <span class="fleet-strip__label"><i data-lucide="activity" aria-hidden="true"></i> {{ t "home.kpi.running_now" }}</span>
+        <span class="fleet-strip__value">{{ .SchedulerOverview.RunningJobs }}</span>
+      </div>
+      <div class="fleet-strip__item{{ if .SchedulerOverview.Enabled }} fleet-strip__item--ok{{ else }} fleet-strip__item--warn{{ end }}">
+        <span class="fleet-strip__label"><i data-lucide="clock" aria-hidden="true"></i> {{ t "home.kpi.collection_scheduler" }}</span>
+        <span class="fleet-strip__value">{{ if .SchedulerOverview.Enabled }}{{ t "home.scheduler.active" }}{{ else }}{{ t "home.scheduler.off" }}{{ end }}</span>
+      </div>
+    </div>
+  </header>
+
+  {{ if .HomeWarnings }}
+  <div class="home-warnings" data-home-warnings>
+    {{ range .HomeWarnings }}
+    <div class="home-warning home-warning--{{ .Severity }}" data-warning-id="{{ .ID }}" role="alert" hidden>
+      <span class="home-warning__icon-wrap" aria-hidden="true"><i data-lucide="{{ .Icon }}" class="home-warning__icon"></i></span>
+      <p class="home-warning__message">{{ .Message }}</p>
+      <a class="home-warning__action" href="{{ .ActionURL }}">{{ .ActionLabel }} <i data-lucide="arrow-right" aria-hidden="true"></i></a>
+      <button type="button" class="home-warning__close" data-warning-dismiss aria-label="{{ t "home.warn.dismiss" }}"><i data-lucide="x" aria-hidden="true"></i></button>
+    </div>
+    {{ end }}
+  </div>
+  {{ end }}
+
+  <p class="dash-section"><i data-lucide="activity" aria-hidden="true"></i> {{ t "home.section.live_activity" }}</p>
+  <div class="dashboard-feeds overview-bento">
+    <article class="card overview-card overview-card--snapshots">
+      <div class="card__header overview-card__header">
+        <div class="overview-card__title-group">
+          <span class="overview-card__icon" aria-hidden="true"><i data-lucide="gauge"></i></span>
+          <h3>{{ t "home.card.resource_snapshots" }}</h3>
+        </div>
+        <span class="badge badge--info">{{ tn "home.server_count" .DashboardSnapshotTotal }}</span>
+      </div>
+      {{ if .DashboardSnapshots }}
+      <div class="dashboard-list">
+        {{ range .DashboardSnapshots }}
+        {{ $cpuVal := trimSuffix .CPUUsage "%" | float64 }}
+        {{ $ramVal := trimSuffix .RAMUsage "%" | float64 }}
+        {{ $diskVal := trimSuffix .DiskUsage "%" | float64 }}
+        <article class="dashboard-item snap-card">
+          <div class="server-item__header snap-card__header">
+            <div class="snap-card__identity">
+              <span class="snap-card__icon" aria-hidden="true"><i data-lucide="server"></i></span>
+              <h4><a class="snap-card__title-link" href="/servers/{{ .ServerID }}/monitoring">{{ .ServerName }}</a>{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</h4>
+            </div>
+            <div class="snap-card__actions">
+              <a class="btn btn--ghost btn--xs snap-card__btn" href="/servers/{{ .ServerID }}/monitoring">
+                <i data-lucide="gauge" class="icon-in-button" aria-hidden="true"></i>
+                <span>{{ t "home.monitor" }}</span>
+              </a>
+              <a class="btn btn--ghost btn--xs snap-card__btn snap-card__btn--icon" href="/servers/{{ .ServerID }}/nodes" title="{{ t "home.nodes" }}" aria-label="{{ t "home.nodes" }}">
+                <i data-lucide="boxes" class="icon-in-button" aria-hidden="true"></i>
+              </a>
+            </div>
+          </div>
+
+          <div class="mini-metrics">
+            <div class="mini-metric mini-metric--{{ if le $cpuVal 60.0 }}ok{{ else if le $cpuVal 80.0 }}warn{{ else }}crit{{ end }}">
+              <div class="mini-metric__top">
+                <span class="mini-metric__label"><i data-lucide="cpu" aria-hidden="true"></i> {{ t "home.metric.cpu" }}</span>
+                <span class="mini-metric__value">{{ .CPUUsage }}</span>
+              </div>
+              <div class="mini-metric__bar"><span class="mini-metric__fill mini-metric__fill--{{ if le $cpuVal 60.0 }}green{{ else if le $cpuVal 80.0 }}yellow{{ else }}red{{ end }}" style="width: {{ trimSuffix .CPUUsage "%" }}%"></span></div>
+            </div>
+            <div class="mini-metric mini-metric--{{ if le $ramVal 60.0 }}ok{{ else if le $ramVal 80.0 }}warn{{ else }}crit{{ end }}">
+              <div class="mini-metric__top">
+                <span class="mini-metric__label"><i data-lucide="memory-stick" aria-hidden="true"></i> {{ t "home.metric.ram" }}</span>
+                <span class="mini-metric__value">{{ .RAMUsage }}</span>
+              </div>
+              <div class="mini-metric__bar"><span class="mini-metric__fill mini-metric__fill--{{ if le $ramVal 60.0 }}green{{ else if le $ramVal 80.0 }}yellow{{ else }}red{{ end }}" style="width: {{ trimSuffix .RAMUsage "%" }}%"></span></div>
+            </div>
+            <div class="mini-metric mini-metric--{{ if le $diskVal 60.0 }}ok{{ else if le $diskVal 80.0 }}warn{{ else }}crit{{ end }}">
+              <div class="mini-metric__top">
+                <span class="mini-metric__label"><i data-lucide="hard-drive" aria-hidden="true"></i> {{ t "home.metric.disk" }}</span>
+                <span class="mini-metric__value">{{ .DiskUsage }}</span>
+              </div>
+              <div class="mini-metric__bar"><span class="mini-metric__fill mini-metric__fill--{{ if le $diskVal 60.0 }}green{{ else if le $diskVal 80.0 }}yellow{{ else }}red{{ end }}" style="width: {{ trimSuffix .DiskUsage "%" }}%"></span></div>
+            </div>
+          </div>
+
+          {{ if or .CurrentMonthDL .PeakBandwidth }}
+          <div class="mini-bw-stats">
+            {{ if .CurrentMonthDL }}
+            <div class="mini-bw-stat mini-bw-stat--dl">
+              <span class="mini-bw-stat__label"><i data-lucide="download" aria-hidden="true"></i> {{ t "home.metric.this_month_dl" }}</span>
+              <span class="mini-bw-stat__value">{{ .CurrentMonthDL }}</span>
+            </div>
+            {{ end }}
+            {{ if .PeakBandwidth }}
+            <div class="mini-bw-stat mini-bw-stat--peak">
+              <span class="mini-bw-stat__label"><i data-lucide="zap" aria-hidden="true"></i> {{ t "home.metric.peak_download" }}</span>
+              <span class="mini-bw-stat__value" title="{{ t "home.metric.peak_download_title" }}">{{ .PeakBandwidth }}</span>
+            </div>
+            {{ end }}
+          </div>
+          {{ end }}
+
+          <div class="dashboard-item__meta snap-card__meta">
+            <span class="snap-meta-pill"><i data-lucide="activity" aria-hidden="true"></i> <span class="snap-meta-pill__text">{{ t "home.meta.load" "value" .LoadAverage }}</span></span>
+            <span class="snap-meta-pill"><i data-lucide="clock" aria-hidden="true"></i> <span class="snap-meta-pill__text">{{ t "home.meta.up" "value" .UptimeHuman }}</span></span>
+            <span class="snap-meta-pill snap-meta-pill--time"><i data-lucide="calendar" aria-hidden="true"></i> <span class="snap-meta-pill__text">{{ .CollectedAt }}</span></span>
+          </div>
+        </article>
+        {{ end }}
+      </div>
+      {{ template "pagination" .DashboardSnapshotPagination }}
+      {{ else }}
+      <div class="empty-state-card overview-empty">
+        <span class="empty-state-icon"><i data-lucide="gauge" aria-hidden="true"></i></span>
+        <p class="empty-state-title">{{ t "home.empty.snapshots_title" }}</p>
+        <p class="empty-state-desc">{{ t "home.empty.snapshots_desc" }}</p>
+        <a class="btn btn--primary" href="/servers"><i data-lucide="server" class="icon-in-button" aria-hidden="true"></i> {{ t "home.empty.go_to_servers" }}</a>
+      </div>
+      {{ end }}
+    </article>
+
+    <article class="card overview-card overview-card--nodes">
+      <div class="card__header overview-card__header">
+        <div class="overview-card__title-group">
+          <span class="overview-card__icon" aria-hidden="true"><i data-lucide="boxes"></i></span>
+          <h3>{{ t "home.card.node_status" }}</h3>
+        </div>
+        {{ if .DashboardNodeStatus.HasStopped }}
+        <span class="status-pill status-pill--crit"><i data-lucide="circle-alert" class="icon-in-button" aria-hidden="true"></i> {{ t "home.node.attention" }}</span>
+        {{ else if .DashboardNodeStatus.Servers }}
+        <span class="badge badge--ok">{{ len .DashboardNodeStatus.Servers }}</span>
+        {{ end }}
+      </div>
+      {{ if .DashboardNodeStatus.Servers }}
+      <div class="dashboard-list">
+        {{ range .DashboardNodeStatus.Servers }}
+        <article class="dashboard-item node-glance-card node-glance-card--{{ .State }}">
+          <div class="server-item__header node-glance-card__head">
+            <div class="snap-card__identity">
+              <span class="snap-card__icon" aria-hidden="true"><i data-lucide="server"></i></span>
+              <h4><a class="snap-card__title-link" href="/servers/{{ .ServerID }}/nodes">{{ .ServerName }}</a>{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}</h4>
+            </div>
+            <div class="node-glance-card__head-end">
+              <span class="status-pill status-pill--{{ if eq .State "stopped" }}crit{{ else if eq .State "partial" }}warn{{ else }}ok{{ end }}">{{ if eq .State "stopped" }}{{ t "home.node.state_stopped" }}{{ else if eq .State "partial" }}{{ t "home.node.state_partial" }}{{ else }}{{ t "home.node.state_running" }}{{ end }}</span>
+              <a class="btn btn--ghost btn--xs snap-card__btn" href="/servers/{{ .ServerID }}/nodes">
+                <i data-lucide="boxes" class="icon-in-button" aria-hidden="true"></i>
+                <span>{{ t "home.nodes" }}</span>
+              </a>
+            </div>
+          </div>
+          <progress class="node-glance-card__progress node-glance-card__progress--{{ .State }}" max="{{ if gt .Total 0 }}{{ .Total }}{{ else }}1{{ end }}" value="{{ .Running }}" aria-label="{{ t "home.card.node_status" }}"></progress>
+          <div class="dashboard-item__meta node-glance-card__meta">
+            <span class="node-glance-stat"><i data-lucide="boxes" aria-hidden="true"></i> {{ t "home.node.total" "count" .Total }}</span>
+            <span class="node-glance-stat node-glance-stat--ok"><i data-lucide="play" aria-hidden="true"></i> {{ t "home.node.running_count" "count" .Running }}</span>
+            {{ if gt .Stopped 0 }}<span class="status-pill status-pill--crit"><i data-lucide="square" class="icon-in-button" aria-hidden="true"></i> {{ t "home.node.stopped_count" "count" .Stopped }}</span>{{ end }}
+          </div>
+        </article>
+        {{ end }}
+      </div>
+      {{ else }}
+      <div class="empty-state-card overview-empty">
+        <span class="empty-state-icon"><i data-lucide="boxes" aria-hidden="true"></i></span>
+        <p class="empty-state-title">{{ t "home.empty.nodes_title" }}</p>
+        <p class="empty-state-desc">{{ t "home.empty.nodes_desc" }}</p>
+      </div>
+      {{ end }}
+    </article>
+  </div>
+
+  <p class="dash-section"><i data-lucide="settings" aria-hidden="true"></i> {{ t "home.section.runtime_config" }}</p>
+  <div class="dashboard-meta overview-meta">
+    <details class="card card--collapsible overview-meta-card">
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <span class="overview-card__icon overview-card__icon--muted" aria-hidden="true"><i data-lucide="server-cog"></i></span>
+          <h3>{{ t "home.card.runtime" }}</h3>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
+      <div class="card__collapsible-body">
+        <ul class="fact-list">
+          <li>
+            <span class="fact-list__key"><i data-lucide="globe" class="icon-in-button" aria-hidden="true"></i> {{ t "home.runtime.http_address" }}</span>
+            <code>{{ .HTTPAddress }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="settings" class="icon-in-button" aria-hidden="true"></i> {{ t "home.runtime.environment" }}</span>
+            <code>{{ .Environment }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="tag" class="icon-in-button" aria-hidden="true"></i> {{ t "home.runtime.version" }}</span>
+            <code>{{ .Version }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="database" class="icon-in-button" aria-hidden="true"></i> {{ t "home.runtime.driver" }}</span>
+            <code>{{ .DatabaseDriver }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="hard-drive" class="icon-in-button" aria-hidden="true"></i> {{ t "home.runtime.db_target" }}</span>
+            <code>{{ .DatabaseTarget }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="list" class="icon-in-button" aria-hidden="true"></i> {{ t "home.runtime.migrations" }}</span>
+            <code>{{ .MigrationCount }}</code>
+          </li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="card card--collapsible overview-meta-card">
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <span class="overview-card__icon overview-card__icon--muted" aria-hidden="true"><i data-lucide="clock"></i></span>
+          <h3>{{ t "home.card.collection_scheduler" }}</h3>
+          {{ if .SchedulerOverview.Enabled }}
+          <span class="status-pill status-pill--ok">{{ t "home.scheduler.active" }}</span>
+          {{ else }}
+          <span class="status-pill status-pill--idle">{{ t "home.scheduler.off" }}</span>
+          {{ end }}
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
+      <div class="card__collapsible-body">
+        <ul class="fact-list">
+          <li>
+            <span class="fact-list__key"><i data-lucide="gauge" class="icon-in-button" aria-hidden="true"></i> {{ t "home.scheduler.monitoring_every" }}</span>
+            <code>{{ .SchedulerOverview.MonitoringInterval }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="boxes" class="icon-in-button" aria-hidden="true"></i> {{ t "home.scheduler.node_scan_every" }}</span>
+            <code>{{ .SchedulerOverview.NodesInterval }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="repeat" class="icon-in-button" aria-hidden="true"></i> {{ t "home.scheduler.sweep_interval" }}</span>
+            <code>{{ .SchedulerOverview.SweepInterval }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="circle-check" class="icon-in-button" aria-hidden="true"></i> {{ t "home.scheduler.eligible_jobs" }}</span>
+            <code>{{ .SchedulerOverview.EligibleJobs }}</code>
+          </li>
+          <li>
+            <span class="fact-list__key"><i data-lucide="circle-alert" class="icon-in-button" aria-hidden="true"></i> {{ t "home.scheduler.blocked_jobs" }}</span>
+            <code>{{ .SchedulerOverview.BlockedJobs }}</code>
+          </li>
+        </ul>
+        <p class="field-hint card__footnote">{{ t "home.scheduler.credentials_note" }}</p>
+      </div>
+    </details>
+
+    <details class="card card--collapsible overview-meta-card">
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <span class="overview-card__icon overview-card__icon--muted" aria-hidden="true"><i data-lucide="route"></i></span>
+          <h3>{{ t "home.card.route_groups" }}</h3>
+          <span class="badge badge--id">{{ len .RouteGroups }}</span>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
+      <div class="card__collapsible-body">
+        <p class="field-hint">{{ t "home.route_groups.note" }}</p>
+        <div class="token-list">
+          {{ range .RouteGroups }}
+          <code>{{ . }}</code>
+          {{ end }}
+        </div>
+      </div>
+    </details>
+  </div>
+</section>
+{{ end }}

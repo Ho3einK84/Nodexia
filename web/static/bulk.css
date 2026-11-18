@@ -1,0 +1,454 @@
+/* ── Bulk action toolbar ─────────────────────────────── */
+
+.bulk-form {
+  margin: 0;
+}
+
+/* Inline padding matches .server-card so the select-all box lines up with
+   every card checkbox below it. */
+.bulk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  flex-wrap: wrap;
+  min-height: 44px;
+  background: rgba(255, 255, 255, 0.022);
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: var(--radius-md);
+  padding: 8px 20px;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+/* At least one server selected: subtle cobalt illumination. */
+.bulk-toolbar.is-active {
+  background: rgba(59, 130, 246, 0.06);
+  border-color: rgba(96, 165, 250, 0.32);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Nothing selected (state set only by bulk.js): slim, quiet bar keeping
+   checkbox alignment intact while hiding action picker and submit button. */
+.bulk-toolbar.is-empty {
+  min-height: 40px;
+  background: rgba(255, 255, 255, 0.016);
+  border-color: rgba(255, 255, 255, 0.06);
+  padding-block: 7px;
+}
+
+.bulk-toolbar.is-empty .bulk-action-select,
+.bulk-toolbar.is-empty #bulk-submit {
+  display: none;
+}
+
+.bulk-toolbar.is-empty .bulk-count {
+  color: var(--text-dim);
+}
+
+.bulk-toolbar .bulk-action-select {
+  margin-inline-start: auto;
+}
+
+@media (max-width: 767px) {
+  .bulk-toolbar {
+    padding-inline: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bulk-toolbar {
+    transition: none;
+  }
+}
+
+#bulk-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bulk-select-all {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 0.8125rem;
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.bulk-select-all input[type="checkbox"],
+.bulk-server-checkbox {
+  position: relative;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.bulk-select-all input[type="checkbox"]:hover,
+.bulk-server-checkbox:hover {
+  border-color: rgba(96, 165, 250, 0.6);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.bulk-select-all input[type="checkbox"]:focus-visible,
+.bulk-server-checkbox:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+
+.bulk-select-all input[type="checkbox"]:checked,
+.bulk-server-checkbox:checked,
+.bulk-select-all input[type="checkbox"]:indeterminate {
+  background: var(--accent);
+  border-color: var(--accent-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.bulk-select-all input[type="checkbox"]:checked::after,
+.bulk-server-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid #ffffff;
+  border-width: 0 1.8px 1.8px 0;
+  transform: rotate(42deg);
+}
+
+.bulk-select-all input[type="checkbox"]:indeterminate::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 3.5px;
+  top: 6.75px;
+  width: 8px;
+  height: 1.8px;
+  border-radius: 1px;
+  background: #ffffff;
+}
+
+.bulk-count {
+  font-size: 0.78rem;
+  font-variant-numeric: var(--num);
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.bulk-action-select {
+  background: var(--bg-deep);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.875rem;
+  padding: var(--space-2) var(--space-3);
+  flex: 1 1 auto;
+  min-width: 160px;
+  max-width: 240px;
+  cursor: pointer;
+}
+
+.bulk-action-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+/* ── Server card checkbox ──────────────────────────────── */
+
+.server-card__checkbox-wrap {
+  display: flex;
+  flex-shrink: 0;
+  /* Optically centre the 16px box on the first (name) line. */
+  padding-block-start: 2px;
+}
+
+/* Selected for a bulk action: one quiet accent cue on the border, no fill. */
+.server-card:has(.bulk-server-checkbox:checked) {
+  border-color: var(--info-border);
+}
+
+/* ── Bulk result summary ───────────────────────────────── */
+
+.bulk-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.bulk-summary__total {
+  font-variant-numeric: var(--num);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── Bulk result status badges ─────────────────────────── */
+
+.bulk-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 0.8125rem;
+  font-weight: var(--fw-semibold);
+  border-radius: var(--radius-xs);
+  padding: 2px var(--space-2);
+  white-space: nowrap;
+}
+
+.bulk-status svg {
+  width: 14px;
+  height: 14px;
+}
+
+.bulk-status--ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border: 1px solid var(--ok-border);
+}
+
+.bulk-status--failed,
+.bulk-status--timeout {
+  background: var(--crit-bg);
+  color: var(--crit);
+  border: 1px solid var(--crit-border);
+}
+
+.bulk-status--skipped {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid var(--warn-border);
+}
+
+.bulk-status--pending {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.bulk-status--running {
+  background: var(--info-bg);
+  color: var(--info);
+  border: 1px solid var(--info-border);
+}
+
+.bulk-status--running svg {
+  animation: bulk-spin 1s linear infinite;
+}
+
+@keyframes bulk-spin {
+  to { transform: rotate(360deg); }
+}
+
+.bulk-progress-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.bulk-stream-alert {
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.bulk-stream-alert[hidden] {
+  display: none;
+}
+
+/* ── Bulk result table ─────────────────────────────────── */
+
+.bulk-result-table-wrap {
+  display: block;
+}
+
+.bulk-result__name {
+  font-weight: var(--fw-medium);
+  max-width: 200px;
+  word-break: break-word;
+}
+
+.bulk-result__code {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--num);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.bulk-result__reason {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 340px;
+  word-break: break-word;
+}
+
+.bulk-result-actions {
+  margin-top: var(--space-4);
+}
+
+/* ── Responsive ────────────────────────────────────────── */
+
+/* Stack single table rows cleanly below 640px */
+@media (max-width: 640px) {
+  .bulk-result-table thead {
+    display: none;
+  }
+
+  .bulk-result-table,
+  .bulk-result-table tbody,
+  .bulk-result-table tr,
+  .bulk-result-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .bulk-result-table tr {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    margin-bottom: var(--space-2);
+  }
+
+  .bulk-result-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-1) 0;
+    border-bottom: 0;
+    text-align: end;
+  }
+
+  .bulk-result-table td::before {
+    content: attr(data-label);
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-weight: var(--fw-medium);
+    text-align: start;
+    flex-shrink: 0;
+  }
+
+  .bulk-result__name,
+  .bulk-result__reason {
+    max-width: none;
+  }
+}
+
+/* Toolbar wraps on small screens; action select goes full-width */
+@media (max-width: 520px) {
+  .bulk-action-select {
+    max-width: none;
+    width: 100%;
+  }
+
+  .bulk-toolbar .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ── Servers list: tag filter chips ─────────────────────────────────────── */
+.server-tag-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.server-tag-filter__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-weight: var(--fw-medium);
+  color: var(--text-dim);
+}
+
+.server-tag-filter__label svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tag-chip--filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.tag-chip--filter:hover {
+  color: var(--text-bright);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tag-chip--filter.is-active {
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(96, 165, 250, 0.45);
+  color: var(--accent-bright);
+}
+
+.tag-chip__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.07);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-variant-numeric: var(--num);
+  color: var(--text-muted);
+}
+
+.tag-chip--filter.is-active .tag-chip__count {
+  background: rgba(59, 130, 246, 0.25);
+  color: var(--accent-bright);
+}
+
+.server-tag-filter__clear {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+.server-tag-filter__clear:hover {
+  color: var(--text);
+}
+
+.server-tag-filter__clear svg {
+  width: 12px;
+  height: 12px;
+}

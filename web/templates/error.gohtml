@@ -1,0 +1,31 @@
+{{ define "content-error" }}
+<section class="hero error-view">
+  <article class="card error-card" role="alert">
+    <p class="error-code">HTTP {{ .StatusCode }}</p>
+    <h2 class="error-card__title">{{ .ErrorTitle }}</h2>
+    <p class="error-card__message">{{ .ErrorMessage }}</p>
+    {{ if or .RequestID .ErrorDetail }}
+    <div class="error-card__meta">
+      {{ if .RequestID }}
+      <p class="error-card__request">
+        <i data-lucide="hash" class="icon-in-button" aria-hidden="true"></i>
+        <span>{{ t "error.request_id" }}</span>
+        <code>{{ .RequestID }}</code>
+      </p>
+      {{ end }}
+      {{ if .ErrorDetail }}
+      <p class="error-inline">{{ .ErrorDetail }}</p>
+      {{ end }}
+    </div>
+    {{ end }}
+    <div class="form-actions error-card__actions">
+      <a class="btn btn--primary" href="/">
+        <i data-lucide="layout-dashboard" class="icon-in-button" aria-hidden="true"></i> {{ t "error.back_to_overview" }}
+      </a>
+      <a class="btn btn--secondary" href="/servers">
+        <i data-lucide="server" class="icon-in-button" aria-hidden="true"></i> {{ t "nav.servers" }}
+      </a>
+    </div>
+  </article>
+</section>
+{{ end }}

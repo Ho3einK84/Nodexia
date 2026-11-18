@@ -1,0 +1,32 @@
+{{ define "content-module-placeholder" }}
+<section class="hero">
+  {{ template "page-header" . }}
+
+  <div class="module-placeholder">
+    <article class="card">
+      <div class="card__header">
+        <h3>{{ t "module.current_state" }}</h3>
+      </div>
+      <p class="module-placeholder__desc">{{ t "module.current_state_desc" }}</p>
+      <ul class="fact-list">
+        <li>
+          <span class="fact-list__key"><i data-lucide="route" aria-hidden="true"></i> {{ t "module.route_group" }}</span>
+          <code>{{ .ModuleRouteGroup }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="layers" aria-hidden="true"></i> {{ t "common.environment" }}</span>
+          <code>{{ .Environment }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="tag" aria-hidden="true"></i> {{ t "common.version" }}</span>
+          <code>{{ .Version }}</code>
+        </li>
+        <li>
+          <span class="fact-list__key"><i data-lucide="database" aria-hidden="true"></i> {{ t "module.database_driver" }}</span>
+          <code>{{ .DatabaseDriver }}</code>
+        </li>
+      </ul>
+    </article>
+  </div>
+</section>
+{{ end }}

@@ -1,0 +1,72 @@
+{{ define "content-bulk-result" }}
+<section class="hero">
+  {{ template "page-header" . }}
+
+  {{ if .BulkActionResult.Available }}
+  <div class="card"
+    {{ if not .BulkActionResult.Finished }}data-bulk-sse-url="{{ .BulkActionResult.RefreshURL }}/events"{{ end }}>
+    <div class="card__header">
+      <h3 class="card__title">{{ t "bulk.result_header" "action" .BulkActionResult.ActionLabel }}</h3>
+      <div class="bulk-summary" data-bulk-summary>
+        <span class="bulk-status bulk-status--running" data-bulk-count="inprogress" {{ if not .BulkActionResult.InProgressCount }}hidden{{ end }}>
+          <span class="spinner spinner--sm"></span> {{ t "bulk.count_in_progress" "count" .BulkActionResult.InProgressCount }}
+        </span>
+        <span class="bulk-status bulk-status--ok" data-bulk-count="ok">
+          <i data-lucide="check-circle-2" class="icon-in-button"></i> {{ t "bulk.count_ok" "count" .BulkActionResult.OKCount }}
+        </span>
+        <span class="bulk-status bulk-status--failed" data-bulk-count="failed" {{ if not .BulkActionResult.FailedCount }}hidden{{ end }}>
+          <i data-lucide="x-circle" class="icon-in-button"></i> {{ t "bulk.count_failed" "count" .BulkActionResult.FailedCount }}
+        </span>
+        <span class="bulk-status bulk-status--skipped" data-bulk-count="skipped" {{ if not .BulkActionResult.SkippedCount }}hidden{{ end }}>
+          <i data-lucide="skip-forward" class="icon-in-button"></i> {{ t "bulk.count_skipped" "count" .BulkActionResult.SkippedCount }}
+        </span>
+        <span class="bulk-summary__total">{{ t "bulk.count_total" "count" .BulkActionResult.Total }}</span>
+      </div>
+    </div>
+
+    {{ if not .BulkActionResult.Finished }}
+    <p class="bulk-progress-note" data-bulk-progress-note><span class="spinner spinner--sm" aria-hidden="true"></span> {{ t "bulk.progress_note" }}</p>
+    {{ end }}
+    <div class="flash-banner bulk-stream-alert" data-bulk-stream-alert hidden></div>
+
+    <div class="data-table-wrap bulk-result-table-wrap">
+      <table class="data-table bulk-result-table">
+        <thead>
+          <tr>
+            <th>{{ t "bulk.th_server" }}</th>
+            <th>{{ t "common.status" }}</th>
+            <th>{{ t "bulk.th_exit_code" }}</th>
+            <th>{{ t "bulk.th_details" }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ range $i, $r := .BulkActionResult.Results }}
+          <tr data-bulk-index="{{ $i }}">
+            <td class="bulk-result__name" data-label="{{ t "bulk.th_server" }}">{{ $r.Name }}</td>
+            <td data-label="{{ t "common.status" }}">{{ template "bulk-status-chip" $r.Status }}</td>
+            <td class="bulk-result__code" data-bulk-exit data-label="{{ t "bulk.th_exit_code" }}">{{ if $r.ExitCode }}{{ $r.ExitCode }}{{ else }}—{{ end }}</td>
+            <td class="bulk-result__reason" data-bulk-reason data-label="{{ t "bulk.th_details" }}">{{ if $r.Reason }}{{ $r.Reason }}{{ else }}—{{ end }}</td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{ end }}
+
+  <div class="bulk-result-actions">
+    <a href="/servers" class="btn btn--secondary"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "bulk.back_to_servers" }}</a>
+  </div>
+</section>
+{{ end }}
+
+{{/* ── Status chip; dot is the row status string ───────── */}}
+{{ define "bulk-status-chip" }}
+<span class="bulk-status bulk-status--{{ . }}" data-bulk-status>
+  {{- if eq . "ok" }}<i data-lucide="check-circle-2" class="icon-in-button"></i> {{ t "bulk.status_ok" }}
+  {{- else if eq . "skipped" }}<i data-lucide="skip-forward" class="icon-in-button"></i> {{ t "bulk.status_skipped" }}
+  {{- else if eq . "pending" }}<span class="spinner spinner--sm"></span> {{ t "bulk.status_pending" }}
+  {{- else if eq . "running" }}<span class="spinner spinner--sm"></span> {{ t "bulk.status_running" }}
+  {{- else }}<i data-lucide="x-circle" class="icon-in-button"></i> {{ t "bulk.status_failed" }}{{ end }}
+</span>
+{{ end }}

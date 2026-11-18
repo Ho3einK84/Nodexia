@@ -1,0 +1,291 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   Nodexia Design Tokens & Foundation (`tokens.css`)
+   ════════════════════════════════════════════════════════════════════════════
+   Zero-build architecture: browser-native CSS custom properties.
+   Loaded unconditionally first in the <head> sequence before shell and components.
+   Provides:
+     1. Self-hosted variable typography (@font-face for Inter, JetBrains Mono & Vazirmatn)
+     2. Dark Graphite neutral ramp, single accent, semantic status tokens
+     3. 4px spacing scale, nested border radii, elevation, z-index hierarchy
+     4. Base resets, layout normalization, reduced-motion preferences
+     5. Internationalization (fa font swap, RTL numeric/gauge isolation)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Typography: Self-hosted Fonts ──────────────────────────────────────── */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/static/fonts/inter-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/static/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Vazirmatn: Persian typography (self-hosted under /static/fonts).
+   Weights 400, 500, 600 matching the unslop weight cap. */
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/Vazirmatn-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/static/fonts/Vazirmatn-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/static/fonts/Vazirmatn-SemiBold.woff2') format('woff2');
+}
+
+/* ── 2. Design Tokens (:root) ──────────────────────────────────────────────── */
+
+:root {
+  /* Color Scheme */
+  color-scheme: dark;
+
+  /* Typography Families */
+  --font-ui: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Typography Scale (enforces 400/500 and rare 600 weight cap) */
+  --fw-regular: 400;   /* body copy, table data, descriptions, logs        */
+  --fw-medium: 500;    /* buttons, inputs, secondary labels, nav default   */
+  --fw-semibold: 600;  /* rare emphasis: active states, wordmark, figures  */
+  --fw-bold: 600;
+  --fw-extrabold: 600;
+
+  /* Numerical Alignment */
+  --num: tabular-nums;
+
+  /* Line Heights */
+  --lh-tight: 1.25;
+  --lh-normal: 1.5;
+  --lh-relaxed: 1.6;
+
+  /* Neutral Ramp Compatibility Aliases (Graphite) */
+  --slate-50: #ffffff;
+  --slate-100: #f3f3f4;
+  --slate-200: #e4e4e7;
+  --slate-300: #d4d4d8;
+  --slate-400: #93939a;
+  --slate-500: #66666d;
+  --slate-600: #52525b;
+  --slate-700: #232325;
+  --slate-800: #19191b;
+  --slate-900: #141415;
+  --slate-950: #0b0b0c;
+
+  /* Surface & Background Tokens (Dark Graphite ramp) */
+  --bg-deep: #0b0b0c;
+  --bg-canvas: #0f0f10;
+  --surface: #141415;
+  --surface-2: #19191b;
+  --surface-elevated: #232325;
+  --surface-card: #141415;
+
+  /* Border Tokens */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+
+  /* Text & Foreground Tokens */
+  --text: #f3f3f4;
+  --text-muted: #93939a;
+  --text-dim: #8a8a93;
+  --text-bright: #ffffff;
+
+  /* Single Brand / Primary Accent (flat, no gradients) */
+  --accent: #3b82f6;
+  --accent-soft: #60a5fa;
+  --accent-bright: #93c5fd;
+  --accent-rgb: 59, 130, 246;
+
+  /* Semantic Status Colors */
+  --ok: #4cc38a;
+  --ok-soft: #4cc38a;
+  --ok-bg: rgba(76, 195, 138, 0.10);
+  --ok-border: rgba(76, 195, 138, 0.24);
+
+  --warn: #eab308;
+  --warn-soft: #eab308;
+  --warn-bg: rgba(234, 179, 8, 0.10);
+  --warn-border: rgba(234, 179, 8, 0.24);
+
+  --crit: #e5484d;
+  --crit-soft: #e5484d;
+  --crit-bg: rgba(229, 72, 77, 0.10);
+  --crit-border: rgba(229, 72, 77, 0.24);
+
+  --info: #60a5fa;
+  --info-soft: #93c5fd;
+  --info-bg: rgba(96, 165, 250, 0.10);
+  --info-border: rgba(96, 165, 250, 0.24);
+
+  /* Spacing Scale (4px standard grid) */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Border Radius Scale */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Shadows & Elevation (quiet neutral depth, no colored glows) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.44);
+  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.56);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  /* Transition Tokens (single easing curve) */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-fast: 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-base: 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-slow: 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-spring: 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Z-Index Hierarchy */
+  --z-base: 1;
+  --z-sticky: 100;
+  --z-dropdown: 500;
+  --z-bottom-nav: 1100;
+  --z-fab: 1150;
+  --z-drawer-backdrop: 1200;
+  --z-drawer: 1300;
+  --z-tab-switcher: 1400;
+  --z-floating-menu: 1500;
+  --z-toast: 1600;
+  --z-modal-backdrop: 2000;
+  --z-modal: 2100;
+  --z-overlay: 9999;
+  --z-progress: 10000;
+}
+
+/* ── 3. Base Resets & Document Normalization ────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* `hidden` must always win over author display rules. */
+[hidden] {
+  display: none !important;
+}
+
+html {
+  overflow-x: clip;
+  font-family: var(--font-ui);
+  line-height: var(--lh-normal);
+  background: var(--bg-canvas);
+  color: var(--text);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow-x: clip;
+  font-family: var(--font-ui);
+  font-weight: var(--fw-regular);
+  color: var(--text);
+  line-height: var(--lh-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  background: var(--bg-canvas);
+}
+
+/* Consistent Lucide stroke weight across the entire application */
+svg.lucide,
+[data-lucide] svg {
+  stroke-width: 1.5;
+}
+
+/* ── 4. Internationalization & Bidirectional Typography ─────────────────────── */
+
+/* Persian locale: Swap UI font to Vazirmatn */
+html[lang="fa"] {
+  --font-ui: 'Vazirmatn', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/* Numeric, code, and identifier surfaces stay LTR regardless of UI direction */
+[dir="rtl"] code,
+[dir="rtl"] pre,
+[dir="rtl"] .token-list code,
+[dir="rtl"] .fact-list code {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Measurement numbers paired with Latin units stay LTR */
+[dir="rtl"] .gauge__value,
+[dir="rtl"] .gauge__detail,
+[dir="rtl"] .metric-strip__value,
+[dir="rtl"] .badge--load,
+[dir="rtl"] .traffic-bw__value,
+[dir="rtl"] .traffic-row__rx,
+[dir="rtl"] .traffic-row__tx,
+[dir="rtl"] .traffic-row__total,
+[dir="rtl"] .mini-metric__value,
+[dir="rtl"] .mini-bw-stat__value,
+[dir="rtl"] .traffic-summary__value,
+[dir="rtl"] .metric-badge,
+[dir="rtl"] .traffic-badge {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Gauges fill from 0% left to 100% right; keep pinned */
+[dir="rtl"] .gauge__scale {
+  direction: ltr;
+}
+
+/* ── 5. Accessibility & Motion Preferences ─────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

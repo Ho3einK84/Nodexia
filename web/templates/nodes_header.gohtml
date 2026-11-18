@@ -1,0 +1,148 @@
+{{- define "node-overview" -}}
+  <article class="card nodes-overview-card" data-nodes-overview{{ if not .NodeFleet.Total }} hidden{{ end }}>
+    <div class="card__header nodes-overview-header">
+      <div class="nodes-overview__brand">
+        <span class="nodes-overview__emblem" aria-hidden="true"><i data-lucide="boxes"></i></span>
+        <div class="nodes-overview__titles">
+          <h3>{{ t "nodes.command_center" }}</h3>
+          <span class="nodes-last-sweep" title="{{ t "nodes.last_seen" }}">
+            <i data-lucide="clock" aria-hidden="true"></i>
+            <span data-last-sweep>{{ if .NodeCollection.CollectedAt }}{{ .NodeCollection.CollectedAt }}{{ else }}—{{ end }}</span>
+          </span>
+        </div>
+      </div>
+      <div class="nodes-overview__actions">
+        {{ if .NodeForm.StoredCredentialsAvailable }}
+        <button type="button" class="btn btn--secondary btn--xs" data-nodes-refresh-btn title="{{ t "nodes.refresh_now_btn" }}">
+          <i data-lucide="refresh-cw" class="icon-in-button" aria-hidden="true"></i>
+          <span class="btn-label">{{ t "nodes.quick_scan" }}</span>
+        </button>
+        <label class="auto-refresh-toggle nodes-overview__auto">
+          <span>{{ t "common.auto_label" }}</span>
+          <select data-auto-refresh data-refresh-url="{{ .NodeForm.RefreshURL }}" data-refresh-method="post" data-refresh-key="node_{{ .NodeTarget.ID }}">
+            <option value="0" selected>{{ t "common.off" }}</option>
+            <option value="10000">10s</option>
+            <option value="30000">30s</option>
+            <option value="60000">1m</option>
+          </select>
+        </label>
+        {{ end }}
+        {{ if .NodeStream.Available }}
+        <button type="button" class="btn btn--secondary btn--xs" data-log-drawer-open="{{ .NodeStream.ID }}"
+                data-log-sse-url="/servers/{{ .NodeTarget.ID }}/nodes/stream/{{ .NodeStream.ID }}/events"
+                data-log-running="{{ if .NodeStream.IsRunning }}1{{ else }}0{{ end }}">
+          <i data-lucide="terminal" class="icon-in-button" aria-hidden="true"></i>
+          <span class="btn-label">{{ t "nodes.card_quick_logs" }}</span>
+        </button>
+        {{ end }}
+        <button type="button" class="btn btn--primary btn--xs nodes-overview__deploy" data-modal-open="deploy-node-modal">
+          <i data-lucide="plus" class="icon-in-button" aria-hidden="true"></i>
+          <span class="btn-label">{{ t "nodes.deploy_title" }}</span>
+        </button>
+      </div>
+    </div>
+
+    {{/* Compact 4-Cell KPI Strip (4-col desktop, balanced 2x2 mobile) */}}
+    <div class="nodes-fleet" data-node-fleet data-total="{{ .NodeFleet.Total }}">
+      <div class="nodes-kpi">
+        <span class="nodes-kpi__label"><i data-lucide="server" aria-hidden="true"></i> {{ t "nodes.kpi_total" }}</span>
+        <div class="nodes-kpi__val-row">
+          <span class="nodes-kpi__value" data-kpi="total">{{ .NodeFleet.Total }}</span>
+          <span class="nodes-kpi__engines">
+            <span class="nodes-engine-pill nodes-engine-pill--pg">PG <strong data-kpi="pg">{{ .NodeFleet.PasarGuardCount }}</strong></span>
+            <span class="nodes-engine-pill nodes-engine-pill--rebecca">RB <strong data-kpi="rebecca">{{ .NodeFleet.RebeccaCount }}</strong></span>
+          </span>
+        </div>
+        <span class="nodes-kpi__sub">
+          <i data-lucide="network" aria-hidden="true"></i>
+          <span data-kpi="ports">{{ .NodeFleet.Ports }}</span> {{ t "nodes.fleet_ports" }}
+        </span>
+      </div>
+
+      <div class="nodes-kpi nodes-kpi--ok">
+        <span class="nodes-kpi__label"><i data-lucide="activity" aria-hidden="true"></i> {{ t "nodes.kpi_online" }}</span>
+        <div class="nodes-kpi__val-row">
+          <span class="nodes-kpi__value" data-kpi="online">{{ .NodeFleet.Running }}</span>
+          <span class="nodes-kpi__pct" data-kpi="health_pct">{{ if .NodeFleet.HealthKnown }}{{ .NodeFleet.HealthPct }}%{{ else }}—{{ end }}</span>
+        </div>
+        <span class="nodes-kpi__sub">
+          <progress class="nodes-fleet__progress" max="100" value="{{ if .NodeFleet.HealthKnown }}{{ .NodeFleet.HealthPct }}{{ else }}0{{ end }}" data-kpi-progress aria-label="{{ t "nodes.fleet_health" }}"></progress>
+        </span>
+      </div>
+
+      <div class="nodes-kpi{{ if gt .NodeFleet.OfflineDegraded 0 }} nodes-kpi--crit{{ else }} nodes-kpi--muted{{ end }}" data-kpi-tile="offline">
+        <span class="nodes-kpi__label"><i data-lucide="power-off" aria-hidden="true"></i> {{ t "nodes.kpi_offline_degraded" }}</span>
+        <div class="nodes-kpi__val-row">
+          <span class="nodes-kpi__value" data-kpi="offline_degraded">{{ .NodeFleet.OfflineDegraded }}</span>
+        </div>
+      </div>
+
+      <div class="nodes-kpi{{ if gt .NodeFleet.InstallingCount 0 }} nodes-kpi--info{{ else }} nodes-kpi--muted{{ end }}" data-kpi-tile="deploying">
+        <span class="nodes-kpi__label"><i data-lucide="rocket" aria-hidden="true"></i> {{ t "nodes.kpi_deploying" }}</span>
+        <div class="nodes-kpi__val-row">
+          <span class="nodes-kpi__value" data-kpi="deploying">{{ .NodeFleet.InstallingCount }}</span>
+        </div>
+      </div>
+    </div>
+
+    {{/* Single-line Compact Allocated Ports Bar */}}
+    <div class="nodes-fleet-ports" data-kpi-ports-bar{{ if not .NodeFleet.PortList }} hidden{{ end }}>
+      <span class="nodes-fleet-ports__label" title="{{ t "nodes.fleet_ports" }}">
+        <i data-lucide="network" aria-hidden="true"></i>
+        <span>{{ t "nodes.fleet_ports" }}</span>
+      </span>
+      <span class="nodes-fleet__ports" data-kpi-port-list>
+        {{ range .NodeFleet.PortList }}<code class="nodes-port-badge">:{{ . }}</code>{{ end }}
+      </span>
+    </div>
+
+    {{/* Compact Search, Engine/Status Filters, Sort & View Toggle */}}
+    <div class="nodes-toolbar" data-nodes-toolbar{{ if not .NodeFleet.Total }} hidden{{ end }}>
+      <div class="nodes-toolbar__main">
+        <div class="nodes-toolbar__search">
+          <i data-lucide="search" class="nodes-toolbar__search-icon" aria-hidden="true"></i>
+          <input type="search" class="nodes-toolbar__search-input"
+                 data-nodes-search
+                 placeholder="{{ t "nodes.filter_search_placeholder" }}"
+                 aria-label="{{ t "nodes.filter_search_aria" }}"
+                 autocomplete="off">
+          <button type="button" class="nodes-toolbar__search-clear" data-nodes-search-clear aria-label="{{ t "nodes.filter_clear" }}" hidden>
+            <i data-lucide="x" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <div class="nodes-view-toggle nodes-view-toggle--compact" role="group" aria-label="{{ t "nodes.view_grid" }}">
+          <button type="button" class="nodes-view-toggle__btn" data-nodes-view="grid" aria-pressed="true" title="{{ t "nodes.view_grid" }}" aria-label="{{ t "nodes.view_grid" }}">
+            <i data-lucide="layout-grid" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="nodes-view-toggle__btn" data-nodes-view="list" aria-pressed="false" title="{{ t "nodes.view_list" }}" aria-label="{{ t "nodes.view_list" }}">
+            <i data-lucide="list" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="nodes-toolbar__controls">
+        <select class="nodes-toolbar__select" data-nodes-filter-engine aria-label="{{ t "nodes.engine" }}">
+          <option value="all">{{ t "nodes.filter_engine_all" }}</option>
+          <option value="pasarguard-node">PasarGuard</option>
+          <option value="rebecca-node">Rebecca</option>
+        </select>
+
+        <select class="nodes-toolbar__select" data-nodes-filter-status aria-label="{{ t "common.status" }}">
+          <option value="all">{{ t "nodes.filter_status_all" }}</option>
+          <option value="running">{{ t "nodes.filter_status_running" }}</option>
+          <option value="degraded">{{ t "nodes.filter_status_degraded" }}</option>
+          <option value="stopped">{{ t "nodes.filter_status_stopped" }}</option>
+          <option value="unknown">{{ t "nodes.filter_status_unknown" }}</option>
+        </select>
+
+        <select class="nodes-toolbar__select" data-nodes-sort aria-label="{{ t "nodes.sort_label" }}">
+          <option value="name">{{ t "nodes.sort_label" }}: {{ t "nodes.sort_name" }}</option>
+          <option value="status">{{ t "nodes.sort_label" }}: {{ t "nodes.sort_status" }}</option>
+          <option value="uptime">{{ t "nodes.sort_label" }}: {{ t "nodes.sort_uptime" }}</option>
+          <option value="latency">{{ t "nodes.sort_label" }}: {{ t "nodes.sort_latency" }}</option>
+        </select>
+      </div>
+    </div>
+  </article>
+{{- end -}}

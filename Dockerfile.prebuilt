@@ -1,0 +1,42 @@
+# syntax=docker/dockerfile:1
+# Runtime image assembled from a prebuilt binary instead of compiling from
+# source. install.sh downloads the release binary for the host architecture into
+# dist/nodexia and selects this file via the compose build arg
+# NODEXIA_DOCKERFILE=Dockerfile.prebuilt, turning a ~100s source build into a
+# sub-second COPY. When no prebuilt binary is available the installer falls back
+# to the source-building Dockerfile, so the two stay interchangeable.
+
+ARG VERSION=dev
+
+# Minimal stage whose only job is to create the data directory owned by the
+# distroless `nonroot` user (uid/gid 65532). The named volume mounted at
+# /var/lib/nodexia inherits this ownership on first creation, so the non-root
+# process can write the SQLite database and pinned host keys — mirroring what the
+# source Dockerfile does from its Go build stage.
+FROM busybox:1.37 AS prep
+RUN mkdir -p /data && chown -R 65532:65532 /data
+
+FROM gcr.io/distroless/static-debian12:nonroot
+
+ARG VERSION
+
+WORKDIR /app
+
+COPY --from=prep --chown=nonroot:nonroot /data /var/lib/nodexia
+
+# dist/nodexia is the statically linked, CGO-free binary placed in the build
+# context by install.sh (or by hand for manual installs).
+COPY --chown=nonroot:nonroot dist/nodexia /app/nodexia
+
+LABEL org.opencontainers.image.title="Nodexia" \
+      org.opencontainers.image.description="Lightweight SSH-first control plane for servers and infrastructure nodes." \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/Ho3einK84/Nodexia"
+
+EXPOSE 8080
+
+VOLUME ["/var/lib/nodexia"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["/app/nodexia", "healthcheck"]
+
+ENTRYPOINT ["/app/nodexia"]

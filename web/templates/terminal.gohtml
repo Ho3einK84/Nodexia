@@ -1,0 +1,290 @@
+{{ define "content-terminal" }}
+<section class="hero">
+  {{ template "server-header" . }}
+
+  {{/* ── Credential form (shown when no ticket yet) ─────────────────────── */}}
+  {{ if eq .TerminalTicket "" }}
+  <div class="card">
+    <div class="card__header">
+      <h3 class="card__title"><i data-lucide="terminal-square" class="icon-in-button"></i> {{ t "terminal.open" }}</h3>
+    </div>
+    <p class="page-description terminal-lead">
+      {{ if .TerminalForm.StoredCredentialsAvailable }}
+      {{ tsafe "terminal.connecting_stored" "addr" (printf "%s@%s:%d" .TerminalTarget.Username .TerminalTarget.Host .TerminalTarget.Port) }}
+      {{ else }}
+      {{ tsafe "terminal.connecting_enter" "addr" (printf "%s@%s:%d" .TerminalTarget.Username .TerminalTarget.Host .TerminalTarget.Port) }}
+      {{ end }}
+    </p>
+
+    {{ if .TerminalForm.InitCommand }}
+    <p class="terminal-init-hint">
+      <i data-lucide="play" class="icon-in-button"></i>
+      {{ tsafe "terminal.init_hint" "cmd" .TerminalForm.InitCommand }}
+    </p>
+    {{ end }}
+
+    <form method="post" action="{{ .TerminalForm.Action }}" class="terminal-form">
+      <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+      {{ if .TerminalForm.InitCommand }}<input type="hidden" name="init" value="{{ .TerminalForm.InitCommand }}">{{ end }}
+
+      {{ if not .TerminalForm.StoredCredentialsAvailable }}
+      {{ if or (eq .TerminalTarget.AuthMode "password") (eq .TerminalTarget.AuthMode "hybrid") (eq .TerminalTarget.AuthMode "") }}
+      <div class="form-field{{ if index .TerminalForm.Errors "password" }} form-field--error{{ end }}">
+        <label class="form-label" for="term-password">{{ t "common.password" }}</label>
+        <input type="password" id="term-password" name="password" class="form-input"
+          autocomplete="current-password" placeholder="{{ t "terminal.password_placeholder" }}">
+        {{ if index .TerminalForm.Errors "password" }}
+        <span class="form-error">{{ index .TerminalForm.Errors "password" }}</span>
+        {{ end }}
+      </div>
+      {{ end }}
+
+      {{ if or (eq .TerminalTarget.AuthMode "key") (eq .TerminalTarget.AuthMode "hybrid") }}
+      <div class="form-field{{ if index .TerminalForm.Errors "private_key" }} form-field--error{{ end }}">
+        <label class="form-label" for="term-key">{{ t "terminal.private_key" }}</label>
+        <textarea id="term-key" name="private_key" class="form-input form-input--mono" rows="5"
+          placeholder="-----BEGIN ... PRIVATE KEY-----"></textarea>
+        {{ if index .TerminalForm.Errors "private_key" }}
+        <span class="form-error">{{ index .TerminalForm.Errors "private_key" }}</span>
+        {{ end }}
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="term-passphrase">{{ t "terminal.passphrase" }}</label>
+        <input type="password" id="term-passphrase" name="key_passphrase" class="form-input"
+          autocomplete="off" placeholder="{{ t "terminal.passphrase_placeholder" }}">
+      </div>
+      {{ end }}
+      {{ end }}
+
+      <div class="form-field">
+        <label class="form-label" for="term-timeout">{{ t "common.connect_timeout" }}</label>
+        <input type="text" id="term-timeout" name="connect_timeout" class="form-input form-input--narrow"
+          value="{{ .TerminalForm.ConnectTimeout }}" placeholder="{{ t "terminal.timeout_placeholder" }}">
+      </div>
+
+      <div class="terminal-form__actions">
+        <button type="submit" class="btn btn--primary">
+          <i data-lucide="terminal-square" class="icon-in-button"></i> {{ t "terminal.open" }}
+        </button>
+        <a href="/servers" class="btn btn--ghost">{{ t "common.cancel" }}</a>
+      </div>
+    </form>
+  </div>
+  {{ end }}
+
+  {{/* ── xterm.js terminal (shown once a ticket is issued) ──────────────── */}}
+  {{ if .TerminalTicket }}
+  <div class="card terminal-card"
+    id="terminal-card"
+    data-server-id="{{ .TerminalTarget.ID }}"
+    data-ticket="{{ .TerminalTicket }}"
+    data-ws-url="{{ .TerminalTarget.WSURL }}"
+    data-history-url="/servers/{{ .TerminalTarget.ID }}/terminal/history"
+    data-init-cmd="{{ .TerminalTarget.InitCommand }}"
+    data-csrf="{{ .CSRFToken }}">
+
+    <div class="terminal-card__header">
+      <span class="terminal-card__host">
+        <i data-lucide="monitor" class="icon-in-button"></i>
+        <span class="terminal-card__addr" title="{{ .TerminalTarget.Username }}@{{ .TerminalTarget.Host }}:{{ .TerminalTarget.Port }}">{{ .TerminalTarget.Username }}@{{ .TerminalTarget.Host }}:{{ .TerminalTarget.Port }}</span>
+      </span>
+      <div class="terminal-card__actions">
+        <span id="terminal-status" class="terminal-status terminal-status--connecting" role="status" aria-live="polite" title="{{ t "terminal.status_connecting" }}">
+          <span class="terminal-status__dot" aria-hidden="true"></span>
+          <span class="terminal-status__text">{{ t "terminal.status_connecting" }}</span>
+        </span>
+
+        {{/* Header tool buttons — wired by terminal.js, responsive on desktop + mobile. */}}
+        <div class="terminal-tools" role="toolbar" aria-label="{{ t "terminal.tools_label" }}">
+          <button type="button" id="term-tool-snippets" class="terminal-tool" aria-label="{{ t "terminal.snippets_label" }}" title="{{ t "terminal.snippets_label" }}">
+            <i data-lucide="code-2"></i>
+          </button>
+          <button type="button" id="term-tool-keyboard" class="terminal-tool" aria-label="{{ t "terminal.keyboard_label" }}" title="{{ t "terminal.keyboard_label" }}" aria-pressed="false">
+            <i data-lucide="panel-bottom"></i>
+          </button>
+          <button type="button" id="term-tool-persian" class="terminal-tool terminal-tool--desktop-only" aria-label="{{ t "terminal.persian_title" }}" title="{{ t "terminal.persian_title" }}">
+            <span class="term-tool-badge">فا</span>
+          </button>
+          <button type="button" id="term-tool-search" class="terminal-tool terminal-tool--desktop-only" aria-label="{{ t "terminal.search_label" }}" title="{{ t "terminal.search_label" }}">
+            <i data-lucide="search"></i>
+          </button>
+          <button type="button" id="term-tool-select" class="terminal-tool terminal-tool--desktop-only" aria-label="{{ t "terminal.select_label" }}" title="{{ t "terminal.select_label" }}" aria-pressed="false">
+            <i data-lucide="text-select"></i>
+          </button>
+          <button type="button" id="term-tool-upload" class="terminal-tool terminal-tool--desktop-only" aria-label="{{ t "terminal.upload_label" }}" title="{{ t "terminal.upload_label" }}">
+            <i data-lucide="upload"></i>
+          </button>
+          <button type="button" id="term-tool-theme" class="terminal-tool terminal-tool--desktop-only" aria-label="{{ t "terminal.theme_label" }}" title="{{ t "terminal.theme_label" }}" aria-haspopup="true" aria-expanded="false">
+            <i data-lucide="palette"></i>
+          </button>
+          <button type="button" id="term-tool-fullscreen" class="terminal-tool terminal-tool--desktop-only" aria-label="{{ t "terminal.fullscreen_label" }}" title="{{ t "terminal.fullscreen_label" }}">
+            <i data-lucide="maximize-2"></i>
+          </button>
+          <button type="button" id="term-tool-more" class="terminal-tool" aria-label="{{ t "terminal.more_label" }}" title="{{ t "terminal.more_label" }}" aria-haspopup="true" aria-expanded="false">
+            <i data-lucide="more-vertical"></i>
+          </button>
+        </div>
+
+        <button type="button" id="terminal-tabs" class="terminal-tabs" aria-label="{{ t "terminal.tabs_aria" }}" title="{{ t "terminal.tabs_aria" }}">
+          <i data-lucide="layers"></i>
+        </button>
+
+        <button type="button" id="terminal-back" class="terminal-back" aria-label="{{ t "terminal.back_aria" }}">
+          <i data-lucide="chevron-left"></i><span>{{ t "common.back" }}</span>
+        </button>
+      </div>
+    </div>
+
+    {{/* More options dropdown menu */}}
+    <div id="terminal-more-menu" class="terminal-more-menu" hidden role="menu" aria-label="{{ t "terminal.more_label" }}">
+      <button type="button" class="terminal-more-menu__item" id="term-more-persian" role="menuitem">
+        <span class="term-tool-badge term-tool-badge--menu">فا</span>
+        <span>{{ t "terminal.persian_title" }}</span>
+      </button>
+      <button type="button" class="terminal-more-menu__item" id="term-more-search" role="menuitem">
+        <i data-lucide="search"></i>
+        <span>{{ t "terminal.search_label" }}</span>
+      </button>
+      <button type="button" class="terminal-more-menu__item" id="term-more-theme" role="menuitem">
+        <i data-lucide="palette"></i>
+        <span>{{ t "terminal.theme_label" }}</span>
+      </button>
+      <button type="button" class="terminal-more-menu__item" id="term-more-select" role="menuitemcheckbox" aria-checked="false">
+        <i data-lucide="text-select"></i>
+        <span>{{ t "terminal.select_label" }}</span>
+      </button>
+      <button type="button" class="terminal-more-menu__item" id="term-more-upload" role="menuitem">
+        <i data-lucide="upload"></i>
+        <span>{{ t "terminal.upload_label" }}</span>
+      </button>
+      <button type="button" class="terminal-more-menu__item" id="term-more-clear" role="menuitem">
+        <i data-lucide="trash-2"></i>
+        <span>{{ t "terminal.clear_label" }}</span>
+      </button>
+      <button type="button" class="terminal-more-menu__item" id="term-more-autocomplete" role="menuitemcheckbox" aria-checked="true">
+        <i data-lucide="sparkles"></i>
+        <span>{{ t "terminal.ac_toggle_label" }}</span>
+        <span class="terminal-more-menu__state" id="term-more-ac-state">ON</span>
+      </button>
+      <button type="button" class="terminal-more-menu__item" id="term-more-clear-history" role="menuitem">
+        <i data-lucide="history"></i>
+        <span>{{ t "terminal.ac_clear_history" }}</span>
+      </button>
+      <div class="terminal-more-menu__divider"></div>
+      <div class="terminal-more-menu__font-row">
+        <span class="terminal-more-menu__label">{{ t "terminal.font_size" }}</span>
+        <div class="terminal-more-menu__font-btns">
+          <button type="button" class="terminal-more-menu__btn-sm" id="term-more-font-dec" title="{{ t "terminal.font_smaller" }}" aria-label="{{ t "terminal.font_smaller" }}">A−</button>
+          <span class="terminal-more-menu__font-val" id="term-more-font-val"></span>
+          <button type="button" class="terminal-more-menu__btn-sm" id="term-more-font-inc" title="{{ t "terminal.font_larger" }}" aria-label="{{ t "terminal.font_larger" }}">A+</button>
+        </div>
+      </div>
+      <div class="terminal-more-menu__divider"></div>
+      <button type="button" class="terminal-more-menu__item" id="term-more-fullscreen" role="menuitem">
+        <i data-lucide="maximize-2"></i>
+        <span>{{ t "terminal.fullscreen_label" }}</span>
+      </button>
+    </div>
+
+    {{/* Theme picker — populated by terminal.js from the vendored theme catalog. */}}
+    <div id="terminal-theme-menu" class="terminal-theme-menu" hidden role="menu" aria-label="{{ t "terminal.theme_label" }}"></div>
+
+    {{/* Quick Snippets & Command Runner (Termius-inspired) */}}
+    <div id="terminal-snippets-modal" class="terminal-popover-sheet" hidden role="dialog" aria-modal="true" aria-label="{{ t "terminal.snippets_title" }}">
+      <div class="terminal-popover-sheet__backdrop" id="terminal-snippets-backdrop"></div>
+      <div class="terminal-popover-sheet__panel">
+        <div class="terminal-popover-sheet__header">
+          <div class="terminal-popover-sheet__title"><i data-lucide="code-2"></i> <span>{{ t "terminal.snippets_title" }}</span></div>
+          <button type="button" class="terminal-popover-sheet__close" id="terminal-snippets-close" aria-label="{{ t "common.close" }}"><i data-lucide="x"></i></button>
+        </div>
+        <div class="terminal-snippets__search-bar">
+          <i data-lucide="search" class="terminal-snippets__search-icon"></i>
+          <input type="text" id="terminal-snippets-search" class="terminal-snippets__search-input" placeholder="{{ t "terminal.snippets_search" }}">
+        </div>
+        <div class="terminal-snippets__list" id="terminal-snippets-list"></div>
+        <div class="terminal-snippets__add-section">
+          <form id="terminal-snippet-add-form" class="terminal-snippets__add-form">
+            <input type="text" id="term-snippet-name" placeholder="{{ t "terminal.snippets_name_placeholder" }}" required>
+            <input type="text" id="term-snippet-cmd" placeholder="{{ t "terminal.snippets_cmd_placeholder" }}" required>
+            <button type="submit" class="btn btn--primary btn--sm"><i data-lucide="plus"></i> {{ t "terminal.snippets_add" }}</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    {{/* Persian Language & Input Helper */}}
+    <div id="terminal-persian-modal" class="terminal-popover-sheet" hidden role="dialog" aria-modal="true" aria-label="{{ t "terminal.persian_title" }}">
+      <div class="terminal-popover-sheet__backdrop" id="terminal-persian-backdrop"></div>
+      <div class="terminal-popover-sheet__panel">
+        <div class="terminal-popover-sheet__header">
+          <div class="terminal-popover-sheet__title"><span class="terminal-modal__badge">FA</span> <span>{{ t "terminal.persian_title" }}</span></div>
+          <button type="button" class="terminal-popover-sheet__close" id="terminal-persian-close" aria-label="{{ t "common.close" }}"><i data-lucide="x"></i></button>
+        </div>
+        <div class="terminal-persian__content">
+          <label class="terminal-persian__toggle">
+            <input type="checkbox" id="term-persian-mode-toggle" checked>
+            <span>{{ t "terminal.persian_mode" }}</span>
+          </label>
+          <div class="terminal-persian__input-wrap">
+            <textarea id="term-persian-input" dir="rtl" rows="3" placeholder="{{ t "terminal.persian_placeholder" }}" class="terminal-persian__textarea"></textarea>
+          </div>
+          <div class="terminal-persian__preview-box">
+            <span class="terminal-persian__preview-title">{{ t "terminal.persian_preview" }}</span>
+            <div id="term-persian-preview" class="terminal-persian__preview"></div>
+          </div>
+          <div class="terminal-persian__actions">
+            <button type="button" id="term-persian-send" class="btn btn--ghost btn--sm"><i data-lucide="send"></i> {{ t "terminal.persian_send" }}</button>
+            <button type="button" id="term-persian-send-enter" class="btn btn--primary btn--sm"><i data-lucide="corner-down-left"></i> {{ t "terminal.persian_send_enter" }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {{/* In-terminal search (addon-search) — hidden until Ctrl/Cmd+F. */}}
+    <div id="terminal-search" class="terminal-search" hidden>
+      <i data-lucide="search" class="terminal-search__icon" aria-hidden="true"></i>
+      <input type="text" id="terminal-search-input" class="terminal-search__input"
+        placeholder="{{ t "terminal.search_placeholder" }}" aria-label="{{ t "terminal.search_placeholder" }}"
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <span id="terminal-search-count" class="terminal-search__count" aria-live="polite"></span>
+      <button type="button" id="terminal-search-case" class="terminal-search__btn" aria-label="{{ t "terminal.search_case" }}" title="{{ t "terminal.search_case" }}" aria-pressed="false">Aa</button>
+      <button type="button" id="terminal-search-prev" class="terminal-search__btn" aria-label="{{ t "terminal.search_prev" }}" title="{{ t "terminal.search_prev" }}"><i data-lucide="chevron-up"></i></button>
+      <button type="button" id="terminal-search-next" class="terminal-search__btn" aria-label="{{ t "terminal.search_next" }}" title="{{ t "terminal.search_next" }}"><i data-lucide="chevron-down"></i></button>
+      <button type="button" id="terminal-search-close" class="terminal-search__btn" aria-label="{{ t "terminal.search_close" }}" title="{{ t "terminal.search_close" }}"><i data-lucide="x"></i></button>
+    </div>
+
+    <div id="terminal-paste-bar" class="terminal-paste-bar" hidden>
+      <textarea id="terminal-paste-input" class="terminal-paste-bar__input" rows="2" placeholder="{{ t "js.terminal.paste_prompt" }}" aria-label="{{ t "js.terminal.paste_prompt" }}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+      <div class="terminal-paste-bar__actions">
+        <button type="button" id="term-paste-submit" class="btn btn--primary btn--sm">{{ t "js.terminal.ctx_paste" }}</button>
+        <button type="button" id="term-paste-cancel" class="btn btn--secondary btn--sm">{{ t "common.cancel" }}</button>
+      </div>
+    </div>
+
+    <input type="file" id="term-file-upload-input" hidden aria-hidden="true">
+
+    <div id="terminal-error" class="terminal-error" hidden></div>
+
+    <div id="terminal-container" class="terminal-container" role="application" aria-label="{{ t "terminal.title" }}"></div>
+
+    {{/* Mobile / compact Termius-style autocomplete suggestion strip */}}
+    <div id="terminal-ac-strip" class="terminal-ac-strip" hidden role="listbox" aria-label="{{ t "terminal.ac_label" }}">
+      <div id="terminal-ac-strip-list" class="terminal-ac-strip__list"></div>
+      <button type="button" id="terminal-ac-strip-dismiss" class="terminal-ac-strip__dismiss" aria-label="{{ t "common.close" }}" title="{{ t "common.close" }}">
+        <i data-lucide="x"></i>
+      </button>
+    </div>
+
+    {{/* Status bar — dimensions, encoding, latency. */}}
+    <div id="terminal-statusbar" class="terminal-statusbar" aria-hidden="true">
+      <span id="term-dims" class="terminal-statusbar__item">—</span>
+      <span class="terminal-statusbar__sep">·</span>
+      <span class="terminal-statusbar__item">UTF-8</span>
+      <span class="terminal-statusbar__sep">·</span>
+      <span id="term-latency" class="terminal-statusbar__item terminal-statusbar__item--latency"></span>
+    </div>
+  </div>
+  {{ end }}
+
+</section>
+{{ end }}

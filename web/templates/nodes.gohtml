@@ -1,0 +1,265 @@
+{{ define "content-nodes" }}
+<section class="hero nodes-page"
+         data-nodes-workspace
+         data-server-id="{{ .NodeTarget.ID }}"
+         data-server-name="{{ .NodeTarget.Name }}"
+         data-nodes-url="/servers/{{ .NodeTarget.ID }}/nodes"
+         data-refresh-url="{{ .NodeForm.RefreshURL }}"
+         data-has-creds="{{ if .NodeForm.StoredCredentialsAvailable }}1{{ else }}0{{ end }}"
+         data-empty-state="{{ .NodeFleet.EmptyState }}"
+         data-last-sweep-iso="{{ .NodeCollection.LastSweepISO }}"
+         data-csrf-token="{{ .CSRFToken }}">
+
+  {{ template "server-header" . }}
+
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
+  {{/* ── Live node action fallback card (SSR / non-JS path) ── */}}
+  {{ if .NodeStream.Available }}
+  <article class="card cmd-result-card stream-card{{ if .NodeStream.IsRunning }} cmd-result-card--live{{ end }}"
+    data-node-result
+    data-node-clean-url="/servers/{{ .NodeTarget.ID }}/nodes"
+    {{ if .NodeStream.IsRunning }}data-stream-sse-url="/servers/{{ .NodeTarget.ID }}/nodes/stream/{{ .NodeStream.ID }}/events" data-stream-page-url="{{ .NodeStream.RefreshURL }}" data-stream-label-done="{{ t "nodes.action_complete" }}" data-stream-label-error="{{ t "nodes.action_failed" }}"{{ else }}data-node-failed="{{ if and (eq .NodeStream.ExitCode "0") (not .NodeStream.Error) }}false{{ else }}true{{ end }}"{{ end }}
+  >
+    <div class="result-header">
+      <span class="result-header__label" data-stream-label>
+        {{ if .NodeStream.IsRunning }}<span class="spinner"></span> {{ t "nodes.action_running" }}{{ else }}<i data-lucide="terminal" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.action_complete" }}{{ end }}
+      </span>
+      <div class="result-header__meta" data-stream-meta>
+        {{ if not .NodeStream.IsRunning }}
+        <span class="result-exit {{ if eq .NodeStream.ExitCode "0" }}result-exit--ok{{ else }}result-exit--err{{ end }}">{{ t "commands.exit" "code" .NodeStream.ExitCode }}</span>
+        {{ end }}
+        <code class="result-duration">{{ .NodeStream.Duration }}</code>
+      </div>
+    </div>
+    <div class="result-cmd"><code>{{ .NodeStream.Command }}</code></div>
+    {{ if .NodeStream.Error }}<pre class="output-block output-block--error">{{ .NodeStream.Error }}</pre>{{ end }}
+    {{ if .NodeStream.IsRunning }}
+    <pre class="output-block scrollable" data-stream-stdout>{{ .NodeStream.Stdout }}</pre>
+    <pre class="output-block output-block--error scrollable" data-stream-stderr{{ if not .NodeStream.Stderr }} hidden{{ end }}>{{ .NodeStream.Stderr }}</pre>
+    <p class="result-message" data-stream-status><span class="live-dot"></span> {{ t "commands.streaming" }}</p>
+    <div class="stream-connecting" aria-hidden="true"><span class="spinner spinner--lg"></span></div>
+    {{ else }}
+    {{ if .NodeStream.Stdout }}<pre class="output-block scrollable">{{ .NodeStream.Stdout }}</pre>{{ else }}<p class="empty-state">{{ t "commands.no_output" }}</p>{{ end }}
+    {{ if .NodeStream.Stderr }}<pre class="output-block scrollable{{ if ne .NodeStream.ExitCode "0" }} output-block--error{{ end }}">{{ .NodeStream.Stderr }}</pre>{{ end }}
+    {{ end }}
+  </article>
+  {{ end }}
+
+  {{/* ── Inline discovery warning / retry banner ───────────── */}}
+  <div class="nodes-inline-banner nodes-inline-banner--warning" data-nodes-inline-banner{{ if not .NodeCollection.Partial }} hidden{{ end }} role="alert">
+    <span class="nodes-inline-banner__msg">
+      <i data-lucide="alert-triangle" aria-hidden="true"></i>
+      <span data-nodes-banner-text>{{ if .NodeCollection.Partial }}{{ t "nodes.partial_warning_banner" "error" .NodeCollection.Error }}{{ end }}</span>
+    </span>
+    <button type="button" class="btn btn--ghost btn--xs" data-nodes-retry-btn>
+      <i data-lucide="refresh-cw" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.inline_retry" }}
+    </button>
+  </div>
+
+  {{/* ── Skeleton loaders (shown during async discovery) ───── */}}
+  <div class="node-skeleton-grid" data-nodes-skeleton hidden aria-label="{{ t "nodes.skeleton_loading" }}" role="status">
+    <div class="node-skeleton-card"><div class="node-skeleton__row"><span class="node-skeleton__bar node-skeleton__bar--icon"></span><span class="node-skeleton__bar node-skeleton__bar--title"></span></div><div class="node-skeleton__row"><span class="node-skeleton__bar node-skeleton__bar--pill"></span><span class="node-skeleton__bar node-skeleton__bar--pill"></span></div><span class="node-skeleton__bar node-skeleton__bar--strip"></span></div>
+    <div class="node-skeleton-card"><div class="node-skeleton__row"><span class="node-skeleton__bar node-skeleton__bar--icon"></span><span class="node-skeleton__bar node-skeleton__bar--title"></span></div><div class="node-skeleton__row"><span class="node-skeleton__bar node-skeleton__bar--pill"></span><span class="node-skeleton__bar node-skeleton__bar--pill"></span></div><span class="node-skeleton__bar node-skeleton__bar--strip"></span></div>
+  </div>
+
+  {{ template "node-overview" . }}
+  {{ template "node-grid" . }}
+
+  <div class="empty-state-card" data-nodes-filter-empty hidden>
+    <span class="empty-state-icon"><i data-lucide="filter-x" aria-hidden="true"></i></span>
+    <p class="empty-state-title">{{ t "nodes.filter_empty_title" }}</p>
+    <p class="empty-state-desc">{{ t "nodes.filter_empty_desc" }}</p>
+    <button type="button" class="btn btn--ghost" data-nodes-filter-reset>
+      <i data-lucide="rotate-ccw" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.filter_clear" }}
+    </button>
+  </div>
+
+  {{ $noneOnly := eq .NodeFleet.EmptyState "none" }}
+  <div class="empty-state-card" data-nodes-empty="none"{{ if not $noneOnly }} hidden{{ end }}>
+    <span class="empty-state-icon"><i data-lucide="search-x" aria-hidden="true"></i></span>
+    <p class="empty-state-title">{{ t "nodes.empty_none_title" }}</p>
+    <p class="empty-state-desc">{{ t "nodes.empty_none_desc" }}</p>
+    <button type="button" class="btn btn--primary" data-modal-open="deploy-node-modal">
+      <i data-lucide="plus-circle" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.deploy_first_cta" }}
+    </button>
+  </div>
+
+  <div class="empty-state-card" data-nodes-empty="nosnap"{{ if ne .NodeFleet.EmptyState "nosnap" }} hidden{{ end }}>
+    <span class="empty-state-icon"><i data-lucide="radar" aria-hidden="true"></i></span>
+    <p class="empty-state-title">{{ t "nodes.empty_nosnap_title" }}</p>
+    <p class="empty-state-desc">{{ t "nodes.empty_nosnap_desc" }}</p>
+    {{ if .NodeForm.StoredCredentialsAvailable }}
+    <button type="button" class="btn btn--primary" data-nodes-refresh-btn>
+      <i data-lucide="radar" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.run_discovery" }}
+    </button>
+    {{ end }}
+  </div>
+
+  {{/* ── Workspace: discovery + launcher ───────────────────── */}}
+  <div class="sys-workspace">
+    {{- $nodeAdvErr := or (index .NodeForm.Errors "password") (index .NodeForm.Errors "private_key") (index .NodeForm.Errors "connect_timeout") (index .NodeForm.Errors "command_timeout") -}}
+    <details class="card card--collapsible" {{ if or $nodeAdvErr .NodeForm.Errors }}open{{ end }}>
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <h3><i data-lucide="radar" aria-hidden="true"></i> {{ t "nodes.run_discovery" }}</h3>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
+
+      <div class="card__collapsible-body">
+        <form method="post" action="{{ .NodeForm.Action }}" data-node-discovery-form>
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+          {{ if .NodeForm.StoredCredentialsAvailable }}
+          <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button" aria-hidden="true"></i> {{ t "system.stored_note" }}</p>
+          {{ end }}
+          <div data-advanced-panel="node-advanced" class="sys-advanced"{{ if and (not $nodeAdvErr) .NodeForm.StoredCredentialsAvailable }} hidden{{ end }}>
+            <div class="form-grid">
+              <label class="form-field">
+                <span>{{ t "common.connect_timeout" }}</span>
+                <input type="text" name="connect_timeout" value="{{ .NodeForm.ConnectTimeout }}" placeholder="10s">
+                {{ with index .NodeForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+              <label class="form-field">
+                <span>{{ t "common.command_timeout" }}</span>
+                <input type="text" name="command_timeout" value="{{ .NodeForm.CommandTimeout }}" placeholder="20s">
+                {{ with index .NodeForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+            </div>
+            {{ if not .NodeForm.StoredCredentialsAvailable }}
+            <label class="form-field">
+              <span>{{ t "nodes.ssh_password" }}</span>
+              <input type="password" name="password" placeholder="{{ t "nodes.password_placeholder" }}" autocomplete="current-password">
+              {{ with index .NodeForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>{{ t "nodes.private_key" }}</span>
+              <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+              {{ with index .NodeForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>{{ t "nodes.passphrase" }}</span>
+              <input type="password" name="key_passphrase" placeholder="{{ t "nodes.optional_placeholder" }}">
+            </label>
+            {{ end }}
+          </div>
+          <div class="sys-form__actions">
+            <button type="submit" class="btn btn--primary">
+              <i data-lucide="radar" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.run_discovery" }}
+            </button>
+            {{ if .NodeForm.StoredCredentialsAvailable }}
+            <button type="button" class="btn btn--ghost" data-nodes-refresh-btn>
+              <i data-lucide="zap" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.quick_scan" }}
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="node-advanced" aria-expanded="false">
+              <i data-lucide="settings-2" class="icon-in-button" aria-hidden="true"></i> {{ t "common.advanced" }}
+            </button>
+            {{ end }}
+          </div>
+        </form>
+      </div>
+    </details>
+
+    <details class="card card--collapsible node-install-launch">
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <h3><i data-lucide="plus-circle" aria-hidden="true"></i> {{ t "nodes.install_node_title" }}</h3>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
+      <div class="card__collapsible-body">
+        <p class="node-install-launch__lead">{{ tsafe "nodes.install_lead" "server" .NodeTarget.Name }}</p>
+        <div class="node-install-grid" data-engine-launcher>
+          {{ range .NodeDeployForm.Engines }}
+          <div class="node-install-card node-install-card--{{ if eq .Kind "binary" }}rebecca{{ else }}pasarguard{{ end }}">
+            <div class="node-install-card__badge-row">
+              <span class="node-install-card__icon"><i data-lucide="{{ .Icon }}" aria-hidden="true"></i></span>
+              <span class="badge badge--strat-key">{{ .Kind }}</span>
+            </div>
+            <h4 class="node-install-card__title">{{ .Label }}</h4>
+            <p class="node-install-card__desc">{{ .Description }}</p>
+            <button type="button" class="btn btn--secondary btn--sm node-install-card__btn"
+                    data-modal-open="deploy-node-modal" data-engine-preselect="{{ .Key }}">
+              <i data-lucide="plus" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.deploy_title" }}
+            </button>
+          </div>
+          {{ end }}
+        </div>
+      </div>
+    </details>
+
+    {{ if .NodeCollection.Available }}
+    <article class="card sys-result-card{{ if .NodeCollection.Error }} sys-result-card--error{{ else }} sys-result-card--ok{{ end }}">
+      <div class="result-header">
+        <span class="result-header__label">
+          <i data-lucide="{{ if .NodeCollection.Error }}alert-circle{{ else }}check-circle{{ end }}" class="icon-in-button" aria-hidden="true"></i>
+          {{ if .NodeCollection.Error }}{{ t "nodes.discovery_errors" }}{{ else }}{{ t "nodes.discovery_complete" }}{{ end }}
+        </span>
+        <code class="result-duration">{{ .NodeCollection.Duration }}</code>
+      </div>
+      <div class="node-collect-meta">
+        <span class="node-collect-meta__item"><i data-lucide="list" aria-hidden="true"></i> {{ t "nodes.probes_count" "count" .NodeCollection.ProbeCount }}</span>
+        <span class="node-collect-meta__item"><i data-lucide="calendar" aria-hidden="true"></i> {{ .NodeCollection.CollectedAt }}</span>
+      </div>
+      {{ if .NodeCollection.Error }}<pre class="output-block output-block--error">{{ .NodeCollection.Error }}</pre>{{ end }}
+      {{ if .NodeCollection.Probes }}
+      <div class="node-probes">
+        {{ range .NodeCollection.Probes }}
+        <div class="collapsible node-probe">
+          <button class="collapsible__toggle" data-collapse-key="probe_{{ .Label }}" data-collapse-default="closed">
+            <i data-lucide="chevron-right" class="collapsible__icon" aria-hidden="true"></i>
+            <span class="node-probe__label">{{ .Label }}</span>
+            {{ if .Error }}<span class="node-probe__badge node-probe__badge--err">{{ t "nodes.probe_error" }}</span>{{ end }}
+            <code class="result-duration">{{ .Duration }}</code>
+          </button>
+          <div class="collapsible__content">
+            <div class="result-cmd"><code>{{ .Command }}</code></div>
+            {{ if .Error }}<pre class="output-block output-block--error">{{ .Error }}</pre>{{ end }}
+            {{ if .Stdout }}<pre class="output-block scrollable">{{ .Stdout }}</pre>{{ else }}<p class="empty-state">{{ t "commands.no_stdout" }}</p>{{ end }}
+            {{ if .Stderr }}<pre class="output-block output-block--error scrollable">{{ .Stderr }}</pre>{{ end }}
+          </div>
+        </div>
+        {{ end }}
+      </div>
+      {{ else }}<p class="empty-state">{{ t "nodes.no_probe_output" }}</p>{{ end }}
+    </article>
+    {{ end }}
+  </div>
+
+  {{ template "node-deploy-modal" . }}
+  {{ template "node-log-drawer" . }}
+  {{ template "node-config-modal" . }}
+  {{ template "node-confirm-modal" . }}
+  <div class="nodes-toast-region" data-nodes-toast-region aria-live="polite" aria-atomic="true"></div>
+
+  <article class="card node-scope">
+    <div class="collapsible">
+      <button class="collapsible__toggle" data-collapse-key="node_scope" data-collapse-default="closed">
+        <i data-lucide="chevron-right" class="collapsible__icon" aria-hidden="true"></i>
+        <span><i data-lucide="book-open" class="icon-in-button" aria-hidden="true"></i> {{ t "nodes.scope_title" }}</span>
+      </button>
+      <div class="collapsible__content">
+        <ul class="node-scope__list">
+          <li>{{ tsafe "nodes.scope_provider" }}</li>
+          <li>{{ tsafe "nodes.scope_pasarguard" }}</li>
+          <li>{{ tsafe "nodes.scope_rebecca" }}</li>
+          <li>{{ tsafe "nodes.scope_ports" }}</li>
+          <li>{{ tsafe "nodes.scope_actions" }}</li>
+        </ul>
+      </div>
+    </div>
+  </article>
+</section>
+{{ end }}
+
+{{ define "node-icon" -}}
+{{ if eq . "pasarguard-node" }}container{{ else if eq . "rebecca-node" }}package{{ else }}help-circle{{ end }}
+{{- end }}
+
+{{ define "node-health-label" -}}
+{{ if eq . "running" }}{{ t "nodes.health_running" }}{{ else if eq . "degraded" }}{{ t "nodes.health_degraded" }}{{ else if eq . "restarting" }}{{ t "nodes.health_restarting" }}{{ else if eq . "stopped" }}{{ t "nodes.health_stopped" }}{{ else if eq . "detected" }}{{ t "nodes.health_detected" }}{{ else if eq . "not_detected" }}{{ t "nodes.health_not_detected" }}{{ else }}{{ t "nodes.health_unknown" }}{{ end }}
+{{- end }}

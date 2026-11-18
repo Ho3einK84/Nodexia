@@ -1,0 +1,298 @@
+/* Real-time monitoring stream client.
+ *
+ * Drives the unified "Resource health" card: the CPU / RAM / Disk arc gauges
+ * and the load / bandwidth / uptime strip update in place as frames arrive over
+ * a WebSocket (~every few seconds).
+ *
+ * Progressive enhancement: if the live card is absent (no stored credentials)
+ * this file no-ops and the server-rendered snapshot gauges stand on their own.
+ * Reconnect uses capped exponential backoff and never clears the last good
+ * values, so a blip just flips the status pill to "Reconnecting".
+ */
+(function () {
+  'use strict';
+
+  // Localization helpers (see app.js for window.nxT / window.nxTn).
+  function getI18nMap() {
+    try {
+      var island = document.getElementById('nodexia-i18n');
+      if (island && island.textContent) return JSON.parse(island.textContent) || {};
+    } catch (e) {}
+    return {};
+  }
+  function T(key, params) {
+    if (typeof window.nxT === 'function') return window.nxT(key, params);
+    var map = getI18nMap();
+    if (map[key]) {
+      var val = map[key];
+      if (typeof val === 'object') val = val.other || key;
+      if (!params) return val;
+      return val.replace(/\{(\w+)\}/g, function (w, k) { return params[k] != null ? params[k] : w; });
+    }
+    if (key === 'monitoring.connecting') {
+      var isFa = document.documentElement.getAttribute('lang') === 'fa';
+      return isFa ? 'در حال اتصال…' : 'Connecting…';
+    }
+    return key;
+  }
+  function Tn(key, count, params) {
+    if (typeof window.nxTn === 'function') return window.nxTn(key, count, params);
+    var map = getI18nMap();
+    if (map[key]) {
+      var val = map[key];
+      var text = typeof val === 'object' ? (val[count === 1 ? 'one' : 'other'] || val.other || key) : val;
+      params = params || {};
+      if (params.count == null) params.count = count;
+      return text.replace(/\{(\w+)\}/g, function (w, k) { return params[k] != null ? params[k] : w; });
+    }
+    return key;
+  }
+
+  // Dynamically loaded workspace scripts execute inside their owning pane.
+  // Scope the lookup so a second monitoring tab cannot bind to the first
+  // pane's card.
+  var scriptPane = document.currentScript && document.currentScript.closest('.tab-pane');
+  var card = (scriptPane || document).querySelector('[data-live-url]');
+  if (!card || typeof WebSocket === 'undefined') return;
+
+  var path = card.getAttribute('data-live-url');
+  var wsURL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + path;
+
+  var statusEl = card.querySelector('[data-live-status]');
+  var statusText = card.querySelector('[data-live-status-text]');
+
+  var socket = null;
+  var backoff = 1000;
+  var reconnectTimer = null;
+  var stopped = false;
+  // Previous network counters, for deriving current bandwidth (rate) from the
+  // delta between consecutive frames. Reset on every (re)connect so a gap never
+  // shows up as a misleading averaged-over-the-gap spike.
+  var prevNet = null;
+
+  function q(sel) { return card.querySelector(sel); }
+  function setText(sel, text) {
+    var el = q(sel);
+    if (el) el.textContent = text;
+  }
+
+  function setStatus(kind, text) {
+    if (statusEl) statusEl.className = 'live-status live-status--' + kind;
+    if (statusText) {
+      if (text && text !== 'monitoring.connecting') {
+        statusText.textContent = text;
+      } else if (!statusText.textContent) {
+        var isFa = document.documentElement.getAttribute('lang') === 'fa';
+        statusText.textContent = isFa ? 'در حال اتصال…' : 'Connecting…';
+      }
+    }
+  }
+
+  function clampPct(value) { return Math.max(0, Math.min(100, value || 0)); }
+
+  function resolveGaugeColor(value) {
+    if (typeof window.nxGaugeColor === 'function') {
+      return window.nxGaugeColor(value);
+    }
+    var token = value <= 60 ? '--ok' : (value <= 80 ? '--warn' : '--crit');
+    if (typeof window.getComputedStyle === 'function' && document.documentElement) {
+      var resolved = window.getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+      if (resolved) return resolved;
+    }
+    return 'var(' + token + ')';
+  }
+
+  // setGauge animates one arc gauge to value and recolors it, matching the
+  // server-rendered gauge geometry exactly (same arc path + dash math).
+  function setGauge(metric, value) {
+    var gauge = card.querySelector('[data-gauge-metric="' + metric + '"]');
+    if (!gauge) return;
+    var v = clampPct(value);
+    if (typeof window.nxApplyGauge === 'function') {
+      window.nxApplyGauge(gauge, v, false);
+    } else {
+      var arc = gauge.querySelector('.gauge__arc');
+      if (arc) {
+        var length = arc.getTotalLength();
+        arc.style.strokeDasharray = length;
+        arc.style.strokeDashoffset = length * (1 - v / 100);
+        gauge.style.setProperty('--gauge-color', resolveGaugeColor(v));
+      }
+    }
+    var valEl = gauge.querySelector('[data-gauge-value]');
+    if (valEl) valEl.textContent = v.toFixed(0) + '%';
+    gauge.setAttribute('data-gauge', v.toFixed(2));
+  }
+
+  function setBandwidth(rxStr, txStr) {
+    var bwEl = q('[data-live-bandwidth]');
+    if (!bwEl) return;
+    var rxNode = bwEl.querySelector('[data-live-bw-rx]');
+    var txNode = bwEl.querySelector('[data-live-bw-tx]');
+    if (!rxNode || !txNode) {
+      bwEl.innerHTML =
+        '<span class="live-bw-pair">' +
+          '<span class="live-bw-item live-bw-item--rx"><i data-lucide="arrow-down"></i><span data-live-bw-rx></span></span>' +
+          '<span class="live-bw-item live-bw-item--tx"><i data-lucide="arrow-up"></i><span data-live-bw-tx></span></span>' +
+        '</span>';
+      if (typeof lucide !== 'undefined' && lucide.createIcons) {
+        try { lucide.createIcons({ nodes: [bwEl] }); } catch (e) {}
+      }
+      rxNode = bwEl.querySelector('[data-live-bw-rx]');
+      txNode = bwEl.querySelector('[data-live-bw-tx]');
+    }
+    if (rxNode) rxNode.textContent = rxStr;
+    if (txNode) txNode.textContent = txStr + ' Mbps';
+  }
+
+  function humanUptime(seconds) {
+    seconds = Math.max(0, Math.floor(seconds || 0));
+    var d = Math.floor(seconds / 86400); seconds %= 86400;
+    var h = Math.floor(seconds / 3600);
+    var m = Math.floor((seconds % 3600) / 60);
+    var parts = [];
+    if (d > 0) parts.push(d + 'd');
+    if (h > 0 || d > 0) parts.push(h + 'h');
+    parts.push(m + 'm');
+    return parts.join(' ');
+  }
+
+  function fmt2(v) { return (v || 0).toFixed(2); }
+
+  // The single Disk gauge tracks the root filesystem; fall back to the busiest
+  // mount when "/" is not reported.
+  function pickRootDisk(disks) {
+    if (!disks || !disks.length) return null;
+    for (var i = 0; i < disks.length; i++) {
+      if (disks[i].mount === '/') return disks[i];
+    }
+    var max = disks[0];
+    for (var j = 1; j < disks.length; j++) {
+      if (disks[j].percent > max.percent) max = disks[j];
+    }
+    return max;
+  }
+
+  function formatBytePair(usedBytes, totalBytes) {
+    var fn = window.nxHumanBytes || function (b) { return (b / 1e9).toFixed(1) + ' GB'; };
+    var u = fn(usedBytes);
+    var t = fn(totalBytes);
+    var uParts = u.split(' ');
+    var tParts = t.split(' ');
+    if (uParts.length === 2 && tParts.length === 2 && uParts[1] === tParts[1]) {
+      return uParts[0] + ' / ' + t;
+    }
+    return u + ' / ' + t;
+  }
+
+  function render(m) {
+    setGauge('cpu', m.cpuPercent);
+    setText('[data-live-cpu-detail]', Tn('js.live.cores', m.perCore ? m.perCore.length : 0));
+
+    setGauge('ram', m.memPercent);
+    setText('[data-live-mem-detail]',
+      formatBytePair(m.memUsedKB * 1024, m.memTotalKB * 1024) +
+      (m.swapPercent > 0 ? ' · ' + T('js.live.swap') + ' ' + m.swapPercent.toFixed(0) + '%' : ''));
+
+    var root = pickRootDisk(m.disks);
+    if (root) {
+      setGauge('disk', root.percent);
+      var diskStr = formatBytePair(root.usedKB * 1024, root.totalKB * 1024);
+      if (root.mount && root.mount !== '/') {
+        diskStr = root.mount.replace(/^\//, '') + ': ' + diskStr;
+      }
+      setText('[data-live-disk-detail]', diskStr);
+    }
+
+    setText('[data-live-load1]', fmt2(m.load1));
+    setText('[data-live-load5]', fmt2(m.load5));
+    setText('[data-live-load15]', fmt2(m.load15));
+
+    // Current bandwidth = byte-counter delta over the elapsed time between
+    // frames. The counters are cumulative since boot, so a negative delta means
+    // the host rebooted and the counter reset — skip that sample.
+    var nowMs = new Date(m.collectedAt || Date.now()).getTime();
+    if (prevNet && nowMs > prevNet.t) {
+      var dtSec = (nowMs - prevNet.t) / 1000;
+      var drx = m.netRxBytes - prevNet.rx;
+      var dtx = m.netTxBytes - prevNet.tx;
+      if (dtSec > 0 && drx >= 0 && dtx >= 0) {
+        var rxMbps = (drx * 8) / 1e6 / dtSec;
+        var txMbps = (dtx * 8) / 1e6 / dtSec;
+        var digits = Math.max(rxMbps, txMbps) >= 100 ? 0 : (Math.max(rxMbps, txMbps) >= 10 ? 1 : 2);
+        setBandwidth(rxMbps.toFixed(digits), txMbps.toFixed(digits));
+      }
+    }
+    prevNet = { rx: m.netRxBytes, tx: m.netTxBytes, t: nowMs };
+
+    setText('[data-live-uptime]', humanUptime(m.uptimeSeconds));
+    setText('[data-live-updated]', new Date(m.collectedAt || Date.now()).toLocaleTimeString());
+  }
+
+  function scheduleReconnect() {
+    if (stopped || reconnectTimer) return;
+    setStatus('error', T('js.live.reconnecting'));
+    reconnectTimer = setTimeout(function () {
+      reconnectTimer = null;
+      connect();
+    }, backoff);
+    backoff = Math.min(backoff * 2, 15000);
+  }
+
+  function connect() {
+    if (stopped) return;
+    setStatus('connecting', T('monitoring.connecting'));
+    var ws;
+    try {
+      ws = new WebSocket(wsURL);
+    } catch (err) {
+      scheduleReconnect();
+      return;
+    }
+    socket = ws;
+
+    ws.onopen = function () {
+      backoff = 1000;
+      prevNet = null; // re-seed the bandwidth baseline after any (re)connect
+      setStatus('live', T('js.live.live'));
+    };
+    ws.onmessage = function (event) {
+      var frame;
+      try { frame = JSON.parse(event.data); } catch (err) { return; }
+      if (frame.type === 'metrics' && frame.data) {
+        setStatus('live', T('js.live.live'));
+        render(frame.data);
+      } else if (frame.type === 'error') {
+        setStatus('error', T('js.live.reconnecting'));
+      }
+    };
+    ws.onclose = function () {
+      socket = null;
+      scheduleReconnect();
+    };
+    ws.onerror = function () {
+      try { ws.close(); } catch (err) {}
+    };
+  }
+
+  function stop() {
+    if (stopped) return;
+    stopped = true;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (socket) { try { socket.close(); } catch (err) {} }
+    socket = null;
+  }
+
+  var cleanupRoot = card.closest('.tab-pane');
+  if (cleanupRoot) {
+    if (!cleanupRoot.__nxCleanups) cleanupRoot.__nxCleanups = [];
+    cleanupRoot.__nxCleanups.push(stop);
+  } else {
+    window.addEventListener('beforeunload', stop, { once: true });
+  }
+
+  connect();
+})();

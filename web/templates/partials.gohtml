@@ -1,0 +1,316 @@
+{{ define "head" }}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ .Title }}</title>
+  <meta name="description" content="{{ .Description }}">
+
+  {{/* Progressive Web App: installability, theming and home-screen icons. */}}
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f0f10">
+  <meta name="color-scheme" content="dark">
+  <meta name="application-name" content="{{ .AppName }}">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="{{ .AppName }}">
+  <link rel="icon" href="{{ asset "/static/favicon.svg" }}" type="image/svg+xml">
+  <link rel="icon" href="{{ asset "/static/icon-192.png" }}" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="{{ asset "/static/apple-touch-icon.png" }}">
+
+  {{/* Self-hosted Inter: preload the Latin variable WOFF2 so the download
+       starts alongside the stylesheet instead of after the @font-face is
+       parsed. */}}
+  <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+  {{ if eq .Lang "fa" }}{{/* Persian locale: preload Vazirmatn alongside the stylesheet. */}}
+  <link rel="preload" href="/static/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  {{ end }}<link rel="stylesheet" href="{{ asset "/static/tokens.css" }}">
+  <link rel="stylesheet" href="{{ asset "/static/shell.css" }}">
+  <link rel="stylesheet" href="{{ asset "/static/style.css" }}">
+  <link rel="stylesheet" href="{{ asset "/static/tabs.css" }}">
+  {{ range .PageStyles }}<link rel="stylesheet" href="{{ asset . }}">
+  {{ end }}<script src="{{ asset "/static/lucide.min.js" }}" defer></script>
+</head>
+{{ end }}
+
+{{ define "brand-icon" }}
+<svg class="shell-brand__icon" viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+  <g stroke="currentColor" stroke-width="1.75" stroke-linecap="round" opacity="0.7">
+    <line x1="12" y1="12" x2="12" y2="5"/>
+    <line x1="12" y1="12" x2="6" y2="17"/>
+    <line x1="12" y1="12" x2="18" y2="17"/>
+  </g>
+  <circle cx="12" cy="5" r="2.2" fill="var(--accent-soft)"/>
+  <circle cx="6" cy="17" r="2.2" fill="var(--accent-soft)"/>
+  <circle cx="18" cy="17" r="2.2" fill="var(--accent-soft)"/>
+  <circle cx="12" cy="12" r="2.8" fill="var(--accent)"/>
+</svg>
+{{ end }}
+
+{{ define "shell-sidebar" }}
+<aside id="shell-sidebar" class="shell-sidebar" aria-label="{{ .AppName }}">
+  <div class="shell-sidebar__top">
+    <a href="/" class="shell-brand" data-rail-tooltip="{{ .AppName }}">
+      <span class="shell-brand__mark" aria-hidden="true">{{ template "brand-icon" . }}</span>
+      <span class="shell-brand__identity">
+        <h1 class="shell-brand__title">{{ .AppName }}</h1>
+      </span>
+    </a>
+  </div>
+
+  <div class="shell-sidebar__body">
+    <div class="shell-sidebar__section">
+      <p class="shell-nav__label">{{ t "drawer.navigate" }}</p>
+      {{ template "shell-nav" . }}
+    </div>
+
+    <div class="shell-sidebar__divider" aria-hidden="true"></div>
+
+    <div class="shell-sidebar__cta">
+      <a href="/servers/new" class="shell-sidebar__action" data-rail-tooltip="{{ t "drawer.add_server" }}">
+        <span class="shell-sidebar__action-icon" aria-hidden="true"><i data-lucide="plus"></i></span>
+        <span class="shell-sidebar__action-label">{{ t "drawer.add_server" }}</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="shell-sidebar__footer">
+    <div class="shell-sidebar__controls">
+      {{ template "lang-switcher" . }}
+      <form action="/logout" method="post" class="shell-sidebar__logout-form">
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+        <button type="submit" class="logout-link" title="{{ t "nav.logout" }}" data-rail-tooltip="{{ t "nav.logout" }}">
+          <span class="logout-link__icon" aria-hidden="true"><i data-lucide="log-out" class="icon-in-button"></i></span>
+          <span class="logout-link__label">{{ t "nav.logout" }}</span>
+        </button>
+      </form>
+    </div>
+
+    <div class="shell-meta" aria-label="{{ t "drawer.session" }}">
+      <span class="shell-meta__env">
+        <span class="shell-meta__dot{{ if eq .Environment "production" }} is-prod{{ end }}" aria-hidden="true"></span>
+        <span>{{ .Environment }}</span>
+      </span>
+      <span class="shell-meta__build">
+        <span>{{ .Version }}</span>
+        <span class="shell-meta__sep" aria-hidden="true">·</span>
+        <span>{{ .DatabaseDriver }}</span>
+      </span>
+    </div>
+  </div>
+</aside>
+{{ end }}
+
+{{ define "shell-header" }}
+{{ template "shell-sidebar" . }}
+{{ end }}
+
+{{/* Language switcher: a row of root-relative links, one per supported locale,
+     that persist the choice via GET /lang/{code} and redirect back. Adding a
+     locale needs no template change — it is driven by .LanguageOptions. */}}
+{{ define "lang-switcher" }}
+<div class="lang-switcher" role="group" aria-label="{{ t "lang.switcher.label" }}">
+  {{ range .LanguageOptions }}
+  <a href="{{ .SwitchURL }}" hreflang="{{ .Code }}" class="lang-switcher__option{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="true"{{ end }} data-tab-bypass data-rail-tooltip="{{ .Label }}"><span class="lang-switcher__full">{{ .Label }}</span><span class="lang-switcher__short" aria-hidden="true">{{ .Code }}</span></a>
+  {{ end }}
+</div>
+{{ end }}
+
+{{ define "mobile-drawer" }}
+<div class="drawer-backdrop" data-drawer-backdrop></div>
+<aside id="mobile-drawer" class="drawer" role="dialog" aria-modal="true" aria-label="{{ t "shell.menu.title" }}" aria-hidden="true">
+  <div class="drawer__header">
+    <div class="drawer__brand">
+      <span class="shell-brand__mark" aria-hidden="true">{{ template "brand-icon" . }}</span>
+      <span class="drawer__title">{{ .AppName }}</span>
+    </div>
+    <button type="button" class="drawer__close" data-drawer-close aria-label="{{ t "shell.menu.close" }}"><i data-lucide="x"></i></button>
+  </div>
+
+  <p class="drawer__section-title">{{ t "drawer.navigate" }}</p>
+  <nav class="drawer__nav" aria-label="{{ t "shell.nav.sections" }}">
+    {{ range .NavigationItems }}
+    <a href="{{ .Href }}" class="drawer__link{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="page"{{ end }}>
+      <span class="drawer__link-icon"><i data-lucide="{{ or .Icon "circle" }}"></i></span>
+      <span>{{ t .Key }}</span>
+      <i data-lucide="chevron-right" class="drawer__link-chevron" aria-hidden="true"></i>
+    </a>
+    {{ end }}
+  </nav>
+
+  <a href="/servers/new" class="btn btn--primary drawer__action"><i data-lucide="plus" class="icon-in-button"></i> {{ t "drawer.add_server" }}</a>
+
+  <div class="drawer__section">
+    <p class="drawer__section-title">{{ t "drawer.session" }}</p>
+    <ul class="drawer__meta">
+      <li><i data-lucide="settings"></i> {{ t "drawer.environment" }} <code>{{ .Environment }}</code></li>
+      <li><i data-lucide="tag"></i> {{ t "drawer.version" }} <code>{{ .Version }}</code></li>
+      <li><i data-lucide="database"></i> {{ t "drawer.database" }} <code>{{ .DatabaseDriver }}</code></li>
+    </ul>
+  </div>
+
+  <div class="drawer__section drawer__section--lang">
+    <p class="drawer__section-title">{{ t "drawer.language" }}</p>
+    {{ template "lang-switcher" . }}
+  </div>
+
+  <form action="/logout" method="post" class="drawer__logout-form">
+    <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+    <button type="submit" class="btn btn--secondary drawer__logout"><i data-lucide="log-out" class="icon-in-button"></i> {{ t "nav.logout" }}</button>
+  </form>
+</aside>
+{{ end }}
+
+{{ define "bottom-nav" }}
+<nav class="bottom-nav" aria-label="{{ t "shell.nav.primary" }}">
+  {{ range .NavigationItems }}
+  <a href="{{ .Href }}" class="bottom-nav__item{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="page"{{ end }}>
+    <span class="bottom-nav__icon" aria-hidden="true"><i data-lucide="{{ or .Icon "circle" }}"></i></span>
+    <span class="bottom-nav__label">{{ t .Key }}</span>
+  </a>
+  {{ end }}
+</nav>
+{{ end }}
+
+{{ define "shell-nav" }}
+<nav class="shell-nav" aria-label="{{ t "shell.nav.primary" }}">
+  {{ range .NavigationItems }}
+  <a href="{{ .Href }}" class="shell-nav__link{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="page"{{ end }} data-rail-tooltip="{{ t .Key }}">
+    <span class="shell-nav__icon" aria-hidden="true"><i data-lucide="{{ or .Icon "circle" }}" class="nav-icon"></i></span>
+    <span class="shell-nav__text">{{ t .Key }}</span>
+  </a>
+  {{ end }}
+</nav>
+{{ end }}
+
+{{/* Subtle info icon beside a page title: opens the page's full description
+     on hover/click/tap instead of cluttering the header with multi-line copy. */}}
+{{ define "page-info" }}
+{{- if .PageDescription }}
+<span class="page-info" data-page-info>
+  <button type="button"
+          class="page-info__trigger"
+          data-page-info-trigger
+          aria-label="{{ t "common.page_info" }}"
+          aria-expanded="false">
+    <i data-lucide="info" aria-hidden="true"></i>
+  </button>
+  <span class="page-info__popover" data-page-info-popover role="tooltip" hidden>
+    <span class="page-info__arrow" aria-hidden="true"></span>
+    <span class="page-info__text">{{ .PageDescription }}</span>
+  </span>
+</span>
+{{- end }}
+{{ end }}
+
+{{ define "page-header" }}
+<div class="page-header">
+  <div class="page-header__title-row">
+    <h2 class="page-header__title">{{ .PageTitle }}{{ if .PageFlag }} <span class="page-header__flag" title="{{ .PageFlagTitle }}" aria-label="{{ .PageFlagTitle }}">{{ .PageFlag }}</span>{{ end }}</h2>
+    {{ template "page-info" . }}
+  </div>
+</div>
+{{ end }}
+
+{{ define "footer" }}
+<footer class="shell-footer">
+  <p>{{ .FooterNote }}</p>
+</footer>
+{{ end }}
+
+{{/* v0.6.0 multi-tab workspace: global tab bar chrome, rendered hidden until
+     tab-manager.js finishes booting (progressive enhancement — a JS-disabled
+     session never sees it and behaves exactly like v0.5.0). Pinned tabs render
+     inside [data-tab-pinned]; the rest inside the scrollable [data-tab-list]. */}}
+{{ define "tab-bar" }}
+<div id="nodexia-tabbar" class="tab-bar" data-tab-bar hidden>
+  <div class="tab-bar__pinned" data-tab-pinned></div>
+  <div class="tab-bar__scroll" data-tab-scroll>
+    <div class="tab-bar__list" role="tablist" data-tab-list aria-label="{{ t "js.tabs.bar_label" }}"></div>
+  </div>
+  <button type="button" class="tab-bar__new" data-tab-new aria-label="{{ t "js.tabs.new_tab" }}" title="{{ t "js.tabs.new_tab" }}">
+    <i data-lucide="plus"></i>
+  </button>
+</div>
+{{ end }}
+
+{{/* v0.6.0 multi-tab workspace: mobile bottom-sheet tab switcher, opened via
+     the FAB below. Cards inside [data-tab-switcher-grid] are built entirely by
+     tab-manager.js. */}}
+{{ define "tab-switcher" }}
+<div id="tab-switcher" class="tab-switcher" data-tab-switcher hidden>
+  <div class="tab-switcher__backdrop" data-tab-switcher-backdrop></div>
+  <div class="tab-switcher__sheet" role="dialog" aria-modal="true" aria-label="{{ t "js.tabs.switcher_title" }}">
+    <div class="tab-switcher__header">
+      <span class="tab-switcher__handle" aria-hidden="true"></span>
+      <button type="button" class="tab-switcher__new" data-tab-switcher-new><i data-lucide="plus"></i> {{ t "js.tabs.new_tab" }}</button>
+      <span class="tab-switcher__count" data-tab-switcher-count></span>
+      <button type="button" class="tab-switcher__close-all" data-tab-switcher-close-all>{{ t "js.tabs.switcher_close_all" }}</button>
+      <button type="button" class="tab-switcher__dismiss" data-tab-switcher-dismiss aria-label="{{ t "js.tabs.switcher_dismiss" }}"><i data-lucide="x"></i></button>
+    </div>
+    <div class="tab-switcher__grid" data-tab-switcher-grid></div>
+  </div>
+</div>
+{{ end }}
+
+{{/* v0.6.0 multi-tab workspace: mobile-only FAB (< 768px, see tabs.css). Always
+     opens the tab switcher above — no speed-dial submenu. */}}
+{{ define "tab-fab" }}
+<button type="button" id="tab-fab" class="tab-fab" data-tab-fab aria-label="{{ t "js.tabs.fab_label" }}">
+  <i data-lucide="layers"></i>
+  <span class="tab-fab__badge" data-tab-fab-badge></span>
+</button>
+{{ end }}
+
+{{/* ── Unified Server Header & Sub-Navigation ────────────────────────────── */}}
+{{ define "server-header" }}
+{{ if .ServerHeader.ID }}
+<div class="server-context">
+  <div class="server-context__identity">
+    <div class="server-context__main">
+      <i data-lucide="server" class="server-context__icon"></i>
+      <span class="server-context__name">{{ .ServerHeader.Name }}</span>
+      {{ if .ServerHeader.Flag }}<span class="server-context__flag" title="{{ .ServerHeader.FlagTitle }}" aria-label="{{ .ServerHeader.FlagTitle }}">{{ .ServerHeader.Flag }}</span>{{ end }}
+      <span class="server-context__addr">{{ .ServerHeader.Username }}@{{ .ServerHeader.Host }}:{{ .ServerHeader.Port }}</span>
+      <span class="badge badge--auth-{{ .ServerHeader.AuthMode }}">{{ .ServerHeader.AuthMode }}</span>
+      {{ range .ServerHeader.Tags }}<span class="tag">{{ . }}</span>{{ end }}
+    </div>
+    <div class="server-context__actions">
+      <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerHeader.ID }}/edit" title="{{ t "common.edit" }}"><i data-lucide="pencil" class="icon-in-button"></i> <span class="btn-label">{{ t "common.edit" }}</span></a>
+      <a class="btn btn--ghost btn--sm" href="/servers" title="{{ t "nav.servers" }}"><i data-lucide="arrow-left" class="icon-in-button"></i> <span class="btn-label">{{ t "nav.servers" }}</span></a>
+    </div>
+  </div>
+
+  <nav class="server-subnav" aria-label="{{ t "servers.subnav_label" }}">
+    <a href="/servers/{{ .ServerHeader.ID }}/monitoring" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "monitoring" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "monitoring" }} aria-current="page"{{ end }}>
+      <i data-lucide="gauge" class="server-subnav__icon"></i>
+      <span>{{ t "common.monitoring" }}</span>
+    </a>
+    <a href="/servers/{{ .ServerHeader.ID }}/nodes" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "nodes" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "nodes" }} aria-current="page"{{ end }}>
+      <i data-lucide="boxes" class="server-subnav__icon"></i>
+      <span>{{ t "common.nodes" }}</span>
+    </a>
+    <a href="/servers/{{ .ServerHeader.ID }}/terminal" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "terminal" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "terminal" }} aria-current="page"{{ end }}>
+      <i data-lucide="terminal-square" class="server-subnav__icon"></i>
+      <span>{{ t "common.terminal" }}</span>
+    </a>
+    <a href="/servers/{{ .ServerHeader.ID }}/commands" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "commands" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "commands" }} aria-current="page"{{ end }}>
+      <i data-lucide="terminal" class="server-subnav__icon"></i>
+      <span>{{ t "common.commands" }}</span>
+    </a>
+    <a href="/servers/{{ .ServerHeader.ID }}/files" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "files" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "files" }} aria-current="page"{{ end }}>
+      <i data-lucide="folder-open" class="server-subnav__icon"></i>
+      <span>{{ t "common.files" }}</span>
+    </a>
+    <a href="/servers/{{ .ServerHeader.ID }}/analytics" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "analytics" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "analytics" }} aria-current="page"{{ end }}>
+      <i data-lucide="bar-chart-2" class="server-subnav__icon"></i>
+      <span>{{ t "nav.analytics" }}</span>
+    </a>
+    <a href="/servers/{{ .ServerHeader.ID }}/system" class="server-subnav__item{{ if eq .ServerHeader.ActiveTab "system" }} is-active{{ end }}"{{ if eq .ServerHeader.ActiveTab "system" }} aria-current="page"{{ end }}>
+      <i data-lucide="info" class="server-subnav__icon"></i>
+      <span>{{ t "common.system" }}</span>
+    </a>
+  </nav>
+</div>
+{{ end }}
+{{ end }}

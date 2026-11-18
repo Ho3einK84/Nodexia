@@ -1,0 +1,104 @@
+{{ define "content-login" }}
+<div class="auth" dir="{{ .Dir }}" data-auth-stage>
+  <div class="auth__grid" aria-hidden="true"></div>
+  <canvas class="auth__mesh" id="auth-mesh" aria-hidden="true"></canvas>
+
+  <div class="auth__topbar">
+    {{ template "lang-switcher" . }}
+  </div>
+
+  <main class="auth__panel">
+    <div class="auth__brand">
+      <div class="auth__emblem" aria-hidden="true">
+        <span class="auth__ripple auth__ripple--1"></span>
+        <span class="auth__ripple auth__ripple--2"></span>
+        <svg class="auth__orbit" viewBox="0 0 88 88" width="88" height="88" fill="none">
+          <circle cx="44" cy="44" r="40" stroke="rgba(96, 165, 250, 0.22)" stroke-width="1" stroke-dasharray="4 6" />
+          <circle cx="44" cy="44" r="33" stroke="rgba(255, 255, 255, 0.08)" stroke-width="1" />
+        </svg>
+        <svg class="auth__logo-mark" viewBox="0 0 64 64" width="52" height="52" role="img" aria-label="{{ .AppName }}">
+          <rect x="4" y="4" width="56" height="56" rx="14" fill="#161618" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
+          <g stroke="#93c5fd" stroke-width="2.75" stroke-linecap="round">
+            <line class="auth__logo-spoke auth__logo-spoke--1" x1="32" y1="32" x2="32" y2="16" />
+            <line class="auth__logo-spoke auth__logo-spoke--2" x1="32" y1="32" x2="18" y2="44" />
+            <line class="auth__logo-spoke auth__logo-spoke--3" x1="32" y1="32" x2="46" y2="44" />
+          </g>
+          <circle class="auth__logo-node auth__logo-node--1" cx="32" cy="16" r="4.5" fill="#60a5fa" />
+          <circle class="auth__logo-node auth__logo-node--2" cx="18" cy="44" r="4.5" fill="#4cc38a" />
+          <circle class="auth__logo-node auth__logo-node--3" cx="46" cy="44" r="4.5" fill="#60a5fa" />
+          <circle class="auth__logo-hub" cx="32" cy="32" r="6.8" fill="#3b82f6" />
+        </svg>
+      </div>
+
+      <p class="auth__eyebrow">
+        <span class="auth__signal-dot" aria-hidden="true"></span>
+        <span>{{ t "shell.eyebrow" }}</span>
+      </p>
+      <h1 class="auth__title">{{ .AppName }}</h1>
+      <p class="auth__tagline">{{ t "login.tagline" }}</p>
+    </div>
+
+    <section class="auth__card{{ if .FlashMessage }} has-flash{{ end }}" aria-labelledby="login-heading">
+      <span class="auth__card-beam" aria-hidden="true"></span>
+      <span class="auth__corner auth__corner--tl" aria-hidden="true"></span>
+      <span class="auth__corner auth__corner--tr" aria-hidden="true"></span>
+      <span class="auth__corner auth__corner--bl" aria-hidden="true"></span>
+      <span class="auth__corner auth__corner--br" aria-hidden="true"></span>
+
+      <header class="auth__card-head">
+        <h2 id="login-heading">{{ t "login.heading" }}</h2>
+        <p>{{ t "login.subtitle" }}</p>
+      </header>
+
+      {{ if .FlashMessage }}
+      <div class="flash-banner flash-banner--{{ .FlashKind }} auth__flash" role="alert">
+        <i data-lucide="alert-triangle" aria-hidden="true"></i>
+        <p>{{ .FlashMessage }}</p>
+      </div>
+      {{ end }}
+
+      <form method="post" action="/login" class="auth__form" autocomplete="on" data-auth-form>
+        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+
+        <label class="auth__field">
+          <span class="auth__field-label">{{ t "common.username" }}</span>
+          <span class="auth__input-wrap">
+            <span class="auth__input-addon" aria-hidden="true">
+              <i data-lucide="user" class="auth__field-icon"></i>
+            </span>
+            <input type="text" name="username" class="auth__input" placeholder=" " required autofocus
+                   autocomplete="username" autocapitalize="none" spellcheck="false">
+          </span>
+        </label>
+
+        <label class="auth__field auth__field--reveal">
+          <span class="auth__field-label">{{ t "common.password" }}</span>
+          <span class="auth__input-wrap">
+            <span class="auth__input-addon" aria-hidden="true">
+              <i data-lucide="lock" class="auth__field-icon"></i>
+            </span>
+            <input type="password" name="password" class="auth__input" placeholder=" " required
+                   autocomplete="current-password">
+          </span>
+        </label>
+
+        <button type="submit" class="auth__submit" data-auth-submit>
+          <span class="auth__submit-sheen" aria-hidden="true"></span>
+          <span class="auth__submit-content">
+            <i data-lucide="log-in" class="icon-in-button auth__submit-icon" aria-hidden="true"></i>
+            <span class="auth__submit-spinner" aria-hidden="true"></span>
+            <span>{{ t "login.sign_in" }}</span>
+          </span>
+        </button>
+      </form>
+
+      <footer class="auth__card-foot">
+        <i data-lucide="shield" aria-hidden="true"></i>
+        <span>{{ t "login.secure_note" }}</span>
+      </footer>
+    </section>
+
+    <p class="auth__meta">{{ .AppName }} · {{ t "shell.meta.version" "value" .Version }}</p>
+  </main>
+</div>
+{{ end }}

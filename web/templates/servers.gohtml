@@ -1,0 +1,275 @@
+{{ define "content-servers-list" }}
+<section class="hero servers-page">
+  <header class="servers-hero">
+    <div class="servers-hero__top">
+      <div class="servers-hero__title-row">
+        <span class="servers-hero__emblem" aria-hidden="true">
+          <i data-lucide="server"></i>
+        </span>
+        <div class="servers-hero__copy">
+          <p class="servers-hero__eyebrow"><span class="servers-hero__dot" aria-hidden="true"></span> {{ t "servers.hero.eyebrow" }}</p>
+          <div class="servers-hero__heading">
+            <h2 class="servers-hero__title">{{ .PageTitle }}</h2>
+            {{ template "page-info" . }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="servers-fleet" role="region" aria-label="{{ t "servers.title" }}">
+      <div class="servers-fleet__stat">
+        <span class="servers-fleet__label"><i data-lucide="layers" aria-hidden="true"></i> {{ t "servers.stats.registered" }}</span>
+        <span class="servers-fleet__value">{{ .ServerCount }}</span>
+      </div>
+      <div class="servers-fleet__stat{{ if gt .ServersUpCount 0 }} servers-fleet__stat--ok{{ end }}">
+        <span class="servers-fleet__label"><i data-lucide="activity" aria-hidden="true"></i> {{ t "servers.stats.online" }}</span>
+        <span class="servers-fleet__value">{{ .ServersUpCount }}</span>
+      </div>
+      {{ if gt .ServersDownCount 0 }}
+      <div class="servers-fleet__stat servers-fleet__stat--crit">
+        <span class="servers-fleet__label"><i data-lucide="alert-circle" aria-hidden="true"></i> {{ t "servers.stats.down" }}</span>
+        <span class="servers-fleet__value">{{ .ServersDownCount }}</span>
+      </div>
+      {{ end }}
+      <div class="servers-fleet__stat servers-fleet__stat--accent" title="{{ t "servers.toolbar_nodes_title" }}">
+        <span class="servers-fleet__label"><i data-lucide="boxes" aria-hidden="true"></i> {{ t "servers.stats.nodes" }}</span>
+        <span class="servers-fleet__value">{{ .TotalNodeCount }}</span>
+      </div>
+    </div>
+  </header>
+
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
+  <div class="server-toolbar">
+    <form class="server-search" method="get" action="/servers" role="search">
+      <i data-lucide="search" class="server-search__icon"></i>
+      <input
+        type="search"
+        name="q"
+        value="{{ .ServerSearch }}"
+        placeholder="{{ t "servers.search_placeholder" }}"
+        autocomplete="off"
+        aria-label="{{ t "servers.search_aria" }}"
+      >
+      {{ if .ServerSearch }}
+      <a class="server-search__clear" href="/servers" aria-label="{{ t "servers.search_clear" }}"><i data-lucide="x"></i></a>
+      {{ else }}
+      <kbd class="server-search__kbd" aria-hidden="true">/</kbd>
+      {{ end }}
+    </form>
+    <div class="server-toolbar__aside">
+      {{ if .Servers }}
+      <button type="button" class="btn btn--ghost server-toggle-all-btn" id="server-toggle-all" data-collapse-label="{{ t "servers.collapse_all" }}" data-expand-label="{{ t "servers.expand_all" }}" aria-label="{{ t "servers.expand_all" }}" title="{{ t "servers.expand_all" }}">
+        <i data-lucide="chevrons-up-down" class="icon-in-button"></i> <span class="btn-label" id="server-toggle-all-label">{{ t "servers.expand_all" }}</span>
+      </button>
+      {{ end }}
+      <a href="/servers/new" class="btn btn--primary server-add-btn"><i data-lucide="plus" class="icon-in-button"></i> {{ t "servers.add" }}</a>
+    </div>
+  </div>
+
+  {{ if .ServerTagOptions }}
+  <div class="server-tag-filter" role="group" aria-label="{{ t "servers.filter.tags_aria" }}">
+    <span class="server-tag-filter__label"><i data-lucide="tags"></i> {{ t "servers.filter.tags" }}</span>
+    {{ range .ServerTagOptions }}
+    <a href="{{ .URL }}" class="tag-chip tag-chip--filter{{ if .Active }} is-active{{ end }}"{{ if .Active }} aria-current="true"{{ end }}>{{ .Tag }} <span class="tag-chip__count">{{ .Count }}</span></a>
+    {{ end }}
+    {{ if .ServerTagFilter }}
+    <a href="/servers{{ if .ServerSearch }}?q={{ .ServerSearch }}{{ end }}" class="server-tag-filter__clear"><i data-lucide="x"></i> {{ t "servers.filter.clear" }}</a>
+    {{ end }}
+  </div>
+  {{ end }}
+
+  {{ if .Servers }}
+  {{ if .ServerSearch }}
+  <p class="server-result-note">
+    {{ tn "servers.result_note" .ServerMatchCount "from" .ServerShowingFrom "to" .ServerShowingTo "query" .ServerSearch }}
+  </p>
+  {{ end }}
+
+  {{/* Bulk-action form holds ONLY the toolbar. Per-server checkboxes live in
+       the cards below and associate with this form via form="bulk-form", so we
+       never nest the per-server delete forms inside it (nested forms are invalid
+       HTML and silently break the inner form). */}}
+  <form id="bulk-form" method="post" action="/servers/bulk" class="bulk-form">
+    <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+
+    <div class="bulk-toolbar" id="bulk-toolbar">
+      <label class="bulk-select-all" for="bulk-select-all">
+        <input type="checkbox" id="bulk-select-all" aria-label="{{ t "servers.bulk.select_all_aria" }}">
+        <span>{{ t "servers.bulk.select_all" }}</span>
+      </label>
+      <span class="bulk-count" id="bulk-count" aria-live="polite">{{ t "servers.bulk.selected_count" "count" 0 }}</span>
+      <select name="action" id="bulk-action" class="bulk-action-select" required aria-label="{{ t "servers.bulk.action_aria" }}">
+        <option value="">{{ t "servers.bulk.choose_action" }}</option>
+        <option value="reboot">{{ t "servers.bulk.reboot" }}</option>
+        <option value="update">{{ t "servers.bulk.update_packages" }}</option>
+        <option value="node-restart">{{ t "servers.bulk.restart_nodes" }}</option>
+        <option value="node-update">{{ t "servers.bulk.update_nodes" }}</option>
+        <option value="delete">{{ t "common.delete" }}</option>
+      </select>
+      <button type="submit" id="bulk-submit" class="btn btn--primary"
+        data-confirm="{{ t "servers.bulk.confirm" }}">
+        <i data-lucide="play" class="icon-in-button"></i> {{ t "servers.bulk.run" }}
+      </button>
+    </div>
+  </form>
+
+  <div class="server-list">
+    {{ range .Servers }}
+    <article class="server-card server-card--collapsible{{ if eq .Status "up" }} server-card--up{{ else if eq .Status "down" }} server-card--down{{ end }}" data-server-card data-server-id="{{ .ID }}">
+      <div class="server-card__header" data-server-toggle>
+        <div class="server-card__lead">
+          <div class="server-card__checkbox-wrap">
+            <input type="checkbox" name="server_ids" value="{{ .ID }}"
+              form="bulk-form"
+              class="bulk-server-checkbox"
+              aria-label="{{ t "servers.card.select_aria" "name" .Name }}">
+          </div>
+          <div class="server-card__identity">
+            <div class="server-card__title-line">
+              <h4 class="server-card__name">{{ .Name }}{{ if .CountryCode }}<code class="server-card__country" title="{{ .CountryName }}">{{ .CountryCode }}</code>{{ end }}</h4>
+              <span class="server-card__status">
+                {{ if eq .Status "up" }}
+                <span class="server-status-badge server-status-badge--up"><span class="status-pulse"></span>{{ t "servers.status.up" }}</span>
+                {{ else if eq .Status "down" }}
+                <span class="server-status-badge server-status-badge--down"><span class="status-pulse"></span>{{ t "servers.status.down" }}</span>
+                {{ else }}
+                <span class="server-status-badge server-status-badge--unknown"><span class="status-pulse"></span>{{ t "servers.status.unknown" }}</span>
+                {{ end }}
+              </span>
+            </div>
+            <div class="server-card__sub-line">
+              <span class="server-card__host">{{ .Username }}@{{ .Host }}:{{ .Port }}</span>
+              {{ if .JustNow }}<span class="server-card__seen">{{ t "servers.status.just_now" }}</span>
+              {{ else if .LastSeenAt }}<span class="server-card__seen">{{ t "servers.status.last_checked" "value" .LastSeenAt }}</span>
+              {{ end }}
+            </div>
+            {{ if or .HasTelemetry (gt .NodeCount 0) }}
+            <div class="server-card__telemetry">
+              {{ if .HasTelemetry }}
+              <span class="server-tele-pill server-tele-pill--{{ .CPULevel }}">
+                <span class="server-tele-pill__label">{{ t "servers.telemetry.cpu" }}</span>
+                <span class="server-tele-pill__val">{{ .CPUPercent }}%</span>
+              </span>
+              <span class="server-tele-pill server-tele-pill--{{ .RAMLevel }}">
+                <span class="server-tele-pill__label">{{ t "servers.telemetry.ram" }}</span>
+                <span class="server-tele-pill__val">{{ .RAMPercent }}%</span>
+              </span>
+              <span class="server-tele-pill server-tele-pill--{{ .DiskLevel }}">
+                <span class="server-tele-pill__label">{{ t "servers.telemetry.disk" }}</span>
+                <span class="server-tele-pill__val">{{ .DiskPercent }}%</span>
+              </span>
+              {{ end }}
+              {{ if gt .NodeCount 0 }}
+              <span class="server-tele-pill server-tele-pill--nodes{{ if gt .StoppedNodeCount 0 }} server-tele-pill--warn{{ end }}">
+                <i data-lucide="boxes" aria-hidden="true"></i>
+                <span class="server-tele-pill__val">{{ if lt .RunningNodeCount .NodeCount }}{{ t "servers.telemetry.nodes_ratio" "running" .RunningNodeCount "total" .NodeCount }}{{ else }}{{ tn "servers.toolbar_nodes" .NodeCount }}{{ end }}</span>
+              </span>
+              {{ end }}
+            </div>
+            {{ end }}
+          </div>
+        </div>
+
+        <div class="server-card__header-end">
+          <div class="server-card__quick-actions">
+            <a class="server-card__quick-btn" href="/servers/{{ .ID }}/monitoring" aria-label="{{ t "common.monitoring" }}" title="{{ t "common.monitoring" }}"><i data-lucide="gauge" class="icon-in-button"></i><span class="server-card__quick-label">{{ t "common.monitoring" }}</span></a>
+            <a class="server-card__quick-btn" href="/servers/{{ .ID }}/nodes" aria-label="{{ t "common.nodes" }}" title="{{ t "common.nodes" }}"><i data-lucide="boxes" class="icon-in-button"></i><span class="server-card__quick-label">{{ t "common.nodes" }}</span></a>
+            <a class="server-card__quick-btn" href="/servers/{{ .ID }}/terminal" aria-label="{{ t "common.terminal" }}" title="{{ t "common.terminal" }}"><i data-lucide="terminal-square" class="icon-in-button"></i><span class="server-card__quick-label">{{ t "common.terminal" }}</span></a>
+            <a class="server-card__quick-btn" href="/servers/{{ .ID }}/files" aria-label="{{ t "common.files" }}" title="{{ t "common.files" }}"><i data-lucide="folder-open" class="icon-in-button"></i><span class="server-card__quick-label">{{ t "common.files" }}</span></a>
+            <a class="server-card__quick-btn" href="/servers/{{ .ID }}/analytics" aria-label="{{ t "nav.analytics" }}" title="{{ t "nav.analytics" }}"><i data-lucide="bar-chart-2" class="icon-in-button"></i><span class="server-card__quick-label">{{ t "nav.analytics" }}</span></a>
+          </div>
+          <div class="server-card__controls">
+            <div class="action-menu server-card__menu" data-action-menu>
+              <button type="button" class="server-card__icon-btn action-menu__toggle" aria-haspopup="true" aria-expanded="false" aria-label="{{ t "servers.card.more_aria" "name" .Name }}" title="{{ t "common.more" }}"><i data-lucide="ellipsis" class="icon-in-button"></i></button>
+              <div class="action-menu__panel" role="menu">
+                <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> {{ t "common.edit" }}</a>
+                <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
+                <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
+                <div class="action-menu__divider" role="separator"></div>
+                <form method="post" action="/servers/{{ .ID }}/delete" class="action-menu__form">
+                  <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+                  <button type="submit" class="action-menu__item action-menu__item--danger" role="menuitem" data-confirm="{{ t "servers.card.delete_confirm" "name" .Name }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "common.delete" }}</button>
+                </form>
+              </div>
+            </div>
+            <button type="button" class="server-card__icon-btn server-card__toggle-btn" data-server-toggle-btn aria-expanded="false" aria-label="{{ t "servers.card.toggle_aria" "name" .Name }}" title="{{ t "servers.card.toggle_aria" "name" .Name }}">
+              <i data-lucide="chevron-down" class="server-card__toggle-icon"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="server-card__collapsible-body" data-server-body hidden>
+        <div class="server-card__meta">
+          <span class="badge badge--auth-{{ .AuthMode }}">{{ .AuthMode }}</span>
+          <span class="badge badge--strat-{{ .CredentialStrategy }}">{{ .CredentialStrategy }}</span>
+          <span class="badge badge--id">#{{ .ID }}</span>
+          {{ range .Tags }}<span class="tag">{{ . }}</span>{{ end }}
+        </div>
+
+        {{ if .Note }}
+        <p class="server-card__note">{{ .Note }}</p>
+        {{ end }}
+
+        <div class="server-card__footer">
+          <span class="server-card__created">{{ t "servers.card.created" "value" .CreatedAt }}</span>
+          <a class="server-card__footer-link" href="/servers/{{ .ID }}/edit"><i data-lucide="pencil" class="icon-in-button"></i> {{ t "common.edit" }}</a>
+        </div>
+      </div>
+    </article>
+    {{ end }}
+  </div>
+
+  {{ template "pagination" .ServerPagination }}
+
+  {{ else if .ServerSearch }}
+  <div class="empty-state-card">
+    <span class="empty-state-icon"><i data-lucide="search-x"></i></span>
+    <p class="empty-state-title">{{ t "servers.empty.no_match_title" }}</p>
+    <p class="empty-state-desc">{{ t "servers.empty.no_match_desc" "query" .ServerSearch }}</p>
+    <a class="btn btn--secondary" href="/servers"><i data-lucide="x" class="icon-in-button"></i> {{ t "servers.search_clear" }}</a>
+  </div>
+  {{ else }}
+  <div class="empty-state-card">
+    <span class="empty-state-icon"><i data-lucide="server"></i></span>
+    <p class="empty-state-title">{{ t "servers.empty.none_title" }}</p>
+    <p class="empty-state-desc">{{ t "servers.empty.none_desc" }}</p>
+    <a class="btn btn--primary" href="/servers/new"><i data-lucide="plus" class="icon-in-button"></i> {{ t "servers.empty.register" }}</a>
+  </div>
+  {{ end }}
+</section>
+{{ end }}
+
+{{/* ── Reusable pagination control ─────────────────────── */}}
+{{ define "pagination" }}
+{{ if gt .TotalPages 1 }}
+<nav class="pagination" aria-label="{{ t "pagination.label" }}">
+  {{ if .HasPrev }}
+  <a class="pagination__nav" href="{{ .PrevURL }}" aria-label="{{ t "pagination.previous" }}"><i data-lucide="chevron-left"></i></a>
+  {{ else }}
+  <span class="pagination__nav pagination__nav--disabled" aria-disabled="true"><i data-lucide="chevron-left"></i></span>
+  {{ end }}
+
+  {{ range .Pages }}
+  {{ if .IsGap }}
+  <span class="pagination__gap">…</span>
+  {{ else if .IsActive }}
+  <span class="pagination__page pagination__page--active" aria-current="page">{{ .Number }}</span>
+  {{ else }}
+  <a class="pagination__page" href="{{ .URL }}">{{ .Number }}</a>
+  {{ end }}
+  {{ end }}
+
+  {{ if .HasNext }}
+  <a class="pagination__nav" href="{{ .NextURL }}" aria-label="{{ t "pagination.next" }}"><i data-lucide="chevron-right"></i></a>
+  {{ else }}
+  <span class="pagination__nav pagination__nav--disabled" aria-disabled="true"><i data-lucide="chevron-right"></i></span>
+  {{ end }}
+</nav>
+{{ end }}
+{{ end }}

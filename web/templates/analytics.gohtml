@@ -1,0 +1,236 @@
+{{ define "content-analytics" }}
+<section class="hero">
+
+  {{ template "server-header" . }}
+
+  <!-- Network Traffic Hero Section (always 30d from vnStat) -->
+  <div class="analytics-traffic-hero">
+    <article class="chart-card chart-card--hero" id="card-traffic">
+      <div class="chart-card__header">
+        <div class="chart-card__title">
+          <i data-lucide="network" class="chart-icon"></i>
+          <span>{{ t "analytics.network_traffic" }}</span>
+          <span class="chart-badge">{{ t "analytics.last_30_days" }}</span>
+        </div>
+        <span class="chart-card__unit">GB/day</span>
+      </div>
+      <div class="chart-wrap chart-wrap--tall">
+        <div class="chart-skeleton" id="skeleton-traffic"></div>
+        <div class="chart-container" id="chart-traffic" data-metric="traffic" data-server="{{ .AnalyticsTarget.ID }}" hidden></div>
+        <div class="chart-empty" id="empty-traffic" hidden>
+          <i data-lucide="wifi-off"></i>
+          <p>{{ t "analytics.no_traffic" }}</p>
+          <small>{{ t "analytics.no_traffic_sub" }}</small>
+        </div>
+        <div class="chart-error" id="error-traffic" hidden>
+          <i data-lucide="alert-circle"></i>
+          <p>{{ t "analytics.traffic_error" }}</p>
+        </div>
+      </div>
+      <div class="chart-legend" id="legend-traffic"></div>
+    </article>
+
+    <!-- This month's traffic split (download vs upload) -->
+    {{ with .AnalyticsTrafficMonth }}
+    {{ if .HasData }}
+    <div class="traffic-summary">
+      <div class="traffic-summary__card traffic-summary__card--dl">
+        <div class="traffic-summary__label"><i data-lucide="arrow-down"></i> {{ t "analytics.download" }}</div>
+        <div class="traffic-summary__value">{{ .Download }}</div>
+        <div class="traffic-summary__sub">{{ t "analytics.this_month" "label" .MonthLabel }}</div>
+      </div>
+      <div class="traffic-summary__card traffic-summary__card--ul">
+        <div class="traffic-summary__label"><i data-lucide="arrow-up"></i> {{ t "analytics.upload" }}</div>
+        <div class="traffic-summary__value">{{ .Upload }}</div>
+        <div class="traffic-summary__sub">{{ t "analytics.this_month" "label" .MonthLabel }}</div>
+      </div>
+      <div class="traffic-summary__card traffic-summary__card--total">
+        <div class="traffic-summary__label"><i data-lucide="arrow-up-down"></i> {{ t "analytics.total" }}</div>
+        <div class="traffic-summary__value">{{ .Total }}</div>
+        <div class="traffic-summary__sub">{{ t "analytics.this_month" "label" .MonthLabel }}</div>
+      </div>
+    </div>
+    {{ end }}
+    {{ end }}
+  </div>
+
+  <!-- Scoped Resource Telemetry Section (controlled by 1H / 24H / 7D / 30D range tabs) -->
+  <div class="analytics-section-bar">
+    <h2 class="analytics-section-title">
+      <i data-lucide="activity" class="chart-icon"></i>
+      <span>{{ t "monitoring.resource_health" }}</span>
+    </h2>
+    <div class="analytics-range-tabs" id="globalRangeTabs" role="tablist" aria-label="{{ t "analytics.time_range" }}">
+      <button class="range-tab" data-range="1h" role="tab">1H</button>
+      <button class="range-tab active" data-range="24h" role="tab" aria-selected="true">24H</button>
+      <button class="range-tab" data-range="7d" role="tab">7D</button>
+      <button class="range-tab" data-range="30d" role="tab">30D</button>
+    </div>
+  </div>
+
+  <!-- Resource Charts: CPU Hero + Secondary Telemetry Grid -->
+  <div class="chart-grid" id="resourceChartGrid">
+
+    <article class="chart-card chart-card--wide" id="card-cpu">
+      <div class="chart-card__header">
+        <div class="chart-card__title">
+          <i data-lucide="cpu" class="chart-icon"></i>
+          <span>{{ t "analytics.cpu_usage" }}</span>
+        </div>
+        <span class="chart-card__unit">%</span>
+      </div>
+      <div class="chart-wrap chart-wrap--hero">
+        <div class="chart-skeleton" id="skeleton-cpu"></div>
+        <div class="chart-container" id="chart-cpu" data-metric="cpu" data-server="{{ .AnalyticsTarget.ID }}" hidden></div>
+        <div class="chart-empty" id="empty-cpu" hidden>
+          <i data-lucide="bar-chart-2"></i>
+          <p>{{ t "analytics.no_data_range" }}</p>
+        </div>
+        <div class="chart-error" id="error-cpu" hidden>
+          <i data-lucide="alert-circle"></i>
+          <p>{{ t "analytics.chart_error" }}</p>
+        </div>
+      </div>
+      <div class="chart-card__footer" id="footer-cpu"></div>
+    </article>
+
+    <article class="chart-card" id="card-ram">
+      <div class="chart-card__header">
+        <div class="chart-card__title">
+          <i data-lucide="memory-stick" class="chart-icon"></i>
+          <span>{{ t "analytics.memory_usage" }}</span>
+        </div>
+        <span class="chart-card__unit">%</span>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-skeleton" id="skeleton-ram"></div>
+        <div class="chart-container" id="chart-ram" data-metric="ram" data-server="{{ .AnalyticsTarget.ID }}" hidden></div>
+        <div class="chart-empty" id="empty-ram" hidden>
+          <i data-lucide="bar-chart-2"></i>
+          <p>{{ t "analytics.no_data_range" }}</p>
+        </div>
+        <div class="chart-error" id="error-ram" hidden>
+          <i data-lucide="alert-circle"></i>
+          <p>{{ t "analytics.chart_error" }}</p>
+        </div>
+      </div>
+      <div class="chart-card__footer" id="footer-ram"></div>
+    </article>
+
+    <article class="chart-card" id="card-disk">
+      <div class="chart-card__header">
+        <div class="chart-card__title">
+          <i data-lucide="hard-drive" class="chart-icon"></i>
+          <span>{{ t "analytics.disk_usage" }}</span>
+        </div>
+        <span class="chart-card__unit">%</span>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-skeleton" id="skeleton-disk"></div>
+        <div class="chart-container" id="chart-disk" data-metric="disk" data-server="{{ .AnalyticsTarget.ID }}" hidden></div>
+        <div class="chart-empty" id="empty-disk" hidden>
+          <i data-lucide="bar-chart-2"></i>
+          <p>{{ t "analytics.no_data_range" }}</p>
+        </div>
+        <div class="chart-error" id="error-disk" hidden>
+          <i data-lucide="alert-circle"></i>
+          <p>{{ t "analytics.chart_error" }}</p>
+        </div>
+      </div>
+      <div class="chart-card__footer" id="footer-disk"></div>
+    </article>
+
+    <article class="chart-card" id="card-load">
+      <div class="chart-card__header">
+        <div class="chart-card__title">
+          <i data-lucide="activity" class="chart-icon"></i>
+          <span>{{ t "analytics.load_average" }}</span>
+        </div>
+        <span class="chart-card__unit"></span>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-skeleton" id="skeleton-load"></div>
+        <div class="chart-container" id="chart-load" data-metric="load" data-server="{{ .AnalyticsTarget.ID }}" hidden></div>
+        <div class="chart-empty" id="empty-load" hidden>
+          <i data-lucide="bar-chart-2"></i>
+          <p>{{ t "analytics.no_data_range" }}</p>
+        </div>
+        <div class="chart-error" id="error-load" hidden>
+          <i data-lucide="alert-circle"></i>
+          <p>{{ t "analytics.chart_error" }}</p>
+        </div>
+      </div>
+      <div class="chart-card__footer" id="footer-load"></div>
+    </article>
+
+  </div>
+
+  <!-- Monthly download limit (optional; drives exhaustion forecasting) -->
+  {{ with .AnalyticsLimit }}
+  <article class="card analytics-limit">
+    <div class="analytics-limit__head">
+      <h3><i data-lucide="gauge"></i> {{ t "analytics.limit.title" }}</h3>
+      {{ if .HasLimit }}
+      <span class="analytics-limit__current">{{ t "analytics.limit.current_kind" "value" .LimitHuman "kind" .KindLabel }}</span>
+      {{ else if .InheritedHuman }}
+      <span class="analytics-limit__current analytics-limit__current--inherited">{{ t "analytics.limit.inherited" "value" .InheritedHuman "source" .InheritedSource }}</span>
+      {{ else }}
+      <span class="analytics-limit__current analytics-limit__current--none">{{ t "analytics.limit.none" }}</span>
+      {{ end }}
+    </div>
+    <p class="analytics-limit__hint">{{ t "analytics.limit.hint" }}</p>
+    <div class="limit-form-row">
+      <form class="limit-form" method="post" action="{{ .Action }}">
+        <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+        <label class="limit-form__field limit-form__field--value">
+          <span>{{ t "analytics.limit.value_label" }}</span>
+          <input type="number" name="limit_value" step="any" min="0"
+                 inputmode="decimal" value="{{ .ValueInput }}"
+                 placeholder="{{ t "analytics.limit.placeholder" }}">
+        </label>
+        <label class="limit-form__field">
+          <span>{{ t "analytics.limit.unit_label" }}</span>
+          <select name="limit_unit">
+            {{ $unit := .UnitInput }}
+            {{ range .UnitOptions }}<option value="{{ . }}"{{ if eq . $unit }} selected{{ end }}>{{ . }}</option>{{ end }}
+          </select>
+        </label>
+        <label class="limit-form__field">
+          <span>{{ t "analytics.limit.kind_label" }}</span>
+          <select name="limit_kind">
+            <option value="rx"{{ if eq .KindInput "rx" }} selected{{ end }}>{{ t "analytics.limit.kind_rx" }}</option>
+            <option value="tx"{{ if eq .KindInput "tx" }} selected{{ end }}>{{ t "analytics.limit.kind_tx" }}</option>
+            <option value="total"{{ if eq .KindInput "total" }} selected{{ end }}>{{ t "analytics.limit.kind_total" }}</option>
+          </select>
+        </label>
+        <button type="submit" class="btn btn--primary btn--sm limit-form__submit"><i data-lucide="save" class="icon-in-button"></i> {{ t "analytics.limit.save" }}</button>
+      </form>
+      {{ if .HasLimit }}
+      <form method="post" action="{{ .Action }}" class="inline-form limit-remove">
+        <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
+        <input type="hidden" name="limit_value" value="">
+        <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" data-confirm="{{ t "analytics.limits.remove_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "analytics.limit.remove" }}</button>
+      </form>
+      {{ end }}
+    </div>
+    {{ if .Error }}<p class="analytics-limit__error">{{ .Error }}</p>{{ end }}
+  </article>
+  {{ end }}
+
+  <!-- Bandwidth Forecast (download only) -->
+  <div class="forecast-header">
+    <p class="eyebrow">{{ t "analytics.forecast_eyebrow" }}</p>
+    <h2 class="analytics-title">{{ t "analytics.usage_forecast" }} <span class="forecast-scope"><i data-lucide="arrow-down"></i> {{ t "analytics.download" }}</span></h2>
+    <p class="analytics-subtitle">{{ tsafe "analytics.forecast_subtitle" }}</p>
+  </div>
+
+  <div class="forecast-grid" id="forecastGrid">
+    <!-- Populated by analytics.js -->
+    <div class="forecast-skeleton"></div>
+  </div>
+
+  <!-- Days-to-exhaustion projection (only when a monthly limit is set) -->
+  <div class="forecast-exhaustion" id="forecastExhaustion" hidden></div>
+
+</section>
+{{ end }}

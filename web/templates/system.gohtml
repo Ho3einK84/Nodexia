@@ -1,0 +1,230 @@
+{{ define "content-system" }}
+<section class="hero">
+
+  {{ template "server-header" . }}
+
+  {{ if .FlashMessage }}
+  <div class="flash-banner flash-banner--{{ .FlashKind }}">
+    <p>{{ .FlashMessage }}</p>
+  </div>
+  {{ end }}
+
+  {{ if .SystemFacts.Available }}
+  <article class="card sys-facts-card">
+    <div class="card__header sys-facts-header">
+      <div class="live-head__title">
+        <h3><i data-lucide="cpu" aria-hidden="true"></i> {{ t "system.facts_title" }}</h3>
+        <span class="sys-badge-arch" title="{{ t "system.architecture" }}">{{ .SystemFacts.Architecture }}</span>
+      </div>
+      <div class="live-head__actions">
+        {{ if .SystemForm.StoredCredentialsAvailable }}
+        <button type="button" class="btn btn--ghost btn--sm sys-btn-refresh" data-refresh-now="{{ .SystemForm.RefreshURL }}?refresh=1" title="{{ t "system.quick_refresh" }}">
+          <i data-lucide="zap" class="icon-in-button"></i> <span class="btn-label">{{ t "system.quick_refresh" }}</span>
+        </button>
+        <label class="auto-refresh-toggle">
+          <span class="auto-refresh-label">{{ t "common.auto_label" }}</span>
+          <select id="auto-refresh-select" data-refresh-url="{{ .SystemForm.RefreshURL }}" data-refresh-key="sys_{{ .SystemTarget.ID }}">
+            <option value="0" selected>{{ t "common.off" }}</option>
+            <option value="10000">10s</option>
+            <option value="30000">30s</option>
+            <option value="60000">1m</option>
+            <option value="300000">5m</option>
+          </select>
+        </label>
+        {{ end }}
+      </div>
+    </div>
+    <div class="sys-facts-primary">
+      <div class="sys-fact-hero sys-fact-hero--hostname">
+        <div class="sys-fact-hero__head">
+          <span class="sys-fact-hero__label"><i data-lucide="monitor-dot"></i> {{ t "system.hostname" }}</span>
+          <button type="button" class="btn-copy-micro" data-copy-target="#sys-hostname-val" title="{{ t "common.copy" }}" aria-label="{{ t "common.copy" }}">
+            <i data-lucide="copy"></i>
+          </button>
+        </div>
+        <span class="sys-fact-hero__value" id="sys-hostname-val">{{ .SystemFacts.Hostname }}</span>
+      </div>
+      <div class="sys-fact-hero sys-fact-hero--os">
+        <div class="sys-fact-hero__head">
+          <span class="sys-fact-hero__label"><i data-lucide="layers"></i> {{ t "system.os" }}</span>
+          {{ if .SystemFacts.OSVersion }}
+          <span class="sys-fact-pill sys-fact-pill--os">{{ .SystemFacts.OSVersion }}</span>
+          {{ end }}
+        </div>
+        <span class="sys-fact-hero__value">{{ .SystemFacts.OSName }}</span>
+      </div>
+      <div class="sys-fact-hero sys-fact-hero--kernel">
+        <div class="sys-fact-hero__head">
+          <span class="sys-fact-hero__label"><i data-lucide="terminal"></i> {{ t "system.kernel" }}</span>
+          <button type="button" class="btn-copy-micro" data-copy-target="#sys-kernel-val" title="{{ t "common.copy" }}" aria-label="{{ t "common.copy" }}">
+            <i data-lucide="copy"></i>
+          </button>
+        </div>
+        <span class="sys-fact-hero__value sys-fact-hero__value--mono" id="sys-kernel-val">{{ .SystemFacts.KernelVersion }}</span>
+      </div>
+      <div class="sys-fact-hero sys-fact-hero--arch">
+        <div class="sys-fact-hero__head">
+          <span class="sys-fact-hero__label"><i data-lucide="microchip"></i> {{ t "system.architecture" }}</span>
+        </div>
+        <span class="sys-fact-hero__value"><span class="sys-fact-pill sys-fact-pill--arch">{{ .SystemFacts.Architecture }}</span></span>
+      </div>
+    </div>
+    <div class="sys-facts-secondary">
+      <div class="sys-fact-item sys-fact-item--wide sys-fact-item--cpu">
+        <div class="sys-fact-item__head">
+          <span class="sys-fact-item__label"><i data-lucide="cpu"></i> {{ t "system.cpu" }}</span>
+          <div class="sys-fact-item__actions">
+            {{ if ne .SystemFacts.CPUCores "-" }}
+            <span class="sys-fact-pill sys-fact-pill--cores">{{ t "system.cores" "count" .SystemFacts.CPUCores }}</span>
+            {{ end }}
+            <button type="button" class="btn-copy-micro" data-copy-target="#sys-cpu-val" title="{{ t "common.copy" }}" aria-label="{{ t "common.copy" }}">
+              <i data-lucide="copy"></i>
+            </button>
+          </div>
+        </div>
+        <span class="sys-fact-item__value" id="sys-cpu-val">{{ .SystemFacts.CPUModel }}</span>
+      </div>
+      <div class="sys-fact-item sys-fact-item--ram">
+        <span class="sys-fact-item__label"><i data-lucide="memory-stick"></i> {{ t "system.memory" }}</span>
+        <span class="sys-fact-item__value">{{ .SystemFacts.TotalRAM }}</span>
+      </div>
+      <div class="sys-fact-item sys-fact-item--disk">
+        <span class="sys-fact-item__label"><i data-lucide="hard-drive"></i> {{ t "system.disk" }}</span>
+        <span class="sys-fact-item__value">{{ .SystemFacts.TotalDisk }}</span>
+      </div>
+      <div class="sys-fact-item sys-fact-item--uptime">
+        <span class="sys-fact-item__label"><i data-lucide="clock"></i> {{ t "system.uptime" }}</span>
+        <span class="sys-fact-item__value sys-fact-item__value--uptime">
+          <span class="uptime-pulse" aria-hidden="true"></span>
+          {{ .SystemFacts.UptimeHuman }}
+        </span>
+      </div>
+      <div class="sys-fact-item sys-fact-item--update">
+        <span class="sys-fact-item__label"><i data-lucide="package-check"></i> {{ t "system.last_pkg_update" }}</span>
+        <span class="sys-fact-item__value">{{ .SystemFacts.LastUpdateAt }}</span>
+      </div>
+      <div class="sys-fact-item sys-fact-item--collected">
+        <span class="sys-fact-item__label"><i data-lucide="calendar"></i> {{ t "system.collected" }}</span>
+        <span class="sys-fact-item__value">{{ .SystemFacts.CollectedAt }}</span>
+      </div>
+    </div>
+  </article>
+  {{ else }}
+  <div class="empty-state-card">
+    <span class="empty-state-icon"><i data-lucide="server"></i></span>
+    <p class="empty-state-title">{{ t "system.empty_title" }}</p>
+    <p class="empty-state-desc">{{ t "system.empty_desc" }}</p>
+  </div>
+  {{ end }}
+
+  <div class="sys-workspace">
+
+    {{- $sysAdvErr := or (index .SystemForm.Errors "password") (index .SystemForm.Errors "private_key") (index .SystemForm.Errors "connect_timeout") (index .SystemForm.Errors "command_timeout") -}}
+    <details class="card card--collapsible" {{ if or $sysAdvErr .SystemForm.Errors }}open{{ end }}>
+      <summary class="card__header card__header--collapsible">
+        <div class="card__title-group">
+          <h3><i data-lucide="refresh-cw"></i> {{ t "system.collect_title" }}</h3>
+        </div>
+        <span class="card__collapse-icon" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </summary>
+
+      <div class="card__collapsible-body">
+        <form method="post" action="{{ .SystemForm.Action }}" id="sys-form">
+          <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+
+          {{ if .SystemForm.StoredCredentialsAvailable }}
+          <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button"></i> {{ t "system.stored_note" }}</p>
+          {{ end }}
+
+          <div
+            id="sys-advanced"
+            class="sys-advanced"
+            {{ if and (not $sysAdvErr) .SystemForm.StoredCredentialsAvailable }}hidden{{ end }}
+          >
+            <div class="form-grid">
+              <label class="form-field">
+                <span>{{ t "common.connect_timeout" }}</span>
+                <input type="text" name="connect_timeout" value="{{ .SystemForm.ConnectTimeout }}" placeholder="10s">
+                {{ with index .SystemForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+              <label class="form-field">
+                <span>{{ t "common.command_timeout" }}</span>
+                <input type="text" name="command_timeout" value="{{ .SystemForm.CommandTimeout }}" placeholder="20s">
+                {{ with index .SystemForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+              </label>
+            </div>
+
+            {{ if not .SystemForm.StoredCredentialsAvailable }}
+            <label class="form-field">
+              <span>{{ t "system.ssh_password" }}</span>
+              <input type="password" name="password" placeholder="{{ t "system.password_placeholder" }}" autocomplete="current-password">
+              {{ with index .SystemForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>{{ t "system.private_key" }}</span>
+              <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+              {{ with index .SystemForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+            </label>
+            <label class="form-field">
+              <span>{{ t "system.passphrase" }}</span>
+              <input type="password" name="key_passphrase" placeholder="{{ t "system.optional_placeholder" }}">
+            </label>
+            {{ end }}
+          </div>
+
+          <div class="sys-form__actions">
+            <button type="submit" class="btn btn--primary">
+              <i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "system.collect_now" }}
+            </button>
+            {{ if .SystemForm.StoredCredentialsAvailable }}
+            <button type="button" class="btn btn--ghost btn--sm advanced-toggle" data-target="sys-advanced" aria-expanded="false">
+              <i data-lucide="settings-2" class="icon-in-button"></i> {{ t "common.advanced" }}
+            </button>
+            {{ end }}
+          </div>
+
+        </form>
+      </div>
+    </details>
+
+    {{ if .SystemCollection.Available }}
+    <article class="card sys-result-card{{ if .SystemCollection.Error }} sys-result-card--error{{ else }} sys-result-card--ok{{ end }}">
+      <div class="result-header">
+        <span class="result-header__label">
+          <i data-lucide="{{ if .SystemCollection.Error }}alert-circle{{ else }}check-circle{{ end }}" class="icon-in-button"></i>
+          {{ if .SystemCollection.Error }}{{ t "system.collection_failed" }}{{ else }}{{ t "system.collection_complete" }}{{ end }}
+        </span>
+        <code class="result-duration">{{ .SystemCollection.Duration }}</code>
+      </div>
+      <div class="result-cmd"><code>{{ .SystemCollection.Command }}</code></div>
+      {{ if .SystemCollection.Error }}<pre class="output-block output-block--error">{{ .SystemCollection.Error }}</pre>{{ end }}
+      {{ if .SystemCollection.Stdout }}
+      <div class="collapsible">
+        <button class="collapsible__toggle" data-collapse-key="sys_stdout" data-collapse-default="closed">
+          <i data-lucide="chevron-right" class="collapsible__icon"></i> {{ t "common.stdout" }}
+        </button>
+        <div class="collapsible__content">
+          <pre class="output-block scrollable">{{ .SystemCollection.Stdout }}</pre>
+        </div>
+      </div>
+      {{ end }}
+      {{ if .SystemCollection.Stderr }}
+      <div class="collapsible">
+        <button class="collapsible__toggle" data-collapse-key="sys_stderr" data-collapse-default="closed">
+          <i data-lucide="chevron-right" class="collapsible__icon"></i> {{ t "common.stderr" }}
+        </button>
+        <div class="collapsible__content">
+          <pre class="output-block output-block--error scrollable">{{ .SystemCollection.Stderr }}</pre>
+        </div>
+      </div>
+      {{ end }}
+      {{ if and (not .SystemCollection.Error) (not .SystemCollection.Stdout) (not .SystemCollection.Stderr) }}
+      <p class="empty-state">{{ t "system.no_output" }}</p>
+      {{ end }}
+    </article>
+    {{ end }}
+
+  </div>
+
+</section>
+{{ end }}
