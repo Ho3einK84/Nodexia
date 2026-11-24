@@ -45,7 +45,7 @@
         <i data-lucide="chevrons-up-down" class="icon-in-button"></i> <span class="btn-label" id="server-toggle-all-label">{{ t "servers.expand_all" }}</span>
       </button>
       {{ end }}
-      <a href="/servers/new" class="btn btn--primary server-add-btn"><i data-lucide="plus" class="icon-in-button"></i> {{ t "servers.add" }}</a>
+      <a href="/servers/new" class="btn btn--primary server-add-btn" data-modal-open="add-server-modal" data-tab-bypass><i data-lucide="plus" class="icon-in-button" aria-hidden="true"></i> {{ t "servers.add" }}</a>
     </div>
   </div>
 
@@ -195,8 +195,10 @@
     <span class="empty-state-icon"><i data-lucide="server"></i></span>
     <p class="empty-state-title">{{ t "servers.empty.none_title" }}</p>
     <p class="empty-state-desc">{{ t "servers.empty.none_desc" }}</p>
-    <a class="btn btn--primary" href="/servers/new"><i data-lucide="plus" class="icon-in-button"></i> {{ t "servers.empty.register" }}</a>
+    <a class="btn btn--primary" href="/servers/new" data-modal-open="add-server-modal" data-tab-bypass><i data-lucide="plus" class="icon-in-button" aria-hidden="true"></i> {{ t "servers.empty.register" }}</a>
   </div>
   {{ end }}
+
+  {{ template "server-add-modal" . }}
 </section>
 {{ end }}

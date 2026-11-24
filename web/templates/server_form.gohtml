@@ -1,135 +1,394 @@
-{{ define "content-server-form" }}
-<section class="hero">
-  {{ template "page-header" . }}
+{{/* ═══════════════════════════════════════════════════════════════════════════
+     Server Create / Edit Form Core, Add-Server Modal & Standalone Page
+     Single source of truth shared by:
+       - `server-add-modal` embedded in /servers (instant in-page modal)
+       - `content-server-form` rendered on /servers/new and /servers/{id}/edit
+     ═══════════════════════════════════════════════════════════════════════════ */}}
 
+{{ define "server-form-fields" }}
+{{- $page := .Page -}}
+{{- $form := .Form -}}
+{{- $isEdit := .IsEdit -}}
+{{- $inModal := .InModal -}}
+{{- $strategy := or $form.CredentialStrategy "stored" -}}
+{{- $auth := or $form.AuthMode "hybrid" -}}
+{{- $resetDay := or $form.TrafficResetDay "1" -}}
+{{- $hasMoreOpen := or (ne $resetDay "1") (ne $form.Note "") (and $form.Errors (or (index $form.Errors "traffic_reset_day") (index $form.Errors "note"))) -}}
+
+<input type="hidden" name="_csrf_token" value="{{ $page.CSRFToken }}">
+{{- if $isEdit }}
+<input type="hidden" name="server_id" value="{{ $form.ID }}">
+{{- end }}
+
+<div class="sf-alert" data-sf-alert role="alert" hidden>
+  <i data-lucide="alert-circle" aria-hidden="true"></i>
+  <span data-sf-alert-text></span>
+</div>
+
+{{/* ── 1. Identity & SSH Target ──────────────────────────────────────────── */}}
+<section class="sf-section">
+  <div class="sf-section__head">
+    <span class="sf-section__title"><i data-lucide="server" aria-hidden="true"></i> {{ t "servers.form.section_target" }}</span>
+    <code class="sf-preview{{ if not $form.Host }} is-placeholder{{ end }}" data-sf-preview>{{ or $form.Username "root" }}@{{ or $form.Host "host" }}:{{ or $form.Port "22" }}</code>
+  </div>
+
+  <label class="sf-field" data-sf-field="name">
+    <span class="sf-field__label">{{ t "common.name" }} <span class="sf-req" aria-hidden="true">*</span></span>
+    <span class="sf-input">
+      <i data-lucide="tag" class="sf-input__icon" aria-hidden="true"></i>
+      <input type="text" name="name" class="sf-input__ctrl"
+             value="{{ $form.Name }}"
+             placeholder="{{ t "servers.form.name_placeholder" }}"
+             maxlength="120" autocomplete="off" required
+             {{ if $inModal }}data-modal-autofocus{{ end }}
+             data-sf-name>
+    </span>
+    {{ if $form.Errors }}{{ with index $form.Errors "name" }}<small class="field-error" data-sf-server-err>{{ . }}</small>{{ end }}{{ end }}
+    <small class="field-error" data-sf-error="name" hidden></small>
+  </label>
+
+  <div class="sf-target-grid">
+    <label class="sf-field" data-sf-field="host">
+      <span class="sf-field__label">{{ t "common.host" }} <span class="sf-req" aria-hidden="true">*</span></span>
+      <span class="sf-input">
+        <i data-lucide="globe" class="sf-input__icon" aria-hidden="true"></i>
+        <input type="text" name="host" class="sf-input__ctrl sf-input__ctrl--mono"
+               value="{{ $form.Host }}"
+               placeholder="203.0.113.10"
+               autocomplete="off" spellcheck="false" required
+               data-sf-host>
+      </span>
+      {{ if $form.Errors }}{{ with index $form.Errors "host" }}<small class="field-error" data-sf-server-err>{{ . }}</small>{{ end }}{{ end }}
+      <small class="field-error" data-sf-error="host" hidden></small>
+    </label>
+
+    <label class="sf-field" data-sf-field="port">
+      <span class="sf-field__label">{{ t "common.port" }}</span>
+      <span class="sf-input sf-input--bare">
+        <input type="number" name="port" class="sf-input__ctrl sf-input__ctrl--mono sf-input__ctrl--center"
+               min="1" max="65535" value="{{ or $form.Port "22" }}"
+               placeholder="22" inputmode="numeric" required
+               data-sf-port>
+      </span>
+      {{ if $form.Errors }}{{ with index $form.Errors "port" }}<small class="field-error" data-sf-server-err>{{ . }}</small>{{ end }}{{ end }}
+      <small class="field-error" data-sf-error="port" hidden></small>
+    </label>
+
+    <label class="sf-field" data-sf-field="username">
+      <span class="sf-field__label">{{ t "common.username" }} <span class="sf-req" aria-hidden="true">*</span></span>
+      <span class="sf-input">
+        <i data-lucide="user" class="sf-input__icon" aria-hidden="true"></i>
+        <input type="text" name="username" class="sf-input__ctrl sf-input__ctrl--mono"
+               value="{{ $form.Username }}"
+               placeholder="root" maxlength="64"
+               autocomplete="off" spellcheck="false" required
+               data-sf-username>
+      </span>
+      {{ if $form.Errors }}{{ with index $form.Errors "username" }}<small class="field-error" data-sf-server-err>{{ . }}</small>{{ end }}{{ end }}
+      <small class="field-error" data-sf-error="username" hidden></small>
+    </label>
+  </div>
+  <p class="sf-paste-tip"><i data-lucide="sparkles" aria-hidden="true"></i> <span>{{ t "servers.form.host_paste_hint" }}</span></p>
+</section>
+
+{{/* ── 2. Credentials & Auth ─────────────────────────────────────────────── */}}
+<section class="sf-section">
+  <div class="sf-section__head">
+    <span class="sf-section__title"><i data-lucide="shield-check" aria-hidden="true"></i> {{ t "servers.form.section_auth" }}</span>
+  </div>
+
+  <fieldset class="sf-fieldset" data-sf-field="credential_strategy">
+    <legend class="sf-field__label">{{ t "servers.form.cred_strategy" }}</legend>
+    <div class="sf-strategy-grid" role="radiogroup" aria-label="{{ t "servers.form.cred_strategy" }}">
+      <label class="sf-strategy-card{{ if eq $strategy "stored" }} is-selected{{ end }}" data-strategy-card="stored">
+        <input type="radio" name="credential_strategy" value="stored"{{ if eq $strategy "stored" }} checked{{ end }}>
+        <span class="sf-strategy-card__top">
+          <span class="sf-strategy-card__icon"><i data-lucide="shield-check" aria-hidden="true"></i></span>
+          <span class="sf-strategy-card__title">{{ t "servers.form.info_stored_title" }}</span>
+          <span class="sf-strategy-card__sched">{{ t "servers.form.scheduler_ok" }}</span>
+        </span>
+        <span class="sf-strategy-card__desc">{{ t "servers.form.strategy_stored_short" }}</span>
+      </label>
+
+      <label class="sf-strategy-card{{ if eq $strategy "runtime" }} is-selected{{ end }}" data-strategy-card="runtime">
+        <input type="radio" name="credential_strategy" value="runtime"{{ if eq $strategy "runtime" }} checked{{ end }}>
+        <span class="sf-strategy-card__top">
+          <span class="sf-strategy-card__icon"><i data-lucide="key-round" aria-hidden="true"></i></span>
+          <span class="sf-strategy-card__title">{{ t "servers.form.info_runtime_title" }}</span>
+        </span>
+        <span class="sf-strategy-card__desc">{{ t "servers.form.strategy_runtime_short" }}</span>
+      </label>
+
+      <label class="sf-strategy-card{{ if eq $strategy "external_ref" }} is-selected{{ end }}" data-strategy-card="external_ref">
+        <input type="radio" name="credential_strategy" value="external_ref"{{ if eq $strategy "external_ref" }} checked{{ end }}>
+        <span class="sf-strategy-card__top">
+          <span class="sf-strategy-card__icon"><i data-lucide="file-code" aria-hidden="true"></i></span>
+          <span class="sf-strategy-card__title">{{ t "servers.form.info_external_title" }}</span>
+          <span class="sf-strategy-card__sched">{{ t "servers.form.scheduler_ok" }}</span>
+        </span>
+        <span class="sf-strategy-card__desc">{{ t "servers.form.strategy_external_short" }}</span>
+      </label>
+
+      <label class="sf-strategy-card{{ if eq $strategy "agent_ready" }} is-selected{{ end }}" data-strategy-card="agent_ready">
+        <input type="radio" name="credential_strategy" value="agent_ready"{{ if eq $strategy "agent_ready" }} checked{{ end }}>
+        <span class="sf-strategy-card__top">
+          <span class="sf-strategy-card__icon"><i data-lucide="bot" aria-hidden="true"></i></span>
+          <span class="sf-strategy-card__title">{{ t "servers.form.info_agent_title" }}</span>
+          <span class="sf-strategy-card__sched">{{ t "servers.form.scheduler_ok" }}</span>
+        </span>
+        <span class="sf-strategy-card__desc">{{ t "servers.form.strategy_agent_short" }}</span>
+      </label>
+    </div>
+    {{ if $form.Errors }}{{ with index $form.Errors "credential_strategy" }}<small class="field-error" data-sf-server-err>{{ . }}</small>{{ end }}{{ end }}
+  </fieldset>
+
+  {{/* Stored SSH password */}}
+  <div class="sf-cred-panel" data-cred-section="stored"{{ if ne $strategy "stored" }} hidden{{ end }}>
+    <label class="sf-field" data-sf-field="credential_ref">
+      <span class="sf-field__label">{{ t "servers.form.ssh_password" }}</span>
+      <span class="sf-input sf-input--pw">
+        <i data-lucide="lock" class="sf-input__icon" aria-hidden="true"></i>
+        <input type="password" name="credential_ref" class="sf-input__ctrl sf-input__ctrl--mono"
+               data-cred-input="stored" value=""
+               placeholder="{{ if $form.HasStoredCredential }}{{ t "servers.form.ssh_password_keep_placeholder" }}{{ else }}{{ t "servers.form.ssh_password_placeholder" }}{{ end }}"
+               autocomplete="new-password">
+        <button type="button" class="sf-pw-toggle" data-pw-toggle aria-label="{{ t "servers.form.show_password" }}" aria-pressed="false">
+          <i data-lucide="eye" aria-hidden="true"></i>
+        </button>
+      </span>
+      <small class="field-hint">{{ t "servers.form.stored_hint" }}</small>
+      {{ if $form.Errors }}{{ with index $form.Errors "credential_ref" }}<small class="field-error" data-sf-server-err>{{ . }}</small>{{ end }}{{ end }}
+      <small class="field-error" data-sf-error="credential_ref" hidden></small>
+    </label>
+  </div>
+
+  {{/* Runtime optional password */}}
+  <div class="sf-cred-panel" data-cred-section="runtime"{{ if ne $strategy "runtime" }} hidden{{ end }}>
+    <label class="sf-field" data-sf-field="credential_ref">
+      <span class="sf-field__label">
+        <span>{{ t "servers.form.ssh_password" }}</span>
+        <span class="sf-opt-pill">{{ t "common.optional" }}</span>
+      </span>
+      <span class="sf-input sf-input--pw">
+        <i data-lucide="lock" class="sf-input__icon" aria-hidden="true"></i>
+        <input type="password" name="{{ if eq $strategy "runtime" }}credential_ref{{ else }}credential_ref_disabled{{ end }}"
+               class="sf-input__ctrl sf-input__ctrl--mono"
+               data-cred-input="runtime" value=""
+               {{ if ne $strategy "runtime" }}disabled{{ end }}
+               placeholder="{{ if $form.HasStoredCredential }}{{ t "servers.form.ssh_password_keep_placeholder" }}{{ else }}{{ t "servers.form.ssh_password_optional_placeholder" }}{{ end }}"
+               autocomplete="new-password">
+        <button type="button" class="sf-pw-toggle" data-pw-toggle aria-label="{{ t "servers.form.show_password" }}" aria-pressed="false">
+          <i data-lucide="eye" aria-hidden="true"></i>
+        </button>
+      </span>
+      <small class="field-hint">{{ t "servers.form.runtime_hint" }}</small>
+      {{ if $form.Errors }}{{ with index $form.Errors "credential_ref" }}<small class="field-error" data-sf-server-err>{{ . }}</small>{{ end }}{{ end }}
+      <small class="field-error" data-sf-error="credential_ref_runtime" hidden></small>
+    </label>
+  </div>
+
+  {{/* External reference key=value */}}
+  <div class="sf-cred-panel" data-cred-section="external_ref"{{ if ne $strategy "external_ref" }} hidden{{ end }}>
+    <label class="sf-field" data-sf-field="credential_ref">
+      <span class="sf-field__label">{{ t "servers.form.cred_ref" }} <span class="sf-req" aria-hidden="true">*</span></span>
+      <textarea name="{{ if eq $strategy "external_ref" }}credential_ref{{ else }}credential_ref_ext{{ end }}"
+                rows="3" class="cmd-textarea sf-ext-textarea"
+                data-cred-input="external_ref" spellcheck="false"
+                {{ if ne $strategy "external_ref" }}disabled{{ end }}
+                placeholder="password_env=MY_SSH_PASS&#10;traffic_interface=eth0">{{ if eq $strategy "external_ref" }}{{ $form.CredentialRef }}{{ end }}</textarea>
+      <div class="sf-ext-chips" aria-label="{{ t "servers.form.supported_keys" }}">
+        <button type="button" class="sf-chip-btn" data-ext-snippet="password_env=">+ password_env</button>
+        <button type="button" class="sf-chip-btn" data-ext-snippet="key_file=">+ key_file</button>
+        <button type="button" class="sf-chip-btn" data-ext-snippet="password_file=">+ password_file</button>
+        <button type="button" class="sf-chip-btn" data-ext-snippet="traffic_interface=">+ traffic_interface</button>
+      </div>
+      <small class="field-hint">{{ t "servers.form.extref_hint" }}
+        {{ t "servers.form.supported_keys" }} <code>password_env</code>, <code>password_file</code>,
+        <code>key_env</code>, <code>key_file</code>, <code>passphrase_env</code>,
+        <code>passphrase_file</code>, <code>traffic_interface</code>.
+      </small>
+      {{ if $form.Errors }}{{ with index $form.Errors "credential_ref" }}<small class="field-error" data-sf-server-err>{{ . }}</small>{{ end }}{{ end }}
+      <small class="field-error" data-sf-error="credential_ref_ext" hidden></small>
+    </label>
+  </div>
+
+  {{/* Agent-ready note */}}
+  <div class="sf-cred-panel" data-cred-section="agent_ready"{{ if ne $strategy "agent_ready" }} hidden{{ end }}>
+    <p class="sf-agent-note">
+      <i data-lucide="bot" aria-hidden="true"></i>
+      <span>{{ tsafe "servers.form.agent_note" }}</span>
+    </p>
+  </div>
+
+  {{/* Auth Mode 3-way segmented control */}}
+  <fieldset class="sf-fieldset sf-auth-fieldset" data-sf-field="auth_mode">
+    <legend class="sf-field__label">{{ t "servers.form.auth_mode" }}</legend>
+    <div class="sf-segmented" role="radiogroup" aria-label="{{ t "servers.form.auth_mode" }}">
+      <label class="sf-segment">
+        <input type="radio" name="auth_mode" value="hybrid"{{ if eq $auth "hybrid" }} checked{{ end }}>
+        <span class="sf-segment__label"><i data-lucide="layers" aria-hidden="true"></i> {{ t "servers.form.auth_hybrid_short" }}</span>
+      </label>
+      <label class="sf-segment">
+        <input type="radio" name="auth_mode" value="password"{{ if eq $auth "password" }} checked{{ end }}>
+        <span class="sf-segment__label"><i data-lucide="lock" aria-hidden="true"></i> {{ t "servers.form.auth_password" }}</span>
+      </label>
+      <label class="sf-segment">
+        <input type="radio" name="auth_mode" value="key"{{ if eq $auth "key" }} checked{{ end }}>
+        <span class="sf-segment__label"><i data-lucide="key" aria-hidden="true"></i> {{ t "servers.form.auth_key" }}</span>
+      </label>
+    </div>
+    {{ if $form.Errors }}{{ with index $form.Errors "auth_mode" }}<small class="field-error" data-sf-server-err>{{ . }}</small>{{ end }}{{ end }}
+  </fieldset>
+</section>
+
+{{/* ── 3. Labels & Optional Settings ─────────────────────────────────────── */}}
+<section class="sf-section">
+  <div class="sf-section__head">
+    <span class="sf-section__title"><i data-lucide="tags" aria-hidden="true"></i> {{ t "servers.form.section_org" }}</span>
+  </div>
+
+  <div class="sf-field" data-sf-field="tags" data-sf-tags>
+    <span class="sf-field__label">
+      <span>{{ t "servers.form.labels" }}</span>
+      <span class="sf-opt-pill">{{ t "common.optional" }}</span>
+    </span>
+    <input type="text" name="tags" class="sf-input__ctrl sf-tags-fallback"
+           value="{{ $form.Tags }}" placeholder="prod, eu, rebecca"
+           autocomplete="off" data-sf-tags-source>
+    <div class="sf-tags-box" data-sf-tags-box hidden>
+      <div class="sf-tags-list" data-sf-tags-list></div>
+      <input type="text" class="sf-tags-input" data-sf-tags-entry
+             placeholder="{{ t "servers.form.tags_placeholder" }}"
+             aria-label="{{ t "servers.form.labels" }}" autocomplete="off" spellcheck="false">
+    </div>
+    {{- if $page.ServerTagOptions }}
+    <div class="sf-tag-suggestions" data-sf-tag-suggestions>
+      <span class="sf-tag-suggestions__label">{{ t "servers.form.tags_suggestions" }}</span>
+      {{- range $page.ServerTagOptions }}
+      <button type="button" class="sf-tag-suggest" data-sf-tag-suggest="{{ .Tag }}">{{ .Tag }}</button>
+      {{- end }}
+    </div>
+    {{- end }}
+    {{ if $form.Errors }}{{ with index $form.Errors "tags" }}<small class="field-error" data-sf-server-err>{{ . }}</small>{{ end }}{{ end }}
+    <small class="field-error" data-sf-error="tags" hidden></small>
+  </div>
+
+  <details class="sf-more" data-sf-more{{ if $hasMoreOpen }} open{{ end }}>
+    <summary class="sf-more__summary">
+      <span class="sf-more__title">
+        <i data-lucide="sliders-horizontal" aria-hidden="true"></i>
+        <span>{{ t "servers.form.more_options" }}</span>
+        <span class="sf-more__hint">{{ t "servers.form.more_options_hint" }}</span>
+      </span>
+      <i data-lucide="chevron-down" class="sf-more__chev" aria-hidden="true"></i>
+    </summary>
+    <div class="sf-more__body">
+      <div class="sf-field" data-sf-field="traffic_reset_day">
+        <span class="sf-field__label">{{ t "servers.form.traffic_reset_day" }}</span>
+        <div class="sf-reset-row">
+          <span class="sf-input sf-input--bare sf-reset-input">
+            <input type="number" name="traffic_reset_day" class="sf-input__ctrl sf-input__ctrl--mono sf-input__ctrl--center"
+                   min="1" max="28" value="{{ $resetDay }}" inputmode="numeric" data-sf-reset-day>
+          </span>
+          <div class="sf-reset-presets">
+            <button type="button" class="sf-chip-btn" data-reset-preset="1">{{ t "servers.form.reset_day_1" }}</button>
+            <button type="button" class="sf-chip-btn" data-reset-preset="15">{{ t "servers.form.reset_day_15" }}</button>
+          </div>
+        </div>
+        <small class="field-hint">{{ t "servers.form.traffic_reset_day_hint" }}</small>
+        {{ if $form.Errors }}{{ with index $form.Errors "traffic_reset_day" }}<small class="field-error" data-sf-server-err>{{ . }}</small>{{ end }}{{ end }}
+        <small class="field-error" data-sf-error="traffic_reset_day" hidden></small>
+      </div>
+
+      <label class="sf-field" data-sf-field="note">
+        <span class="sf-field__label">{{ t "servers.form.notes" }}</span>
+        <textarea name="note" rows="3" class="sf-textarea" placeholder="{{ t "servers.form.notes_placeholder" }}">{{ $form.Note }}</textarea>
+      </label>
+    </div>
+  </details>
+</section>
+
+{{/* ── Live SSH Test Status Banner ───────────────────────────────────────── */}}
+<div class="sf-test-banner" data-sf-test-result role="status" aria-live="polite" hidden>
+  <span class="sf-test-banner__icon" data-sf-test-icon aria-hidden="true"></span>
+  <span class="sf-test-banner__text" data-sf-test-text></span>
+</div>
+{{ end }}
+
+{{/* ═══════════════════════════════════════════════════════════════════════════
+     In-Page Add Server Modal (rendered inside /servers)
+     ═══════════════════════════════════════════════════════════════════════════ */}}
+{{ define "server-add-modal" }}
+<div class="modal modal--server" data-modal data-server-add-modal data-modal-id="add-server-modal" hidden
+     {{ if .ServerAddModalOpen }}data-modal-open-initial{{ end }}>
+  <div class="modal__backdrop" data-modal-close></div>
+  <div class="modal__dialog modal__dialog--server" role="dialog" aria-modal="true" aria-label="{{ t "servers.form.title_new" }}">
+    <span class="sf-modal__handle" aria-hidden="true"></span>
+    <header class="modal__header sf-modal__header">
+      <div class="sf-modal__heading">
+        <span class="sf-modal__emblem" aria-hidden="true"><i data-lucide="server"></i></span>
+        <div class="sf-modal__titles">
+          <h3 class="modal__title">{{ t "servers.form.title_new" }}</h3>
+          <p class="sf-modal__subtitle">{{ t "servers.form.modal_subtitle" }}</p>
+        </div>
+      </div>
+      <button type="button" class="modal__close" data-modal-close aria-label="{{ t "servers.form.close" }}">
+        <i data-lucide="x" aria-hidden="true"></i>
+      </button>
+    </header>
+
+    <form method="post" action="/servers" class="sf-modal__form" data-server-form data-server-modal-form novalidate>
+      <div class="modal__body sf-modal__body">
+        {{ template "server-form-fields" (dict "Page" . "Form" .ServerForm "IsEdit" false "InModal" true) }}
+      </div>
+
+      <footer class="sf-modal__footer">
+        <button type="button" class="btn btn--ghost sf-test-btn" data-sf-test-btn>
+          <i data-lucide="plug-zap" class="icon-in-button" aria-hidden="true"></i>
+          <span>{{ t "servers.form.test_ssh" }}</span>
+        </button>
+        <div class="sf-modal__footer-end">
+          <button type="button" class="btn btn--secondary" data-modal-close data-sf-cancel>{{ t "common.cancel" }}</button>
+          <button type="submit" class="btn btn--primary" data-sf-submit>
+            <i data-lucide="plus" class="icon-in-button" aria-hidden="true"></i>
+            <span>{{ t "servers.form.create" }}</span>
+          </button>
+        </div>
+      </footer>
+    </form>
+  </div>
+</div>
+{{ end }}
+
+{{/* ═══════════════════════════════════════════════════════════════════════════
+     Standalone Server Create / Edit Page (/servers/new & /servers/{id}/edit)
+     ═══════════════════════════════════════════════════════════════════════════ */}}
+{{ define "content-server-form" }}
+<section class="hero servers-form-page">
+  {{ template "page-header" . }}
   {{ template "flash-banner" . }}
 
-  <div class="server-form-layout">
-    <article class="card server-form-layout__main">
-      <h3><i data-lucide="{{ if .IsEditingServer }}pencil{{ else }}plus{{ end }}"></i> {{ if .IsEditingServer }}{{ t "servers.form.title_edit" }}{{ else }}{{ t "servers.form.title_new" }}{{ end }}</h3>
-      <form method="post" action="{{ .ServerFormAction }}" class="server-form" id="server-form">
-        <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
+  <div class="server-form-shell">
+    <article class="card sf-page-card">
+      <div class="sf-page-card__head">
+        <h3><i data-lucide="{{ if .IsEditingServer }}pencil{{ else }}plus{{ end }}" aria-hidden="true"></i> {{ if .IsEditingServer }}{{ t "servers.form.title_edit" }}{{ else }}{{ t "servers.form.title_new" }}{{ end }}</h3>
+      </div>
 
-        <label class="form-field">
-          <span>{{ t "common.name" }}</span>
-          <input type="text" name="name" value="{{ .ServerForm.Name }}" placeholder="{{ t "servers.form.name_placeholder" }}">
-          {{ with index .ServerForm.Errors "name" }}<small class="field-error">{{ . }}</small>{{ end }}
-        </label>
+      <form method="post" action="{{ .ServerFormAction }}" class="sf-standalone-form" id="server-form" data-server-form novalidate>
+        {{ template "server-form-fields" (dict "Page" . "Form" .ServerForm "IsEdit" .IsEditingServer "InModal" false) }}
 
-        <div class="form-grid">
-          <label class="form-field">
-            <span>{{ t "common.host" }}</span>
-            <input type="text" name="host" value="{{ .ServerForm.Host }}" placeholder="203.0.113.10">
-            {{ with index .ServerForm.Errors "host" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-
-          <label class="form-field">
-            <span>{{ t "common.port" }}</span>
-            <input type="number" name="port" min="1" max="65535" value="{{ .ServerForm.Port }}">
-            {{ with index .ServerForm.Errors "port" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-        </div>
-
-        <div class="form-grid">
-          <label class="form-field">
-            <span>{{ t "servers.form.auth_mode" }}</span>
-            <select name="auth_mode">
-              <option value="password" {{ if eq .ServerForm.AuthMode "password" }}selected{{ end }}>{{ t "servers.form.auth_password" }}</option>
-              <option value="key" {{ if eq .ServerForm.AuthMode "key" }}selected{{ end }}>{{ t "servers.form.auth_key" }}</option>
-              <option value="hybrid" {{ if eq .ServerForm.AuthMode "hybrid" }}selected{{ end }}>{{ t "servers.form.auth_hybrid" }}</option>
-            </select>
-            {{ with index .ServerForm.Errors "auth_mode" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-
-          <label class="form-field">
-            <span>{{ t "common.username" }}</span>
-            <input type="text" name="username" value="{{ .ServerForm.Username }}" placeholder="root">
-            {{ with index .ServerForm.Errors "username" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-        </div>
-
-        {{/* ── Credential strategy ─────────────────────────────── */}}
-        <label class="form-field">
-          <span>{{ t "servers.form.cred_strategy" }}</span>
-          <select name="credential_strategy" id="cred-strategy">
-            <option value="stored"      {{ if or (eq .ServerForm.CredentialStrategy "stored") (eq .ServerForm.CredentialStrategy "") }}selected{{ end }}>{{ t "servers.form.cred_stored" }}</option>
-            <option value="runtime"     {{ if eq .ServerForm.CredentialStrategy "runtime" }}selected{{ end }}>{{ t "servers.form.cred_runtime" }}</option>
-            <option value="external_ref"{{ if eq .ServerForm.CredentialStrategy "external_ref" }}selected{{ end }}>{{ t "servers.form.cred_external" }}</option>
-            <option value="agent_ready" {{ if eq .ServerForm.CredentialStrategy "agent_ready" }}selected{{ end }}>{{ t "servers.form.cred_agent" }}</option>
-          </select>
-          {{ with index .ServerForm.Errors "credential_strategy" }}<small class="field-error">{{ . }}</small>{{ end }}
-        </label>
-
-        {{/* Stored: show a password field */}}
-        <div id="cred-section-stored" class="cred-section"{{ if and (ne .ServerForm.CredentialStrategy "stored") (ne .ServerForm.CredentialStrategy "") }} hidden{{ end }}>
-          <label class="form-field">
-            <span>{{ t "servers.form.ssh_password" }}</span>
-            <input type="password" name="credential_ref" id="cred-ref-stored"
-                   value=""
-                   placeholder="{{ if .ServerForm.HasStoredCredential }}{{ t "servers.form.ssh_password_keep_placeholder" }}{{ else }}{{ t "servers.form.ssh_password_placeholder" }}{{ end }}"
-                   autocomplete="new-password">
-            <small class="field-hint">{{ t "servers.form.stored_hint" }}</small>
-            {{ with index .ServerForm.Errors "credential_ref" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-        </div>
-
-        {{/* External reference: key=value textarea */}}
-        <div id="cred-section-external_ref" class="cred-section"{{ if ne .ServerForm.CredentialStrategy "external_ref" }} hidden{{ end }}>
-          <label class="form-field">
-            <span>{{ t "servers.form.cred_ref" }}</span>
-            <textarea name="credential_ref_ext" id="cred-ref-ext" rows="3"
-                      class="cmd-textarea"
-                      placeholder="password_env=MY_SSH_PASS&#10;traffic_interface=eth0">{{ if eq .ServerForm.CredentialStrategy "external_ref" }}{{ .ServerForm.CredentialRef }}{{ end }}</textarea>
-            <small class="field-hint">{{ t "servers.form.extref_hint" }}
-              {{ t "servers.form.supported_keys" }} <code>password_env</code>, <code>password_file</code>,
-              <code>key_env</code>, <code>key_file</code>, <code>passphrase_env</code>,
-              <code>passphrase_file</code>, <code>traffic_interface</code>.
-            </small>
-            {{ with index .ServerForm.Errors "credential_ref" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-        </div>
-
-        {{/* Agent-ready: no credential field needed */}}
-        <div id="cred-section-agent_ready" class="cred-section"{{ if ne .ServerForm.CredentialStrategy "agent_ready" }} hidden{{ end }}>
-          <p class="cred-note"><i data-lucide="bot" class="icon-in-button"></i>
-            {{ tsafe "servers.form.agent_note" }}
-          </p>
-        </div>
-
-        {{/* Runtime-only password (optional) */}}
-        <div id="cred-section-runtime" class="cred-section"{{ if ne .ServerForm.CredentialStrategy "runtime" }} hidden{{ end }}>
-          <label class="form-field">
-            <span>{{ t "servers.form.ssh_password" }} <span class="badge badge--warn badge--inline">{{ t "common.optional" }}</span></span>
-            <input type="password" name="credential_ref" id="cred-ref-runtime"
-                   value=""
-                   placeholder="{{ if .ServerForm.HasStoredCredential }}{{ t "servers.form.ssh_password_keep_placeholder" }}{{ else }}{{ t "servers.form.ssh_password_optional_placeholder" }}{{ end }}"
-                   autocomplete="new-password">
-            <small class="field-hint">{{ t "servers.form.runtime_hint" }}</small>
-            {{ with index .ServerForm.Errors "credential_ref" }}<small class="field-error">{{ . }}</small>{{ end }}
-          </label>
-        </div>
-
-        <label class="form-field">
-          <span>{{ t "servers.form.labels" }}</span>
-          <input type="text" name="tags" value="{{ .ServerForm.Tags }}" placeholder="prod, eu, rebecca">
-          {{ with index .ServerForm.Errors "tags" }}<small class="field-error">{{ . }}</small>{{ end }}
-        </label>
-
-        <label class="form-field">
-          <span>{{ t "servers.form.traffic_reset_day" }}</span>
-          <input type="number" name="traffic_reset_day" min="1" max="28" value="{{ .ServerForm.TrafficResetDay }}">
-          <small class="field-hint">{{ t "servers.form.traffic_reset_day_hint" }}</small>
-          {{ with index .ServerForm.Errors "traffic_reset_day" }}<small class="field-error">{{ . }}</small>{{ end }}
-        </label>
-
-        <label class="form-field">
-          <span>{{ t "servers.form.notes" }}</span>
-          <textarea name="note" rows="4" placeholder="{{ t "servers.form.notes_placeholder" }}">{{ .ServerForm.Note }}</textarea>
-        </label>
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn--primary">{{ if .IsEditingServer }}{{ t "servers.form.save" }}{{ else }}{{ t "servers.form.create" }}{{ end }}</button>
-          <a class="btn btn--secondary" href="/servers"><i data-lucide="list" class="icon-in-button"></i> {{ t "servers.form.back_to_list" }}</a>
+        <div class="sf-standalone-footer">
+          <button type="button" class="btn btn--ghost sf-test-btn" data-sf-test-btn>
+            <i data-lucide="plug-zap" class="icon-in-button" aria-hidden="true"></i>
+            <span>{{ t "servers.form.test_ssh" }}</span>
+          </button>
+          <div class="sf-modal__footer-end">
+            <a class="btn btn--secondary" href="/servers"><i data-lucide="list" class="icon-in-button" aria-hidden="true"></i> {{ t "servers.form.back_to_list" }}</a>
+            <button type="submit" class="btn btn--primary" data-sf-submit>
+              <i data-lucide="{{ if .IsEditingServer }}check{{ else }}plus{{ end }}" class="icon-in-button" aria-hidden="true"></i>
+              <span>{{ if .IsEditingServer }}{{ t "servers.form.save" }}{{ else }}{{ t "servers.form.create" }}{{ end }}</span>
+            </button>
+          </div>
         </div>
       </form>
 
@@ -137,55 +396,28 @@
       <div class="server-quick-links">
         <p class="server-quick-links__title">{{ t "servers.form.quick_access" }}</p>
         <nav class="server-quick-links__nav" aria-label="{{ t "servers.form.quick_access" }}">
-          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button"></i> {{ t "common.monitoring" }}</a>
-          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/nodes"><i data-lucide="boxes" class="icon-in-button"></i> {{ t "common.nodes" }}</a>
-          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/terminal"><i data-lucide="terminal-square" class="icon-in-button"></i> {{ t "common.terminal" }}</a>
-          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/files"><i data-lucide="folder-open" class="icon-in-button"></i> {{ t "common.files" }}</a>
-          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}</a>
-          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
-          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/monitoring"><i data-lucide="gauge" class="icon-in-button" aria-hidden="true"></i> {{ t "common.monitoring" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/nodes"><i data-lucide="boxes" class="icon-in-button" aria-hidden="true"></i> {{ t "common.nodes" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/terminal"><i data-lucide="terminal-square" class="icon-in-button" aria-hidden="true"></i> {{ t "common.terminal" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/files"><i data-lucide="folder-open" class="icon-in-button" aria-hidden="true"></i> {{ t "common.files" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button" aria-hidden="true"></i> {{ t "nav.analytics" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/system"><i data-lucide="info" class="icon-in-button" aria-hidden="true"></i> {{ t "common.system" }}</a>
+          <a class="btn btn--ghost btn--sm" href="/servers/{{ .ServerForm.ID }}/commands"><i data-lucide="terminal" class="icon-in-button" aria-hidden="true"></i> {{ t "common.commands" }}</a>
         </nav>
       </div>
 
       <div class="danger-zone">
         <form method="post" action="/servers/{{ .ServerForm.ID }}/forget-host-key" class="inline-form">
           <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-          <button type="submit" class="btn btn--ghost" data-confirm="{{ t "servers.form.forget_host_key_confirm" }}"><i data-lucide="key" class="icon-in-button"></i> {{ t "servers.form.forget_host_key" }}</button>
+          <button type="submit" class="btn btn--ghost" data-confirm="{{ t "servers.form.forget_host_key_confirm" }}"><i data-lucide="key" class="icon-in-button" aria-hidden="true"></i> {{ t "servers.form.forget_host_key" }}</button>
         </form>
         <form method="post" action="{{ .ServerDeleteAction }}" class="inline-form">
           <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-          <button type="submit" class="btn btn--danger" data-confirm="{{ t "servers.card.delete_confirm" "name" .ServerForm.Name }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "servers.form.delete_server" }}</button>
+          <button type="submit" class="btn btn--danger" data-confirm="{{ t "servers.card.delete_confirm" "name" .ServerForm.Name }}"><i data-lucide="trash-2" class="icon-in-button" aria-hidden="true"></i> {{ t "servers.form.delete_server" }}</button>
         </form>
       </div>
       {{ end }}
     </article>
-
-    <aside class="card card--info server-form-layout__aside">
-      <div class="card__header">
-        <h3><i data-lucide="calendar-clock"></i> {{ t "servers.form.info_title" }}</h3>
-      </div>
-      <ul class="credential-info">
-        <li>
-          <strong><i data-lucide="shield-check" class="icon-in-button"></i> {{ t "servers.form.info_stored_title" }}</strong>
-          {{ tsafe "servers.form.info_stored_desc" }}
-          <span class="credential-info__meta">{{ t "servers.form.scheduler_ok" }}</span>
-        </li>
-        <li>
-          <strong><i data-lucide="play" class="icon-in-button"></i> {{ t "servers.form.info_runtime_title" }}</strong>
-          {{ t "servers.form.info_runtime_desc" }}
-        </li>
-        <li>
-          <strong><i data-lucide="external-link" class="icon-in-button"></i> {{ t "servers.form.info_external_title" }}</strong>
-          {{ tsafe "servers.form.info_external_desc" }}
-          <span class="credential-info__meta">{{ t "servers.form.scheduler_ok" }}</span>
-        </li>
-        <li>
-          <strong><i data-lucide="bot" class="icon-in-button"></i> {{ t "servers.form.info_agent_title" }}</strong>
-          {{ tsafe "servers.form.info_agent_desc" }}
-          <span class="credential-info__meta">{{ t "servers.form.scheduler_ok" }}</span>
-        </li>
-      </ul>
-    </aside>
   </div>
 </section>
 {{ end }}

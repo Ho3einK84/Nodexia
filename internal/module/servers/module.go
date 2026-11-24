@@ -34,6 +34,7 @@ func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 	mux.Handle("GET /servers", NewListHandler(deps, repo))
 	mux.Handle("GET /servers/new", NewNewHandler(deps))
 	mux.Handle("POST /servers", NewCreateHandler(deps, repo))
+	mux.Handle("POST /servers/test-connection", NewTestConnectionHandler(deps, repo))
 	mux.Handle("GET /servers/{id}/edit", NewEditHandler(deps, repo))
 	mux.Handle("POST /servers/{id}/edit", NewUpdateHandler(deps, repo))
 	mux.Handle("POST /servers/{id}/delete", NewDeleteHandler(deps, repo))

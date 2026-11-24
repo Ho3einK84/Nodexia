@@ -67,7 +67,7 @@
     <div class="shell-sidebar__divider" aria-hidden="true"></div>
 
     <div class="shell-sidebar__cta">
-      <a href="/servers/new" class="shell-sidebar__action" data-rail-tooltip="{{ t "drawer.add_server" }}">
+      <a href="/servers/new" class="shell-sidebar__action" data-add-server-trigger data-tab-bypass data-rail-tooltip="{{ t "drawer.add_server" }}">
         <span class="shell-sidebar__action-icon" aria-hidden="true"><i data-lucide="plus"></i></span>
         <span class="shell-sidebar__action-label">{{ t "drawer.add_server" }}</span>
       </a>
@@ -138,7 +138,7 @@
     {{ end }}
   </nav>
 
-  <a href="/servers/new" class="btn btn--primary drawer__action"><i data-lucide="plus" class="icon-in-button"></i> {{ t "drawer.add_server" }}</a>
+  <a href="/servers/new" class="btn btn--primary drawer__action" data-add-server-trigger data-tab-bypass><i data-lucide="plus" class="icon-in-button"></i> {{ t "drawer.add_server" }}</a>
 
   <div class="drawer__section">
     <p class="drawer__section-title">{{ t "drawer.session" }}</p>

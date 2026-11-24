@@ -69,6 +69,7 @@ type PageData struct {
 	IsEditingServer             bool
 	ServerFormAction            string
 	ServerDeleteAction          string
+	ServerAddModalOpen          bool
 	CommandTarget               CommandTargetView
 	CommandForm                 CommandFormView
 	CommandPresets              []CommandPresetView

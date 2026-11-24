@@ -19,7 +19,6 @@ import {
   initShortcuts,
   initCollapsibles,
   initAdvancedToggle,
-  initServerForm,
   initPageInfo
 } from './modules/ui.js';
 import { initActionMenus, initModals } from './modules/modals.js';
@@ -27,6 +26,7 @@ import {
   initHomeWarnings,
   initDrawer,
   initServerCards,
+  initAddServerTriggers,
   initServiceWorker,
   initOrientationLock,
   initDesktopSidebar
@@ -59,6 +59,12 @@ function initDomainModules(root) {
       m.initNodes(scope);
     }).catch(function () {});
   }
+
+  if (scope.querySelector('[data-server-form]')) {
+    import('./modules/server-modal.js').then(function (m) {
+      m.initServerModal(scope);
+    }).catch(function () {});
+  }
 }
 
 /* ── Boot: run lightweight shell + widget inits, then one scoped icon pass ── */
@@ -76,11 +82,11 @@ function boot() {
   initModals();
   initDrawer();
   initDesktopSidebar();
+  initAddServerTriggers();
   initBackToTop();
   initShortcuts();
   initCollapsibles();
   initAdvancedToggle();
-  initServerForm();
   initPageInfo();
   initServerCards();
   initServiceWorker();
@@ -100,7 +106,6 @@ window.NodexiaApp = {
     initCopyTargets(root);
     initModals(root);
     initCollapsibles(root);
-    initServerForm(root);
     initPageInfo(root);
     initServerCards(root);
     initActionMenus(root);

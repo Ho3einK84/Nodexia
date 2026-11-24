@@ -2,6 +2,7 @@ package servers_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -192,5 +193,167 @@ func TestUpdateHandlerPreservesBlankStoredPasswordAndAvoidsLeakOnValidationError
 	}
 	if rotated.CredentialRef != "RotatedSecret!99" {
 		t.Fatalf("rotated CredentialRef = %q, want RotatedSecret!99", rotated.CredentialRef)
+	}
+}
+
+func TestCreateHandlerJSONValidationAndSuccess(t *testing.T) {
+	deps, repo := testServerDeps(t)
+	h := servers.NewCreateHandler(deps, repo)
+
+	// 1. Invalid payload with Accept: application/json returns 422 JSON with field errors.
+	badForm := url.Values{
+		"name":                {""},
+		"host":                {"not a host"},
+		"port":                {"99999"},
+		"auth_mode":           {servers.AuthModeHybrid},
+		"username":            {""},
+		"credential_strategy": {servers.CredentialStrategyStored},
+	}
+	badReq := httptest.NewRequest(http.MethodPost, "/servers", strings.NewReader(badForm.Encode()))
+	badReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	badReq.Header.Set("Accept", "application/json")
+	badRec := httptest.NewRecorder()
+	h.ServeHTTP(badRec, badReq)
+
+	if badRec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid JSON create status = %d, want 422", badRec.Code)
+	}
+	var badPayload struct {
+		OK      bool              `json:"ok"`
+		Message string            `json:"message"`
+		Errors  map[string]string `json:"errors"`
+	}
+	if err := json.Unmarshal(badRec.Body.Bytes(), &badPayload); err != nil {
+		t.Fatalf("decode 422 JSON: %v (body=%s)", err, badRec.Body.String())
+	}
+	if badPayload.OK {
+		t.Fatal("expected ok=false on validation error")
+	}
+	for _, field := range []string{"name", "host", "port", "username"} {
+		if badPayload.Errors[field] == "" {
+			t.Errorf("expected JSON error for %q, got %+v", field, badPayload.Errors)
+		}
+	}
+
+	// 2. Valid payload with Accept: application/json returns 201 JSON and persists the server.
+	okForm := url.Values{
+		"name":                {"edge-nl-01"},
+		"host":                {"203.0.113.42"},
+		"port":                {"2222"},
+		"auth_mode":           {servers.AuthModeHybrid},
+		"username":            {"root"},
+		"tags":                {"prod, nl"},
+		"credential_strategy": {servers.CredentialStrategyStored},
+		"credential_ref":      {"S3cretPass!"},
+		"traffic_reset_day":   {"15"},
+	}
+	okReq := httptest.NewRequest(http.MethodPost, "/servers", strings.NewReader(okForm.Encode()))
+	okReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	okReq.Header.Set("Accept", "application/json")
+	okRec := httptest.NewRecorder()
+	h.ServeHTTP(okRec, okReq)
+
+	if okRec.Code != http.StatusCreated {
+		t.Fatalf("valid JSON create status = %d, want 201 (body=%s)", okRec.Code, okRec.Body.String())
+	}
+	var okPayload struct {
+		OK       bool   `json:"ok"`
+		ID       int64  `json:"id"`
+		Name     string `json:"name"`
+		Host     string `json:"host"`
+		Port     int    `json:"port"`
+		Redirect string `json:"redirect"`
+		Message  string `json:"message"`
+	}
+	if err := json.Unmarshal(okRec.Body.Bytes(), &okPayload); err != nil {
+		t.Fatalf("decode 201 JSON: %v", err)
+	}
+	if !okPayload.OK || okPayload.ID < 1 || okPayload.Name != "edge-nl-01" || okPayload.Port != 2222 {
+		t.Fatalf("unexpected 201 JSON payload: %+v", okPayload)
+	}
+	if strings.Contains(okRec.Body.String(), "S3cretPass!") {
+		t.Fatal("create JSON response leaked SSH password")
+	}
+	saved, err := repo.GetByID(context.Background(), okPayload.ID)
+	if err != nil {
+		t.Fatalf("GetByID(%d) error = %v", okPayload.ID, err)
+	}
+	if saved.TrafficResetDay != 15 || len(saved.Tags) != 2 {
+		t.Fatalf("unexpected saved server: %+v", saved)
+	}
+}
+
+func TestConnectionHandlerValidatesAndHandlesUnavailableSSH(t *testing.T) {
+	deps, repo := testServerDeps(t)
+	h := servers.NewTestConnectionHandler(deps, repo)
+
+	// 1. Missing host/username returns 422 JSON even when name is omitted.
+	badForm := url.Values{
+		"host":                {""},
+		"port":                {"22"},
+		"username":            {""},
+		"auth_mode":           {servers.AuthModeHybrid},
+		"credential_strategy": {servers.CredentialStrategyStored},
+	}
+	badReq := httptest.NewRequest(http.MethodPost, "/servers/test-connection", strings.NewReader(badForm.Encode()))
+	badReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	badRec := httptest.NewRecorder()
+	h.ServeHTTP(badRec, badReq)
+
+	if badRec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid test-connection status = %d, want 422", badRec.Code)
+	}
+	var badPayload struct {
+		OK     bool              `json:"ok"`
+		Errors map[string]string `json:"errors"`
+	}
+	if err := json.Unmarshal(badRec.Body.Bytes(), &badPayload); err != nil {
+		t.Fatalf("decode 422 JSON: %v", err)
+	}
+	if badPayload.Errors["host"] == "" || badPayload.Errors["username"] == "" || badPayload.Errors["name"] != "" {
+		t.Fatalf("unexpected test-connection validation errors: %+v", badPayload.Errors)
+	}
+
+	// 2. Valid connection fields without SSH runtime return 503 JSON.
+	okForm := url.Values{
+		"host":                {"203.0.113.10"},
+		"port":                {"22"},
+		"username":            {"root"},
+		"auth_mode":           {servers.AuthModeHybrid},
+		"credential_strategy": {servers.CredentialStrategyStored},
+		"credential_ref":      {"secret"},
+	}
+	okReq := httptest.NewRequest(http.MethodPost, "/servers/test-connection", strings.NewReader(okForm.Encode()))
+	okReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	okRec := httptest.NewRecorder()
+	h.ServeHTTP(okRec, okReq)
+
+	if okRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("test-connection with nil SSH status = %d, want 503", okRec.Code)
+	}
+}
+
+func TestListHandlerRendersAddServerModalAndQueryAutoOpen(t *testing.T) {
+	deps, repo := testServerDeps(t)
+	h := servers.NewListHandler(deps, repo)
+
+	req := httptest.NewRequest(http.MethodGet, "/servers?add=1", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ListHandler status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`data-server-add-modal`,
+		`data-modal-id="add-server-modal"`,
+		`data-modal-open="add-server-modal"`,
+		`data-modal-open-initial`,
+		`data-sf-test-btn`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("/servers?add=1 missing %q", want)
+		}
 	}
 }

@@ -49,6 +49,7 @@ var PRECACHE_URLS = [
   '/static/modules/log-drawer.js',
   '/static/modules/nodes.js',
   '/static/modules/nodes-deploy.js',
+  '/static/modules/server-modal.js',
   '/static/modules/stream.js',
   '/static/tab-manager.js',
   '/static/login.js',

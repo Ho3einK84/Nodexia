@@ -135,6 +135,16 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 	pd.ServerShowingFrom = showingFrom
 	pd.ServerShowingTo = showingTo
 	pd.ServerPagination = buildPagination(currentPage, totalPages, query, tagFilter)
+	defaultForm := NewFormViewData(DefaultFormInput(), ValidationErrors{})
+	pd.ServerFormAction = defaultForm.Action
+	pd.ServerAddModalOpen = strings.TrimSpace(r.URL.Query().Get("add")) == "1"
+	pd.ServerForm = view.ServerFormView{
+		Port:               defaultForm.Port,
+		AuthMode:           defaultForm.AuthMode,
+		CredentialStrategy: defaultForm.CredentialStrategy,
+		TrafficResetDay:    defaultForm.TrafficResetDay,
+		Errors:             defaultForm.Errors,
+	}
 	pd.FlashKind = flashKind
 	pd.FlashMessage = flashMessage
 	pd.PageStyles = []string{"/static/servers.css", "/static/bulk.css"}
@@ -585,6 +595,7 @@ func renderFormPage(
 		TrafficResetDay:     form.TrafficResetDay,
 		Errors:              form.Errors,
 	}
+	page.ServerTagOptions = loadFleetTagOptions(r.Context(), deps)
 	page.FlashKind = flashKind
 	page.FlashMessage = page.T(flashMessage)
 	page.PageStyles = []string{"/static/servers.css"}
@@ -592,6 +603,28 @@ func renderFormPage(
 	if err := deps.Renderer.Render(w, statusCode, page); err != nil {
 		http.Error(w, "render server form page", http.StatusInternalServerError)
 	}
+}
+
+func loadFleetTagOptions(ctx context.Context, deps module.Dependencies) []view.ServerTagOption {
+	if deps.Database == nil || deps.Database.SQL == nil {
+		return nil
+	}
+	rows, err := deps.Database.SQL.QueryContext(ctx,
+		`SELECT tag, COUNT(*) FROM server_tags GROUP BY tag ORDER BY tag ASC`)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = rows.Close() }()
+	var out []view.ServerTagOption
+	for rows.Next() {
+		var tag string
+		var count int
+		if err := rows.Scan(&tag, &count); err != nil || strings.TrimSpace(tag) == "" {
+			continue
+		}
+		out = append(out, view.ServerTagOption{Tag: tag, Count: count})
+	}
+	return out
 }
 
 // renderRepositoryError renders an SSR error page. fallbackTitle/fallbackMessage

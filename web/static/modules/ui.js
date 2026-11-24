@@ -51,8 +51,9 @@ function initForms() {
 /* ── Same-origin link navigation → progress bar ───────────────────────────── */
 function initLinks() {
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var a = e.target.closest && e.target.closest('a[href]');
-    if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+    if (!a || a.target === '_blank' || a.hasAttribute('download') || a.hasAttribute('data-modal-open') || a.hasAttribute('data-add-server-trigger')) return;
     if ((a.getAttribute('href') || '').charAt(0) === '#') return;
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var url;
@@ -353,49 +354,6 @@ function initAdvancedToggle(root) {
   });
 }
 
-/* ── Server create/edit credential strategy switching ─────────────────────── */
-function initServerForm(root) {
-  root = root || document;
-  root.querySelectorAll('#server-form').forEach(function (form) {
-    if (form.dataset.serverFormReady === '1') return;
-    form.dataset.serverFormReady = '1';
-
-    var strategyEl = form.querySelector('#cred-strategy');
-    if (!strategyEl) return;
-
-    var sections = {
-      stored: form.querySelector('#cred-section-stored'),
-      runtime: form.querySelector('#cred-section-runtime'),
-      external_ref: form.querySelector('#cred-section-external_ref'),
-      agent_ready: form.querySelector('#cred-section-agent_ready')
-    };
-
-    var storedInput = form.querySelector('#cred-ref-stored');
-    var runtimeInput = form.querySelector('#cred-ref-runtime');
-    var extTextarea = form.querySelector('#cred-ref-ext');
-
-    function setControlState(el, active) {
-      if (!el) return;
-      el.disabled = !active;
-      el.name = active ? 'credential_ref' : 'credential_ref_disabled';
-    }
-
-    function syncStrategy() {
-      var current = strategyEl.value || 'stored';
-      Object.keys(sections).forEach(function (key) {
-        if (sections[key]) sections[key].hidden = key !== current;
-      });
-      setControlState(storedInput, current === 'stored');
-      setControlState(runtimeInput, current === 'runtime');
-      setControlState(extTextarea, current === 'external_ref');
-    }
-
-    strategyEl.addEventListener('change', syncStrategy);
-    form.addEventListener('submit', syncStrategy);
-    syncStrategy();
-  });
-}
-
 /* ── Page header info popover (rAF-throttled repositioning) ───────────────── */
 var pageInfoDocWired = false;
 var allPageInfos = new Set();
@@ -597,7 +555,6 @@ export {
   initShortcuts,
   initCollapsibles,
   initAdvancedToggle,
-  initServerForm,
   initPageInfo,
   copyText
 };

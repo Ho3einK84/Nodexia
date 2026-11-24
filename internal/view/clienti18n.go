@@ -436,6 +436,25 @@ var clientI18nKeys = []string{
 	// Commands workspace (commands.js)
 	"js.commands.confirm_replace",
 
+	// Server create/edit modal & live SSH test (modules/server-modal.js)
+	"servers.form.show_password",
+	"servers.form.hide_password",
+	"servers.form.fix_fields",
+	"js.servers.testing",
+	"js.servers.test_failed",
+	"js.servers.creating",
+	"js.servers.created",
+	"js.servers.parsed_ssh",
+	"js.servers.err_name",
+	"js.servers.err_host",
+	"js.servers.err_port",
+	"js.servers.err_username",
+	"js.servers.err_ext_ref",
+	"js.servers.err_reset_day",
+	"js.servers.err_tag_length",
+	"js.servers.remove_tag",
+	"js.servers.request_failed",
+
 	// Backup & restore (diagnostics.js)
 	"backup.summary.servers",
 	"backup.summary.tags",

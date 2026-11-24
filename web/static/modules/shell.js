@@ -4,7 +4,8 @@
  * collapsible server cards, desktop collapsible sidebar rail, and PWA hooks.
  * Live Log Drawer lives in lazy-loaded ./log-drawer.js.
  */
-import { I18N, prefersReducedMotion } from './core.js';
+import { I18N, prefersReducedMotion, tabNavigate } from './core.js';
+import { openModal } from './modals.js';
 
 /* ── Home fleet warnings: reveal undismissed, dismiss to localStorage ─────── */
 var WARNING_DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -402,4 +403,22 @@ function initDesktopSidebar() {
   });
 }
 
-export { initHomeWarnings, initDrawer, initServerCards, initServiceWorker, initOrientationLock, initDesktopSidebar };
+/* ── Sidebar & Mobile Drawer "Add Server" trigger → in-page modal or /servers?add=1 */
+function initAddServerTriggers() {
+  document.addEventListener('click', function (e) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var trigger = e.target && e.target.closest ? e.target.closest('[data-add-server-trigger]') : null;
+    if (!trigger) return;
+    e.preventDefault();
+
+    var activePane = document.querySelector('.tab-pane:not([hidden])') || document;
+    var modal = activePane.querySelector('[data-server-add-modal]');
+    if (modal) {
+      openModal(modal);
+      return;
+    }
+    tabNavigate('/servers?add=1');
+  });
+}
+
+export { initHomeWarnings, initDrawer, initServerCards, initAddServerTriggers, initServiceWorker, initOrientationLock, initDesktopSidebar };
