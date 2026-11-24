@@ -470,14 +470,19 @@
   block-size: 4px;
   border-radius: var(--radius-full);
   background: var(--border-strong);
-  margin: var(--space-2) auto 0;
+  margin: var(--space-2) 0 0;
   flex-shrink: 0;
+  align-self: center;
+}
+
+.modal--server .sf-modal__handle + .sf-modal__header {
+  padding-block-start: var(--space-2);
 }
 
 .sf-modal__header {
   padding: var(--space-4) var(--space-5);
-  background: var(--surface-sheen), var(--surface-2);
-  border-block-end: 1px solid var(--border);
+  background: var(--surface);
+  border-block-end: 1px solid var(--border-subtle);
   align-items: center;
 }
 
@@ -551,8 +556,8 @@
 .sf-modal__footer {
   flex-shrink: 0;
   padding: var(--space-3) var(--space-5);
-  background: var(--surface-2);
-  border-block-start: 1px solid var(--border);
+  background: var(--surface);
+  border-block-start: 1px solid var(--border-subtle);
 }
 
 .sf-standalone-footer {
