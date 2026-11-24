@@ -1,17 +1,16 @@
 {{ define "content-analytics-limits" }}
 <section class="hero">
 
-  {{ template "page-header" . }}
+  <header class="page-hero">
+    <div class="page-hero__top">
+      {{ template "page-hero-head" (dict "Page" . "Icon" "sliders-horizontal" "Eyebrow" (t "nav.analytics")) }}
+      <div class="page-hero__actions">
+        <a class="btn btn--ghost btn--sm" href="/analytics"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "analytics.limits.back" }}</a>
+      </div>
+    </div>
+  </header>
 
-  {{ if .FlashMessage }}
-  <div class="flash-banner flash-banner--{{ .FlashKind }}">
-    <p>{{ .FlashMessage }}</p>
-  </div>
-  {{ end }}
-
-  <div class="analytics-actions">
-    <a class="btn btn--ghost btn--sm" href="/analytics"><i data-lucide="arrow-left" class="icon-in-button"></i> {{ t "analytics.limits.back" }}</a>
-  </div>
+  {{ template "flash-banner" . }}
 
   {{ with .TrafficLimits }}
   <!-- Precedence explainer: how the effective cap is resolved per server -->
@@ -89,8 +88,8 @@
     <p class="analytics-limit__hint">{{ t "analytics.limits.tag_hint" }}</p>
 
     {{ if .Tags }}
-    <div class="analytics-table-wrap">
-      <table class="analytics-table">
+    <div class="data-table-wrap">
+      <table class="data-table">
         <thead>
           <tr>
             <th>{{ t "analytics.limits.col_tag" }}</th>

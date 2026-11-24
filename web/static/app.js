@@ -1,85 +1,118 @@
-/* Nodexia interactive layer — entrypoint and orchestrator.
+/* Nodexia interactive layer — entrypoint and lazy module orchestrator.
  *
- * The Content-Security-Policy forbids inline <script> blocks, so ALL client
- * behaviour is loaded from this module (served from 'self'). Everything is
- * progressive enhancement: if a feature's target elements are absent, it
- * quietly no-ops. Native ES modules only — no bundler, no npm.
- *
- * The behaviour itself lives in five sibling modules; this file just wires it:
- *   core.js   — i18n bridge, byte formatter, icons, top progress bar,
- *               tab-aware navigation/cleanup, button busy state (also publishes
- *               the window.nx* bridges the classic page scripts rely on).
- *   ui.js     — forms, links, flash, secrets, copy, progress, reveal,
- *               back-to-top, shortcuts, collapsibles, advanced toggle.
- *   modals.js — frosted-backdrop modals and overflow action menus.
- *   nodes.js  — Nodes workspace, filter/sort, config viewer, log/deploy flows.
- *   stream.js — SSE streams, node results, auto/manual refresh.
- *   shell.js  — home warnings, log drawer, mobile drawer, server cards, PWA.
+ * Zero-build native ES modules (strict CSP, no inline scripts).
+ * Heavy domain modules (`nodes.js`, `log-drawer.js`, `stream.js`) are loaded
+ * lazily via native dynamic `import()` ONLY when their DOM hooks exist in the
+ * page or freshly injected tab pane.
  */
-import { renderIcons, finishTopBar } from './modules/core.js';
-import { initForms, initLinks, initFlash, initSecrets, initCopyButtons, initCopyTargets, initProgressBars, initReveal, initBackToTop, initShortcuts, initCollapsibles, initAdvancedToggle, initServerForm, initPageInfo } from './modules/ui.js';
+import { renderIcons, finishTopBar, cancelLoadingOverlay } from './modules/core.js';
+import {
+  initForms,
+  initLinks,
+  initFlash,
+  initSecrets,
+  initCopyButtons,
+  initCopyTargets,
+  initProgressBars,
+  initReveal,
+  initBackToTop,
+  initShortcuts,
+  initCollapsibles,
+  initAdvancedToggle,
+  initServerForm,
+  initPageInfo
+} from './modules/ui.js';
 import { initActionMenus, initModals } from './modules/modals.js';
-import { initNodes } from './modules/nodes.js';
-import { initAutoRefresh, initStream, initNodeResult, initBulkStream, initManualRefresh } from './modules/stream.js';
-import { initHomeWarnings, initLogDrawer, initDrawer, initServerCards, initServiceWorker, initOrientationLock, initDesktopSidebar } from './modules/shell.js';
+import {
+  initHomeWarnings,
+  initDrawer,
+  initServerCards,
+  initServiceWorker,
+  initOrientationLock,
+  initDesktopSidebar
+} from './modules/shell.js';
 
-/* ── Boot: run every page-level init in its established order ──────────── */
-function boot() {
-  renderIcons();
-  [
-    initForms, initLinks, initFlash, initSecrets, initCopyButtons, initCopyTargets,
-    initProgressBars, initReveal, initAutoRefresh, initStream,
-    initHomeWarnings, initNodeResult, initBulkStream, initManualRefresh, initActionMenus,
-    initModals, initNodes, initLogDrawer, initDrawer, initDesktopSidebar, initBackToTop, initShortcuts,
-    initCollapsibles, initAdvancedToggle, initServerForm, initPageInfo, initServerCards, initServiceWorker, initOrientationLock
-  ].forEach(function (init) { init(); });
-  renderIcons(); // pick up icons injected by the steps above
+var STREAM_SEL = '[data-stream-sse-url], [data-node-result], [data-bulk-sse-url], #auto-refresh-select, [data-auto-refresh], [data-refresh-now]';
+
+function initDomainModules(root) {
+  var scope = root || document;
+  if (!scope.querySelector) return;
+
+  if (scope.querySelector(STREAM_SEL)) {
+    import('./modules/stream.js').then(function (m) {
+      m.initAutoRefresh(scope);
+      m.initStream(scope);
+      m.initNodeResult(scope);
+      m.initBulkStream(scope);
+      m.initManualRefresh(scope);
+    }).catch(function () {});
+  }
+
+  if (scope.querySelector('[data-log-drawer], [data-log-drawer-open]')) {
+    import('./modules/log-drawer.js').then(function (m) {
+      m.initLogDrawer(scope);
+    }).catch(function () {});
+  }
+
+  if (scope.querySelector('[data-nodes-workspace]')) {
+    import('./modules/nodes.js').then(function (m) {
+      m.initNodes(scope);
+    }).catch(function () {});
+  }
 }
 
-/* ── v0.6.0: tab-pane rescan bridge ──────────────────────
- * tab-manager.js populates a .tab-pane by DOMParser-extracting another page's
- * markup rather than a real navigation, so none of the boot() inits ever ran
- * against that subtree. rescan() re-runs the idempotent-safe subset, scoped to
- * the given root, so a freshly injected pane gets the same dismiss buttons,
- * secret toggles, copy buttons, modal wiring, collapsibles, server cards and
- * SSE hookups a full page load would have given it — plus a re-render, since
- * DOMParser markup never passed through lucide.
- */
+/* ── Boot: run lightweight shell + widget inits, then one scoped icon pass ── */
+function boot() {
+  initForms();
+  initLinks();
+  initFlash();
+  initSecrets();
+  initCopyButtons();
+  initCopyTargets();
+  initProgressBars();
+  initReveal();
+  initHomeWarnings();
+  initActionMenus();
+  initModals();
+  initDrawer();
+  initDesktopSidebar();
+  initBackToTop();
+  initShortcuts();
+  initCollapsibles();
+  initAdvancedToggle();
+  initServerForm();
+  initPageInfo();
+  initServerCards();
+  initServiceWorker();
+  initOrientationLock();
+  renderIcons(document);
+  initDomainModules(document);
+}
+
+/* ── Tab-pane rescan bridge (called by tab-manager.js) ────────────────────── */
 window.NodexiaApp = {
   rescan: function (root) {
     root = root || document;
-    renderIcons(root);
     initFlash(root);
     initHomeWarnings(root);
     initSecrets(root);
     initCopyButtons(root);
     initCopyTargets(root);
     initModals(root);
-    initLogDrawer(root);
     initCollapsibles(root);
     initServerForm(root);
     initPageInfo(root);
     initServerCards(root);
-    initStream(root);
-    initBulkStream(root);
     initActionMenus(root);
-    initNodes(root);
-    initManualRefresh(root);
-    initAutoRefresh(root);
-    initNodeResult(root);
     initAdvancedToggle(root);
     initProgressBars(root);
     initReveal(root);
     renderIcons(root);
+    initDomainModules(root);
   },
   finishNavigation: function () {
     finishTopBar();
-    var overlay = document.getElementById('loading-overlay');
-    if (overlay) {
-      overlay.hidden = true;
-      overlay.classList.remove('is-active');
-      overlay.style.display = '';
-    }
+    cancelLoadingOverlay();
   }
 };
 

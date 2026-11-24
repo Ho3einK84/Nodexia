@@ -12,11 +12,7 @@
 
   {{ template "server-header" . }}
 
-  {{ if .FlashMessage }}
-  <div class="flash-banner flash-banner--{{ .FlashKind }}">
-    <p>{{ .FlashMessage }}</p>
-  </div>
-  {{ end }}
+  {{ template "flash-banner" . }}
 
   {{/* ── Live node action fallback card (SSR / non-JS path) ── */}}
   {{ if .NodeStream.Available }}
@@ -118,34 +114,7 @@
           <p class="sys-form__cred-note"><i data-lucide="key-round" class="icon-in-button" aria-hidden="true"></i> {{ t "system.stored_note" }}</p>
           {{ end }}
           <div data-advanced-panel="node-advanced" class="sys-advanced"{{ if and (not $nodeAdvErr) .NodeForm.StoredCredentialsAvailable }} hidden{{ end }}>
-            <div class="form-grid">
-              <label class="form-field">
-                <span>{{ t "common.connect_timeout" }}</span>
-                <input type="text" name="connect_timeout" value="{{ .NodeForm.ConnectTimeout }}" placeholder="10s">
-                {{ with index .NodeForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
-              </label>
-              <label class="form-field">
-                <span>{{ t "common.command_timeout" }}</span>
-                <input type="text" name="command_timeout" value="{{ .NodeForm.CommandTimeout }}" placeholder="20s">
-                {{ with index .NodeForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
-              </label>
-            </div>
-            {{ if not .NodeForm.StoredCredentialsAvailable }}
-            <label class="form-field">
-              <span>{{ t "nodes.ssh_password" }}</span>
-              <input type="password" name="password" placeholder="{{ t "nodes.password_placeholder" }}" autocomplete="current-password">
-              {{ with index .NodeForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </label>
-            <label class="form-field">
-              <span>{{ t "nodes.private_key" }}</span>
-              <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
-              {{ with index .NodeForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </label>
-            <label class="form-field">
-              <span>{{ t "nodes.passphrase" }}</span>
-              <input type="password" name="key_passphrase" placeholder="{{ t "nodes.optional_placeholder" }}">
-            </label>
-            {{ end }}
+            {{ template "ssh-advanced-fields" (dict "ConnectTimeout" .NodeForm.ConnectTimeout "CommandTimeout" .NodeForm.CommandTimeout "Errors" .NodeForm.Errors "Stored" .NodeForm.StoredCredentialsAvailable "Prefix" "nodes") }}
           </div>
           <div class="sys-form__actions">
             <button type="submit" class="btn btn--primary">
@@ -234,7 +203,6 @@
   {{ template "node-log-drawer" . }}
   {{ template "node-config-modal" . }}
   {{ template "node-confirm-modal" . }}
-  <div class="nodes-toast-region" data-nodes-toast-region aria-live="polite" aria-atomic="true"></div>
 
   <article class="card node-scope">
     <div class="collapsible">

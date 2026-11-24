@@ -36,34 +36,7 @@
             class="sys-advanced"
             {{ if and (not $monAdvErr) .MonitoringForm.StoredCredentialsAvailable }}hidden{{ end }}
           >
-            <div class="form-grid">
-              <label class="form-field">
-                <span>{{ t "common.connect_timeout" }}</span>
-                <input type="text" name="connect_timeout" value="{{ .MonitoringForm.ConnectTimeout }}" placeholder="10s">
-                {{ with index .MonitoringForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
-              </label>
-              <label class="form-field">
-                <span>{{ t "common.command_timeout" }}</span>
-                <input type="text" name="command_timeout" value="{{ .MonitoringForm.CommandTimeout }}" placeholder="20s">
-                {{ with index .MonitoringForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
-              </label>
-            </div>
-            {{ if not .MonitoringForm.StoredCredentialsAvailable }}
-            <label class="form-field">
-              <span>{{ t "monitoring.ssh_password" }}</span>
-              <input type="password" name="password" placeholder="{{ t "monitoring.password_placeholder" }}" autocomplete="current-password">
-              {{ with index .MonitoringForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </label>
-            <label class="form-field">
-              <span>{{ t "monitoring.private_key" }}</span>
-              <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
-              {{ with index .MonitoringForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </label>
-            <label class="form-field">
-              <span>{{ t "monitoring.passphrase" }}</span>
-              <input type="password" name="key_passphrase" placeholder="{{ t "monitoring.optional_placeholder" }}">
-            </label>
-            {{ end }}
+            {{ template "ssh-advanced-fields" (dict "ConnectTimeout" .MonitoringForm.ConnectTimeout "CommandTimeout" .MonitoringForm.CommandTimeout "Errors" .MonitoringForm.Errors "Stored" .MonitoringForm.StoredCredentialsAvailable "Prefix" "monitoring") }}
           </div>
 
           <div class="sys-form__actions">

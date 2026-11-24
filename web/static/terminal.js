@@ -973,8 +973,10 @@
       snippetsList.appendChild(item);
     });
 
-    if (window.lucide && window.lucide.createIcons) {
-      try { window.lucide.createIcons(); } catch (e) {}
+    if (window.nxRenderIcons) {
+      window.nxRenderIcons(snippetsList);
+    } else if (window.lucide && window.lucide.createIcons) {
+      try { window.lucide.createIcons({ root: snippetsList }); } catch (e) {}
     }
   }
 
@@ -1084,8 +1086,10 @@
       persianInput.focus();
     }
     updatePersianPreview();
-    if (window.lucide && window.lucide.createIcons) {
-      try { window.lucide.createIcons(); } catch (e) {}
+    if (window.nxRenderIcons) {
+      window.nxRenderIcons(persianModal);
+    } else if (window.lucide && window.lucide.createIcons) {
+      try { window.lucide.createIcons({ root: persianModal }); } catch (e) {}
     }
   }
   function closePersianModal() {

@@ -2,16 +2,15 @@
    Nodexia Design Tokens & Foundation (`tokens.css`)
    ════════════════════════════════════════════════════════════════════════════
    Zero-build architecture: browser-native CSS custom properties.
-   Loaded unconditionally first in the <head> sequence before shell and components.
-   Provides:
-     1. Self-hosted variable typography (@font-face for Inter, JetBrains Mono & Vazirmatn)
-     2. Dark Graphite neutral ramp, single accent, semantic status tokens
-     3. 4px spacing scale, nested border radii, elevation, z-index hierarchy
-     4. Base resets, layout normalization, reduced-motion preferences
-     5. Internationalization (fa font swap, RTL numeric/gauge isolation)
+   Loaded unconditionally first in <head> before shell, components, and modules.
+
+   Standard Breakpoints (enforced across all stylesheets):
+     - Compact mobile : <= 480px
+     - Mobile shell   : <= 767px
+     - Tablet/compact : <= 1024px
    ════════════════════════════════════════════════════════════════════════════ */
 
-/* ── 1. Typography: Self-hosted Fonts ──────────────────────────────────────── */
+/* ── 1. Self-hosted Typography ─────────────────────────────────────────────── */
 
 @font-face {
   font-family: 'Inter';
@@ -35,8 +34,6 @@
     U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* Vazirmatn: Persian typography (self-hosted under /static/fonts).
-   Weights 400, 500, 600 matching the unslop weight cap. */
 @font-face {
   font-family: 'Vazirmatn';
   font-style: normal;
@@ -64,29 +61,31 @@
 /* ── 2. Design Tokens (:root) ──────────────────────────────────────────────── */
 
 :root {
-  /* Color Scheme */
   color-scheme: dark;
 
-  /* Typography Families */
+  /* Typography */
   --font-ui: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Typography Scale (enforces 400/500 and rare 600 weight cap) */
-  --fw-regular: 400;   /* body copy, table data, descriptions, logs        */
-  --fw-medium: 500;    /* buttons, inputs, secondary labels, nav default   */
-  --fw-semibold: 600;  /* rare emphasis: active states, wordmark, figures  */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
   --fw-bold: 600;
   --fw-extrabold: 600;
 
-  /* Numerical Alignment */
-  --num: tabular-nums;
+  --text-xs: 0.72rem;
+  --text-sm: 0.8rem;
+  --text-base: 0.875rem;
+  --text-md: 0.95rem;
+  --text-lg: 1.15rem;
+  --text-xl: 1.38rem;
 
-  /* Line Heights */
+  --num: tabular-nums;
   --lh-tight: 1.25;
   --lh-normal: 1.5;
   --lh-relaxed: 1.6;
 
-  /* Neutral Ramp Compatibility Aliases (Graphite) */
+  /* Neutral Ramp (Dark Graphite) */
   --slate-50: #ffffff;
   --slate-100: #f3f3f4;
   --slate-200: #e4e4e7;
@@ -99,53 +98,72 @@
   --slate-900: #141415;
   --slate-950: #0b0b0c;
 
-  /* Surface & Background Tokens (Dark Graphite ramp) */
+  /* Surfaces */
   --bg-deep: #0b0b0c;
   --bg-canvas: #0f0f10;
   --surface: #141415;
   --surface-2: #19191b;
   --surface-elevated: #232325;
   --surface-card: #141415;
+  --surface-popover: #1c1d21;
+  --surface-bar: rgba(15, 15, 16, 0.95);
+  --surface-well: rgba(0, 0, 0, 0.22);
+  --surface-chip: rgba(255, 255, 255, 0.032);
+  --surface-hover: rgba(255, 255, 255, 0.065);
+  --surface-scrim: rgba(11, 11, 12, 0.74);
+  --surface-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.032) 0%, rgba(255, 255, 255, 0.008) 100%);
+  --hero-glow: radial-gradient(72% 130% at 0% 0%, rgba(59, 130, 246, 0.11) 0%, rgba(59, 130, 246, 0) 64%);
+  --hero-glow-rtl: radial-gradient(72% 130% at 100% 0%, rgba(59, 130, 246, 0.11) 0%, rgba(59, 130, 246, 0) 64%);
 
-  /* Border Tokens */
+  /* Borders */
   --border: rgba(255, 255, 255, 0.08);
+  --border-card: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.14);
-  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-subtle: rgba(255, 255, 255, 0.055);
 
-  /* Text & Foreground Tokens */
+  /* Text */
   --text: #f3f3f4;
   --text-muted: #93939a;
   --text-dim: #8a8a93;
   --text-bright: #ffffff;
 
-  /* Single Brand / Primary Accent (flat, no gradients) */
+  /* Primary Accent (Cobalt) */
   --accent: #3b82f6;
+  --accent-hover: #2563eb;
   --accent-soft: #60a5fa;
   --accent-bright: #93c5fd;
   --accent-rgb: 59, 130, 246;
+  --accent-bg: rgba(59, 130, 246, 0.12);
+  --accent-bg-subtle: rgba(59, 130, 246, 0.07);
+  --accent-border: rgba(96, 165, 250, 0.28);
+  --accent-border-strong: rgba(96, 165, 250, 0.45);
+  --accent-ring: 0 0 0 3px rgba(59, 130, 246, 0.18);
 
-  /* Semantic Status Colors */
+  /* Semantic Status */
   --ok: #4cc38a;
   --ok-soft: #4cc38a;
   --ok-bg: rgba(76, 195, 138, 0.10);
-  --ok-border: rgba(76, 195, 138, 0.24);
+  --ok-border: rgba(76, 195, 138, 0.25);
 
   --warn: #eab308;
   --warn-soft: #eab308;
   --warn-bg: rgba(234, 179, 8, 0.10);
-  --warn-border: rgba(234, 179, 8, 0.24);
+  --warn-border: rgba(234, 179, 8, 0.25);
 
   --crit: #e5484d;
-  --crit-soft: #e5484d;
+  --crit-soft: #f87171;
+  --crit-text: #fca5a5;
   --crit-bg: rgba(229, 72, 77, 0.10);
-  --crit-border: rgba(229, 72, 77, 0.24);
+  --crit-bg-hover: rgba(229, 72, 77, 0.18);
+  --crit-border: rgba(229, 72, 77, 0.26);
+  --crit-border-strong: rgba(229, 72, 77, 0.44);
 
   --info: #60a5fa;
   --info-soft: #93c5fd;
   --info-bg: rgba(96, 165, 250, 0.10);
-  --info-border: rgba(96, 165, 250, 0.24);
+  --info-border: rgba(96, 165, 250, 0.25);
 
-  /* Spacing Scale (4px standard grid) */
+  /* Spacing (4px grid) */
   --space-0: 0;
   --space-1: 4px;
   --space-2: 8px;
@@ -158,7 +176,7 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* Border Radius Scale */
+  /* Radii */
   --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -166,19 +184,20 @@
   --radius-xl: 20px;
   --radius-full: 9999px;
 
-  /* Shadows & Elevation (quiet neutral depth, no colored glows) */
+  /* Elevation */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.44);
-  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.56);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.34);
+  --shadow-lg: 0 10px 28px rgba(0, 0, 0, 0.46);
+  --shadow-xl: 0 18px 46px rgba(0, 0, 0, 0.56);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shadow-card: var(--shadow-inset), var(--shadow-sm);
 
-  /* Transition Tokens (single easing curve) */
+  /* Transitions (single smooth deceleration curve) */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --transition-fast: 0.14s cubic-bezier(0.22, 1, 0.36, 1);
-  --transition-base: 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-  --transition-slow: 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-  --transition-spring: 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-fast: 0.14s var(--ease-out);
+  --transition-base: 0.2s var(--ease-out);
+  --transition-slow: 0.3s var(--ease-out);
+  --transition-spring: 0.3s var(--ease-out);
 
   /* Z-Index Hierarchy */
   --z-base: 1;
@@ -197,7 +216,7 @@
   --z-progress: 10000;
 }
 
-/* ── 3. Base Resets & Document Normalization ────────────────────────────────── */
+/* ── 3. Base Resets & Document Normalization ───────────────────────────────── */
 
 *,
 *::before,
@@ -205,7 +224,6 @@
   box-sizing: border-box;
 }
 
-/* `hidden` must always win over author display rules. */
 [hidden] {
   display: none !important;
 }
@@ -232,29 +250,23 @@ body {
   background: var(--bg-canvas);
 }
 
-/* Consistent Lucide stroke weight across the entire application */
 svg.lucide,
 [data-lucide] svg {
   stroke-width: 1.5;
 }
 
-/* ── 4. Internationalization & Bidirectional Typography ─────────────────────── */
+/* ── 4. Internationalization & Bidirectional Isolation ───────────────────────── */
 
-/* Persian locale: Swap UI font to Vazirmatn */
 html[lang="fa"] {
   --font-ui: 'Vazirmatn', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
-/* Numeric, code, and identifier surfaces stay LTR regardless of UI direction */
 [dir="rtl"] code,
 [dir="rtl"] pre,
+[dir="rtl"] .country-tag,
+[dir="rtl"] .server-card__country,
 [dir="rtl"] .token-list code,
-[dir="rtl"] .fact-list code {
-  direction: ltr;
-  unicode-bidi: isolate;
-}
-
-/* Measurement numbers paired with Latin units stay LTR */
+[dir="rtl"] .fact-list code,
 [dir="rtl"] .gauge__value,
 [dir="rtl"] .gauge__detail,
 [dir="rtl"] .metric-strip__value,
@@ -272,12 +284,11 @@ html[lang="fa"] {
   unicode-bidi: isolate;
 }
 
-/* Gauges fill from 0% left to 100% right; keep pinned */
 [dir="rtl"] .gauge__scale {
   direction: ltr;
 }
 
-/* ── 5. Accessibility & Motion Preferences ─────────────────────────────────── */
+/* ── 5. Reduced Motion ─────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   *,

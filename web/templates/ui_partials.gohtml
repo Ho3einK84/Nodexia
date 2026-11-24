@@ -1,0 +1,93 @@
+{{/* ═══════════════════════════════════════════════════════════════════════════
+     Nodexia Shared UI Partials (`ui_partials.gohtml`)
+     Reusable presentation primitives shared across all content templates.
+     ═══════════════════════════════════════════════════════════════════════════ */}}
+
+{{ define "flash-banner" -}}
+{{- if .FlashMessage }}
+<div class="flash-banner flash-banner--{{ .FlashKind }}">
+  <p>{{ .FlashMessage }}</p>
+</div>
+{{- end -}}
+{{ end }}
+
+{{ define "country-tag" -}}
+{{- $cc := countryCode .Code .Flag -}}
+{{- if $cc }}<code class="country-tag"{{ with .Name }} title="{{ . }}" aria-label="{{ . }}"{{ end }}>{{ $cc }}</code>{{ end -}}
+{{ end }}
+
+{{ define "page-hero-head" -}}
+<div class="page-hero__title-row">
+  {{- if .Icon }}
+  <span class="page-hero__emblem" aria-hidden="true">
+    <i data-lucide="{{ .Icon }}"></i>
+  </span>
+  {{- end }}
+  <div class="page-hero__copy">
+    {{- if .Eyebrow }}
+    <p class="page-hero__eyebrow"><span class="page-hero__dot" aria-hidden="true"></span> {{ .Eyebrow }}</p>
+    {{- end }}
+    <div class="page-hero__heading">
+      <h2 class="page-hero__title">{{ .Page.PageTitle }}</h2>
+      {{ template "page-info" .Page }}
+    </div>
+  </div>
+</div>
+{{ end }}
+
+{{ define "ssh-advanced-fields" -}}
+<div class="form-grid">
+  <label class="form-field">
+    <span>{{ t "common.connect_timeout" }}</span>
+    <input type="text" name="connect_timeout" value="{{ .ConnectTimeout }}" placeholder="10s">
+    {{ with index .Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+  </label>
+  <label class="form-field">
+    <span>{{ t "common.command_timeout" }}</span>
+    <input type="text" name="command_timeout" value="{{ .CommandTimeout }}" placeholder="20s">
+    {{ with index .Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
+  </label>
+</div>
+{{- if not .Stored }}
+<label class="form-field">
+  <span>{{ t (printf "%s.ssh_password" .Prefix) }}</span>
+  <input type="password" name="password" placeholder="{{ t (printf "%s.password_placeholder" .Prefix) }}" autocomplete="current-password">
+  {{ with index .Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
+</label>
+<label class="form-field">
+  <span>{{ t (printf "%s.private_key" .Prefix) }}</span>
+  <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+  {{ with index .Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
+</label>
+<label class="form-field">
+  <span>{{ t (printf "%s.passphrase" .Prefix) }}</span>
+  <input type="password" name="key_passphrase" placeholder="{{ t (printf "%s.optional_placeholder" .Prefix) }}">
+</label>
+{{- end -}}
+{{ end }}
+
+{{ define "pagination" -}}
+{{ if gt .TotalPages 1 }}
+<nav class="pagination" aria-label="{{ t "pagination.label" }}">
+  {{ if .HasPrev }}
+  <a class="pagination__nav" href="{{ .PrevURL }}" aria-label="{{ t "pagination.previous" }}"><i data-lucide="chevron-left"></i></a>
+  {{ else }}
+  <span class="pagination__nav pagination__nav--disabled" aria-disabled="true"><i data-lucide="chevron-left"></i></span>
+  {{ end }}
+  {{ range .Pages }}
+  {{ if .IsGap }}
+  <span class="pagination__gap">…</span>
+  {{ else if .IsActive }}
+  <span class="pagination__page pagination__page--active" aria-current="page">{{ .Number }}</span>
+  {{ else }}
+  <a class="pagination__page" href="{{ .URL }}">{{ .Number }}</a>
+  {{ end }}
+  {{ end }}
+  {{ if .HasNext }}
+  <a class="pagination__nav" href="{{ .NextURL }}" aria-label="{{ t "pagination.next" }}"><i data-lucide="chevron-right"></i></a>
+  {{ else }}
+  <span class="pagination__nav pagination__nav--disabled" aria-disabled="true"><i data-lucide="chevron-right"></i></span>
+  {{ end }}
+</nav>
+{{ end }}
+{{- end }}

@@ -1,41 +1,43 @@
 {{ define "content-analytics-global" }}
 <section class="hero">
-
-  {{ template "page-header" . }}
-
-  {{/* Traffic limits at a glance — replaces the easy-to-miss ghost button
-       with a summary of the fleet caps and a clear entry point. */}}
-  <article class="card limits-banner">
-    <div class="limits-banner__icon" aria-hidden="true"><i data-lucide="gauge"></i></div>
-    <div class="limits-banner__body">
-      <h3>{{ t "analytics.limits.banner_title" }}</h3>
-      <p>{{ t "analytics.limits.banner_desc" }}</p>
-      <div class="limits-banner__stats">
-        {{ if .GlobalAnalytics.HasGlobalLimit }}
-        <span class="badge badge--ok">{{ t "analytics.limits.banner_global" "value" .GlobalAnalytics.GlobalLimitHuman }}</span>
-        {{ else }}
-        <span class="badge badge--warn">{{ t "analytics.limits.banner_none" }}</span>
-        {{ end }}
-        <span class="badge badge--id">{{ t "analytics.limits.banner_tags" "count" .GlobalAnalytics.TagLimitCount }}</span>
+  <header class="page-hero">
+    <div class="page-hero__top">
+      {{ template "page-hero-head" (dict "Page" . "Icon" "bar-chart-2" "Eyebrow" (t "nav.analytics")) }}
+      <div class="page-hero__actions">
+        <a class="btn btn--primary btn--sm" href="/analytics/limits"><i data-lucide="sliders-horizontal" class="icon-in-button"></i> {{ t "analytics.limits.manage" }}</a>
       </div>
     </div>
-    <a class="btn btn--primary btn--sm limits-banner__cta" href="/analytics/limits"><i data-lucide="sliders-horizontal" class="icon-in-button"></i> {{ t "analytics.limits.manage" }}</a>
-  </article>
+    <div class="kpi-strip" role="region" aria-label="{{ t "nav.analytics" }}">
+      <div class="kpi-strip__item">
+        <span class="kpi-strip__label"><i data-lucide="server" aria-hidden="true"></i> {{ t "nav.servers" }}</span>
+        <span class="kpi-strip__value">{{ .GlobalAnalytics.ServerCount }}</span>
+      </div>
+      <div class="kpi-strip__item{{ if .GlobalAnalytics.HasGlobalLimit }} kpi-strip__item--ok{{ else }} kpi-strip__item--warn{{ end }}">
+        <span class="kpi-strip__label"><i data-lucide="gauge" aria-hidden="true"></i> {{ t "analytics.limits.banner_title" }}</span>
+        <span class="kpi-strip__value">{{ if .GlobalAnalytics.HasGlobalLimit }}{{ .GlobalAnalytics.GlobalLimitHuman }}{{ else }}—{{ end }}</span>
+      </div>
+      <div class="kpi-strip__item">
+        <span class="kpi-strip__label"><i data-lucide="tags" aria-hidden="true"></i> {{ t "analytics.limits.tag_heading" }}</span>
+        <span class="kpi-strip__value">{{ .GlobalAnalytics.TagLimitCount }}</span>
+      </div>
+    </div>
+  </header>
 
   {{ if eq .GlobalAnalytics.ServerCount 0 }}
-  <article class="card card--empty">
-    <i data-lucide="bar-chart-2" class="empty-icon"></i>
-    <h3>{{ t "analytics.global_empty_title" }}</h3>
-    <p>{{ t "analytics.global_empty_desc" }}</p>
-    <a class="btn btn--primary" href="/servers">{{ t "analytics.go_servers" }}</a>
-  </article>
+  <div class="empty-state-card">
+    <span class="empty-state-icon"><i data-lucide="bar-chart-2" aria-hidden="true"></i></span>
+    <p class="empty-state-title">{{ t "analytics.global_empty_title" }}</p>
+    <p class="empty-state-desc">{{ t "analytics.global_empty_desc" }}</p>
+    <a class="btn btn--primary" href="/servers"><i data-lucide="server" class="icon-in-button"></i> {{ t "analytics.go_servers" }}</a>
+  </div>
   {{ else }}
 
-  <!-- Top consumers by CPU / RAM / Disk -->
   <article class="card">
-    <h3><i data-lucide="cpu"></i> {{ t "analytics.top_resource" }}</h3>
-    <div class="analytics-table-wrap">
-      <table class="analytics-table">
+    <div class="card__header">
+      <h3><i data-lucide="cpu"></i> {{ t "analytics.top_resource" }}</h3>
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table">
         <thead>
           <tr>
             <th>{{ t "common.server" }}</th>
@@ -53,15 +55,14 @@
           <tr>
             <td class="server-name-cell">
               <i data-lucide="server" class="table-icon"></i>
-              {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}
+              <span>{{ .ServerName }}</span>
+              {{ template "country-tag" (dict "Code" "" "Flag" .FlagEmoji "Name" .CountryName) }}
             </td>
             <td class="text-right"><span class="metric-badge{{ if gt $cpu 80.0 }} metric-badge--crit{{ else if gt $cpu 60.0 }} metric-badge--warn{{ end }}">{{ .CPU }}</span></td>
             <td class="text-right"><span class="metric-badge{{ if gt $ram 80.0 }} metric-badge--crit{{ else if gt $ram 60.0 }} metric-badge--warn{{ end }}">{{ .RAM }}</span></td>
             <td class="text-right"><span class="metric-badge{{ if gt $disk 80.0 }} metric-badge--crit{{ else if gt $disk 60.0 }} metric-badge--warn{{ end }}">{{ .Disk }}</span></td>
             <td class="text-right">
-              <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics">
-                <i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}
-              </a>
+              <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}</a>
             </td>
           </tr>
           {{ end }}
@@ -71,11 +72,12 @@
   </article>
 
   {{ if .GlobalAnalytics.TopTraffic }}
-  <!-- Top consumers by bandwidth -->
   <article class="card">
-    <h3><i data-lucide="network"></i> {{ t "analytics.top_traffic" }}</h3>
-    <div class="analytics-table-wrap">
-      <table class="analytics-table">
+    <div class="card__header">
+      <h3><i data-lucide="network"></i> {{ t "analytics.top_traffic" }}</h3>
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table">
         <thead>
           <tr>
             <th>{{ t "common.server" }}</th>
@@ -90,21 +92,14 @@
           <tr>
             <td class="server-name-cell">
               <i data-lucide="server" class="table-icon"></i>
-              {{ .ServerName }}{{ if .FlagEmoji }} <span class="server-flag" title="{{ .CountryName }}" aria-label="{{ .CountryName }}">{{ .FlagEmoji }}</span>{{ end }}
+              <span>{{ .ServerName }}</span>
+              {{ template "country-tag" (dict "Code" "" "Flag" .FlagEmoji "Name" .CountryName) }}
             </td>
+            <td class="text-right"><span class="traffic-badge">{{ .Download }}</span></td>
+            <td class="text-right"><span class="traffic-badge">{{ .Upload }}</span></td>
+            <td class="text-right"><span class="traffic-badge traffic-badge--total">{{ .MonthBytes }}</span></td>
             <td class="text-right">
-              <span class="traffic-badge">{{ .Download }}</span>
-            </td>
-            <td class="text-right">
-              <span class="traffic-badge">{{ .Upload }}</span>
-            </td>
-            <td class="text-right">
-              <span class="traffic-badge traffic-badge--total">{{ .MonthBytes }}</span>
-            </td>
-            <td class="text-right">
-              <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics">
-                <i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}
-              </a>
+              <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}</a>
             </td>
           </tr>
           {{ end }}

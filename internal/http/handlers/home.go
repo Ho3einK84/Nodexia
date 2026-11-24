@@ -60,6 +60,7 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	page.ActiveNav = "/"
 	page.PageTitle = page.T("home.page_title")
 	page.PageDescription = page.T("home.page_description")
+	page.PageStyles = []string{"/static/home.css"}
 	page.MigrationCount = db.BootstrapMigrationCount()
 	page.RouteGroups = h.routeGroups
 

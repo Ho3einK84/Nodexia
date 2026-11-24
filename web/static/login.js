@@ -22,9 +22,7 @@
       if (!window.lucide || typeof window.lucide.createIcons !== 'function') return;
       try {
         window.lucide.createIcons({ root: btn });
-      } catch (e) {
-        try { window.lucide.createIcons(); } catch (err) { /* ignore */ }
-      }
+      } catch (e) { /* ignore */ }
     }
 
     btn.addEventListener('click', function () {
@@ -311,6 +309,10 @@
   }
 
   function boot() {
+    var stage = document.querySelector('[data-auth-stage]');
+    if (stage && window.lucide && typeof window.lucide.createIcons === 'function') {
+      try { window.lucide.createIcons({ root: stage }); } catch (e) { /* ignore */ }
+    }
     initReveal();
     initSubmitState();
     initAuthMesh();

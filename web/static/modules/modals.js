@@ -1,12 +1,12 @@
 /* Nodexia dialogs & overflow action menus (native ES module — no bundler, no npm).
  *
- * Shared frosted-backdrop modal dialogs (open/close, visibility-safe focus trap,
- * Escape, pane cleanup) and card overflow action menus (keyboard navigation,
- * pane-scoped cleanup, no inline z-index mutations).
+ * Shared modal dialogs (open/close, visibility-safe focus trap, Escape, scroll
+ * lock, pane cleanup) published as window.nxModal for classic page scripts,
+ * plus accessible card overflow action menus.
  */
 import { prefersReducedMotion, registerCleanup } from './core.js';
 
-/* ── Server / node card overflow action menus ────────────── */
+/* ── Server / node card overflow action menus ─────────────────────────────── */
 var actionMenuDocWired = false;
 var allActionMenus = new Set();
 
@@ -19,39 +19,26 @@ function visibleMenuItems(menu) {
 }
 
 function isMobileMenuViewport() {
-  return typeof window !== 'undefined' && window.innerWidth <= 640;
+  return typeof window !== 'undefined' && window.innerWidth <= 767;
 }
 
 function positionMenuDirection(menu, toggle) {
   var panel = menu.querySelector('.action-menu__panel');
   if (!panel || !toggle) return;
-  var panelH = panel.offsetHeight;
-  if (!panelH) {
-    panel.style.visibility = 'hidden';
-    panel.style.display = 'flex';
-    panelH = panel.offsetHeight || 220;
-    panel.style.display = '';
-    panel.style.visibility = '';
-  }
+  var panelH = panel.offsetHeight || 220;
   var rect = toggle.getBoundingClientRect();
   var pane = menu.closest('.tab-pane');
   var bounds = pane ? pane.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
-  var topEdge = Math.max(bounds.top, 0);
-  var bottomEdge = Math.min(bounds.bottom, window.innerHeight);
-  var spaceAbove = rect.top - topEdge;
-  var spaceBelow = bottomEdge - rect.bottom;
-  var openBelow = spaceBelow >= (panelH + 12) || spaceBelow >= spaceAbove;
-  menu.classList.toggle('action-menu--below', openBelow);
+  var spaceAbove = rect.top - Math.max(bounds.top, 0);
+  var spaceBelow = Math.min(bounds.bottom, window.innerHeight) - rect.bottom;
+  menu.classList.toggle('action-menu--below', spaceBelow >= (panelH + 12) || spaceBelow >= spaceAbove);
 }
 
 function setMenuOpen(menu, open) {
   var toggle = menu.querySelector('.action-menu__toggle');
   if (menu.classList.contains('node-card__menu')) {
-    if (open && !isMobileMenuViewport()) {
-      positionMenuDirection(menu, toggle);
-    } else if (!open) {
-      menu.classList.add('action-menu--below');
-    }
+    if (open && !isMobileMenuViewport()) positionMenuDirection(menu, toggle);
+    else if (!open) menu.classList.add('action-menu--below');
   }
   menu.classList.toggle('is-open', open);
   if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -64,13 +51,8 @@ function setMenuOpen(menu, open) {
 
 function closeAllMenus(except) {
   allActionMenus.forEach(function (menu) {
-    if (!document.contains(menu)) {
-      allActionMenus.delete(menu);
-      return;
-    }
-    if (menu !== except && menu.classList.contains('is-open')) {
-      setMenuOpen(menu, false);
-    }
+    if (!document.contains(menu)) { allActionMenus.delete(menu); return; }
+    if (menu !== except && menu.classList.contains('is-open')) setMenuOpen(menu, false);
   });
 }
 
@@ -100,9 +82,7 @@ function initActionMenus(root) {
           closeAllMenus(menu);
           setMenuOpen(menu, true);
           var items = visibleMenuItems(menu);
-          if (items.length) {
-            items[e.key === 'ArrowUp' ? items.length - 1 : 0].focus();
-          }
+          if (items.length) items[e.key === 'ArrowUp' ? items.length - 1 : 0].focus();
         }
       });
     }
@@ -132,23 +112,11 @@ function initActionMenus(root) {
       if (!items.length) return;
       var idx = items.indexOf(document.activeElement);
 
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        items[(idx + 1) % items.length].focus();
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        items[(idx - 1 + items.length) % items.length].focus();
-      } else if (e.key === 'Home') {
-        e.preventDefault();
-        items[0].focus();
-      } else if (e.key === 'End') {
-        e.preventDefault();
-        items[items.length - 1].focus();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        setMenuOpen(menu, false);
-        if (toggle) toggle.focus();
-      }
+      if (e.key === 'ArrowDown') { e.preventDefault(); items[(idx + 1) % items.length].focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); items[(idx - 1 + items.length) % items.length].focus(); }
+      else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+      else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+      else if (e.key === 'Escape') { e.preventDefault(); setMenuOpen(menu, false); if (toggle) toggle.focus(); }
     });
 
     var owningPane = menu.closest('.tab-pane');
@@ -164,34 +132,22 @@ function initActionMenus(root) {
   actionMenuDocWired = true;
   document.addEventListener('click', function (e) {
     allActionMenus.forEach(function (menu) {
-      if (!document.contains(menu)) {
-        allActionMenus.delete(menu);
-        return;
-      }
+      if (!document.contains(menu)) { allActionMenus.delete(menu); return; }
       if (!menu.classList.contains('is-open')) return;
       var panel = menu.querySelector('.action-menu__panel');
       var toggle = menu.querySelector('.action-menu__toggle');
       var closeBtn = e.target.closest && e.target.closest('[data-action-menu-close]');
-      if (closeBtn && menu.contains(closeBtn)) {
-        setMenuOpen(menu, false);
-        return;
-      }
-      if (toggle && (toggle === e.target || toggle.contains(e.target))) {
-        return;
-      }
-      if (panel && panel.contains(e.target)) {
-        return;
-      }
+      if (closeBtn && menu.contains(closeBtn)) { setMenuOpen(menu, false); return; }
+      if (toggle && (toggle === e.target || toggle.contains(e.target))) return;
+      if (panel && panel.contains(e.target)) return;
       setMenuOpen(menu, false);
     });
   });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeAllMenus(null);
-  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAllMenus(null); });
   window.addEventListener('resize', function () { closeAllMenus(null); });
 }
 
-/* ── Modal dialogs (frosted backdrop + focus trap) ───────── */
+/* ── Modal dialogs (focus trap + scroll lock + Escape) ────────────────────── */
 var modalDocWired = false;
 
 function isElementVisible(el) {
@@ -209,7 +165,7 @@ function getFocusableElements(modal) {
 
 function syncBodyScrollLock() {
   var hasOpen = !!(
-    document.querySelector('[data-modal].is-open') ||
+    document.querySelector('[data-modal].is-open, .modal.is-open') ||
     document.querySelector('.log-drawer.is-open') ||
     (isMobileMenuViewport() && document.querySelector('.node-card__menu.is-open'))
   );
@@ -220,9 +176,13 @@ function openModal(modal) {
   if (!modal) return;
   modal._nxLastFocus = document.activeElement;
   modal.hidden = false;
-  // Force reflow so entrance transition runs cleanly from hidden state.
-  void modal.offsetWidth;
-  modal.classList.add('is-open');
+  if (prefersReducedMotion) {
+    modal.classList.add('is-open');
+  } else {
+    requestAnimationFrame(function () {
+      if (!modal.hidden) modal.classList.add('is-open');
+    });
+  }
   syncBodyScrollLock();
 
   var autofocus = modal.querySelector('[data-modal-autofocus]');
@@ -235,26 +195,18 @@ function openModal(modal) {
 }
 
 function closeModal(modal, force) {
-  if (!modal || !modal.classList.contains('is-open')) return false;
+  if (!modal || (!modal.classList.contains('is-open') && modal.hidden)) return false;
   if (!force) {
-    var ok = modal.dispatchEvent(new CustomEvent('modal:beforeclose', {
-      cancelable: true,
-      bubbles: false
-    }));
+    var ok = modal.dispatchEvent(new CustomEvent('modal:beforeclose', { cancelable: true, bubbles: false }));
     if (!ok) return false;
   }
 
   modal.classList.remove('is-open');
   syncBodyScrollLock();
 
-  var finish = function () {
-    if (!modal.classList.contains('is-open')) modal.hidden = true;
-  };
-  if (prefersReducedMotion) {
-    finish();
-  } else {
-    setTimeout(finish, 240);
-  }
+  var finish = function () { if (!modal.classList.contains('is-open')) modal.hidden = true; };
+  if (prefersReducedMotion || force) finish();
+  else setTimeout(finish, 220);
 
   var prev = modal._nxLastFocus;
   modal._nxLastFocus = null;
@@ -266,6 +218,12 @@ function closeModal(modal, force) {
   }
   return true;
 }
+
+window.nxModal = {
+  open: openModal,
+  close: closeModal,
+  syncScrollLock: syncBodyScrollLock
+};
 
 function findModalForOpener(opener, root) {
   var key = opener.getAttribute('data-modal-open');
@@ -316,13 +274,8 @@ function initModals(root) {
       if (!focusables.length) return;
       var first = focusables[0];
       var last = focusables[focusables.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
 
     var owningPane = modal.closest('.tab-pane');

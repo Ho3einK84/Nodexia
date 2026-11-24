@@ -12,12 +12,19 @@
   // Localization helper (see app.js for window.nxT). Falls back to the key.
   function T(key, params) { return window.nxT ? window.nxT(key, params) : key; }
 
-  // Escape HTML-special characters so server-sourced values can safely be
-  // interpolated into innerHTML.
   function escapeHTML(str) {
-    return String(str).replace(/[&<>"']/g, function (m) {
+    if (window.nxEscape) return window.nxEscape(str);
+    return String(str == null ? '' : str).replace(/[&<>"']/g, function (m) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
     });
+  }
+
+  function renderIcons(scope) {
+    if (!scope) return;
+    if (window.nxRenderIcons) { window.nxRenderIcons(scope); return; }
+    if (window.lucide && window.lucide.createIcons) {
+      try { window.lucide.createIcons({ root: scope }); } catch (e) {}
+    }
   }
 
   // Resolve chart series colors strictly from CSS custom properties on :root
@@ -181,13 +188,17 @@
 
   function ensureResizeObserver(container) {
     if (container.__ro || typeof ResizeObserver === 'undefined') return;
+    let raf = 0;
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const nw = Math.round(entry.contentRect.width);
         const nh = Math.round(entry.contentRect.height);
         if (nw > 0 && nh > 0 && (nw !== container.__lastW || nh !== container.__lastH)) {
-          if (container.__chartData && !container.hidden) {
-            buildChart(container, container.__chartData);
+          if (!raf && container.__chartData && !container.hidden) {
+            raf = requestAnimationFrame(() => {
+              raf = 0;
+              if (container.__chartData && !container.hidden) buildChart(container, container.__chartData);
+            });
           }
         }
       }
@@ -196,7 +207,10 @@
     container.__ro = ro;
     if (scriptPane) {
       if (!scriptPane.__nxCleanups) scriptPane.__nxCleanups = [];
-      scriptPane.__nxCleanups.push(() => ro.disconnect());
+      scriptPane.__nxCleanups.push(() => {
+        if (raf) cancelAnimationFrame(raf);
+        ro.disconnect();
+      });
     }
   }
 
@@ -455,7 +469,7 @@
           <i data-lucide="alert-circle"></i>
           <p>${window.nxT ? window.nxT('js.analytics.forecast_unavailable') : 'Forecast unavailable — no traffic data collected yet'}</p>
         </div>`;
-        if (window.lucide) lucide.createIcons();
+        renderIcons(grid);
       }
     }
   }
@@ -491,7 +505,9 @@
 
     renderExhaustion(f.exhaustion);
 
-    if (window.lucide) lucide.createIcons();
+    renderIcons(grid);
+    renderIcons(meta);
+    renderIcons(byId('forecastExhaustion'));
   }
 
   function seriesScopeLabel(series) {

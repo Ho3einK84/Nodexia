@@ -1,68 +1,40 @@
-/* Nodexia live streams, auto-refresh & result cards (native ES module — no
- * bundler, no npm).
+/* Nodexia live streams, auto-refresh & result cards (lazy-loaded ES module).
  *
- * Everything that keeps a finished-or-running page moving on its own: the
- * auto-refresh countdown, the Server-Sent Events output stream for commands /
- * node actions / installs, the node-action result card (auto-dismiss with a
- * live countdown, manual close on failure), the bulk-action row/summary
- * progress stream and the manual "refresh now" buttons. Extracted from
- * app.js; the shared primitives (i18n, icons, top bar, tab-aware navigation
- * + cleanup, busy buttons) come from ./core.js and the copy-button wiring
- * from ./ui.js.
- *
- * Every init* function is progressive enhancement: absent targets no-op, and
- * the ones that accept `root` can be re-run against a freshly injected tab
- * pane by window.NodexiaApp.rescan().
+ * Loaded on demand by app.js only when a page or tab pane contains auto-refresh
+ * controls, SSE stream cards, node result cards, bulk progress cards, or manual
+ * refresh buttons.
  */
-import { I18N, prefersReducedMotion, renderIcons, startTopBar, tabNavigate, tabReload, registerCleanup, markButtonBusy } from './core.js';
+import {
+  I18N,
+  escapeHTML,
+  prefersReducedMotion,
+  renderIcons,
+  startTopBar,
+  tabNavigate,
+  tabReload,
+  registerCleanup,
+  markButtonBusy
+} from './core.js';
 import { initCopyButtons } from './ui.js';
 
-/* ── Auto-refresh with live countdown ───────────────────── */
 function navigateOwningPane(pane, targetURL) {
   if (!pane) {
     startTopBar();
     window.location.href = targetURL;
     return;
   }
-  if (!pane.hidden) {
-    startTopBar();
-  }
+  if (!pane.hidden) startTopBar();
   if (window.NodexiaTabs && typeof window.NodexiaTabs.navigatePane === 'function') {
     window.NodexiaTabs.navigatePane(pane, targetURL);
     return;
   }
-  try {
-    var parsed = new URL(targetURL, window.location.origin);
-    var form = document.createElement('form');
-    form.method = 'get';
-    form.action = parsed.pathname;
-    form.hidden = true;
-    parsed.searchParams.forEach(function (val, k) {
-      var input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = k;
-      input.value = val;
-      form.appendChild(input);
-    });
-    pane.appendChild(form);
-    var ev = new Event('submit', { bubbles: true, cancelable: true });
-    var notCancelled = form.dispatchEvent(ev);
-    form.remove();
-    if (notCancelled && !pane.hidden) {
-      window.location.href = targetURL;
-    }
-  } catch (e) {
-    if (!pane.hidden) {
-      window.location.href = targetURL;
-    }
-  }
+  tabNavigate(targetURL);
 }
 
+/* ── Auto-refresh with live countdown ─────────────────────────────────────── */
 function initAutoRefresh(root) {
   root = root || document;
-  var selects = root.querySelectorAll('#auto-refresh-select, [data-auto-refresh]');
-  if (!selects.length) return;
-  selects.forEach(function (select) {
+  root.querySelectorAll('#auto-refresh-select, [data-auto-refresh]').forEach(function (select) {
     wireAutoRefreshSelect(select, root);
   });
 }
@@ -97,10 +69,7 @@ function wireAutoRefreshSelect(select, root) {
     if (owningPane && owningPane.hidden) return;
     if (refreshMethod === 'post') {
       var targetScope = select.closest('[data-nodes-workspace]') || owningPane || root || document;
-      var dispatched = targetScope.dispatchEvent(new CustomEvent('nodes:autorefresh', {
-        bubbles: false,
-        cancelable: true
-      }));
+      var dispatched = targetScope.dispatchEvent(new CustomEvent('nodes:autorefresh', { bubbles: false, cancelable: true }));
       if (dispatched) {
         var btn = targetScope.querySelector('[data-nodes-refresh-btn]');
         if (btn) btn.click();
@@ -116,6 +85,12 @@ function wireAutoRefreshSelect(select, root) {
     if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
     pill.hidden = true;
   }
+
+  function updatePill() {
+    var remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    textSpan.textContent = I18N.t('js.refresh.next_in', { seconds: remaining });
+  }
+
   function start(ms) {
     stop();
     if (owningPane && owningPane.hidden) return;
@@ -123,42 +98,24 @@ function wireAutoRefreshSelect(select, root) {
     pill.hidden = false;
     updatePill();
     tickTimer = setInterval(function () {
-      if (owningPane && owningPane.hidden) {
-        stop();
-        return;
-      }
-      if (Date.now() >= deadline) {
-        stop();
-        triggerRefresh();
-        return;
-      }
+      if (owningPane && owningPane.hidden) { stop(); return; }
+      if (Date.now() >= deadline) { stop(); triggerRefresh(); return; }
       updatePill();
     }, 250);
   }
-  function updatePill() {
-    var remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-    textSpan.textContent = I18N.t('js.refresh.next_in', { seconds: remaining });
-  }
+
   function apply() {
     var ms = parseInt(select.value, 10);
-    if (ms > 0) {
-      try { localStorage.setItem(key, select.value); } catch (e) {}
-      start(ms);
-    } else {
-      try { localStorage.setItem(key, '0'); } catch (e) {}
-      stop();
-    }
+    try { localStorage.setItem(key, ms > 0 ? select.value : '0'); } catch (e) {}
+    if (ms > 0) start(ms);
+    else stop();
   }
 
   function onActivated(e) {
-    if (!owningPane) return;
-    var pane = e && e.detail && e.detail.pane;
-    if (pane === owningPane) apply();
+    if (owningPane && e && e.detail && e.detail.pane === owningPane) apply();
   }
   function onDeactivated(e) {
-    if (!owningPane) return;
-    var pane = e && e.detail && e.detail.pane;
-    if (pane === owningPane) stop();
+    if (owningPane && e && e.detail && e.detail.pane === owningPane) stop();
   }
 
   var saved = null;
@@ -167,11 +124,7 @@ function wireAutoRefreshSelect(select, root) {
     select.value = saved;
   } else {
     var selectedOpt = select.querySelector('option[selected]');
-    if (selectedOpt) {
-      select.value = selectedOpt.value;
-    } else {
-      select.value = '0';
-    }
+    select.value = selectedOpt ? selectedOpt.value : '0';
   }
   select.addEventListener('change', apply);
   if (owningPane) {
@@ -188,21 +141,9 @@ function wireAutoRefreshSelect(select, root) {
   });
 }
 
-/* ── Live output stream (Server-Sent Events) ────────────────
- * Replaces the old 2-second full-page poll. A running command / node action /
- * install renders a result card carrying data-stream-sse-url; we subscribe to
- * that feed and append output chunks in place. EventSource reconnects on its
- * own after a network blip — and because the server resends the buffer from
- * offset 0 on every connect, we reset the output on each (re)open so a
- * reconnect never duplicates lines.
- */
+/* ── Live output stream (SSE) ─────────────────────────────────────────────── */
 function createStreamTrack(el) {
-  var track = {
-    el: el,
-    autoScroll: true,
-    received: el ? el.textContent.length : 0,
-    connOffset: 0
-  };
+  var track = { el: el, autoScroll: true, received: el ? el.textContent.length : 0, connOffset: 0 };
   if (el) {
     el.addEventListener('scroll', function () {
       track.autoScroll = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
@@ -226,21 +167,20 @@ function appendStreamChunk(track, chunk) {
 
 function setReconnectingState(card, active) {
   if (!card) return;
+  card.classList.toggle('is-reconnecting', active);
+  var existing = card.querySelector('[data-stream-reconnect]');
   if (active) {
-    card.classList.add('is-reconnecting');
     var statusLine = card.querySelector('[data-stream-status]');
-    if (statusLine && !statusLine.querySelector('[data-stream-reconnect]')) {
+    if (statusLine && !existing) {
       var note = document.createElement('span');
       note.className = 'stream-reconnect-note';
       note.setAttribute('data-stream-reconnect', '');
       note.textContent = ' — ' + I18N.t('js.live.reconnecting');
       statusLine.appendChild(note);
     }
-    return;
+  } else if (existing) {
+    existing.remove();
   }
-  card.classList.remove('is-reconnecting');
-  var existing = card.querySelector('[data-stream-reconnect]');
-  if (existing) existing.remove();
 }
 
 function initStream(root) {
@@ -255,22 +195,17 @@ function initStream(root) {
   var stderr = card.querySelector('[data-stream-stderr]');
   var reloadOnDone = card.hasAttribute('data-stream-reload');
 
-  if (typeof EventSource === 'undefined') {
-    streamFallback(card);
-    return;
-  }
+  if (typeof EventSource === 'undefined') { streamFallback(card); return; }
 
-  // Track independent scroll pinning and deduplicate offset-0 replays on SSE reconnect
-  // so transient network drops never clear accumulated output or duplicate lines.
   var outTrack = createStreamTrack(stdout);
   var errTrack = createStreamTrack(stderr);
-
   var finished = false;
   card.classList.add('is-connecting');
   var es = new EventSource(url);
+
   registerCleanup(card.closest('.tab-pane') || root, function () {
     finished = true;
-    try { es.close(); } catch (err) { /* best-effort */ }
+    try { es.close(); } catch (err) {}
   });
 
   es.addEventListener('open', function () {
@@ -280,13 +215,8 @@ function initStream(root) {
     errTrack.connOffset = 0;
   });
 
-  es.addEventListener('output', function (e) {
-    appendStreamChunk(outTrack, e.data);
-  });
-
-  es.addEventListener('stderr', function (e) {
-    appendStreamChunk(errTrack, e.data);
-  });
+  es.addEventListener('output', function (e) { appendStreamChunk(outTrack, e.data); });
+  es.addEventListener('stderr', function (e) { appendStreamChunk(errTrack, e.data); });
 
   es.addEventListener('done', function (e) {
     finished = true;
@@ -296,7 +226,6 @@ function initStream(root) {
   });
 
   es.addEventListener('error', function (e) {
-    // A server-sent `event: error` carries data; a transport drop does not.
     if (e && e.data) {
       finished = true;
       es.close();
@@ -304,9 +233,6 @@ function initStream(root) {
       finishStreamCard(card, parseJSON(e.data), true);
       return;
     }
-    // Transport error. EventSource retries on its own while readyState is
-    // CONNECTING; if it gave up (CLOSED), fall back to a manual refresh so the
-    // connecting overlay never sticks.
     card.classList.remove('is-connecting');
     if (finished) return;
     if (es.readyState === EventSource.CLOSED) {
@@ -370,20 +296,16 @@ function finishStreamCard(card, payload, isError) {
   if (doneStderr) doneStderr.hidden = !doneStderr.textContent;
   var emptyNote = card.querySelector('[data-stream-empty]');
   if (emptyNote) {
-    var hasOut = Boolean((doneStdout && doneStdout.textContent) || (doneStderr && doneStderr.textContent));
-    emptyNote.hidden = hasOut;
+    emptyNote.hidden = Boolean((doneStdout && doneStdout.textContent) || (doneStderr && doneStderr.textContent));
   }
 
-  // A node-action card self-dismisses on success / exposes a manual close on
-  // failure, and stderr that arrived on a clean exit is no longer styled red.
   if (card.hasAttribute('data-node-result')) {
     if (doneStderr && !failed) doneStderr.classList.remove('output-block--error');
     scheduleNodeResultDismiss(card, failed);
   }
 
-  // Output that streamed in after page load has no copy button yet.
-  initCopyButtons();
-  renderIcons();
+  initCopyButtons(card);
+  renderIcons(card);
 }
 
 function streamFallback(card) {
@@ -394,28 +316,17 @@ function streamFallback(card) {
   if (status) {
     status.innerHTML = '<a class="btn btn--ghost btn--sm" href="' + escapeHTML(url) +
       '"><i data-lucide="refresh-cw" class="icon-in-button"></i> ' + escapeHTML(I18N.t('js.stream.refresh')) + '</a>';
-    renderIcons();
+    renderIcons(status);
   }
 }
 
-/* ── Node action result card: auto-dismiss / manual close ───
- * Once a node action completes, a successful result counts down ("Closing in
- * 5…") and then slides out, navigating to the clean nodes URL (no ?stream=) so
- * the node list is shown without a stale result card. A failed result stays
- * put — the error output must remain readable — and gets a manual close (X)
- * that navigates to the clean URL. Two entry points feed this: a card already
- * completed at page load (server-rendered) and a live card that finished over
- * SSE (finishStreamCard calls scheduleNodeResultDismiss directly).
- */
+/* ── Node action result card: auto-dismiss / manual close ─────────────────── */
 var NODE_RESULT_COUNTDOWN_SECS = 5;
 
 function initNodeResult(root) {
   root = root || document;
   var card = root.querySelector('[data-node-result]');
-  if (!card) return;
-  // A still-running card finishes through the SSE path, which schedules its own
-  // dismiss; skip it here so we don't act before the action completes.
-  if (card.hasAttribute('data-stream-sse-url')) return;
+  if (!card || card.hasAttribute('data-stream-sse-url')) return;
   scheduleNodeResultDismiss(card, card.getAttribute('data-node-failed') === 'true');
 }
 
@@ -423,14 +334,10 @@ function scheduleNodeResultDismiss(card, failed) {
   if (card.dataset.nodeDismissReady === '1') return;
   card.dataset.nodeDismissReady = '1';
   var cleanURL = card.getAttribute('data-node-clean-url') || '/servers';
-  if (failed) {
-    addNodeResultClose(card, cleanURL);
-    return;
-  }
-  startNodeResultCountdown(card, cleanURL);
+  if (failed) addNodeResultClose(card, cleanURL);
+  else startNodeResultCountdown(card, cleanURL);
 }
 
-// addNodeResultClose pins a dismiss (X) button to the card corner.
 function addNodeResultClose(card, cleanURL) {
   if (card.querySelector('.node-result-close')) return;
   var btn = document.createElement('button');
@@ -440,11 +347,9 @@ function addNodeResultClose(card, cleanURL) {
   btn.innerHTML = '<i data-lucide="x"></i>';
   btn.addEventListener('click', function () { dismissNodeCard(card, cleanURL); });
   card.appendChild(btn);
-  renderIcons();
+  renderIcons(btn);
 }
 
-// startNodeResultCountdown shows a live "Closing in N…" pill, then dismisses.
-// Hovering the card pauses it so a user reading the output is never yanked away.
 function startNodeResultCountdown(card, cleanURL) {
   var meta = card.querySelector('[data-stream-meta]') || card.querySelector('.result-header');
   var pill = document.createElement('span');
@@ -475,9 +380,6 @@ function startNodeResultCountdown(card, cleanURL) {
   registerCleanup(card.closest('.tab-pane') || document, function () { clearInterval(timer); });
 }
 
-// dismissNodeCard slides the card out (honoring reduced-motion) then navigates
-// to the clean nodes URL in its owning tab pane so background tabs never
-// hijack the active view.
 function dismissNodeCard(card, cleanURL) {
   var pane = card.closest('.tab-pane');
   if (!pane || !pane.hidden) startTopBar();
@@ -492,18 +394,14 @@ function dismissNodeCard(card, cleanURL) {
   }
   card.classList.add('is-dismissing');
   card.addEventListener('transitionend', go, { once: true });
-  fallbackTimer = setTimeout(go, 600); // fallback when transitionend does not fire
+  fallbackTimer = setTimeout(go, 600);
   registerCleanup(pane || document, function () {
     navigated = true;
     if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
   });
 }
 
-/* ── Bulk action progress stream (SSE) ──────────────────────
- * The bulk result page runs a command across many servers at once. Each
- * server row is pushed as a `row` event as it transitions
- * pending → running → ok/failed, swapping an inline spinner for a check / x.
- */
+/* ── Bulk action progress stream (SSE) ────────────────────────────────────── */
 function initBulkStream(root) {
   root = root || document;
   var card = root.querySelector('[data-bulk-sse-url]');
@@ -515,27 +413,22 @@ function initBulkStream(root) {
   var es = new EventSource(url);
   registerCleanup(root, function () {
     finished = true;
-    try { es.close(); } catch (err) { /* best-effort */ }
+    try { es.close(); } catch (err) {}
   });
 
-  es.addEventListener('open', function () {
-    if (!finished) hideBulkStreamAlert(card);
-  });
-
+  es.addEventListener('open', function () { if (!finished) hideBulkStreamAlert(card); });
   es.addEventListener('row', function (e) {
     var row = parseJSON(e.data);
     if (row.index == null) return;
     hideBulkStreamAlert(card);
     updateBulkRow(card, row);
   });
-
   es.addEventListener('done', function (e) {
     finished = true;
     es.close();
     hideBulkStreamAlert(card);
     updateBulkSummary(card, parseJSON(e.data));
   });
-
   es.addEventListener('error', function (e) {
     if (e && e.data) {
       var payload = parseJSON(e.data);
@@ -562,11 +455,8 @@ function ensureBulkStreamAlert(card) {
   el.setAttribute('data-bulk-stream-alert', '');
   el.hidden = true;
   var tableWrap = card.querySelector('.bulk-result-table-wrap');
-  if (tableWrap && tableWrap.parentNode === card) {
-    card.insertBefore(el, tableWrap);
-  } else {
-    card.appendChild(el);
-  }
+  if (tableWrap && tableWrap.parentNode === card) card.insertBefore(el, tableWrap);
+  else card.appendChild(el);
   return el;
 }
 
@@ -591,18 +481,16 @@ function showBulkStreamAlert(card, kind, message, withRetry) {
     btn.className = 'btn btn--secondary btn--sm';
     btn.textContent = I18N.t('js.tabs.retry');
     btn.addEventListener('click', function () {
-      markButtonBusy(btn, I18N.t('js.loading'));
+      markButtonBusy(btn);
       reloadForResult();
     });
     el.appendChild(btn);
   }
-
   el.hidden = false;
 }
 
 function normalizeBulkStatus(status) {
-  var allowed = ['ok', 'failed', 'skipped', 'pending', 'running', 'timeout'];
-  return allowed.indexOf(status) !== -1 ? status : 'unknown';
+  return ['ok', 'failed', 'skipped', 'pending', 'running', 'timeout'].indexOf(status) !== -1 ? status : 'unknown';
 }
 
 function updateBulkRow(card, row) {
@@ -616,22 +504,20 @@ function updateBulkRow(card, row) {
     var code = el.querySelector('[data-bulk-exit]');
     if (code) code.textContent = row.exitCode ? row.exitCode : '—';
     var reason = el.querySelector('[data-bulk-reason]');
-    if (reason) {
-      reason.textContent = row.reason ? row.reason : '—';
-    }
+    if (reason) reason.textContent = row.reason ? row.reason : '—';
   });
 }
 
 function bulkChip(status) {
   var safeStatus = normalizeBulkStatus(status);
   var inner = {
-    ok: '<i data-lucide="check-circle-2" class="icon-in-button"></i> ' + I18N.t('bulk.status_ok'),
-    failed: '<i data-lucide="x-circle" class="icon-in-button"></i> ' + I18N.t('bulk.status_failed'),
-    skipped: '<i data-lucide="skip-forward" class="icon-in-button"></i> ' + I18N.t('bulk.status_skipped'),
-    pending: '<span class="spinner spinner--sm"></span> ' + I18N.t('bulk.status_pending'),
-    running: '<span class="spinner spinner--sm"></span> ' + I18N.t('bulk.status_running'),
-    timeout: '<i data-lucide="x-circle" class="icon-in-button"></i> ' + I18N.t('bulk.status_failed')
-  }[safeStatus] || ('<i data-lucide="x-circle" class="icon-in-button"></i> ' + I18N.t('bulk.status_failed'));
+    ok: '<i data-lucide="check-circle-2" class="icon-in-button"></i> ' + escapeHTML(I18N.t('bulk.status_ok')),
+    failed: '<i data-lucide="x-circle" class="icon-in-button"></i> ' + escapeHTML(I18N.t('bulk.status_failed')),
+    skipped: '<i data-lucide="skip-forward" class="icon-in-button"></i> ' + escapeHTML(I18N.t('bulk.status_skipped')),
+    pending: '<span class="spinner spinner--sm"></span> ' + escapeHTML(I18N.t('bulk.status_pending')),
+    running: '<span class="spinner spinner--sm"></span> ' + escapeHTML(I18N.t('bulk.status_running')),
+    timeout: '<i data-lucide="x-circle" class="icon-in-button"></i> ' + escapeHTML(I18N.t('bulk.status_failed'))
+  }[safeStatus] || ('<i data-lucide="x-circle" class="icon-in-button"></i> ' + escapeHTML(I18N.t('bulk.status_failed')));
   return '<span class="bulk-status bulk-status--' + safeStatus + '" data-bulk-status>' + inner + '</span>';
 }
 
@@ -654,10 +540,10 @@ function setBulkCount(card, key, value) {
 }
 
 function bulkCountInner(key, value) {
-  if (key === 'ok') return '<i data-lucide="check-circle-2" class="icon-in-button"></i> ' + I18N.t('bulk.count_ok', { count: value });
-  if (key === 'failed') return '<i data-lucide="x-circle" class="icon-in-button"></i> ' + I18N.t('bulk.count_failed', { count: value });
-  if (key === 'skipped') return '<i data-lucide="skip-forward" class="icon-in-button"></i> ' + I18N.t('bulk.count_skipped', { count: value });
-  return '<span class="spinner spinner--sm"></span> ' + I18N.t('bulk.count_in_progress', { count: value });
+  if (key === 'ok') return '<i data-lucide="check-circle-2" class="icon-in-button"></i> ' + escapeHTML(I18N.t('bulk.count_ok', { count: value }));
+  if (key === 'failed') return '<i data-lucide="x-circle" class="icon-in-button"></i> ' + escapeHTML(I18N.t('bulk.count_failed', { count: value }));
+  if (key === 'skipped') return '<i data-lucide="skip-forward" class="icon-in-button"></i> ' + escapeHTML(I18N.t('bulk.count_skipped', { count: value }));
+  return '<span class="spinner spinner--sm"></span> ' + escapeHTML(I18N.t('bulk.count_in_progress', { count: value }));
 }
 
 function parseJSON(data) {
@@ -669,13 +555,7 @@ function reloadForResult() {
   tabReload();
 }
 
-function escapeHTML(value) {
-  return String(value).replace(/[&<>"']/g, function (c) {
-    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-  });
-}
-
-/* ── Manual "refresh now" buttons ───────────────────────── */
+/* ── Manual "refresh now" buttons ─────────────────────────────────────────── */
 function initManualRefresh(root) {
   root = root || document;
   root.querySelectorAll('[data-refresh-now]').forEach(function (btn) {

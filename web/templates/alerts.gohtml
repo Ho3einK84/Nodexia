@@ -1,12 +1,22 @@
 {{ define "content-alerts-overview" }}
 <section class="hero">
-  {{ template "page-header" . }}
+  <header class="page-hero">
+    <div class="page-hero__top">
+      {{ template "page-hero-head" (dict "Page" . "Icon" "bell-ring" "Eyebrow" (t "nav.alerts")) }}
+      <div class="page-hero__actions">
+        <a href="{{ .AlertsOverview.NewRuleURL }}" class="btn btn--primary btn--sm"><i data-lucide="plus" class="icon-in-button"></i> {{ t "alerts.new_rule" }}</a>
+        <a href="{{ .AlertsOverview.NewChannelURL }}" class="btn btn--secondary btn--sm"><i data-lucide="send" class="icon-in-button"></i> {{ t "alerts.new_channel" }}</a>
+      </div>
+    </div>
+    <div class="kpi-strip" role="region" aria-label="{{ t "nav.alerts" }}">
+      <div class="kpi-strip__item"><span class="kpi-strip__label"><i data-lucide="siren" aria-hidden="true"></i> {{ t "alerts.rules_title" }}</span><span class="kpi-strip__value">{{ len .AlertsOverview.Rules }}</span></div>
+      <div class="kpi-strip__item"><span class="kpi-strip__label"><i data-lucide="send" aria-hidden="true"></i> {{ t "alerts.channels_title" }}</span><span class="kpi-strip__value">{{ len .AlertsOverview.Channels }}</span></div>
+      <div class="kpi-strip__item"><span class="kpi-strip__label"><i data-lucide="bell-off" aria-hidden="true"></i> {{ t "alerts.silences_title" }}</span><span class="kpi-strip__value">{{ len .AlertsOverview.Silences }}</span></div>
+      <div class="kpi-strip__item{{ if gt .AlertsOverview.EventsTotal 0 }} kpi-strip__item--warn{{ end }}"><span class="kpi-strip__label"><i data-lucide="history" aria-hidden="true"></i> {{ t "alerts.history_title" }}</span><span class="kpi-strip__value">{{ .AlertsOverview.EventsTotal }}</span></div>
+    </div>
+  </header>
 
-  {{ if .FlashMessage }}
-  <div class="flash-banner flash-banner--{{ .FlashKind }}">
-    <p>{{ .FlashMessage }}</p>
-  </div>
-  {{ end }}
+  {{ template "flash-banner" . }}
 
   {{ with .AlertsOverview }}
   {{ if .TokenNotice }}

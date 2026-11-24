@@ -1,20 +1,13 @@
 /* Nodexia core utilities (native ES module — no bundler, no npm).
  *
- * Everything the rest of the client layer shares lives here: the i18n bridge,
- * the byte formatter, icon rendering, the top progress bar, tab-aware
- * navigation/cleanup helpers and the button busy state. app.js imports these
- * and page scripts keep consuming the window.nx* globals set up below, so the
- * load order (module executes before DOMContentLoaded) stays transparent to
- * them.
+ * Shared primitives for ES modules and classic page scripts (via window.nx*):
+ *   - I18N (`nxT`, `nxTn`), `humanBytes` (`nxHumanBytes`), `escapeHTML` (`nxEscape`)
+ *   - `getCSRF` (`nxCSRF`), `paneScope` (`nxPane`), `el` (`nxEl`), `showToast` (`nxToast`)
+ *   - Strictly scoped `renderIcons` (`nxRenderIcons`) — never full-DOM fallback on subtree
+ *   - Top progress bar, delayed loading overlay cancellation, tab-aware nav & cleanup, busy buttons
  */
 
-/* ── Client-side i18n ───────────────────────────────────
- * The server injects only the strings the JS needs as a non-executable JSON
- * island (<script type="application/json" id="nodexia-i18n">), which is exempt
- * from the strict script-src CSP. We parse it once and expose window.nxT /
- * window.nxTn so every page script (loaded after this file) can localize.
- * nxT mirrors the server's {{ t }}; nxTn mirrors {{ tn }} (plural by count).
- * A missing key returns the key itself, matching the Go fallback. */
+/* ── Client-side i18n ─────────────────────────────────────────────────────── */
 var I18N = (function () {
   var map = {};
   try {
@@ -54,8 +47,7 @@ var I18N = (function () {
 window.nxT = I18N.t;
 window.nxTn = I18N.tn;
 
-/* Shared byte formatter for page-specific scripts. Labels use the concise
- * B/KB/MB/GB/TB/PB UI convention while scaling remains base 1024. */
+/* ── Shared formatters, escaping, CSRF, DOM factory & pane scope ──────────── */
 function humanBytes(bytes) {
   if (!bytes || bytes < 0) bytes = 0;
   var units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
@@ -69,35 +61,136 @@ function humanBytes(bytes) {
 }
 window.nxHumanBytes = humanBytes;
 
+var ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function escapeHTML(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) { return ESC_MAP[c]; });
+}
+window.nxEscape = escapeHTML;
+
+function getCSRF(root) {
+  var scope = (root && root.querySelector) ? root : document;
+  var holder = scope.querySelector('[data-csrf-token], [data-csrf]') ||
+    (scope !== document ? document.querySelector('[data-csrf-token], [data-csrf]') : null);
+  if (holder) {
+    var attr = holder.getAttribute('data-csrf-token') || holder.getAttribute('data-csrf');
+    if (attr) return attr;
+  }
+  var input = scope.querySelector('input[name="_csrf_token"]') ||
+    (scope !== document ? document.querySelector('input[name="_csrf_token"]') : null);
+  return input ? (input.value || '') : '';
+}
+window.nxCSRF = getCSRF;
+
+function appendChildren(parent, children) {
+  if (children == null || children === false) return;
+  if (Array.isArray(children)) {
+    children.forEach(function (child) { appendChildren(parent, child); });
+  } else if (typeof children === 'string' || typeof children === 'number') {
+    parent.appendChild(document.createTextNode(String(children)));
+  } else if (children.nodeType) {
+    parent.appendChild(children);
+  }
+}
+
+function el(tag, attrs, children) {
+  var node = document.createElement(tag);
+  if (attrs && typeof attrs === 'object' && !Array.isArray(attrs) && !attrs.nodeType) {
+    Object.keys(attrs).forEach(function (k) {
+      var v = attrs[k];
+      if (v == null || v === false) return;
+      if (k === 'class' || k === 'className') node.className = v;
+      else if (k === 'text') node.textContent = String(v);
+      else if (k === 'dataset' && typeof v === 'object') {
+        Object.keys(v).forEach(function (dk) { if (v[dk] != null) node.dataset[dk] = String(v[dk]); });
+      } else if (k === 'on' && typeof v === 'object') {
+        Object.keys(v).forEach(function (ev) { node.addEventListener(ev, v[ev]); });
+      } else if (v === true) node.setAttribute(k, '');
+      else node.setAttribute(k, String(v));
+    });
+  } else if (children === undefined) {
+    children = attrs;
+  }
+  appendChildren(node, children);
+  return node;
+}
+window.nxEl = el;
+
+function paneScope(scriptEl) {
+  var pane = (scriptEl && scriptEl.closest) ? scriptEl.closest('.tab-pane') : null;
+  var root = pane || document;
+  return {
+    pane: pane,
+    root: root,
+    isScoped: !!pane,
+    byId: function (id) { return pane ? pane.querySelector('#' + id) : document.getElementById(id); },
+    onCleanup: function (fn) { registerCleanup(root, fn); }
+  };
+}
+window.nxPane = paneScope;
+
 var prefersReducedMotion = window.matchMedia &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* ── Icons ──────────────────────────────────────────────
- * Lucide is vendored locally (/static/lucide.min.js, loaded with `defer`).
- * renderIcons() is safe to call repeatedly and after dynamic DOM inserts.
- */
+/* ── Unified Application Toast Stack ──────────────────────────────────────── */
+var toastRegion = null;
+function ensureToastRegion() {
+  if (toastRegion && document.body.contains(toastRegion)) return toastRegion;
+  toastRegion = document.querySelector('.nx-toast-region');
+  if (!toastRegion) {
+    toastRegion = el('div', { class: 'nx-toast-region', 'aria-live': 'polite', 'aria-atomic': 'false' });
+    document.body.appendChild(toastRegion);
+  }
+  return toastRegion;
+}
+
+function showToast(message, kind, durationMs) {
+  if (!message) return;
+  var region = ensureToastRegion();
+  var tone = { ok: 'ok', success: 'ok', warn: 'warn', warning: 'warn', error: 'error', err: 'error', info: 'info' }[kind || 'info'] || 'info';
+  var iconName = tone === 'ok' ? 'check-circle-2' : tone === 'warn' ? 'alert-triangle' : tone === 'error' ? 'alert-circle' : 'info';
+
+  while (region.childElementCount >= 4) {
+    region.firstElementChild.remove();
+  }
+
+  var toast = el('div', { class: 'nx-toast nx-toast--' + tone, role: tone === 'error' ? 'alert' : 'status' }, [
+    el('i', { 'data-lucide': iconName, 'aria-hidden': 'true' }),
+    el('span', { text: message })
+  ]);
+  region.appendChild(toast);
+  renderIcons(toast);
+
+  requestAnimationFrame(function () { toast.classList.add('is-visible'); });
+
+  var ttl = typeof durationMs === 'number' ? durationMs : (tone === 'error' ? 4600 : 3200);
+  setTimeout(function () {
+    toast.classList.remove('is-visible');
+    setTimeout(function () { toast.remove(); }, prefersReducedMotion ? 0 : 220);
+  }, ttl);
+}
+window.nxToast = showToast;
+
+/* ── Strictly Scoped Lucide Icon Renderer ─────────────────────────────────── */
 function renderIcons(root) {
   if (typeof lucide === 'undefined' || !lucide.createIcons) return;
+  var scope = (root && root.querySelector) ? root : document;
+  if (!scope.querySelector('[data-lucide]')) return;
   try {
-    var scope = root && root.querySelector ? root : document;
-    if (!scope.querySelector('[data-lucide]')) return;
     if (root && root !== document) {
       lucide.createIcons({ root: root });
     } else {
       lucide.createIcons();
     }
-  } catch (err) {
-    try { lucide.createIcons(); } catch (e) { /* never let an icon failure break the page */ }
-  }
+  } catch (err) { /* never let an icon failure break interaction */ }
 }
 window.nxRenderIcons = renderIcons;
 
-/* ── Top progress bar ───────────────────────────────────
- * Lightweight navigation indicator shown during form posts and same-origin
- * link navigations, since full-page reloads are the app's primary flow.
- */
+/* ── Top Progress Bar & Delayed Loading Overlay ───────────────────────────── */
 var topBar = null;
 var topBarTimer = null;
+var overlayDelayTimer = null;
+var overlaySafetyTimer = null;
+
 function ensureTopBar() {
   if (topBar) return topBar;
   topBar = document.createElement('div');
@@ -105,6 +198,7 @@ function ensureTopBar() {
   document.body.appendChild(topBar);
   return topBar;
 }
+
 function startTopBar() {
   if (prefersReducedMotion) return;
   var bar = ensureTopBar();
@@ -118,6 +212,7 @@ function startTopBar() {
     bar.style.transform = 'scaleX(' + (progress / 100).toFixed(3) + ')';
   }, 220);
 }
+
 function finishTopBar() {
   if (!topBar) return;
   clearInterval(topBarTimer);
@@ -131,13 +226,30 @@ function finishTopBar() {
   }, 220);
 }
 
-/* ── v0.6.3: tab-aware navigation + cleanup helpers ────
- * tabNavigate / tabReload replace bare window.location.href / .reload()
- * calls so auto-refresh, manual refresh, node-result dismiss, and install
- * reload-all stay scoped to the active tab pane instead of blowing away the
- * entire multi-tab shell.  registerCleanup lets init functions attach
- * teardown callbacks (EventSource.close, clearInterval, …) to a pane
- * element; tab-manager.js calls them before replacing or closing the pane. */
+function scheduleLoadingOverlay(delayMs) {
+  var overlay = document.getElementById('loading-overlay');
+  if (!overlay) return;
+  cancelLoadingOverlay();
+  overlayDelayTimer = setTimeout(function () {
+    overlayDelayTimer = null;
+    overlay.hidden = false;
+    overlay.classList.add('is-active');
+    overlaySafetyTimer = setTimeout(cancelLoadingOverlay, 15000);
+  }, typeof delayMs === 'number' ? delayMs : 180);
+}
+
+function cancelLoadingOverlay() {
+  if (overlayDelayTimer) { clearTimeout(overlayDelayTimer); overlayDelayTimer = null; }
+  if (overlaySafetyTimer) { clearTimeout(overlaySafetyTimer); overlaySafetyTimer = null; }
+  var overlay = document.getElementById('loading-overlay');
+  if (overlay) {
+    overlay.hidden = true;
+    overlay.classList.remove('is-active');
+    overlay.style.display = '';
+  }
+}
+
+/* ── Tab-Aware Navigation & Pane Cleanup ──────────────────────────────────── */
 function tabNavigate(url) {
   if (window.NodexiaTabs && typeof window.NodexiaTabs.navigate === 'function') {
     window.NodexiaTabs.navigate(url);
@@ -145,6 +257,7 @@ function tabNavigate(url) {
     window.location.href = url;
   }
 }
+
 function tabReload() {
   if (window.NodexiaTabs && typeof window.NodexiaTabs.reloadActive === 'function') {
     window.NodexiaTabs.reloadActive();
@@ -152,17 +265,19 @@ function tabReload() {
     window.location.reload();
   }
 }
+
 function registerCleanup(root, fn) {
   if (!root || typeof fn !== 'function') return;
   if (!root.__nxCleanups) root.__nxCleanups = [];
   root.__nxCleanups.push(fn);
 }
-window.addEventListener('pageshow', finishTopBar);
 
-/* ── Button busy state ──────────────────────────────────
- * Disables the clicked submit button and swaps in a spinner so double
- * submits are prevented and slow SSH actions feel responsive.
- */
+window.addEventListener('pageshow', function () {
+  finishTopBar();
+  cancelLoadingOverlay();
+});
+
+/* ── Button Busy State ────────────────────────────────────────────────────── */
 function markButtonBusy(btn) {
   if (!btn || btn.dataset.busy === '1') return;
   btn.dataset.busy = '1';
@@ -170,12 +285,11 @@ function markButtonBusy(btn) {
   btn.dataset.busyHtml = btn.innerHTML;
   var label = btn.textContent.trim();
   if (label) btn.setAttribute('data-busy-label', label);
-  // Keep width stable while we swap content.
   btn.style.minWidth = btn.offsetWidth + 'px';
-  btn.innerHTML = '<span class="spinner spinner--sm" aria-hidden="true"></span> ' + I18N.t('js.working');
-  // Re-enable as a safety net if navigation never happens (e.g. validation).
+  btn.innerHTML = '<span class="spinner spinner--sm" aria-hidden="true"></span> ' + escapeHTML(I18N.t('js.working'));
   setTimeout(function () { restoreButton(btn); }, 30000);
 }
+
 function restoreButton(btn) {
   if (!btn || btn.dataset.busy !== '1') return;
   btn.dataset.busy = '';
@@ -186,9 +300,28 @@ function restoreButton(btn) {
     renderIcons(btn);
   } else {
     var label = btn.getAttribute('data-busy-label');
-    if (label) { btn.textContent = label; }
+    if (label) btn.textContent = label;
   }
   btn.style.minWidth = '';
 }
 
-export { I18N, humanBytes, prefersReducedMotion, renderIcons, startTopBar, finishTopBar, tabNavigate, tabReload, registerCleanup, markButtonBusy, restoreButton };
+export {
+  I18N,
+  humanBytes,
+  escapeHTML,
+  getCSRF,
+  el,
+  paneScope,
+  showToast,
+  prefersReducedMotion,
+  renderIcons,
+  startTopBar,
+  finishTopBar,
+  scheduleLoadingOverlay,
+  cancelLoadingOverlay,
+  tabNavigate,
+  tabReload,
+  registerCleanup,
+  markButtonBusy,
+  restoreButton
+};

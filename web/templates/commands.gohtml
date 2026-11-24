@@ -3,11 +3,7 @@
 
   {{ template "server-header" . }}
 
-  {{ if .FlashMessage }}
-  <div class="flash-banner flash-banner--{{ .FlashKind }}">
-    <p>{{ .FlashMessage }}</p>
-  </div>
-  {{ end }}
+  {{ template "flash-banner" . }}
 
   {{ if .CommandPresets }}
   <div class="preset-chips">
@@ -74,35 +70,7 @@
             class="cmd-advanced"
             {{ if and (not $advErr) .CommandForm.StoredCredentialsAvailable }}hidden{{ end }}
           >
-            <div class="form-grid">
-              <label class="form-field">
-                <span>{{ t "common.connect_timeout" }}</span>
-                <input type="text" name="connect_timeout" value="{{ .CommandForm.ConnectTimeout }}" placeholder="10s">
-                {{ with index .CommandForm.Errors "connect_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
-              </label>
-              <label class="form-field">
-                <span>{{ t "common.command_timeout" }}</span>
-                <input type="text" name="command_timeout" value="{{ .CommandForm.CommandTimeout }}" placeholder="20s">
-                {{ with index .CommandForm.Errors "command_timeout" }}<small class="field-error">{{ . }}</small>{{ end }}
-              </label>
-            </div>
-
-            {{ if not .CommandForm.StoredCredentialsAvailable }}
-            <label class="form-field">
-              <span>{{ t "commands.ssh_password" }}</span>
-              <input type="password" name="password" placeholder="{{ t "commands.password_placeholder" }}" autocomplete="current-password">
-              {{ with index .CommandForm.Errors "password" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </label>
-            <label class="form-field">
-              <span>{{ t "commands.private_key" }}</span>
-              <textarea name="private_key" rows="5" class="cmd-textarea" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
-              {{ with index .CommandForm.Errors "private_key" }}<small class="field-error">{{ . }}</small>{{ end }}
-            </label>
-            <label class="form-field">
-              <span>{{ t "commands.passphrase" }}</span>
-              <input type="password" name="key_passphrase" placeholder="{{ t "commands.optional_placeholder" }}">
-            </label>
-            {{ end }}
+            {{ template "ssh-advanced-fields" (dict "ConnectTimeout" .CommandForm.ConnectTimeout "CommandTimeout" .CommandForm.CommandTimeout "Errors" .CommandForm.Errors "Stored" .CommandForm.StoredCredentialsAvailable "Prefix" "commands") }}
           </div>
 
         </form>

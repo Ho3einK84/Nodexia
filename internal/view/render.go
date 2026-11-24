@@ -38,6 +38,7 @@ type PageData struct {
 	PageTitle                   string
 	PageDescription             string
 	PageFlag                    string // server-scoped country flag emoji; set via SetServerCountry
+	PageCountryCode             string // server-scoped ISO 3166-1 alpha-2 code; set via SetServerCountry
 	PageFlagTitle               string // country name shown on the flag's hover title
 	StatusCode                  int
 	ErrorTitle                  string
@@ -193,6 +194,7 @@ func (p *PageData) SetLocalizer(loc *i18n.Localizer) {
 // safe to call with an empty/unknown code — the flag simply does not render.
 func (p *PageData) SetServerCountry(code, name string) {
 	p.PageFlag = geoip.FlagEmoji(code)
+	p.PageCountryCode = strings.ToUpper(strings.TrimSpace(code))
 	p.PageFlagTitle = name
 }
 
@@ -544,16 +546,17 @@ type SystemCollectionResultView struct {
 }
 
 type ServerHeaderView struct {
-	ID        int64
-	Name      string
-	Host      string
-	Port      int
-	AuthMode  string
-	Username  string
-	Tags      []string
-	Flag      string
-	FlagTitle string
-	ActiveTab string
+	ID          int64
+	Name        string
+	Host        string
+	Port        int
+	AuthMode    string
+	Username    string
+	Tags        []string
+	Flag        string
+	CountryCode string
+	FlagTitle   string
+	ActiveTab   string
 }
 
 type MonitoringTargetView struct {
@@ -1291,6 +1294,19 @@ func NewRenderer() (*Renderer, error) {
 			}
 			return v
 		},
+		// dict builds a key-value map for parameterized template partials.
+		"dict": func(pairs ...any) map[string]any {
+			m := make(map[string]any, len(pairs)/2)
+			for i := 0; i+1 < len(pairs); i += 2 {
+				if k, ok := pairs[i].(string); ok {
+					m[k] = pairs[i+1]
+				}
+			}
+			return m
+		},
+		// countryCode normalizes an ISO 3166-1 alpha-2 code or decodes a
+		// regional-indicator flag emoji back to its 2-letter uppercase code.
+		"countryCode": resolveCountryCode,
 		// t/tn/tsafe are placeholders so the templates parse; Render rebinds them
 		// to the request's active language by cloning the template set per render.
 		"t":     func(key string, _ ...any) string { return key },
@@ -1493,10 +1509,28 @@ func normalizePageData(data PageData) PageData {
 			}
 		}
 	}
-	if data.ServerHeader.ID != 0 && data.ServerHeader.Flag == "" && data.PageFlag != "" {
-		data.ServerHeader.Flag = data.PageFlag
-		data.ServerHeader.FlagTitle = data.PageFlagTitle
+	if data.ServerHeader.ID != 0 {
+		if data.ServerHeader.Flag == "" && data.PageFlag != "" {
+			data.ServerHeader.Flag = data.PageFlag
+			data.ServerHeader.FlagTitle = data.PageFlagTitle
+		}
+		if data.ServerHeader.CountryCode == "" && data.PageCountryCode != "" {
+			data.ServerHeader.CountryCode = data.PageCountryCode
+		}
 	}
 
 	return data
+}
+
+func resolveCountryCode(code, flag string) string {
+	if c := strings.ToUpper(strings.TrimSpace(code)); c != "" {
+		return c
+	}
+	runes := []rune(strings.TrimSpace(flag))
+	if len(runes) == 2 &&
+		runes[0] >= 0x1F1E6 && runes[0] <= 0x1F1FF &&
+		runes[1] >= 0x1F1E6 && runes[1] <= 0x1F1FF {
+		return string([]byte{byte('A' + (runes[0] - 0x1F1E6)), byte('A' + (runes[1] - 0x1F1E6))})
+	}
+	return ""
 }

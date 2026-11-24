@@ -3,11 +3,7 @@
 
   {{ template "server-header" . }}
 
-  {{ if .FlashMessage }}
-  <div class="flash-banner flash-banner--{{ .FlashKind }}">
-    <p>{{ .FlashMessage }}</p>
-  </div>
-  {{ end }}
+  {{ template "flash-banner" . }}
 
   <article
     class="card file-browser-card"

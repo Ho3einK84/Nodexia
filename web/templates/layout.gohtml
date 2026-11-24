@@ -54,8 +54,10 @@
        type="application/json" is data, not script, so it is exempt from the
        strict script-src CSP; app.js parses it and exposes window.nxT/nxTn. */}}
   <script type="application/json" id="nodexia-i18n">{{ clientI18nJSON }}</script>
+  {{ if ne .ContentTemplate "content-login" }}
   <script type="module" src="{{ asset "/static/app.js" }}"></script>
   <script src="{{ asset "/static/tab-manager.js" }}"></script>
+  {{ end }}
   {{ range .PageScripts }}<script src="{{ asset . }}"></script>
   {{ end }}
 </body>

@@ -134,9 +134,16 @@
     });
   }
 
-  function renderIcons() {
+  function renderIcons(scope) {
+    var target = scope || tabBarEl;
+    if (!target) return;
+    if (typeof window.nxRenderIcons === 'function') {
+      window.nxRenderIcons(target);
+      return;
+    }
     if (typeof lucide === 'undefined' || !lucide.createIcons) return;
-    try { lucide.createIcons(); } catch (err) { /* never break the page over an icon */ }
+    if (target.querySelector && !target.querySelector('[data-lucide]')) return;
+    try { lucide.createIcons({ root: target }); } catch (err) { /* never break the page over an icon */ }
   }
 
   /* ── URL helpers ─────────────────────────────────────────── */
@@ -414,7 +421,7 @@
     }
     setTabButtonActive(tab, tab.id === activeTabId);
     ensureStatusDot(tab);
-    renderIcons();
+    renderIcons(tab.btn);
   }
 
   function removeTabButton(tab) {
@@ -543,6 +550,7 @@
     Array.prototype.forEach.call(document.head.querySelectorAll('link[rel="stylesheet"]'), function (l) {
       existingHrefs[l.getAttribute('href')] = true;
     });
+    var pendingStyles = [];
     Array.prototype.forEach.call(doc.querySelectorAll('head link[rel="stylesheet"]'), function (l) {
       var href = l.getAttribute('href');
       if (!href || existingHrefs[href]) return;
@@ -550,6 +558,13 @@
       var clone = document.createElement('link');
       clone.rel = 'stylesheet';
       clone.href = href;
+      pendingStyles.push(new Promise(function (resolve) {
+        var settled = false;
+        function done() { if (!settled) { settled = true; resolve(); } }
+        clone.addEventListener('load', done, { once: true });
+        clone.addEventListener('error', done, { once: true });
+        setTimeout(done, 200);
+      }));
       document.head.appendChild(clone);
     });
 
@@ -577,7 +592,8 @@
       pane.appendChild(clone);
     });
 
-    var scriptsReady = pendingScripts.length ? Promise.all(pendingScripts) : Promise.resolve();
+    var pendingAll = pendingStyles.concat(pendingScripts);
+    var scriptsReady = pendingAll.length ? Promise.all(pendingAll) : Promise.resolve();
     return {
       title: (doc.title || '').trim(),
       scriptsReady: scriptsReady
@@ -604,8 +620,15 @@
     }
     tab.abortController = new AbortController();
     tab.loading = true;
+    var loadSpinnerTimer = null;
     if (!opts.deferPaneTeardown) {
-      showPaneLoading(pane);
+      loadSpinnerTimer = setTimeout(function () {
+        loadSpinnerTimer = null;
+        if (tab.loading) showPaneLoading(pane);
+      }, 150);
+    }
+    function clearLoadSpinner() {
+      if (loadSpinnerTimer) { clearTimeout(loadSpinnerTimer); loadSpinnerTimer = null; }
     }
     var fetchOpts = {
       method: opts.method || 'GET',
@@ -622,6 +645,7 @@
       return resp.text().then(function (text) { return { kind: 'html', resp: resp, text: text }; });
     }).then(function (result) {
       if (result.kind === 'download') {
+        clearLoadSpinner();
         tab.loading = false;
         triggerBlobDownload(result.blob, result.filename);
         var targetEl = opts.__form || pane;
@@ -654,6 +678,7 @@
           return { cancelled: true };
         }
       }
+      clearLoadSpinner();
       var extracted = extractAndInject(pane, result.text);
       var title = extracted.title;
       tab.loading = false;
@@ -669,12 +694,14 @@
       return extracted.scriptsReady.then(function () {
         if (window.NodexiaApp && typeof window.NodexiaApp.rescan === 'function') {
           try { window.NodexiaApp.rescan(pane); } catch (err) { /* a module's own rescan must not break tabs */ }
+        } else {
+          renderIcons(pane);
         }
-        renderIcons();
         schedulePersist();
         return { download: false };
       });
     }).catch(function (err) {
+      clearLoadSpinner();
       if (err && err.name === 'AbortError') return { aborted: true };
       tab.loading = false;
       var status = 0;
@@ -903,18 +930,10 @@
   }
 
   /* ── Toast (mobile tab cap notice, §9) ───────────────────── */
-  var toastEl = null, toastTimer = null;
   function showToast(message) {
-    if (!toastEl) {
-      toastEl = document.createElement('div');
-      toastEl.className = 'tab-toast';
-      toastEl.setAttribute('role', 'status');
-      document.body.appendChild(toastEl);
+    if (typeof window.nxToast === 'function') {
+      window.nxToast(message, 'info', TOAST_MS);
     }
-    toastEl.textContent = message;
-    toastEl.classList.add('is-visible');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { if (toastEl) toastEl.classList.remove('is-visible'); }, TOAST_MS);
   }
 
   /* ── Floating UI: tab context menu + mobile link action sheet ─
@@ -1386,7 +1405,7 @@
       empty.className = 'tab-switcher__empty';
       empty.textContent = T('js.tabs.no_tabs');
       switcherGrid.appendChild(empty);
-      renderIcons();
+      renderIcons(switcherGrid);
       return;
     }
     list.forEach(function (tab) {
@@ -1441,7 +1460,7 @@
       });
       switcherGrid.appendChild(card);
     });
-    renderIcons();
+    renderIcons(switcherGrid);
   }
   function showSwitcher() {
     if (!switcherEl) return;
@@ -1635,11 +1654,8 @@
       initStatusListener();
 
       schedulePersist();
-      renderIcons();
-      // lucide.min.js loads with `defer`, so it may not be defined yet at
-      // this point in the parse (this script runs synchronously, earlier);
-      // re-render once more after the document + deferred scripts settle.
-      document.addEventListener('DOMContentLoaded', renderIcons);
+      renderIcons(tabBarEl);
+      document.addEventListener('DOMContentLoaded', function () { renderIcons(tabBarEl); });
 
       tabBarEl.removeAttribute('hidden');
       ready = true;
@@ -1670,6 +1686,13 @@
     reload(activeTabId);
   }
 
+  function navigatePane(paneEl, url) {
+    if (!ready || !paneEl) { navigateActive(url); return; }
+    var tab = tabsById[paneEl.dataset && paneEl.dataset.tabId];
+    if (!tab) { navigateActive(url); return; }
+    navigateInPane(tab, pathAndSearch(url), {}, tab.id === activeTabId);
+  }
+
   window.NodexiaTabs = {
     init: init,
     open: open,
@@ -1683,6 +1706,7 @@
     reload: reload,
     reopenClosed: reopenClosed,
     navigate: navigateActive,
+    navigatePane: navigatePane,
     reloadActive: reloadActive,
     refreshCSRFToken: refreshCSRFToken,
     getActive: getActive,

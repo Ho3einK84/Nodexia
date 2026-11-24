@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -95,6 +96,81 @@ func TestJSSyntaxWithNode(t *testing.T) {
 		out, runErr := cmd.CombinedOutput()
 		if runErr != nil {
 			t.Errorf("JS syntax error in %s: %v\nOutput: %s", fullPath, runErr, string(out))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WalkDir: %v", err)
+	}
+}
+
+func TestServiceWorkerPrecacheFilesExist(t *testing.T) {
+	sub, err := fs.Sub(staticFiles, "web/static")
+	if err != nil {
+		t.Fatalf("fs.Sub: %v", err)
+	}
+	raw, err := fs.ReadFile(sub, "sw.js")
+	if err != nil {
+		t.Fatalf("ReadFile sw.js: %v", err)
+	}
+	script := string(raw)
+	start := strings.Index(script, "PRECACHE_URLS = [")
+	if start < 0 {
+		t.Fatal("sw.js missing PRECACHE_URLS")
+	}
+	end := strings.Index(script[start:], "];")
+	if end < 0 {
+		t.Fatal("sw.js PRECACHE_URLS unterminated")
+	}
+	block := script[start : start+end]
+	for _, line := range strings.Split(block, "\n") {
+		line = strings.TrimSpace(line)
+		idx := strings.Index(line, "'/static/")
+		if idx < 0 {
+			continue
+		}
+		rest := line[idx+len("'/static/"):]
+		closeIdx := strings.Index(rest, "'")
+		if closeIdx < 0 {
+			continue
+		}
+		rel := rest[:closeIdx]
+		if _, err := fs.Stat(sub, rel); err != nil {
+			t.Errorf("sw.js PRECACHE_URLS references missing asset %q: %v", rel, err)
+		}
+	}
+}
+
+var unscopedLucideRe = regexp.MustCompile(`createIcons\s*\(\s*\)`)
+
+func TestNoUnscopedLucideCreateIcons(t *testing.T) {
+	sub, err := fs.Sub(staticFiles, "web/static")
+	if err != nil {
+		t.Fatalf("fs.Sub: %v", err)
+	}
+	allowed := map[string]bool{
+		"modules/core.js": true,
+		"offline.js":      true,
+	}
+	err = fs.WalkDir(sub, ".", func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() || !strings.HasSuffix(path, ".js") {
+			return nil
+		}
+		if strings.HasSuffix(path, ".min.js") || allowed[path] {
+			return nil
+		}
+		data, readErr := fs.ReadFile(sub, path)
+		if readErr != nil {
+			t.Fatalf("ReadFile %s: %v", path, readErr)
+		}
+		for lineNo, line := range strings.Split(string(data), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "*") || strings.HasPrefix(trimmed, "/*") {
+				continue
+			}
+			if unscopedLucideRe.MatchString(line) {
+				t.Errorf("%s:%d uses unscoped createIcons(); pass { root: scope } or use window.nxRenderIcons(scope)", path, lineNo+1)
+			}
 		}
 		return nil
 	})

@@ -137,7 +137,7 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 	pd.ServerPagination = buildPagination(currentPage, totalPages, query, tagFilter)
 	pd.FlashKind = flashKind
 	pd.FlashMessage = flashMessage
-	pd.PageStyles = []string{"/static/bulk.css"}
+	pd.PageStyles = []string{"/static/servers.css", "/static/bulk.css"}
 	pd.PageScripts = []string{"/static/bulk.js"}
 
 	if err := deps.Renderer.Render(w, http.StatusOK, pd); err != nil {
@@ -587,6 +587,7 @@ func renderFormPage(
 	}
 	page.FlashKind = flashKind
 	page.FlashMessage = page.T(flashMessage)
+	page.PageStyles = []string{"/static/servers.css"}
 
 	if err := deps.Renderer.Render(w, statusCode, page); err != nil {
 		http.Error(w, "render server form page", http.StatusInternalServerError)

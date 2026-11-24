@@ -37,7 +37,6 @@
         arc.style.strokeDashoffset = filled;
       } else {
         arc.style.strokeDashoffset = length;
-        void arc.offsetWidth;
         requestAnimationFrame(function () {
           requestAnimationFrame(function () { arc.style.strokeDashoffset = filled; });
         });

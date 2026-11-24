@@ -53,6 +53,7 @@ func (h DiagnosticsHandler) renderPage(w http.ResponseWriter, r *http.Request, s
 	page.FlashKind = flashKind
 	page.FlashMessage = flashMessage
 	page.BackupCanRun = h.database != nil && h.database.SQL != nil
+	page.PageStyles = []string{"/static/diagnostics.css"}
 	page.PageScripts = []string{"/static/diagnostics.js"}
 	if page.BackupCanRun {
 		if counts, err := backup.SummarizeDB(r.Context(), h.database.SQL); err == nil {

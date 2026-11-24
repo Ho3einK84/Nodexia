@@ -3,11 +3,7 @@
 
   {{ template "server-header" . }}
 
-  {{ if .FlashMessage }}
-  <div class="flash-banner flash-banner--{{ .FlashKind }}">
-    <p>{{ .FlashMessage }}</p>
-  </div>
-  {{ end }}
+  {{ template "flash-banner" . }}
 
   {{/* Unified resource health: the gauges are live-driven when the live-metrics
        hub + stored credentials are available, and fall back to the latest stored
