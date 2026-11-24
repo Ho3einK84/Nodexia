@@ -2,7 +2,7 @@
 
 > **Single-binary control plane for server fleet telemetry, bandwidth forecasting, SSH operations, and Rebecca / PasarGuard node management.**
 
-[![version](https://img.shields.io/badge/release-v0.9.2-3b82f6)](https://github.com/Ho3einK84/Nodexia/releases)
+[![version](https://img.shields.io/badge/release-v0.9.3-3b82f6)](https://github.com/Ho3einK84/Nodexia/releases)
 [![go](https://img.shields.io/badge/go-1.26-00ADD8)](https://go.dev/)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![frontend](https://img.shields.io/badge/frontend-zero--build-22c55e)](FRONTEND.md)
@@ -22,7 +22,7 @@ Nodexia connects to Linux servers over SSH, collects system and `vnStat` traffic
 
 ---
 
-## Interface Gallery (`v0.9.2`)
+## Interface Gallery (`v0.9.3`)
 
 ### Overview & Bilingual RTL Workspace
 Unified fleet summary, active warning banners, resource snapshots, and full bidirectional English / Persian (فارسی) layout parity.
