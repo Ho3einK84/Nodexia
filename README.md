@@ -13,16 +13,18 @@ Nodexia connects to Linux servers over SSH, collects system and `vnStat` traffic
 
 ## Key Capabilities
 
-- **Fleet Telemetry & Forecasting:** Real-time CPU, RAM, swap, disk, load averages, hourly/daily metric rollups, chic minimal Bento layouts with 3-column micro-gauges optimized for mobile screens, host specification cards with animated uptime indicators and one-click copy, and `vnStat` interface bandwidth tracking (`1H` / `24H` / `7D` / `30D` views) with reset-day forecasting and exhaustion warnings.
-- **Node Discovery & Deployment:** Single-flight SSH discovery of Docker and systemd **Rebecca** and **PasarGuard** nodes, atomic snapshot tracking, 30-day UTC uptime strips, confidence & latency telemetry, interactive quick-action menus with outside-tap and backdrop dismiss, redesigned glassmorphism Properties and Node Update modals, read-only SSH config inspection, live streaming log drawer, and a guided 3-step deploy wizard with preflight checks and secure PTY installs.
+- **Fleet Telemetry & Forecasting:** Real-time CPU, RAM, swap, disk, load averages, hourly/daily metric rollups, minimal Bento layouts with 3-column micro-gauges optimized for mobile screens, host specification cards with animated uptime indicators and one-click copy, plus a color-coded **Analytics** workspace (layered dark-slate surfaces, 4-tile fleet KPI strip with monthly fleet traffic & RX/TX split, resource health meters & dual-tone stacked traffic bars that adapt into responsive cards on mobile, interactive gradient SVG charts with pulsing live beacons, touch scrubbing, series legend toggles, sliding `1H` / `24H` / `7D` / `30D` range tabs, and quota exhaustion trajectory bars calibrated to billing reset days).
+- **Node Discovery & Deployment:** Single-flight SSH discovery of Docker and systemd **Rebecca** and **PasarGuard** nodes, atomic snapshot tracking, 30-day UTC uptime strips, confidence & latency telemetry, interactive quick-action menus with outside-tap dismiss, unified Dark Graphite Properties, Node Update, and in-page **Add Server** modals (with live SSH test, smart paste, and tag chips), read-only SSH config inspection, live streaming log drawer, and a guided 3-step deploy wizard with preflight checks and secure PTY installs.
 - **Built-In Ops Suite:** Multi-pane workspace featuring an in-browser SSH WebSocket terminal (`xterm.js` with Termius-style smart command autocomplete, learned history, vector mobile controls, `/tmp` upload, and Dark/Light themes), SFTP file browser and inline code/config/log-tail editor, SSE command runner, and bulk batch tasks.
 - **Alerting & Operational Diagnostics:** Configurable threshold, predictive quota, anomaly, and host-down rules with per-server silences and Telegram digests; live runtime diagnostics (`/ops/diagnostics`), Kubernetes-style health probes (`/healthz`, `/healthz/live`, `/healthz/ready`), Prometheus exporter (`/metrics`), and AES-256-GCM encrypted backup/restore.
-- **Zero-Build Multi-Tab Workspace:** Open multiple servers, terminals, and analytics panes side by side without page reloads using browser-native ES Modules (`app.js` + 6 domain modules), pure Dark Graphite CSS design tokens, intuitive server subnav ordering, and Go `embed.FS` SHA-256 asset fingerprinting—zero `npm` or bundler pipelines.
+- **Zero-Build Multi-Tab Workspace:** Open multiple servers, terminals, and analytics panes side by side without page reloads using browser-native ES Modules (`app.js` + 4 core modules `core.js`, `ui.js`, `modals.js`, `shell.js` and 5 lazy-loaded domain modules `stream.js`, `log-drawer.js`, `nodes.js`, `nodes-deploy.js`, `server-modal.js`), pure Dark Graphite CSS design tokens, strict 60fps smoothness guardrails (zero `backdrop-filter`, zero `transition: all`, strictly scoped Lucide icons), intuitive server subnav ordering, and Go `embed.FS` SHA-256 asset fingerprinting—zero `npm` or bundler pipelines.
 - **Security Hardened:** Single-administrator session auth, rate-limited login, HMAC synchronizer CSRF tokens, TOFU SSH host-key pinning, external credential references (`env:` / `file:`), and strict CSP (`script-src 'self'`, `frame-ancestors 'none'`).
 
 ---
 
-## Interface Gallery (`v0.9.3`)
+## Interface Gallery (`v0.9.2`)
+
+> **Note:** The gallery screenshots below were captured on `v0.9.2` (prior to the `v0.9.3` unified Dark Graphite UI refactor and the `dev` Analytics color & motion redesign).
 
 ### Overview & Bilingual RTL Workspace
 Unified fleet summary, active warning banners, resource snapshots, and full bidirectional English / Persian (فارسی) layout parity.
@@ -82,7 +84,7 @@ Interactive WebSocket terminal with Termius-style smart command autocomplete and
 |---|---|---|
 | **Backend** | Go 1.26+ | Standard library `net/http` routing and middleware chain (`Recover` -> `Logging` -> `RequireAuth` -> `CSRF` -> `Session` -> `Locale`) |
 | **Database** | SQLite / MySQL 8+ | Embedded pure-Go SQLite (`modernc.org/sqlite`) default via shared `db.DBTX`; optional MySQL driver |
-| **Frontend** | Zero-Build Web Standards | Server-rendered Go `html/template` partials + modular ES Modules (`core.js`, `ui.js`, `modals.js`, `nodes.js`, `stream.js`, `shell.js`) + 5-layer CSS design tokens |
+| **Frontend** | Zero-Build Web Standards | Server-rendered Go `html/template` partials + modular ES Modules (`core.js`, `ui.js`, `modals.js`, `shell.js` + lazy `stream.js`, `log-drawer.js`, `nodes.js`, `nodes-deploy.js`, `server-modal.js`) + 5-layer CSS design tokens |
 | **Remote Ops** | SSH / SFTP / WebSocket | `golang.org/x/crypto/ssh` pooled runtime (`BatchSession`), `pkg/sftp`, and `coder/websocket` paired with vendored `xterm.js` + smart autocomplete |
 | **Packaging** | Single Static Binary | Templates, locales (`en.json`, `fa.json`), fonts, and static assets embedded via `go:embed` (`CGO_ENABLED=0`) |
 

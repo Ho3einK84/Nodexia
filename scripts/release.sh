@@ -39,7 +39,6 @@ sed -i -E "s/^readonly DEFAULT_IMAGE_VERSION=.*/readonly DEFAULT_IMAGE_VERSION=\
 sed -i -E "s/(NODEXIA_IMAGE_VERSION=).*/\1${VERSION}/" .env.production.example
 sed -i -E "s/(-X main\.version=)[^ \"]*/\1${VERSION}/" .github/workflows/test.yml
 sed -i -E "s|(img\.shields\.io/badge/release-)v[0-9]+\.[0-9]+\.[0-9]+|\1${VERSION}|" README.md
-sed -i -E "s/^(## Interface Gallery \()\`v[0-9]+\.[0-9]+\.[0-9]+\`(\))/\1\`${VERSION}\`\2/" README.md
 
 # Guard against a sed that silently matched nothing.
 for f in Makefile scripts/install.sh .env.production.example .github/workflows/test.yml README.md; do
