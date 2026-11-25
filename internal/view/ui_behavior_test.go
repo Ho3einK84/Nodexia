@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	assets "github.com/Ho3einK84/Nodexia"
+	"github.com/Ho3einK84/Nodexia/internal/config"
 )
 
 func renderUIBehaviorFixture(t *testing.T, data PageData) string {
@@ -485,6 +486,128 @@ func TestPageHeadersPlaceDescriptionInInfoPopover(t *testing.T) {
 				if !strings.Contains(body, want) {
 					t.Errorf("%s header missing %q", tc.name, want)
 				}
+			}
+		})
+	}
+}
+
+func TestAnalyticsPagesRenderColorAndMotionHooks(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	for _, lang := range []string{"en", "fa"} {
+		t.Run(lang+"/global", func(t *testing.T) {
+			page := NewPageData(config.Config{App: config.AppConfig{Name: "Nodexia"}}, requestWithLang(t, lang))
+			page.ContentTemplate = "content-analytics-global"
+			page.PageTitle = page.T("analytics.global_title")
+			page.GlobalAnalytics = GlobalAnalyticsView{
+				ServerCount:        4,
+				HasGlobalLimit:     true,
+				GlobalLimitHuman:   "10 TB",
+				TagLimitCount:      3,
+				HasFleetTraffic:    true,
+				FleetDownloadHuman: "15.32 TB",
+				FleetUploadHuman:   "15.10 TB",
+				FleetTotalHuman:    "30.42 TB",
+				FleetRXPct:         50,
+				FleetTXPct:         50,
+				FleetMonthLabel:    "2026-11",
+				AvgCPU:             "30.8%",
+				AvgRAM:             "51.1%",
+				AvgDisk:            "31.0%",
+				AvgCPULevel:        "ok",
+				AvgRAMLevel:        "ok",
+				AvgDiskLevel:       "ok",
+				TopMetrics: []TopServerMetricView{
+					{Rank: 1, ServerID: 1, ServerName: "Germany", CountryName: "Germany", FlagEmoji: "\U0001F1E9\U0001F1EA", CPU: "62.4%", RAM: "85.2%", Disk: "28.0%", CPUPct: 62.4, RAMPct: 85.2, DiskPct: 28.0, CPULevel: "warn", RAMLevel: "crit", DiskLevel: "ok"},
+				},
+				TopTraffic: []TopServerTrafficView{
+					{Rank: 1, ServerID: 4, ServerName: "Netherlands", CountryName: "Netherlands", FlagEmoji: "\U0001F1F3\U0001F1F1", Download: "5.56 TB", Upload: "5.50 TB", MonthBytes: "11.06 TB", MonthLabel: "2026-11", SharePct: 36, BarPct: 100, RXBarPct: 50, TXBarPct: 50},
+				},
+			}
+
+			rec := httptest.NewRecorder()
+			if err := renderer.Render(rec, 200, page); err != nil {
+				t.Fatalf("render global (%s): %v", lang, err)
+			}
+			body := rec.Body.String()
+			for _, want := range []string{
+				`an-kpi--sky`, `an-kpi--indigo`, `an-kpi--ok`, `an-kpi--violet`,
+				`an-avg-pills`, `an-meter__fill--warn`, `an-meter__fill--crit`, `an-meter__fill--ok`,
+				`an-traffic-bar__rx`, `an-traffic-bar__tx`, `an-share-pill`, `an-split-summary`,
+			} {
+				if !strings.Contains(body, want) {
+					t.Errorf("global (%s) missing %q", lang, want)
+				}
+			}
+			stripped := headPattern.ReplaceAllString(clientI18nIslandPattern.ReplaceAllString(body, ""), "")
+			if m := rawKeyPattern.FindString(stripped); m != "" {
+				t.Errorf("global (%s) leaked raw translation key %q", lang, m)
+			}
+		})
+
+		t.Run(lang+"/server", func(t *testing.T) {
+			page := NewPageData(config.Config{App: config.AppConfig{Name: "Nodexia"}}, requestWithLang(t, lang))
+			page.ContentTemplate = "content-analytics"
+			page.PageTitle = page.T("analytics.page_title", "server", "nl-ams-02")
+			page.AnalyticsTarget = AnalyticsTargetView{ID: 4, Name: "nl-ams-02"}
+			page.AnalyticsTrafficMonth = AnalyticsTrafficSummaryView{
+				HasData: true, MonthLabel: "2026-11",
+				Download: "5.56 TB", Upload: "5.50 TB", Total: "11.06 TB",
+				DownloadPct: 50, UploadPct: 50,
+			}
+			page.AnalyticsLimit = AnalyticsLimitView{
+				Action: "/servers/4/analytics/limit", HasLimit: true,
+				LimitHuman: "7.00 TB", ValueInput: "7", UnitInput: "TB",
+				UnitOptions: []string{"GB", "TB"}, KindInput: "rx", KindLabel: "Download (RX)",
+			}
+
+			rec := httptest.NewRecorder()
+			if err := renderer.Render(rec, 200, page); err != nil {
+				t.Fatalf("render server (%s): %v", lang, err)
+			}
+			body := rec.Body.String()
+			for _, want := range []string{
+				`chart-card--traffic`, `chart-card--cpu`, `chart-card--ram`, `chart-card--disk`, `chart-card--load`,
+				`id="rangeTabIndicator"`, `id="live-cpu"`, `id="live-traffic"`,
+				`traffic-summary__pct--dl`, `traffic-summary__pct--ul`, `traffic-summary__split-rx`, `traffic-summary__split-tx`,
+				`an-shimmer`,
+			} {
+				if !strings.Contains(body, want) {
+					t.Errorf("server (%s) missing %q", lang, want)
+				}
+			}
+			stripped := headPattern.ReplaceAllString(clientI18nIslandPattern.ReplaceAllString(body, ""), "")
+			if m := rawKeyPattern.FindString(stripped); m != "" {
+				t.Errorf("server (%s) leaked raw translation key %q", lang, m)
+			}
+		})
+
+		t.Run(lang+"/limits", func(t *testing.T) {
+			page := NewPageData(config.Config{App: config.AppConfig{Name: "Nodexia"}}, requestWithLang(t, lang))
+			page.ContentTemplate = "content-analytics-limits"
+			page.PageTitle = page.T("analytics.limits.title")
+			page.TrafficLimits = TrafficLimitsView{
+				GlobalAction: "/analytics/limits", TagAction: "/analytics/limits/tags", TagDeleteAction: "/analytics/limits/tags/delete",
+				HasGlobal: true, GlobalHuman: "10 TB", GlobalValue: "10", GlobalUnit: "TB", UnitOptions: []string{"GB", "TB"},
+				Tags: []TrafficLimitTagView{{Tag: "hetzner", LimitHuman: "5 TB"}},
+			}
+
+			rec := httptest.NewRecorder()
+			if err := renderer.Render(rec, 200, page); err != nil {
+				t.Fatalf("render limits (%s): %v", lang, err)
+			}
+			body := rec.Body.String()
+			for _, want := range []string{`precedence-step--1`, `precedence-step--2`, `precedence-step--3`, `an-tag-chip`} {
+				if !strings.Contains(body, want) {
+					t.Errorf("limits (%s) missing %q", lang, want)
+				}
+			}
+			stripped := headPattern.ReplaceAllString(clientI18nIslandPattern.ReplaceAllString(body, ""), "")
+			if m := rawKeyPattern.FindString(stripped); m != "" {
+				t.Errorf("limits (%s) leaked raw translation key %q", lang, m)
 			}
 		})
 	}

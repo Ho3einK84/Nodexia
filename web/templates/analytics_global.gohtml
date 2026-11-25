@@ -1,30 +1,42 @@
 {{ define "content-analytics-global" }}
-<section class="hero">
-  <header class="page-hero">
+<section class="hero analytics-page analytics-global">
+  <header class="page-hero an-hero an-enter" style="--stagger:0">
     <div class="page-hero__top">
       {{ template "page-hero-head" (dict "Page" . "Icon" "bar-chart-2" "Eyebrow" (t "nav.analytics")) }}
       <div class="page-hero__actions">
-        <a class="btn btn--primary btn--sm" href="/analytics/limits"><i data-lucide="sliders-horizontal" class="icon-in-button"></i> {{ t "analytics.limits.manage" }}</a>
+        <a class="btn btn--primary btn--sm an-hero-cta" href="/analytics/limits"><i data-lucide="sliders-horizontal" class="icon-in-button"></i> {{ t "analytics.limits.manage" }}</a>
       </div>
     </div>
-    <div class="kpi-strip" role="region" aria-label="{{ t "nav.analytics" }}">
-      <div class="kpi-strip__item">
+    <div class="kpi-strip an-kpi-strip" role="region" aria-label="{{ t "nav.analytics" }}">
+      <div class="kpi-strip__item an-kpi an-kpi--sky">
         <span class="kpi-strip__label"><i data-lucide="server" aria-hidden="true"></i> {{ t "nav.servers" }}</span>
-        <span class="kpi-strip__value">{{ .GlobalAnalytics.ServerCount }}</span>
+        <span class="kpi-strip__value" data-countup>{{ .GlobalAnalytics.ServerCount }}</span>
       </div>
-      <div class="kpi-strip__item{{ if .GlobalAnalytics.HasGlobalLimit }} kpi-strip__item--ok{{ else }} kpi-strip__item--warn{{ end }}">
+      <div class="kpi-strip__item an-kpi an-kpi--indigo">
+        <span class="kpi-strip__label"><i data-lucide="activity" aria-hidden="true"></i> {{ t "analytics.fleet_traffic" }}</span>
+        {{ if .GlobalAnalytics.HasFleetTraffic }}
+        <span class="kpi-strip__value" data-countup>{{ .GlobalAnalytics.FleetTotalHuman }}</span>
+        <span class="an-kpi__sub" dir="ltr">
+          <span class="an-kpi__dl">↓ {{ .GlobalAnalytics.FleetDownloadHuman }}</span>
+          <span class="an-kpi__ul">↑ {{ .GlobalAnalytics.FleetUploadHuman }}</span>
+        </span>
+        {{ else }}
+        <span class="kpi-strip__value">—</span>
+        {{ end }}
+      </div>
+      <div class="kpi-strip__item an-kpi{{ if .GlobalAnalytics.HasGlobalLimit }} an-kpi--ok kpi-strip__item--ok{{ else }} an-kpi--amber kpi-strip__item--warn{{ end }}">
         <span class="kpi-strip__label"><i data-lucide="gauge" aria-hidden="true"></i> {{ t "analytics.limits.banner_title" }}</span>
         <span class="kpi-strip__value">{{ if .GlobalAnalytics.HasGlobalLimit }}{{ .GlobalAnalytics.GlobalLimitHuman }}{{ else }}—{{ end }}</span>
       </div>
-      <div class="kpi-strip__item">
+      <div class="kpi-strip__item an-kpi an-kpi--violet">
         <span class="kpi-strip__label"><i data-lucide="tags" aria-hidden="true"></i> {{ t "analytics.limits.tag_heading" }}</span>
-        <span class="kpi-strip__value">{{ .GlobalAnalytics.TagLimitCount }}</span>
+        <span class="kpi-strip__value" data-countup>{{ .GlobalAnalytics.TagLimitCount }}</span>
       </div>
     </div>
   </header>
 
   {{ if eq .GlobalAnalytics.ServerCount 0 }}
-  <div class="empty-state-card">
+  <div class="empty-state-card an-empty-card an-enter" style="--stagger:1">
     <span class="empty-state-icon"><i data-lucide="bar-chart-2" aria-hidden="true"></i></span>
     <p class="empty-state-title">{{ t "analytics.global_empty_title" }}</p>
     <p class="empty-state-desc">{{ t "analytics.global_empty_desc" }}</p>
@@ -32,37 +44,91 @@
   </div>
   {{ else }}
 
-  <article class="card">
-    <div class="card__header">
-      <h3><i data-lucide="cpu"></i> {{ t "analytics.top_resource" }}</h3>
+  <article class="card an-card an-card--resource an-enter" style="--stagger:1">
+    <div class="card__header an-card__header">
+      <div class="an-card__title-group">
+        <span class="an-card__emblem an-card__emblem--sky" aria-hidden="true"><i data-lucide="cpu"></i></span>
+        <h3>{{ t "analytics.top_resource" }}</h3>
+      </div>
+      {{ if .GlobalAnalytics.AvgCPU }}
+      <div class="an-avg-pills" aria-label="{{ t "analytics.fleet_avg" }}">
+        <span class="an-avg-pill an-avg-pill--{{ if .GlobalAnalytics.AvgCPULevel }}{{ .GlobalAnalytics.AvgCPULevel }}{{ else }}ok{{ end }}">
+          <span class="an-dot an-dot--sky" aria-hidden="true"></span>
+          <span class="an-avg-pill__key">{{ t "home.metric.cpu" }}</span>
+          <span class="an-avg-pill__val">{{ .GlobalAnalytics.AvgCPU }}</span>
+        </span>
+        <span class="an-avg-pill an-avg-pill--{{ if .GlobalAnalytics.AvgRAMLevel }}{{ .GlobalAnalytics.AvgRAMLevel }}{{ else }}ok{{ end }}">
+          <span class="an-dot an-dot--emerald" aria-hidden="true"></span>
+          <span class="an-avg-pill__key">{{ t "home.metric.ram" }}</span>
+          <span class="an-avg-pill__val">{{ .GlobalAnalytics.AvgRAM }}</span>
+        </span>
+        <span class="an-avg-pill an-avg-pill--{{ if .GlobalAnalytics.AvgDiskLevel }}{{ .GlobalAnalytics.AvgDiskLevel }}{{ else }}ok{{ end }}">
+          <span class="an-dot an-dot--amber" aria-hidden="true"></span>
+          <span class="an-avg-pill__key">{{ t "home.metric.disk" }}</span>
+          <span class="an-avg-pill__val">{{ .GlobalAnalytics.AvgDisk }}</span>
+        </span>
+      </div>
+      {{ end }}
     </div>
     <div class="data-table-wrap">
-      <table class="data-table">
+      <table class="data-table an-table an-table--resource">
         <thead>
           <tr>
             <th>{{ t "common.server" }}</th>
-            <th class="text-right">{{ t "home.metric.cpu" }}</th>
-            <th class="text-right">{{ t "home.metric.ram" }}</th>
-            <th class="text-right">{{ t "home.metric.disk" }}</th>
+            <th class="text-right"><span class="an-th-dot an-th-dot--sky" aria-hidden="true"></span> {{ t "home.metric.cpu" }}</th>
+            <th class="text-right"><span class="an-th-dot an-th-dot--emerald" aria-hidden="true"></span> {{ t "home.metric.ram" }}</th>
+            <th class="text-right"><span class="an-th-dot an-th-dot--amber" aria-hidden="true"></span> {{ t "home.metric.disk" }}</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {{ range .GlobalAnalytics.TopMetrics }}
+          {{ range $idx, $row := .GlobalAnalytics.TopMetrics }}
           {{- $cpu := float64 (trimSuffix .CPU "%") -}}
           {{- $ram := float64 (trimSuffix .RAM "%") -}}
           {{- $disk := float64 (trimSuffix .Disk "%") -}}
-          <tr>
-            <td class="server-name-cell">
-              <i data-lucide="server" class="table-icon"></i>
-              <span>{{ .ServerName }}</span>
-              {{ template "country-tag" (dict "Code" "" "Flag" .FlagEmoji "Name" .CountryName) }}
+          {{- $cpuLvl := .CPULevel }}{{ if not $cpuLvl }}{{ if gt $cpu 80.0 }}{{ $cpuLvl = "crit" }}{{ else if gt $cpu 60.0 }}{{ $cpuLvl = "warn" }}{{ else }}{{ $cpuLvl = "ok" }}{{ end }}{{ end -}}
+          {{- $ramLvl := .RAMLevel }}{{ if not $ramLvl }}{{ if gt $ram 80.0 }}{{ $ramLvl = "crit" }}{{ else if gt $ram 60.0 }}{{ $ramLvl = "warn" }}{{ else }}{{ $ramLvl = "ok" }}{{ end }}{{ end -}}
+          {{- $diskLvl := .DiskLevel }}{{ if not $diskLvl }}{{ if gt $disk 80.0 }}{{ $diskLvl = "crit" }}{{ else if gt $disk 60.0 }}{{ $diskLvl = "warn" }}{{ else }}{{ $diskLvl = "ok" }}{{ end }}{{ end -}}
+          {{- $rank := .Rank }}{{ if eq $rank 0 }}{{ $rank = 1 }}{{ end -}}
+          {{- $cpuPct := .CPUPct }}{{ if and (eq $cpuPct 0.0) (gt $cpu 0.0) }}{{ $cpuPct = $cpu }}{{ end -}}
+          {{- $ramPct := .RAMPct }}{{ if and (eq $ramPct 0.0) (gt $ram 0.0) }}{{ $ramPct = $ram }}{{ end -}}
+          {{- $diskPct := .DiskPct }}{{ if and (eq $diskPct 0.0) (gt $disk 0.0) }}{{ $diskPct = $disk }}{{ end -}}
+          <tr class="an-row an-enter" style="--stagger:{{ $rank }}">
+            <td class="an-cell-server">
+              <div class="an-server-row">
+                <span class="an-rank{{ if le $rank 3 }} an-rank--{{ $rank }}{{ end }}" aria-hidden="true">#{{ $rank }}</span>
+                <span class="an-server-icon an-server-icon--sky" aria-hidden="true"><i data-lucide="server"></i></span>
+                <a class="an-server-link" href="/servers/{{ .ServerID }}/analytics">{{ .ServerName }}</a>
+                {{ template "country-tag" (dict "Code" "" "Flag" .FlagEmoji "Name" .CountryName) }}
+                <a class="btn btn--ghost btn--xs an-row-cta an-row-cta--mobile" href="/servers/{{ .ServerID }}/analytics" aria-label="{{ t "nav.analytics" }} — {{ .ServerName }}">
+                  <i data-lucide="bar-chart-2" class="icon-in-button"></i>
+                  <i data-lucide="chevron-right" class="an-cta-arrow" aria-hidden="true"></i>
+                </a>
+              </div>
             </td>
-            <td class="text-right"><span class="metric-badge{{ if gt $cpu 80.0 }} metric-badge--crit{{ else if gt $cpu 60.0 }} metric-badge--warn{{ end }}">{{ .CPU }}</span></td>
-            <td class="text-right"><span class="metric-badge{{ if gt $ram 80.0 }} metric-badge--crit{{ else if gt $ram 60.0 }} metric-badge--warn{{ end }}">{{ .RAM }}</span></td>
-            <td class="text-right"><span class="metric-badge{{ if gt $disk 80.0 }} metric-badge--crit{{ else if gt $disk 60.0 }} metric-badge--warn{{ end }}">{{ .Disk }}</span></td>
-            <td class="text-right">
-              <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}</a>
+            <td class="an-cell-metric an-cell-metric--cpu text-right">
+              <span class="an-mobile-label"><i data-lucide="cpu" aria-hidden="true"></i> {{ t "home.metric.cpu" }}</span>
+              <div class="an-metric-cell">
+                <span class="metric-badge metric-badge--{{ $cpuLvl }}">{{ .CPU }}</span>
+                <div class="an-meter" aria-hidden="true"><span class="an-meter__fill an-meter__fill--{{ $cpuLvl }}" data-an-bar style="--pct:{{ printf "%.1f" $cpuPct }}"></span></div>
+              </div>
+            </td>
+            <td class="an-cell-metric an-cell-metric--ram text-right">
+              <span class="an-mobile-label"><i data-lucide="memory-stick" aria-hidden="true"></i> {{ t "home.metric.ram" }}</span>
+              <div class="an-metric-cell">
+                <span class="metric-badge metric-badge--{{ $ramLvl }}">{{ .RAM }}</span>
+                <div class="an-meter" aria-hidden="true"><span class="an-meter__fill an-meter__fill--{{ $ramLvl }}" data-an-bar style="--pct:{{ printf "%.1f" $ramPct }}"></span></div>
+              </div>
+            </td>
+            <td class="an-cell-metric an-cell-metric--disk text-right">
+              <span class="an-mobile-label"><i data-lucide="hard-drive" aria-hidden="true"></i> {{ t "home.metric.disk" }}</span>
+              <div class="an-metric-cell">
+                <span class="metric-badge metric-badge--{{ $diskLvl }}">{{ .Disk }}</span>
+                <div class="an-meter" aria-hidden="true"><span class="an-meter__fill an-meter__fill--{{ $diskLvl }}" data-an-bar style="--pct:{{ printf "%.1f" $diskPct }}"></span></div>
+              </div>
+            </td>
+            <td class="an-cell-action text-right">
+              <a class="btn btn--ghost btn--xs an-row-cta" href="/servers/{{ .ServerID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }} <i data-lucide="chevron-right" class="an-cta-arrow" aria-hidden="true"></i></a>
             </td>
           </tr>
           {{ end }}
@@ -72,34 +138,73 @@
   </article>
 
   {{ if .GlobalAnalytics.TopTraffic }}
-  <article class="card">
-    <div class="card__header">
-      <h3><i data-lucide="network"></i> {{ t "analytics.top_traffic" }}</h3>
+  <article class="card an-card an-card--traffic an-enter" style="--stagger:2">
+    <div class="card__header an-card__header">
+      <div class="an-card__title-group">
+        <span class="an-card__emblem an-card__emblem--emerald" aria-hidden="true"><i data-lucide="network"></i></span>
+        <h3>{{ t "analytics.top_traffic" }}</h3>
+      </div>
+      {{ if .GlobalAnalytics.HasFleetTraffic }}
+      <div class="an-split-summary" aria-label="{{ t "analytics.rx_tx_split" }}">
+        {{ with .GlobalAnalytics.FleetMonthLabel }}<span class="an-month-chip">{{ . }}</span>{{ end }}
+        <span class="an-split-pill an-split-pill--dl" dir="ltr"><i data-lucide="arrow-down" aria-hidden="true"></i> {{ .GlobalAnalytics.FleetRXPct }}%</span>
+        <span class="an-split-pill an-split-pill--ul" dir="ltr"><i data-lucide="arrow-up" aria-hidden="true"></i> {{ .GlobalAnalytics.FleetTXPct }}%</span>
+      </div>
+      {{ end }}
     </div>
     <div class="data-table-wrap">
-      <table class="data-table">
+      <table class="data-table an-table an-table--traffic">
         <thead>
           <tr>
             <th>{{ t "common.server" }}</th>
-            <th class="text-right"><i data-lucide="arrow-down" class="th-icon"></i> {{ t "analytics.download" }}</th>
-            <th class="text-right"><i data-lucide="arrow-up" class="th-icon"></i> {{ t "analytics.upload" }}</th>
+            <th class="text-right"><i data-lucide="arrow-down" class="th-icon th-icon--dl"></i> {{ t "analytics.download" }}</th>
+            <th class="text-right"><i data-lucide="arrow-up" class="th-icon th-icon--ul"></i> {{ t "analytics.upload" }}</th>
             <th class="text-right">{{ t "analytics.total_month" "label" (index .GlobalAnalytics.TopTraffic 0).MonthLabel }}</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {{ range .GlobalAnalytics.TopTraffic }}
-          <tr>
-            <td class="server-name-cell">
-              <i data-lucide="server" class="table-icon"></i>
-              <span>{{ .ServerName }}</span>
-              {{ template "country-tag" (dict "Code" "" "Flag" .FlagEmoji "Name" .CountryName) }}
+          {{- $rank := .Rank }}{{ if eq $rank 0 }}{{ $rank = 1 }}{{ end -}}
+          <tr class="an-row an-enter" style="--stagger:{{ $rank }}">
+            <td class="an-cell-server an-cell-server--traffic">
+              <div class="an-server-stack">
+                <div class="an-server-row">
+                  <span class="an-rank{{ if le $rank 3 }} an-rank--{{ $rank }}{{ end }}" aria-hidden="true">#{{ $rank }}</span>
+                  <span class="an-server-icon an-server-icon--emerald" aria-hidden="true"><i data-lucide="server"></i></span>
+                  <a class="an-server-link" href="/servers/{{ .ServerID }}/analytics">{{ .ServerName }}</a>
+                  {{ template "country-tag" (dict "Code" "" "Flag" .FlagEmoji "Name" .CountryName) }}
+                  {{ if gt .SharePct 0 }}<span class="an-share-pill an-share-pill--inline" title="{{ t "analytics.share_of_fleet" "pct" .SharePct }}">{{ .SharePct }}%</span>{{ end }}
+                  <a class="btn btn--ghost btn--xs an-row-cta an-row-cta--mobile" href="/servers/{{ .ServerID }}/analytics" aria-label="{{ t "nav.analytics" }} — {{ .ServerName }}">
+                    <i data-lucide="bar-chart-2" class="icon-in-button"></i>
+                    <i data-lucide="chevron-right" class="an-cta-arrow" aria-hidden="true"></i>
+                  </a>
+                </div>
+                <div class="an-traffic-bar-track" aria-hidden="true">
+                  <div class="an-traffic-bar" data-an-bar style="--pct:{{ printf "%.1f" .BarPct }}">
+                    <span class="an-traffic-bar__rx" style="width:{{ printf "%.1f" .RXBarPct }}%"></span>
+                    <span class="an-traffic-bar__tx" style="width:{{ printf "%.1f" .TXBarPct }}%"></span>
+                  </div>
+                </div>
+              </div>
             </td>
-            <td class="text-right"><span class="traffic-badge">{{ .Download }}</span></td>
-            <td class="text-right"><span class="traffic-badge">{{ .Upload }}</span></td>
-            <td class="text-right"><span class="traffic-badge traffic-badge--total">{{ .MonthBytes }}</span></td>
-            <td class="text-right">
-              <a class="btn btn--ghost btn--xs" href="/servers/{{ .ServerID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }}</a>
+            <td class="an-cell-traffic an-cell-traffic--dl text-right">
+              <span class="an-mobile-label"><i data-lucide="arrow-down" aria-hidden="true"></i> {{ t "analytics.download" }}</span>
+              <span class="traffic-badge traffic-badge--dl"><i data-lucide="arrow-down" class="an-dir-icon" aria-hidden="true"></i> {{ .Download }}</span>
+            </td>
+            <td class="an-cell-traffic an-cell-traffic--ul text-right">
+              <span class="an-mobile-label"><i data-lucide="arrow-up" aria-hidden="true"></i> {{ t "analytics.upload" }}</span>
+              <span class="traffic-badge traffic-badge--ul"><i data-lucide="arrow-up" class="an-dir-icon" aria-hidden="true"></i> {{ .Upload }}</span>
+            </td>
+            <td class="an-cell-traffic an-cell-traffic--total text-right">
+              <span class="an-mobile-label"><i data-lucide="arrow-up-down" aria-hidden="true"></i> {{ t "analytics.total" }}</span>
+              <div class="an-total-wrap">
+                <span class="traffic-badge traffic-badge--total">{{ .MonthBytes }}</span>
+                {{ if gt .SharePct 0 }}<span class="an-share-pill" title="{{ t "analytics.share_of_fleet" "pct" .SharePct }}">{{ .SharePct }}%</span>{{ end }}
+              </div>
+            </td>
+            <td class="an-cell-action text-right">
+              <a class="btn btn--ghost btn--xs an-row-cta" href="/servers/{{ .ServerID }}/analytics"><i data-lucide="bar-chart-2" class="icon-in-button"></i> {{ t "nav.analytics" }} <i data-lucide="chevron-right" class="an-cta-arrow" aria-hidden="true"></i></a>
             </td>
           </tr>
           {{ end }}

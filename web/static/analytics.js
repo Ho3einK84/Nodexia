@@ -1,16 +1,39 @@
-/* analytics.js — pure SVG time-series charts and bandwidth forecast UI */
+/* analytics.js — colorful SVG time-series charts, motion & bandwidth forecast UI */
 (function () {
   'use strict';
 
-  var scriptPane = document.currentScript && document.currentScript.closest('.tab-pane');
-  var rootScope = scriptPane || document;
+  var scriptEl = document.currentScript;
+  var paneAPI = window.nxPane ? window.nxPane(scriptEl) : null;
+  var scriptPane = paneAPI ? paneAPI.pane : (scriptEl && scriptEl.closest ? scriptEl.closest('.tab-pane') : null);
+  var rootScope = paneAPI ? paneAPI.root : (scriptPane || document);
 
   function byId(id) {
+    if (paneAPI) return paneAPI.byId(id);
     return rootScope.querySelector ? rootScope.querySelector('#' + id) : document.getElementById(id);
   }
 
-  // Localization helper (see app.js for window.nxT). Falls back to the key.
+  function onCleanup(fn) {
+    if (typeof fn !== 'function') return;
+    if (paneAPI) {
+      paneAPI.onCleanup(fn);
+      return;
+    }
+    if (scriptPane) {
+      if (!scriptPane.__nxCleanups) scriptPane.__nxCleanups = [];
+      scriptPane.__nxCleanups.push(fn);
+    }
+  }
+
+  const prefersReducedMotion = Boolean(
+    window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+
+  // Localization helper (see core.js for window.nxT). Falls back to the key.
   function T(key, params) { return window.nxT ? window.nxT(key, params) : key; }
+  function Tn(key, count, params) {
+    if (window.nxTn) return window.nxTn(key, count, params);
+    return T(key, params);
+  }
 
   function escapeHTML(str) {
     if (window.nxEscape) return window.nxEscape(str);
@@ -27,25 +50,52 @@
     }
   }
 
-  // Resolve chart series colors strictly from CSS custom properties on :root
-  // (--accent, --ok, --warn, --text-muted), never competing purple/violet hues.
+  // Semantic telemetry palette mapped onto scoped analytics CSS custom properties.
   const SERIES_TOKEN_MAP = {
-    cpu: '--accent',
-    ram: '--ok',
-    disk: '--warn',
-    swap: '--text-muted',
-    load1: '--accent',
-    load5: '--ok',
-    load15: '--text-muted',
-    rx: '--accent',
-    tx: '--ok',
+    cpu: '--an-sky',
+    ram: '--an-emerald',
+    disk: '--an-amber',
+    swap: '--an-violet',
+    load1: '--an-indigo',
+    load5: '--an-cyan',
+    load15: '--an-amber',
+    rx: '--an-sky',
+    tx: '--an-emerald',
   };
-  const ALLOWED_TOKENS = new Set(['--accent', '--ok', '--warn', '--crit', '--text-muted', '--text-dim']);
+
+  const TOKEN_DEFAULTS = {
+    '--an-sky': '#38bdf8',
+    '--an-emerald': '#34d399',
+    '--an-amber': '#fbbf24',
+    '--an-indigo': '#818cf8',
+    '--an-violet': '#a78bfa',
+    '--an-cyan': '#22d3ee',
+    '--an-rose': '#fb7185',
+    '--accent': '#38bdf8',
+    '--ok': '#34d399',
+    '--warn': '#fbbf24',
+    '--crit': '#fb7185',
+    '--text-muted': '#94a3b8',
+    '--text-dim': '#64748b',
+  };
+
+  const BACKEND_TOKEN_ALIASES = {
+    '--accent': '--an-sky',
+    '--ok': '--an-emerald',
+    '--warn': '--an-amber',
+    '--crit': '--an-rose',
+  };
+
+  const ALLOWED_TOKENS = new Set(Object.keys(TOKEN_DEFAULTS));
   const COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+
+  function tokenHost() {
+    return (rootScope.querySelector && rootScope.querySelector('.analytics-page')) || document.documentElement;
+  }
 
   function readCSSToken(tokenName, fallback) {
     try {
-      const val = getComputedStyle(document.documentElement).getPropertyValue(tokenName).trim();
+      const val = getComputedStyle(tokenHost()).getPropertyValue(tokenName).trim();
       if (val) return val;
     } catch (e) {}
     return fallback;
@@ -56,32 +106,129 @@
     let token = SERIES_TOKEN_MAP[metricKey] || '';
     if (!token && series && typeof series.color === 'string') {
       if (ALLOWED_TOKENS.has(series.color)) {
-        token = series.color;
+        token = BACKEND_TOKEN_ALIASES[series.color] || series.color;
       } else if (series.color.startsWith('var(')) {
         const inner = series.color.slice(4, -1).trim();
-        if (ALLOWED_TOKENS.has(inner)) token = inner;
+        if (ALLOWED_TOKENS.has(inner)) {
+          token = BACKEND_TOKEN_ALIASES[inner] || inner;
+        }
       }
     }
     if (token) {
-      const defaults = {
-        '--accent': '#3b82f6',
-        '--ok': '#4cc38a',
-        '--warn': '#eab308',
-        '--crit': '#e5484d',
-        '--text-muted': '#93939a',
-        '--text-dim': '#66666d',
-      };
-      return readCSSToken(token, defaults[token] || '#3b82f6');
+      return readCSSToken(token, TOKEN_DEFAULTS[token] || '#38bdf8');
     }
     if (series && COLOR_RE.test(series.color)) {
       return series.color;
     }
-    return readCSSToken('--accent', '#3b82f6');
+    return readCSSToken('--an-sky', '#38bdf8');
   }
 
-  // ── SVG chart renderer ────────────────────────────────────────────────────
+  // ── Shared GPU Bar & Count-Up Enhancers ───────────────────────────────────
 
-  const CHART_PAD = { top: 12, right: 16, bottom: 28, left: 44 };
+  function revealBarElement(el, targetPct) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.style.setProperty('--pct', targetPct);
+      });
+    });
+  }
+
+  function initAnimatedBars(scope) {
+    const host = scope || rootScope;
+    if (!host || !host.querySelectorAll) return;
+    const bars = host.querySelectorAll('[data-an-bar]');
+    if (!bars.length) return;
+
+    const pending = [];
+    bars.forEach((bar) => {
+      if (bar.dataset.anBarReady === '1') return;
+      bar.dataset.anBarReady = '1';
+      const target = bar.style.getPropertyValue('--pct').trim();
+      if (target === '') return;
+      if (prefersReducedMotion) {
+        bar.style.setProperty('--pct', target);
+        return;
+      }
+      bar.dataset.anBarTarget = target;
+      bar.style.setProperty('--pct', '0');
+      pending.push(bar);
+    });
+
+    if (!pending.length) return;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      pending.forEach((bar) => revealBarElement(bar, bar.dataset.anBarTarget));
+      return;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const bar = entry.target;
+        const target = bar.dataset.anBarTarget;
+        if (target !== undefined) revealBarElement(bar, target);
+        observer.unobserve(bar);
+      });
+    }, { threshold: 0.05, rootMargin: '40px' });
+
+    pending.forEach((bar) => observer.observe(bar));
+    onCleanup(() => observer.disconnect());
+  }
+
+  function initCountUp(scope) {
+    const host = scope || rootScope;
+    if (!host || !host.querySelectorAll || prefersReducedMotion) return;
+    const nodes = host.querySelectorAll('[data-countup]');
+    if (!nodes.length) return;
+
+    const activeRAFs = new Set();
+    onCleanup(() => {
+      activeRAFs.forEach((id) => cancelAnimationFrame(id));
+      activeRAFs.clear();
+    });
+
+    nodes.forEach((el) => {
+      if (el.dataset.countupDone === '1') return;
+      const raw = (el.textContent || '').trim();
+      const match = raw.match(/^([^\d.-]*)(-?\d+(?:\.\d+)?)(.*)$/);
+      if (!match) return;
+
+      const prefix = match[1] || '';
+      const numStr = match[2];
+      const suffix = match[3] || '';
+      const target = parseFloat(numStr);
+      if (!Number.isFinite(target) || target === 0) return;
+
+      el.dataset.countupDone = '1';
+      const dotIdx = numStr.indexOf('.');
+      const decimals = dotIdx >= 0 ? numStr.length - dotIdx - 1 : 0;
+      const duration = 520;
+      let startTs = 0;
+
+      function tick(ts) {
+        if (!startTs) startTs = ts;
+        const elapsed = ts - startTs;
+        const progress = Math.min(1, elapsed / duration);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const value = target * eased;
+        el.textContent = prefix + value.toFixed(decimals) + suffix;
+        if (progress < 1) {
+          const nextId = requestAnimationFrame(tick);
+          activeRAFs.add(nextId);
+        } else {
+          el.textContent = raw;
+        }
+      }
+
+      const firstId = requestAnimationFrame(tick);
+      activeRAFs.add(firstId);
+    });
+  }
+
+  // ── SVG Chart Renderer ────────────────────────────────────────────────────
+
+  const CHART_PAD = { top: 14, right: 16, bottom: 28, left: 46 };
+  let chartInstanceSeq = 0;
 
   function createSVGEl(tag, attrs) {
     const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -89,9 +236,12 @@
     return el;
   }
 
-  function buildChart(container, data) {
+  function buildChart(container, data, opts) {
     if (!container || !data) return;
+    const animate = !(opts && opts.animate === false);
     container.__chartData = data;
+    if (!container.__hiddenSeries) container.__hiddenSeries = new Set();
+
     const w = Math.max(120, Math.round(container.clientWidth || 400));
     const h = Math.max(80, Math.round(container.clientHeight || 200));
     container.__lastW = w;
@@ -101,12 +251,15 @@
     const pw = Math.max(10, w - CHART_PAD.left - CHART_PAD.right);
     const ph = Math.max(10, h - CHART_PAD.top - CHART_PAD.bottom);
 
-    // Exact container aspect ratio viewBox with uniform preserveAspectRatio
-    // so axis labels and text never stretch or distort on resize.
     const svg = createSVGEl('svg', {
       viewBox: `0 0 ${w} ${h}`,
       preserveAspectRatio: 'xMidYMid meet',
     });
+
+    const seq = ++chartInstanceSeq;
+    const defs = createSVGEl('defs');
+    svg.appendChild(defs);
+
     const plotG = createSVGEl('g', { transform: `translate(${CHART_PAD.left},${CHART_PAD.top})` });
     svg.appendChild(plotG);
 
@@ -151,38 +304,121 @@
       plotG.appendChild(axisLabel);
     }
 
-    // Draw each series
-    for (const s of series) {
-      if (!s.data || s.data.length === 0) continue;
+    const linePathsToAnimate = [];
+    const surfaceBg = readCSSToken('--an-surface', '#141926');
+
+    series.forEach((s, sIdx) => {
+      if (!s.data || s.data.length === 0) return;
       const strokeColor = resolveSeriesColor(s, data.metric);
+      const gradId = `an-g-${seq}-${sIdx}`;
+
+      const grad = createSVGEl('linearGradient', {
+        id: gradId,
+        x1: '0', y1: '0', x2: '0', y2: '1',
+      });
+      grad.appendChild(createSVGEl('stop', { offset: '0%', 'stop-color': strokeColor, 'stop-opacity': '0.32' }));
+      grad.appendChild(createSVGEl('stop', { offset: '62%', 'stop-color': strokeColor, 'stop-opacity': '0.09' }));
+      grad.appendChild(createSVGEl('stop', { offset: '100%', 'stop-color': strokeColor, 'stop-opacity': '0' }));
+      defs.appendChild(grad);
+
       const pts = s.data.map((v, i) => ({
         x: (i / Math.max(s.data.length - 1, 1)) * pw,
         y: ph - ((v - yMin) / yRange) * ph,
         v,
       }));
 
-      // Area fill
+      const seriesG = createSVGEl('g', {
+        class: 'chart-series' + (container.__hiddenSeries.has(sIdx) ? ' is-hidden-series' : ''),
+        'data-series-idx': String(sIdx),
+      });
+
+      // Vertical gradient area fill
       const areaD = buildAreaPath(pts, pw, ph);
-      plotG.appendChild(createSVGEl('path', {
-        class: 'chart-area',
+      seriesG.appendChild(createSVGEl('path', {
+        class: 'chart-area' + (animate && !prefersReducedMotion ? ' is-revealing' : ''),
         d: areaD,
-        fill: strokeColor,
+        fill: `url(#${gradId})`,
       }));
 
-      // Line
+      // Luminous soft halo + crisp line path
       const lineD = buildLinePath(pts);
-      plotG.appendChild(createSVGEl('path', {
-        class: 'chart-path',
+      seriesG.appendChild(createSVGEl('path', {
+        class: 'chart-path-glow',
         d: lineD,
         stroke: strokeColor,
       }));
-    }
 
-    // Interaction overlay
+      const linePath = createSVGEl('path', {
+        class: 'chart-path',
+        d: lineD,
+        stroke: strokeColor,
+      });
+      seriesG.appendChild(linePath);
+      if (animate && !prefersReducedMotion) {
+        linePathsToAnimate.push(linePath);
+      }
+
+      // Highlight peak point on single-series percentage charts
+      if (series.length === 1 && pts.length >= 3 && unit === '%') {
+        let peakIdx = 0;
+        for (let i = 1; i < pts.length; i++) {
+          if (pts[i].v > pts[peakIdx].v) peakIdx = i;
+        }
+        if (peakIdx > 0 && peakIdx < pts.length - 1) {
+          seriesG.appendChild(createSVGEl('circle', {
+            class: 'chart-peak-dot',
+            cx: pts[peakIdx].x.toFixed(2),
+            cy: pts[peakIdx].y.toFixed(2),
+            r: '3.5',
+            fill: surfaceBg,
+            stroke: strokeColor,
+            'stroke-width': '2',
+          }));
+        }
+      }
+
+      // Pulsing live endpoint beacon
+      const lastPt = pts[pts.length - 1];
+      if (lastPt) {
+        seriesG.appendChild(createSVGEl('circle', {
+          class: 'chart-beacon-ring',
+          cx: lastPt.x.toFixed(2),
+          cy: lastPt.y.toFixed(2),
+          r: '4',
+          stroke: strokeColor,
+        }));
+        seriesG.appendChild(createSVGEl('circle', {
+          class: 'chart-beacon-dot',
+          cx: lastPt.x.toFixed(2),
+          cy: lastPt.y.toFixed(2),
+          r: '3.5',
+          fill: strokeColor,
+        }));
+      }
+
+      plotG.appendChild(seriesG);
+    });
+
+    // Interaction overlay (mouse + touch)
     const overlay = buildInteractionOverlay(container, plotG, pw, ph, labels, series, yMin, yRange, unit, data.metric);
     plotG.appendChild(overlay);
 
     container.appendChild(svg);
+
+    if (linePathsToAnimate.length && container.clientWidth > 0) {
+      linePathsToAnimate.forEach((lp) => {
+        try {
+          const len = lp.getTotalLength();
+          if (len > 0 && Number.isFinite(len)) {
+            lp.style.setProperty('--path-len', len.toFixed(1));
+            lp.classList.add('is-drawing');
+            const finishDraw = () => lp.classList.remove('is-drawing');
+            lp.addEventListener('animationend', finishDraw, { once: true });
+          }
+        } catch (e) {}
+      });
+    }
+
     ensureResizeObserver(container);
   }
 
@@ -197,7 +433,9 @@
           if (!raf && container.__chartData && !container.hidden) {
             raf = requestAnimationFrame(() => {
               raf = 0;
-              if (container.__chartData && !container.hidden) buildChart(container, container.__chartData);
+              if (container.__chartData && !container.hidden) {
+                buildChart(container, container.__chartData, { animate: false });
+              }
             });
           }
         }
@@ -205,13 +443,10 @@
     });
     ro.observe(container);
     container.__ro = ro;
-    if (scriptPane) {
-      if (!scriptPane.__nxCleanups) scriptPane.__nxCleanups = [];
-      scriptPane.__nxCleanups.push(() => {
-        if (raf) cancelAnimationFrame(raf);
-        ro.disconnect();
-      });
-    }
+    onCleanup(() => {
+      if (raf) cancelAnimationFrame(raf);
+      ro.disconnect();
+    });
   }
 
   function buildInteractionOverlay(container, plotG, pw, ph, labels, series, yMin, yRange, unit, metricName) {
@@ -223,14 +458,27 @@
     let tooltipEl = null;
     let vline = null;
     let dots = [];
+    let touchHideTimer = null;
+
+    onCleanup(() => {
+      if (touchHideTimer) {
+        clearTimeout(touchHideTimer);
+        touchHideTimer = null;
+      }
+    });
 
     function showTooltip(x, clientX, clientY) {
       if (!labels.length) return;
+      if (touchHideTimer) {
+        clearTimeout(touchHideTimer);
+        touchHideTimer = null;
+      }
       const clampedX = Math.max(0, Math.min(pw, x));
       const idx = Math.round((clampedX / pw) * Math.max(labels.length - 1, 0));
       if (idx < 0 || idx >= labels.length) return;
 
       const xPos = (idx / Math.max(labels.length - 1, 1)) * pw;
+      const hidden = container.__hiddenSeries || new Set();
 
       if (!vline) {
         vline = createSVGEl('line', {
@@ -245,18 +493,25 @@
 
       dots.forEach(d => d.remove());
       dots = [];
-      for (const s of series) {
-        if (!s.data || idx >= s.data.length) continue;
+      let visibleRows = 0;
+      series.forEach((s, sIdx) => {
+        if (hidden.has(sIdx) || !s.data || idx >= s.data.length) return;
+        visibleRows++;
         const v = s.data[idx];
         const y = ph - ((v - yMin) / yRange) * ph;
         const color = resolveSeriesColor(s, metricName);
         const dot = createSVGEl('circle', {
           class: 'chart-tooltip-dot',
-          cx: xPos, cy: y, r: 4,
+          cx: xPos, cy: y, r: 4.5,
           fill: color,
         });
         plotG.appendChild(dot);
         dots.push(dot);
+      });
+
+      if (!visibleRows) {
+        hideTooltip();
+        return;
       }
 
       if (!tooltipEl) {
@@ -266,8 +521,8 @@
       }
 
       let html = `<div class="chart-tooltip__label">${escapeHTML(labels[idx])}</div>`;
-      for (const s of series) {
-        if (!s.data || idx >= s.data.length) continue;
+      series.forEach((s, sIdx) => {
+        if (hidden.has(sIdx) || !s.data || idx >= s.data.length) return;
         const v = s.data[idx];
         const color = resolveSeriesColor(s, metricName);
         const formatted = unit === '%' ? v.toFixed(1) + '%'
@@ -280,26 +535,24 @@
           </span>
           <span class="chart-tooltip__value">${formatted}</span>
         </div>`;
-      }
+      });
       tooltipEl.innerHTML = html;
 
-      // Position tooltip cleanly inside container bounds regardless of document dir (LTR/RTL)
+      // Position tooltip cleanly inside container bounds using GPU transform
       const cRect = container.getBoundingClientRect();
       const pointerX = clientX - cRect.left;
       const pointerY = clientY - cRect.top;
       const tWidth = tooltipEl.offsetWidth || 150;
       const tHeight = tooltipEl.offsetHeight || 56;
-      let tx = pointerX + 12;
+      let tx = pointerX + 14;
       if (tx + tWidth > cRect.width - 8) {
-        tx = pointerX - tWidth - 12;
+        tx = pointerX - tWidth - 14;
       }
       tx = Math.max(8, Math.min(tx, Math.max(8, cRect.width - tWidth - 8)));
-      let ty = pointerY - 12;
+      let ty = pointerY - 14;
       ty = Math.max(4, Math.min(ty, Math.max(4, cRect.height - tHeight - 4)));
 
-      tooltipEl.style.left = tx + 'px';
-      tooltipEl.style.right = 'auto';
-      tooltipEl.style.top = ty + 'px';
+      tooltipEl.style.transform = `translate3d(${Math.round(tx)}px, ${Math.round(ty)}px, 0)`;
       tooltipEl.style.opacity = '1';
     }
 
@@ -310,18 +563,42 @@
       if (tooltipEl) tooltipEl.style.opacity = '0';
     }
 
-    rect.addEventListener('mousemove', (e) => {
+    function pointerToLocalX(clientX) {
       const svgEl = rect.closest('svg');
-      if (!svgEl) return;
+      if (!svgEl) return null;
       const svgRect = svgEl.getBoundingClientRect();
-      if (!svgRect.width) return;
+      if (!svgRect.width) return null;
       const vbWidth = (svgEl.viewBox && svgEl.viewBox.baseVal && svgEl.viewBox.baseVal.width) || svgRect.width;
       const scaleX = vbWidth / svgRect.width;
-      const localX = (e.clientX - svgRect.left) * scaleX - CHART_PAD.left;
-      showTooltip(localX, e.clientX, e.clientY);
+      return (clientX - svgRect.left) * scaleX - CHART_PAD.left;
+    }
+
+    rect.addEventListener('mousemove', (e) => {
+      const localX = pointerToLocalX(e.clientX);
+      if (localX !== null) showTooltip(localX, e.clientX, e.clientY);
     });
 
     rect.addEventListener('mouseleave', hideTooltip);
+
+    rect.addEventListener('touchstart', (e) => {
+      if (!e.touches || !e.touches.length) return;
+      const t = e.touches[0];
+      const localX = pointerToLocalX(t.clientX);
+      if (localX !== null) showTooltip(localX, t.clientX, t.clientY);
+    }, { passive: true });
+
+    rect.addEventListener('touchmove', (e) => {
+      if (!e.touches || !e.touches.length) return;
+      const t = e.touches[0];
+      const localX = pointerToLocalX(t.clientX);
+      if (localX !== null) showTooltip(localX, t.clientX, t.clientY);
+    }, { passive: true });
+
+    rect.addEventListener('touchend', () => {
+      if (touchHideTimer) clearTimeout(touchHideTimer);
+      touchHideTimer = setTimeout(hideTooltip, 1600);
+    }, { passive: true });
+
     return rect;
   }
 
@@ -363,7 +640,7 @@
     return v.toFixed(v < 10 ? 1 : 0);
   }
 
-  // ── Chart loading (semantic [hidden] toggling) ────────────────────────────
+  // ── Chart loading & interactive series legend ─────────────────────────────
 
   function setCardState(metric, activeState) {
     const sk = byId('skeleton-' + metric);
@@ -374,6 +651,10 @@
     if (ct) ct.hidden = activeState !== 'chart';
     if (em) em.hidden = activeState !== 'empty';
     if (er) er.hidden = activeState !== 'error';
+    if (activeState !== 'chart') {
+      const live = byId('live-' + metric);
+      if (live) live.hidden = true;
+    }
   }
 
   function showSkeleton(metric) { setCardState(metric, 'skeleton'); }
@@ -381,7 +662,74 @@
   function showEmpty(metric) { setCardState(metric, 'empty'); }
   function showError(metric) { setCardState(metric, 'error'); }
 
-  function updateFooter(metric, data) {
+  function updateCardLiveBadge(metric, data) {
+    const badge = byId('live-' + metric);
+    if (!badge || !data || !Array.isArray(data.series)) return;
+    const nonEmpty = data.series.filter(s => Array.isArray(s.data) && s.data.length > 0);
+    if (!nonEmpty.length) {
+      badge.hidden = true;
+      return;
+    }
+
+    badge.className = 'chart-card__live-val';
+    const unit = data.unit || '';
+    if (unit === '%' && nonEmpty.length === 1) {
+      const vals = nonEmpty[0].data;
+      const cur = vals[vals.length - 1];
+      const lvl = cur > 80 ? 'crit' : cur > 60 ? 'warn' : 'ok';
+      badge.classList.add('chart-card__live-val--' + lvl);
+      badge.textContent = cur.toFixed(1) + '%';
+      badge.hidden = false;
+      return;
+    }
+
+    if (metric === 'load') {
+      const vals = nonEmpty[0].data;
+      const cur = vals[vals.length - 1];
+      badge.classList.add('chart-card__live-val--indigo');
+      badge.textContent = cur.toFixed(2);
+      badge.hidden = false;
+      return;
+    }
+
+    if (metric === 'traffic' && nonEmpty.length >= 2) {
+      const rxVals = nonEmpty[0].data;
+      const txVals = nonEmpty[1].data;
+      const rx = rxVals[rxVals.length - 1] || 0;
+      const tx = txVals[txVals.length - 1] || 0;
+      badge.classList.add('chart-card__live-val--sky');
+      badge.textContent = `↓ ${rx.toFixed(1)} · ↑ ${tx.toFixed(1)} GB`;
+      badge.hidden = false;
+      return;
+    }
+
+    badge.hidden = true;
+  }
+
+  function toggleSeriesVisibility(chartEl, sIdx, toggleBtn) {
+    if (!chartEl) return;
+    if (!chartEl.__hiddenSeries) chartEl.__hiddenSeries = new Set();
+    const hidden = chartEl.__hiddenSeries;
+    if (hidden.has(sIdx)) {
+      hidden.delete(sIdx);
+    } else {
+      const totalSeries = (chartEl.__chartData && chartEl.__chartData.series) ? chartEl.__chartData.series.length : 0;
+      // Keep at least one series visible so the chart doesn't go completely blank by accident
+      if (totalSeries > 1 && hidden.size >= totalSeries - 1) {
+        return;
+      }
+      hidden.add(sIdx);
+    }
+    const isHidden = hidden.has(sIdx);
+    if (toggleBtn) {
+      toggleBtn.classList.toggle('is-muted', isHidden);
+      toggleBtn.setAttribute('aria-pressed', isHidden ? 'false' : 'true');
+    }
+    const g = chartEl.querySelector(`.chart-series[data-series-idx="${sIdx}"]`);
+    if (g) g.classList.toggle('is-hidden-series', isHidden);
+  }
+
+  function updateFooter(metric, data, chartEl) {
     const footer = byId('footer-' + metric);
     if (!footer || !data || !Array.isArray(data.series) || data.series.length === 0) return;
 
@@ -400,19 +748,29 @@
       return;
     }
 
-    // Multi-series (e.g. Load 1m / 5m / 15m): render per-series Avg / Peak / Current
-    footer.innerHTML = `<div class="chart-footer-series">${nonEmpty.map(s => {
+    const hidden = (chartEl && chartEl.__hiddenSeries) || new Set();
+    footer.innerHTML = `<div class="chart-footer-series">${data.series.map((s, sIdx) => {
+      if (!Array.isArray(s.data) || s.data.length === 0) return '';
       const vals = s.data;
       const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
       const max = Math.max(...vals);
       const cur = vals[vals.length - 1];
       const color = resolveSeriesColor(s, data.metric);
-      return `<span class="chart-footer-item">
+      const muted = hidden.has(sIdx);
+      const aria = T('js.analytics.toggle_series', { label: s.label });
+      return `<button type="button" class="chart-footer-item chart-footer-item--toggle${muted ? ' is-muted' : ''}" data-series-idx="${sIdx}" aria-pressed="${muted ? 'false' : 'true'}" aria-label="${escapeHTML(aria)}">
         <span class="legend-dot" style="background:${color}"></span>
         <span class="chart-footer-item__label">${escapeHTML(s.label)}</span>
-        <span>${fmt(cur)} (avg ${fmt(avg)} · peak ${fmt(max)})</span>
-      </span>`;
+        <span>${fmt(cur)} (${escapeHTML(T('js.analytics.avg'))} ${fmt(avg)} · ${escapeHTML(T('js.analytics.peak'))} ${fmt(max)})</span>
+      </button>`;
     }).join('')}</div>`;
+
+    footer.querySelectorAll('.chart-footer-item--toggle').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.seriesIdx, 10);
+        if (!Number.isNaN(idx)) toggleSeriesVisibility(chartEl, idx, btn);
+      });
+    });
   }
 
   async function loadChart(serverID, metric, range) {
@@ -429,27 +787,38 @@
       const ct = byId('chart-' + metric);
       if (ct) {
         requestAnimationFrame(() => {
-          buildChart(ct, data);
-          updateFooter(metric, data);
+          buildChart(ct, data, { animate: true });
+          updateCardLiveBadge(metric, data);
+          updateFooter(metric, data, ct);
         });
       }
       if (metric === 'traffic') {
-        buildLegend('legend-traffic', data.series, data.metric);
+        buildLegend('legend-traffic', data.series, data.metric, ct);
       }
     } catch (e) {
       showError(metric);
     }
   }
 
-  function buildLegend(containerId, series, fallbackMetric) {
+  function buildLegend(containerId, series, fallbackMetric, chartEl) {
     const legend = byId(containerId);
     if (!legend) return;
-    legend.innerHTML = series.map(s => `
-      <div class="legend-item">
+    const hidden = (chartEl && chartEl.__hiddenSeries) || new Set();
+    legend.innerHTML = series.map((s, sIdx) => {
+      const muted = hidden.has(sIdx);
+      const aria = T('js.analytics.toggle_series', { label: s.label });
+      return `<button type="button" class="legend-item${muted ? ' is-muted' : ''}" data-series-idx="${sIdx}" aria-pressed="${muted ? 'false' : 'true'}" aria-label="${escapeHTML(aria)}">
         <span class="legend-dot" style="background:${resolveSeriesColor(s, fallbackMetric)}"></span>
-        ${escapeHTML(s.label)}
-      </div>
-    `).join('');
+        <span>${escapeHTML(s.label)}</span>
+      </button>`;
+    }).join('');
+
+    legend.querySelectorAll('.legend-item').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.seriesIdx, 10);
+        if (!Number.isNaN(idx)) toggleSeriesVisibility(chartEl, idx, btn);
+      });
+    });
   }
 
   // ── Forecast UI ───────────────────────────────────────────────────────────
@@ -467,7 +836,7 @@
       if (grid) {
         grid.innerHTML = `<div class="chart-error" style="position:relative;height:80px">
           <i data-lucide="alert-circle"></i>
-          <p>${window.nxT ? window.nxT('js.analytics.forecast_unavailable') : 'Forecast unavailable — no traffic data collected yet'}</p>
+          <p>${escapeHTML(T('js.analytics.forecast_unavailable'))}</p>
         </div>`;
         renderIcons(grid);
       }
@@ -480,21 +849,23 @@
 
     const trendHTML = renderTrend(f.trend);
     const confidenceHTML = renderConfidence(f.confidence);
-    const risksHTML = renderRisks(f.risks);
+    const risksHTML = renderRisks(f.risks || {});
+    const isExhaustRisk = Boolean(f.risks && f.risks.exhaustion);
 
     const scope = seriesScopeLabel(f.series);
     const periodNote = anchoredPeriodNote(f.period_start, f.period_end);
     grid.innerHTML = `
-      ${renderPeriodCard(T('js.analytics.today'), f.today, f.today.pct_elapsed, scope, '')}
-      ${renderPeriodCard(T('js.analytics.this_week'), f.this_week, f.this_week.pct_elapsed, scope, '')}
-      ${renderPeriodCard(T('js.analytics.this_month'), f.this_month, f.this_month.pct_elapsed, scope, periodNote)}
+      ${renderPeriodCard(T('js.analytics.today'), f.today, f.today.pct_elapsed, scope, '', 'today', 0, false)}
+      ${renderPeriodCard(T('js.analytics.this_week'), f.this_week, f.this_week.pct_elapsed, scope, '', 'week', 1, false)}
+      ${renderPeriodCard(T('js.analytics.this_month'), f.this_month, f.this_month.pct_elapsed, scope, periodNote, 'month', 2, isExhaustRisk)}
     `;
 
     let meta = byId('forecastMeta');
     if (!meta) {
       meta = document.createElement('div');
       meta.id = 'forecastMeta';
-      meta.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;';
+      meta.className = 'forecast-meta an-enter';
+      meta.style.setProperty('--stagger', '2');
       grid.parentNode.insertBefore(meta, grid.nextSibling);
     }
     meta.innerHTML = `
@@ -505,9 +876,13 @@
 
     renderExhaustion(f.exhaustion);
 
+    const exhaustionPanel = byId('forecastExhaustion');
     renderIcons(grid);
     renderIcons(meta);
-    renderIcons(byId('forecastExhaustion'));
+    renderIcons(exhaustionPanel);
+    initAnimatedBars(grid);
+    initAnimatedBars(exhaustionPanel);
+    initCountUp(grid);
   }
 
   function seriesScopeLabel(series) {
@@ -521,30 +896,24 @@
     return T('js.analytics.period_range', { start: start, end: end });
   }
 
-  function renderPeriodCard(label, period, pct, scopeLabel, periodNote) {
+  function renderPeriodCard(label, period, pct, scopeLabel, periodNote, theme, staggerIdx, isRisk) {
     const clampedPct = Math.min(100, Math.max(0, pct || 0));
-    const scaleVal = (clampedPct / 100).toFixed(3);
     const progressClass = clampedPct > 90 ? 'forecast-progress__bar--danger'
       : clampedPct > 70 ? 'forecast-progress__bar--warn'
       : '';
     return `
-      <div class="forecast-card">
+      <div class="forecast-card forecast-card--${escapeHTML(theme)}${isRisk ? ' forecast-card--risk' : ''} an-enter" style="--stagger:${staggerIdx}">
         <div class="forecast-card__label"><span>${escapeHTML(label)}</span> <span class="forecast-card__scope">${escapeHTML(scopeLabel)}</span></div>
-        <div class="forecast-card__current">${escapeHTML(period.current_human)}</div>
+        <div class="forecast-card__current" data-countup>${escapeHTML(period.current_human)}</div>
         <div class="forecast-card__predicted">
           ${escapeHTML(T('js.analytics.predicted_end'))} <strong>${escapeHTML(period.predicted_human)}</strong>
         </div>
         <div class="forecast-progress">
-          <div class="forecast-progress__bar ${progressClass}" style="--pct:${scaleVal}"></div>
+          <div class="forecast-progress__bar ${progressClass}" data-an-bar style="--pct:${clampedPct}"></div>
         </div>
         <div class="forecast-progress__label">${escapeHTML(T('js.analytics.period_elapsed', { pct: clampedPct }))}${periodNote ? ` · ${escapeHTML(periodNote)}` : ''}</div>
       </div>
     `;
-  }
-
-  function Tn(key, count, params) {
-    if (window.nxTn) return window.nxTn(key, count, params);
-    return T(key, params);
   }
 
   function renderExhaustion(ex) {
@@ -583,14 +952,29 @@
       message = T('js.analytics.exhaustion_safe', { limit: ex.limit_human, projected: ex.projected_month_human });
     }
 
+    let quotaHTML = '';
+    if (ex.limit_bytes > 0 && ex.projected_month_bytes >= 0) {
+      const rawPct = Math.round((ex.projected_month_bytes / ex.limit_bytes) * 100);
+      const barPct = Math.min(100, Math.max(0, rawPct));
+      quotaHTML = `
+        <div class="forecast-exhaustion__quota">
+          <div class="forecast-exhaustion__meter" aria-hidden="true">
+            <span class="forecast-exhaustion__bar" data-an-bar style="--pct:${barPct}"></span>
+          </div>
+          <div class="forecast-exhaustion__quota-label">${escapeHTML(T('js.analytics.quota_projected', { pct: rawPct }))}</div>
+        </div>
+      `;
+    }
+
     panel.hidden = false;
-    panel.className = 'forecast-exhaustion forecast-exhaustion--' + level;
+    panel.className = 'forecast-exhaustion forecast-exhaustion--' + level + ' an-enter';
     panel.innerHTML = `
       <i data-lucide="${icon}" class="forecast-exhaustion__icon"></i>
       <div class="forecast-exhaustion__body">
         <div class="forecast-exhaustion__title">${escapeHTML(T('js.analytics.exhaustion_title'))}</div>
         <div class="forecast-exhaustion__message">${escapeHTML(message)}</div>
         ${sub ? `<div class="forecast-exhaustion__sub">${escapeHTML(sub)}</div>` : ''}
+        ${quotaHTML}
       </div>
     `;
   }
@@ -619,24 +1003,53 @@
   function renderRisks(risks) {
     const items = [];
     if (risks.traffic_spike) {
-      items.push(`<span class="risk-badge"><i data-lucide="zap"></i> ${T('js.analytics.risk_spike')}</span>`);
+      items.push(`<span class="risk-badge"><i data-lucide="zap"></i> ${escapeHTML(T('js.analytics.risk_spike'))}</span>`);
     }
     if (risks.unusual_growth) {
-      items.push(`<span class="risk-badge"><i data-lucide="trending-up"></i> ${T('js.analytics.risk_growth')}</span>`);
+      items.push(`<span class="risk-badge"><i data-lucide="trending-up"></i> ${escapeHTML(T('js.analytics.risk_growth'))}</span>`);
     }
     if (risks.exhaustion) {
-      items.push(`<span class="risk-badge"><i data-lucide="alert-triangle"></i> ${T('js.analytics.risk_exhaustion')}</span>`);
+      items.push(`<span class="risk-badge"><i data-lucide="alert-triangle"></i> ${escapeHTML(T('js.analytics.risk_exhaustion'))}</span>`);
     }
     return items.length > 0 ? `<div class="risk-badges">${items.join('')}</div>` : '';
   }
 
-  // ── Range tabs ────────────────────────────────────────────────────────────
+  // ── Sliding Range Tabs ────────────────────────────────────────────────────
 
   let currentRange = '24h';
+
+  function positionRangeIndicator(tabs, indicator, btn) {
+    if (!tabs || !indicator || !btn) return;
+    const trackRect = tabs.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    if (!trackRect.width || !btnRect.width) return;
+    const x = Math.round(btnRect.left - trackRect.left - (tabs.clientLeft || 0));
+    const w = Math.round(btnRect.width);
+    tabs.classList.add('has-indicator');
+    indicator.style.width = w + 'px';
+    indicator.style.transform = `translate3d(${x}px, 0, 0)`;
+    indicator.classList.add('is-ready');
+  }
 
   function initRangeTabs(serverID) {
     const tabs = byId('globalRangeTabs');
     if (!tabs) return;
+    const indicator = byId('rangeTabIndicator');
+
+    const syncActiveIndicator = () => {
+      const activeBtn = tabs.querySelector('.range-tab.active');
+      if (activeBtn && indicator) {
+        positionRangeIndicator(tabs, indicator, activeBtn);
+      }
+    };
+
+    requestAnimationFrame(syncActiveIndicator);
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const tabRO = new ResizeObserver(() => requestAnimationFrame(syncActiveIndicator));
+      tabRO.observe(tabs);
+      onCleanup(() => tabRO.disconnect());
+    }
 
     tabs.addEventListener('click', (e) => {
       const btn = e.target.closest('.range-tab');
@@ -650,6 +1063,7 @@
       });
       btn.classList.add('active');
       btn.setAttribute('aria-selected', 'true');
+      positionRangeIndicator(tabs, indicator, btn);
 
       currentRange = range;
       loadResourceCharts(serverID, range);
@@ -671,6 +1085,9 @@
   // ── Init ──────────────────────────────────────────────────────────────────
 
   function init() {
+    initAnimatedBars(rootScope);
+    initCountUp(rootScope);
+
     const firstChart = rootScope.querySelector('[data-metric][data-server]');
     if (!firstChart) return;
 

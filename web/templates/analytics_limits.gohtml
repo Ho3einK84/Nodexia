@@ -1,7 +1,7 @@
 {{ define "content-analytics-limits" }}
-<section class="hero">
+<section class="hero analytics-page analytics-limits">
 
-  <header class="page-hero">
+  <header class="page-hero an-hero an-enter" style="--stagger:0">
     <div class="page-hero__top">
       {{ template "page-hero-head" (dict "Page" . "Icon" "sliders-horizontal" "Eyebrow" (t "nav.analytics")) }}
       <div class="page-hero__actions">
@@ -14,24 +14,27 @@
 
   {{ with .TrafficLimits }}
   <!-- Precedence explainer: how the effective cap is resolved per server -->
-  <article class="card limits-precedence">
-    <h3><i data-lucide="list-ordered"></i> {{ t "analytics.limits.precedence_title" }}</h3>
+  <article class="card limits-precedence an-card an-card--precedence an-enter" style="--stagger:1">
+    <h3>
+      <span class="an-card__emblem an-card__emblem--indigo" aria-hidden="true"><i data-lucide="list-ordered"></i></span>
+      <span>{{ t "analytics.limits.precedence_title" }}</span>
+    </h3>
     <ol class="precedence-steps">
-      <li class="precedence-step">
+      <li class="precedence-step precedence-step--1">
         <span class="precedence-step__rank" aria-hidden="true">1</span>
         <div class="precedence-step__body">
           <strong>{{ t "analytics.limits.precedence_server" }}</strong>
           <p>{{ t "analytics.limits.precedence_server_desc" }}</p>
         </div>
       </li>
-      <li class="precedence-step">
+      <li class="precedence-step precedence-step--2">
         <span class="precedence-step__rank" aria-hidden="true">2</span>
         <div class="precedence-step__body">
           <strong>{{ t "analytics.limits.precedence_tag" }}</strong>
           <p>{{ t "analytics.limits.precedence_tag_desc" }}</p>
         </div>
       </li>
-      <li class="precedence-step">
+      <li class="precedence-step precedence-step--3">
         <span class="precedence-step__rank" aria-hidden="true">3</span>
         <div class="precedence-step__body">
           <strong>{{ t "analytics.limits.precedence_global" }}</strong>
@@ -42,11 +45,14 @@
   </article>
 
   <!-- Global default cap -->
-  <article class="card analytics-limit">
+  <article class="card analytics-limit an-card an-card--limit an-enter" style="--stagger:2">
     <div class="analytics-limit__head">
-      <h3><i data-lucide="globe"></i> {{ t "analytics.limits.global_heading" }}</h3>
+      <h3>
+        <span class="an-card__emblem an-card__emblem--sky" aria-hidden="true"><i data-lucide="globe"></i></span>
+        <span>{{ t "analytics.limits.global_heading" }}</span>
+      </h3>
       {{ if .HasGlobal }}
-      <span class="analytics-limit__current">{{ t "analytics.limit.current" "value" .GlobalHuman }}</span>
+      <span class="analytics-limit__current analytics-limit__current--active">{{ t "analytics.limit.current" "value" .GlobalHuman }}</span>
       {{ else }}
       <span class="analytics-limit__current analytics-limit__current--none">{{ t "analytics.limit.none" }}</span>
       {{ end }}
@@ -81,15 +87,18 @@
   </article>
 
   <!-- Per-tag caps -->
-  <article class="card analytics-limit">
+  <article class="card analytics-limit an-card an-card--limit an-enter" style="--stagger:3">
     <div class="analytics-limit__head">
-      <h3><i data-lucide="tags"></i> {{ t "analytics.limits.tag_heading" }}</h3>
+      <h3>
+        <span class="an-card__emblem an-card__emblem--violet" aria-hidden="true"><i data-lucide="tags"></i></span>
+        <span>{{ t "analytics.limits.tag_heading" }}</span>
+      </h3>
     </div>
     <p class="analytics-limit__hint">{{ t "analytics.limits.tag_hint" }}</p>
 
     {{ if .Tags }}
     <div class="data-table-wrap">
-      <table class="data-table">
+      <table class="data-table an-table">
         <thead>
           <tr>
             <th>{{ t "analytics.limits.col_tag" }}</th>
@@ -99,9 +108,9 @@
         </thead>
         <tbody>
           {{ range .Tags }}
-          <tr>
-            <td><span class="tag-chip">{{ .Tag }}</span></td>
-            <td class="text-right"><span class="traffic-badge">{{ .LimitHuman }}</span></td>
+          <tr class="an-row">
+            <td><span class="tag-chip an-tag-chip">{{ .Tag }}</span></td>
+            <td class="text-right"><span class="traffic-badge traffic-badge--dl">{{ .LimitHuman }}</span></td>
             <td class="text-right">
               <form method="post" action="{{ $.TrafficLimits.TagDeleteAction }}" class="inline-form">
                 <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">

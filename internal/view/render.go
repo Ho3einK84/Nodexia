@@ -1180,6 +1180,7 @@ type AnalyticsTargetView struct {
 }
 
 type TopServerMetricView struct {
+	Rank       int
 	ServerID   int64
 	ServerName string
 	// FlagEmoji is the server's country flag (or "" when undetected); CountryName
@@ -1190,9 +1191,16 @@ type TopServerMetricView struct {
 	CPU         string
 	RAM         string
 	Disk        string
+	CPUPct      float64
+	RAMPct      float64
+	DiskPct     float64
+	CPULevel    string
+	RAMLevel    string
+	DiskLevel   string
 }
 
 type TopServerTrafficView struct {
+	Rank       int
 	ServerID   int64
 	ServerName string
 	// FlagEmoji is the server's country flag (or "" when undetected); CountryName
@@ -1204,6 +1212,10 @@ type TopServerTrafficView struct {
 	Upload      string // current-month TX, human-readable
 	MonthBytes  string // current-month total, human-readable
 	MonthLabel  string
+	SharePct    int
+	BarPct      float64
+	RXBarPct    float64
+	TXBarPct    float64
 }
 
 type GlobalAnalyticsView struct {
@@ -1215,17 +1227,34 @@ type GlobalAnalyticsView struct {
 	HasGlobalLimit   bool
 	GlobalLimitHuman string
 	TagLimitCount    int
+	// Fleet-wide monthly traffic & average resource summaries for the global
+	// analytics hero and card headers.
+	HasFleetTraffic    bool
+	FleetDownloadHuman string
+	FleetUploadHuman   string
+	FleetTotalHuman    string
+	FleetRXPct         int
+	FleetTXPct         int
+	FleetMonthLabel    string
+	AvgCPU             string
+	AvgRAM             string
+	AvgDisk            string
+	AvgCPULevel        string
+	AvgRAMLevel        string
+	AvgDiskLevel       string
 }
 
 // AnalyticsTrafficSummaryView is the current-month download/upload/total strip
 // shown on a single server's analytics page. HasData is false when the server
 // has no vnstat row for the current month.
 type AnalyticsTrafficSummaryView struct {
-	HasData    bool
-	MonthLabel string
-	Download   string
-	Upload     string
-	Total      string
+	HasData     bool
+	MonthLabel  string
+	Download    string
+	Upload      string
+	Total       string
+	DownloadPct int
+	UploadPct   int
 }
 
 // AnalyticsLimitView powers the per-server monthly download (RX) limit form on

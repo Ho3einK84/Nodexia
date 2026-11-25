@@ -1,21 +1,24 @@
 {{ define "content-analytics" }}
-<section class="hero">
+<section class="hero analytics-page analytics-server">
 
   {{ template "server-header" . }}
 
   <!-- Network Traffic Hero Section (always 30d from vnStat) -->
   <div class="analytics-traffic-hero">
-    <article class="chart-card chart-card--hero" id="card-traffic">
+    <article class="chart-card chart-card--hero chart-card--traffic an-enter" id="card-traffic" style="--stagger:0">
       <div class="chart-card__header">
         <div class="chart-card__title">
-          <i data-lucide="network" class="chart-icon"></i>
+          <span class="chart-icon-badge chart-icon-badge--traffic" aria-hidden="true"><i data-lucide="network" class="chart-icon"></i></span>
           <span>{{ t "analytics.network_traffic" }}</span>
-          <span class="chart-badge">{{ t "analytics.last_30_days" }}</span>
+          <span class="chart-badge chart-badge--live"><span class="chart-badge__dot" aria-hidden="true"></span> {{ t "analytics.last_30_days" }}</span>
         </div>
-        <span class="chart-card__unit">GB/day</span>
+        <div class="chart-card__meta">
+          <span class="chart-card__live-val" id="live-traffic" hidden></span>
+          <span class="chart-card__unit">GB/day</span>
+        </div>
       </div>
       <div class="chart-wrap chart-wrap--tall">
-        <div class="chart-skeleton" id="skeleton-traffic"></div>
+        <div class="chart-skeleton an-shimmer" id="skeleton-traffic"></div>
         <div class="chart-container" id="chart-traffic" data-metric="traffic" data-server="{{ .AnalyticsTarget.ID }}" hidden></div>
         <div class="chart-empty" id="empty-traffic" hidden>
           <i data-lucide="wifi-off"></i>
@@ -34,19 +37,49 @@
     {{ with .AnalyticsTrafficMonth }}
     {{ if .HasData }}
     <div class="traffic-summary">
-      <div class="traffic-summary__card traffic-summary__card--dl">
-        <div class="traffic-summary__label"><i data-lucide="arrow-down"></i> {{ t "analytics.download" }}</div>
-        <div class="traffic-summary__value">{{ .Download }}</div>
+      <div class="traffic-summary__card traffic-summary__card--dl an-enter" style="--stagger:1">
+        <div class="traffic-summary__top">
+          <div class="traffic-summary__label">
+            <span class="traffic-summary__icon traffic-summary__icon--dl" aria-hidden="true"><i data-lucide="arrow-down"></i></span>
+            <span>{{ t "analytics.download" }}</span>
+          </div>
+          <span class="traffic-summary__pct traffic-summary__pct--dl">{{ .DownloadPct }}%</span>
+        </div>
+        <div class="traffic-summary__value" data-countup>{{ .Download }}</div>
+        <div class="traffic-summary__meter" aria-hidden="true">
+          <span class="traffic-summary__fill traffic-summary__fill--dl" data-an-bar style="--pct:{{ .DownloadPct }}"></span>
+        </div>
         <div class="traffic-summary__sub">{{ t "analytics.this_month" "label" .MonthLabel }}</div>
       </div>
-      <div class="traffic-summary__card traffic-summary__card--ul">
-        <div class="traffic-summary__label"><i data-lucide="arrow-up"></i> {{ t "analytics.upload" }}</div>
-        <div class="traffic-summary__value">{{ .Upload }}</div>
+      <div class="traffic-summary__card traffic-summary__card--ul an-enter" style="--stagger:2">
+        <div class="traffic-summary__top">
+          <div class="traffic-summary__label">
+            <span class="traffic-summary__icon traffic-summary__icon--ul" aria-hidden="true"><i data-lucide="arrow-up"></i></span>
+            <span>{{ t "analytics.upload" }}</span>
+          </div>
+          <span class="traffic-summary__pct traffic-summary__pct--ul">{{ .UploadPct }}%</span>
+        </div>
+        <div class="traffic-summary__value" data-countup>{{ .Upload }}</div>
+        <div class="traffic-summary__meter" aria-hidden="true">
+          <span class="traffic-summary__fill traffic-summary__fill--ul" data-an-bar style="--pct:{{ .UploadPct }}"></span>
+        </div>
         <div class="traffic-summary__sub">{{ t "analytics.this_month" "label" .MonthLabel }}</div>
       </div>
-      <div class="traffic-summary__card traffic-summary__card--total">
-        <div class="traffic-summary__label"><i data-lucide="arrow-up-down"></i> {{ t "analytics.total" }}</div>
-        <div class="traffic-summary__value">{{ .Total }}</div>
+      <div class="traffic-summary__card traffic-summary__card--total an-enter" style="--stagger:3">
+        <div class="traffic-summary__top">
+          <div class="traffic-summary__label">
+            <span class="traffic-summary__icon traffic-summary__icon--total" aria-hidden="true"><i data-lucide="arrow-up-down"></i></span>
+            <span>{{ t "analytics.total" }}</span>
+          </div>
+          <span class="traffic-summary__ratio" dir="ltr">↓ {{ .DownloadPct }}% · ↑ {{ .UploadPct }}%</span>
+        </div>
+        <div class="traffic-summary__value" data-countup>{{ .Total }}</div>
+        <div class="traffic-summary__split" aria-hidden="true">
+          <div class="traffic-summary__split-inner" data-an-bar style="--pct:100">
+            <span class="traffic-summary__split-rx" style="width:{{ .DownloadPct }}%"></span>
+            <span class="traffic-summary__split-tx" style="width:{{ .UploadPct }}%"></span>
+          </div>
+        </div>
         <div class="traffic-summary__sub">{{ t "analytics.this_month" "label" .MonthLabel }}</div>
       </div>
     </div>
@@ -55,12 +88,13 @@
   </div>
 
   <!-- Scoped Resource Telemetry Section (controlled by 1H / 24H / 7D / 30D range tabs) -->
-  <div class="analytics-section-bar">
+  <div class="analytics-section-bar an-enter" style="--stagger:1">
     <h2 class="analytics-section-title">
-      <i data-lucide="activity" class="chart-icon"></i>
+      <span class="an-section-icon" aria-hidden="true"><i data-lucide="activity" class="chart-icon"></i></span>
       <span>{{ t "monitoring.resource_health" }}</span>
     </h2>
     <div class="analytics-range-tabs" id="globalRangeTabs" role="tablist" aria-label="{{ t "analytics.time_range" }}">
+      <span class="range-tab-indicator" id="rangeTabIndicator" aria-hidden="true"></span>
       <button class="range-tab" data-range="1h" role="tab">1H</button>
       <button class="range-tab active" data-range="24h" role="tab" aria-selected="true">24H</button>
       <button class="range-tab" data-range="7d" role="tab">7D</button>
@@ -71,16 +105,19 @@
   <!-- Resource Charts: CPU Hero + Secondary Telemetry Grid -->
   <div class="chart-grid" id="resourceChartGrid">
 
-    <article class="chart-card chart-card--wide" id="card-cpu">
+    <article class="chart-card chart-card--wide chart-card--cpu an-enter" id="card-cpu" style="--stagger:0">
       <div class="chart-card__header">
         <div class="chart-card__title">
-          <i data-lucide="cpu" class="chart-icon"></i>
+          <span class="chart-icon-badge chart-icon-badge--cpu" aria-hidden="true"><i data-lucide="cpu" class="chart-icon"></i></span>
           <span>{{ t "analytics.cpu_usage" }}</span>
         </div>
-        <span class="chart-card__unit">%</span>
+        <div class="chart-card__meta">
+          <span class="chart-card__live-val" id="live-cpu" hidden></span>
+          <span class="chart-card__unit">%</span>
+        </div>
       </div>
       <div class="chart-wrap chart-wrap--hero">
-        <div class="chart-skeleton" id="skeleton-cpu"></div>
+        <div class="chart-skeleton an-shimmer" id="skeleton-cpu"></div>
         <div class="chart-container" id="chart-cpu" data-metric="cpu" data-server="{{ .AnalyticsTarget.ID }}" hidden></div>
         <div class="chart-empty" id="empty-cpu" hidden>
           <i data-lucide="bar-chart-2"></i>
@@ -94,16 +131,19 @@
       <div class="chart-card__footer" id="footer-cpu"></div>
     </article>
 
-    <article class="chart-card" id="card-ram">
+    <article class="chart-card chart-card--ram an-enter" id="card-ram" style="--stagger:1">
       <div class="chart-card__header">
         <div class="chart-card__title">
-          <i data-lucide="memory-stick" class="chart-icon"></i>
+          <span class="chart-icon-badge chart-icon-badge--ram" aria-hidden="true"><i data-lucide="memory-stick" class="chart-icon"></i></span>
           <span>{{ t "analytics.memory_usage" }}</span>
         </div>
-        <span class="chart-card__unit">%</span>
+        <div class="chart-card__meta">
+          <span class="chart-card__live-val" id="live-ram" hidden></span>
+          <span class="chart-card__unit">%</span>
+        </div>
       </div>
       <div class="chart-wrap">
-        <div class="chart-skeleton" id="skeleton-ram"></div>
+        <div class="chart-skeleton an-shimmer" id="skeleton-ram"></div>
         <div class="chart-container" id="chart-ram" data-metric="ram" data-server="{{ .AnalyticsTarget.ID }}" hidden></div>
         <div class="chart-empty" id="empty-ram" hidden>
           <i data-lucide="bar-chart-2"></i>
@@ -117,16 +157,19 @@
       <div class="chart-card__footer" id="footer-ram"></div>
     </article>
 
-    <article class="chart-card" id="card-disk">
+    <article class="chart-card chart-card--disk an-enter" id="card-disk" style="--stagger:2">
       <div class="chart-card__header">
         <div class="chart-card__title">
-          <i data-lucide="hard-drive" class="chart-icon"></i>
+          <span class="chart-icon-badge chart-icon-badge--disk" aria-hidden="true"><i data-lucide="hard-drive" class="chart-icon"></i></span>
           <span>{{ t "analytics.disk_usage" }}</span>
         </div>
-        <span class="chart-card__unit">%</span>
+        <div class="chart-card__meta">
+          <span class="chart-card__live-val" id="live-disk" hidden></span>
+          <span class="chart-card__unit">%</span>
+        </div>
       </div>
       <div class="chart-wrap">
-        <div class="chart-skeleton" id="skeleton-disk"></div>
+        <div class="chart-skeleton an-shimmer" id="skeleton-disk"></div>
         <div class="chart-container" id="chart-disk" data-metric="disk" data-server="{{ .AnalyticsTarget.ID }}" hidden></div>
         <div class="chart-empty" id="empty-disk" hidden>
           <i data-lucide="bar-chart-2"></i>
@@ -140,16 +183,19 @@
       <div class="chart-card__footer" id="footer-disk"></div>
     </article>
 
-    <article class="chart-card" id="card-load">
+    <article class="chart-card chart-card--load an-enter" id="card-load" style="--stagger:3">
       <div class="chart-card__header">
         <div class="chart-card__title">
-          <i data-lucide="activity" class="chart-icon"></i>
+          <span class="chart-icon-badge chart-icon-badge--load" aria-hidden="true"><i data-lucide="activity" class="chart-icon"></i></span>
           <span>{{ t "analytics.load_average" }}</span>
         </div>
-        <span class="chart-card__unit"></span>
+        <div class="chart-card__meta">
+          <span class="chart-card__live-val" id="live-load" hidden></span>
+          <span class="chart-card__unit"></span>
+        </div>
       </div>
       <div class="chart-wrap">
-        <div class="chart-skeleton" id="skeleton-load"></div>
+        <div class="chart-skeleton an-shimmer" id="skeleton-load"></div>
         <div class="chart-container" id="chart-load" data-metric="load" data-server="{{ .AnalyticsTarget.ID }}" hidden></div>
         <div class="chart-empty" id="empty-load" hidden>
           <i data-lucide="bar-chart-2"></i>
@@ -167,11 +213,14 @@
 
   <!-- Monthly download limit (optional; drives exhaustion forecasting) -->
   {{ with .AnalyticsLimit }}
-  <article class="card analytics-limit">
+  <article class="card analytics-limit an-card an-card--limit an-enter" style="--stagger:2">
     <div class="analytics-limit__head">
-      <h3><i data-lucide="gauge"></i> {{ t "analytics.limit.title" }}</h3>
+      <h3>
+        <span class="an-card__emblem an-card__emblem--indigo" aria-hidden="true"><i data-lucide="gauge"></i></span>
+        <span>{{ t "analytics.limit.title" }}</span>
+      </h3>
       {{ if .HasLimit }}
-      <span class="analytics-limit__current">{{ t "analytics.limit.current_kind" "value" .LimitHuman "kind" .KindLabel }}</span>
+      <span class="analytics-limit__current analytics-limit__current--active">{{ t "analytics.limit.current_kind" "value" .LimitHuman "kind" .KindLabel }}</span>
       {{ else if .InheritedHuman }}
       <span class="analytics-limit__current analytics-limit__current--inherited">{{ t "analytics.limit.inherited" "value" .InheritedHuman "source" .InheritedSource }}</span>
       {{ else }}
@@ -218,15 +267,19 @@
   {{ end }}
 
   <!-- Bandwidth Forecast (download only) -->
-  <div class="forecast-header">
-    <p class="eyebrow">{{ t "analytics.forecast_eyebrow" }}</p>
-    <h2 class="analytics-title">{{ t "analytics.usage_forecast" }} <span class="forecast-scope"><i data-lucide="arrow-down"></i> {{ t "analytics.download" }}</span></h2>
+  <div class="forecast-header an-enter" style="--stagger:3">
+    <p class="eyebrow forecast-eyebrow"><span class="an-dot an-dot--indigo" aria-hidden="true"></span> {{ t "analytics.forecast_eyebrow" }}</p>
+    <h2 class="analytics-title">
+      <span class="chart-icon-badge chart-icon-badge--forecast" aria-hidden="true"><i data-lucide="sparkles"></i></span>
+      <span>{{ t "analytics.usage_forecast" }}</span>
+      <span class="forecast-scope"><i data-lucide="arrow-down"></i> {{ t "analytics.download" }}</span>
+    </h2>
     <p class="analytics-subtitle">{{ tsafe "analytics.forecast_subtitle" }}</p>
   </div>
 
   <div class="forecast-grid" id="forecastGrid">
     <!-- Populated by analytics.js -->
-    <div class="forecast-skeleton"></div>
+    <div class="forecast-skeleton an-shimmer"></div>
   </div>
 
   <!-- Days-to-exhaustion projection (only when a monthly limit is set) -->

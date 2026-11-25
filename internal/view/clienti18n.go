@@ -95,6 +95,11 @@ var clientI18nKeys = []string{
 	"js.analytics.exhaustion_in_days",
 	"js.analytics.exhaustion_safe",
 	"js.analytics.exhaustion_margin",
+	"js.analytics.current",
+	"js.analytics.peak",
+	"js.analytics.avg",
+	"js.analytics.quota_projected",
+	"js.analytics.toggle_series",
 
 	// File browser (files.js)
 	"js.files.request_failed",

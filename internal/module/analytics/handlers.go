@@ -242,6 +242,7 @@ func (h PageHandler) currentPeriodTraffic(r *http.Request, server servers.Server
 			summary.Download = humanize.Bytes(rx)
 			summary.Upload = humanize.Bytes(tx)
 			summary.Total = humanize.Bytes(total)
+			summary.DownloadPct, summary.UploadPct = rxTxSplit(rx, tx)
 		}
 		return summary
 	}
@@ -259,6 +260,7 @@ func (h PageHandler) currentPeriodTraffic(r *http.Request, server servers.Server
 		summary.Download = humanize.Bytes(m.RX)
 		summary.Upload = humanize.Bytes(m.TX)
 		summary.Total = humanize.Bytes(total)
+		summary.DownloadPct, summary.UploadPct = rxTxSplit(m.RX, m.TX)
 		break
 	}
 	return summary
@@ -280,8 +282,16 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	topTraffic, _ := h.repo.ListServerTrafficSummaries(r.Context(), 10)
 
 	metricViews := make([]view.TopServerMetricView, 0, len(topMetrics))
-	for _, s := range topMetrics {
+	var sumCPU, sumRAM, sumDisk float64
+	for i, s := range topMetrics {
+		cpuPct := clampPct(s.AvgCPU)
+		ramPct := clampPct(s.AvgRAM)
+		diskPct := clampPct(s.AvgDisk)
+		sumCPU += cpuPct
+		sumRAM += ramPct
+		sumDisk += diskPct
 		metricViews = append(metricViews, view.TopServerMetricView{
+			Rank:        i + 1,
 			ServerID:    s.ServerID,
 			ServerName:  s.ServerName,
 			FlagEmoji:   geoip.FlagEmoji(s.CountryCode),
@@ -289,20 +299,56 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			CPU:         fmt.Sprintf("%.1f%%", s.AvgCPU),
 			RAM:         fmt.Sprintf("%.1f%%", s.AvgRAM),
 			Disk:        fmt.Sprintf("%.1f%%", s.AvgDisk),
+			CPUPct:      cpuPct,
+			RAMPct:      ramPct,
+			DiskPct:     diskPct,
+			CPULevel:    metricLevel(s.AvgCPU),
+			RAMLevel:    metricLevel(s.AvgRAM),
+			DiskLevel:   metricLevel(s.AvgDisk),
 		})
+	}
+
+	var fleetRX, fleetTX, fleetTotal int64
+	var fleetMonthLabel string
+	for _, s := range topTraffic {
+		fleetRX += s.MonthRX
+		fleetTX += s.MonthTX
+		fleetTotal += s.MonthBytes
+		if fleetMonthLabel == "" && s.MonthLabel != "" {
+			fleetMonthLabel = s.MonthLabel
+		}
 	}
 
 	// Sort traffic descending by monthly total, then keep the top 10 (the repo
 	// returns every server because the total can't be sorted in SQL).
-	sort.Slice(topTraffic, func(i, j int) bool {
+	sort.SliceStable(topTraffic, func(i, j int) bool {
 		return topTraffic[i].MonthBytes > topTraffic[j].MonthBytes
 	})
 	if len(topTraffic) > 10 {
 		topTraffic = topTraffic[:10]
 	}
+
+	var maxBytes int64
+	if len(topTraffic) > 0 {
+		maxBytes = topTraffic[0].MonthBytes
+	}
+
 	trafficViews := make([]view.TopServerTrafficView, 0, len(topTraffic))
-	for _, s := range topTraffic {
+	for i, s := range topTraffic {
+		var sharePct int
+		if fleetTotal > 0 && s.MonthBytes > 0 {
+			sharePct = int(math.Round(float64(s.MonthBytes) * 100 / float64(fleetTotal)))
+			if sharePct > 100 {
+				sharePct = 100
+			}
+		}
+		var barPct float64
+		if s.MonthBytes > 0 && maxBytes > 0 {
+			barPct = math.Max(4, math.Min(100, float64(s.MonthBytes)*100/float64(maxBytes)))
+		}
+		rxPct, txPct := rxTxSplit(s.MonthRX, s.MonthTX)
 		trafficViews = append(trafficViews, view.TopServerTrafficView{
+			Rank:        i + 1,
 			ServerID:    s.ServerID,
 			ServerName:  s.ServerName,
 			FlagEmoji:   geoip.FlagEmoji(s.CountryCode),
@@ -311,6 +357,10 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Upload:      humanize.Bytes(s.MonthTX),
 			MonthBytes:  humanize.Bytes(s.MonthBytes),
 			MonthLabel:  s.MonthLabel,
+			SharePct:    sharePct,
+			BarPct:      barPct,
+			RXBarPct:    float64(rxPct),
+			TXBarPct:    float64(txPct),
 		})
 	}
 
@@ -328,6 +378,26 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		TopMetrics:  metricViews,
 		TopTraffic:  trafficViews,
 		ServerCount: len(topMetrics),
+	}
+	if len(topMetrics) > 0 {
+		count := float64(len(topMetrics))
+		avgCPU := sumCPU / count
+		avgRAM := sumRAM / count
+		avgDisk := sumDisk / count
+		globalView.AvgCPU = fmt.Sprintf("%.1f%%", avgCPU)
+		globalView.AvgRAM = fmt.Sprintf("%.1f%%", avgRAM)
+		globalView.AvgDisk = fmt.Sprintf("%.1f%%", avgDisk)
+		globalView.AvgCPULevel = metricLevel(avgCPU)
+		globalView.AvgRAMLevel = metricLevel(avgRAM)
+		globalView.AvgDiskLevel = metricLevel(avgDisk)
+	}
+	if fleetTotal > 0 {
+		globalView.HasFleetTraffic = true
+		globalView.FleetDownloadHuman = humanize.Bytes(fleetRX)
+		globalView.FleetUploadHuman = humanize.Bytes(fleetTX)
+		globalView.FleetTotalHuman = humanize.Bytes(fleetTotal)
+		globalView.FleetMonthLabel = fleetMonthLabel
+		globalView.FleetRXPct, globalView.FleetTXPct = rxTxSplit(fleetRX, fleetTX)
 	}
 	// Traffic-limit summary for the banner linking to /analytics/limits.
 	// Best-effort: a read error just renders the banner without figures.
@@ -918,4 +988,47 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+func clampPct(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
+		return 0
+	}
+	if v > 100 {
+		return 100
+	}
+	return v
+}
+
+func metricLevel(v float64) string {
+	if v > 80.0 {
+		return "crit"
+	}
+	if v > 60.0 {
+		return "warn"
+	}
+	return "ok"
+}
+
+func rxTxSplit(rx, tx int64) (int, int) {
+	if rx <= 0 && tx <= 0 {
+		return 0, 0
+	}
+	if rx < 0 {
+		rx = 0
+	}
+	if tx < 0 {
+		tx = 0
+	}
+	total := rx + tx
+	if total <= 0 {
+		return 0, 0
+	}
+	rxPct := int(math.Round(float64(rx) * 100 / float64(total)))
+	if rxPct < 0 {
+		rxPct = 0
+	} else if rxPct > 100 {
+		rxPct = 100
+	}
+	return rxPct, 100 - rxPct
 }
