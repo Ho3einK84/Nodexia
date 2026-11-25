@@ -84,6 +84,8 @@ function initDrawer() {
     document.body.classList.remove('drawer-open');
     drawer.style.transition = '';
     drawer.style.transform = '';
+    backdrop.style.transition = '';
+    backdrop.style.opacity = '';
     setExpanded(false);
     if (lastFocus && lastFocus.focus && document.contains(lastFocus)) lastFocus.focus();
     lastFocus = null;
@@ -137,10 +139,14 @@ function initDrawer() {
     if (Math.abs(dy) > Math.abs(dx) && closingDx === 0) { dragging = false; return; }
     var candidate = rtl ? -dx : dx;
     closingDx = candidate > 0 ? candidate : 0;
+    var width = Math.max(drawer.offsetWidth || 280, 160);
+    var ratio = Math.max(0, Math.min(1, 1 - closingDx / width));
     drawer.style.transition = 'none';
     drawer.style.transform = closingDx > 0
-      ? 'translateX(' + (rtl ? -closingDx : closingDx) + 'px)'
-      : 'translateX(0)';
+      ? 'translate3d(' + (rtl ? -closingDx : closingDx) + 'px, 0, 0)'
+      : 'translate3d(0, 0, 0)';
+    backdrop.style.transition = 'none';
+    backdrop.style.opacity = String(ratio);
   }, { passive: true });
 
   function endTouch() {
@@ -148,11 +154,124 @@ function initDrawer() {
     dragging = false;
     drawer.style.transition = '';
     drawer.style.transform = '';
+    backdrop.style.transition = '';
+    backdrop.style.opacity = '';
     if (closingDx > 72) close();
     closingDx = 0;
   }
   drawer.addEventListener('touchend', endTouch);
   drawer.addEventListener('touchcancel', endTouch);
+}
+
+/* ── Mobile bottom nav: GPU sliding active pill & icon spring feedback ─────── */
+function initBottomNav() {
+  var nav = document.querySelector('.bottom-nav');
+  if (!nav || nav.dataset.bottomNavReady === '1') return;
+  nav.dataset.bottomNavReady = '1';
+
+  var slider = document.createElement('span');
+  slider.className = 'bottom-nav__slider';
+  slider.setAttribute('aria-hidden', 'true');
+  nav.insertBefore(slider, nav.firstChild);
+
+  var activeTarget = null;
+  var syncRAF = 0;
+
+  function triggerBounce(item) {
+    if (!item || prefersReducedMotion) return;
+    item.classList.remove('is-bouncing');
+    void item.offsetWidth;
+    item.classList.add('is-bouncing');
+    var clear = function () { item.classList.remove('is-bouncing'); };
+    item.addEventListener('animationend', clear, { once: true });
+    setTimeout(clear, 420);
+  }
+
+  function placeSlider(item, animate) {
+    if (!item) return;
+    var navRect = nav.getBoundingClientRect();
+    var itemRect = item.getBoundingClientRect();
+    if (!navRect.width || !itemRect.width) return;
+
+    var x = Math.round(itemRect.left - navRect.left - (nav.clientLeft || 0));
+    var w = Math.round(itemRect.width);
+    if (!animate || prefersReducedMotion) {
+      slider.classList.remove('is-animated');
+    } else if (!slider.classList.contains('is-animated')) {
+      slider.classList.add('is-animated');
+    }
+
+    nav.classList.add('has-slider');
+    slider.style.width = w + 'px';
+    slider.style.transform = 'translate3d(' + x + 'px, 0, 0)';
+    slider.classList.add('is-ready');
+
+    if (!animate && !prefersReducedMotion) {
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          slider.classList.add('is-animated');
+        });
+      });
+    }
+  }
+
+  function syncActive(animate, bounce) {
+    var active = nav.querySelector('.bottom-nav__item.is-active');
+    if (!active) return;
+    var changed = activeTarget !== active;
+    activeTarget = active;
+    placeSlider(active, animate);
+    if (bounce && changed) triggerBounce(active);
+  }
+
+  function scheduleSync(animate, bounce) {
+    if (syncRAF) cancelAnimationFrame(syncRAF);
+    syncRAF = requestAnimationFrame(function () {
+      syncRAF = 0;
+      syncActive(animate, bounce);
+    });
+  }
+
+  scheduleSync(false, false);
+
+  nav.addEventListener('click', function (e) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var item = e.target && e.target.closest ? e.target.closest('.bottom-nav__item') : null;
+    if (!item) return;
+    var changed = activeTarget !== item;
+    activeTarget = item;
+    placeSlider(item, true);
+    if (changed) triggerBounce(item);
+  });
+
+  if (typeof MutationObserver !== 'undefined') {
+    var mo = new MutationObserver(function (records) {
+      var sawItemChange = records.some(function (rec) {
+        return rec.target && rec.target.classList && rec.target.classList.contains('bottom-nav__item');
+      });
+      if (!sawItemChange) return;
+      var active = nav.querySelector('.bottom-nav__item.is-active');
+      if (active && active !== activeTarget) {
+        scheduleSync(true, true);
+      }
+    });
+    mo.observe(nav, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    var ro = new ResizeObserver(function () {
+      scheduleSync(false, false);
+    });
+    ro.observe(nav);
+  }
+
+  window.addEventListener('orientationchange', function () {
+    setTimeout(function () { scheduleSync(false, false); }, 120);
+  });
+
+  window.addEventListener('pageshow', function () {
+    scheduleSync(false, false);
+  });
 }
 
 /* ── Collapsible server cards & expand/collapse all ───────────────────────── */
@@ -421,4 +540,4 @@ function initAddServerTriggers() {
   });
 }
 
-export { initHomeWarnings, initDrawer, initServerCards, initAddServerTriggers, initServiceWorker, initOrientationLock, initDesktopSidebar };
+export { initHomeWarnings, initDrawer, initBottomNav, initServerCards, initAddServerTriggers, initServiceWorker, initOrientationLock, initDesktopSidebar };

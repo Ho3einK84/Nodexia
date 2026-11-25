@@ -612,3 +612,51 @@ func TestAnalyticsPagesRenderColorAndMotionHooks(t *testing.T) {
 		})
 	}
 }
+
+func TestMobileNavAnimationAndCSSSmoothnessContract(t *testing.T) {
+	staticFS, err := assets.Static()
+	if err != nil {
+		t.Fatalf("open embedded static assets: %v", err)
+	}
+
+	appRaw, err := fs.ReadFile(staticFS, "app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	if !strings.Contains(string(appRaw), "initBottomNav();") {
+		t.Error("app.js boot must initialize mobile bottom-nav sliding animations via initBottomNav()")
+	}
+
+	shellJSRaw, err := fs.ReadFile(staticFS, "modules/shell.js")
+	if err != nil {
+		t.Fatalf("read modules/shell.js: %v", err)
+	}
+	for _, want := range []string{"function initBottomNav()", "bottom-nav__slider", "is-bouncing"} {
+		if !strings.Contains(string(shellJSRaw), want) {
+			t.Errorf("modules/shell.js missing mobile nav animation hook %q", want)
+		}
+	}
+
+	shellCSSRaw, err := fs.ReadFile(staticFS, "shell.css")
+	if err != nil {
+		t.Fatalf("read shell.css: %v", err)
+	}
+	for _, want := range []string{".bottom-nav__slider", "@keyframes bn-icon-pop", "@keyframes bn-dock-in", ".drawer.is-open .drawer__link:nth-child(1)"} {
+		if !strings.Contains(string(shellCSSRaw), want) {
+			t.Errorf("shell.css missing mobile nav animation rule %q", want)
+		}
+	}
+
+	cssComments := regexp.MustCompile(`(?s)/\*.*?\*/`)
+	forbiddenCSS := regexp.MustCompile(`backdrop-filter\s*:|transition\s*:\s*all\b`)
+	for _, file := range []string{"analytics.css", "shell.css", "tabs.css"} {
+		raw, err := fs.ReadFile(staticFS, file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		cleaned := cssComments.ReplaceAllString(string(raw), "")
+		if match := forbiddenCSS.FindString(cleaned); match != "" {
+			t.Errorf("%s violates 60fps CSS guardrail with %q", file, match)
+		}
+	}
+}

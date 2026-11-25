@@ -50,40 +50,34 @@
     }
   }
 
-  // Semantic telemetry palette mapped onto scoped analytics CSS custom properties.
+  // Semantic telemetry palette aligned to Nodexia's Dark Graphite design tokens.
   const SERIES_TOKEN_MAP = {
-    cpu: '--an-sky',
-    ram: '--an-emerald',
-    disk: '--an-amber',
-    swap: '--an-violet',
-    load1: '--an-indigo',
-    load5: '--an-cyan',
-    load15: '--an-amber',
-    rx: '--an-sky',
-    tx: '--an-emerald',
+    cpu: '--accent-soft',
+    ram: '--ok',
+    disk: '--warn',
+    swap: '--an-slate-indigo',
+    load1: '--accent-soft',
+    load5: '--ok',
+    load15: '--warn',
+    rx: '--accent-soft',
+    tx: '--ok',
   };
 
   const TOKEN_DEFAULTS = {
-    '--an-sky': '#38bdf8',
-    '--an-emerald': '#34d399',
-    '--an-amber': '#fbbf24',
-    '--an-indigo': '#818cf8',
-    '--an-violet': '#a78bfa',
-    '--an-cyan': '#22d3ee',
-    '--an-rose': '#fb7185',
-    '--accent': '#38bdf8',
-    '--ok': '#34d399',
-    '--warn': '#fbbf24',
-    '--crit': '#fb7185',
-    '--text-muted': '#94a3b8',
-    '--text-dim': '#64748b',
+    '--accent': '#3b82f6',
+    '--accent-soft': '#60a5fa',
+    '--accent-bright': '#93c5fd',
+    '--ok': '#4cc38a',
+    '--warn': '#eab308',
+    '--crit': '#e5484d',
+    '--an-slate-indigo': '#8b9cf7',
+    '--an-slate-teal': '#5cb8c4',
+    '--text-muted': '#93939a',
+    '--text-dim': '#8a8a93',
   };
 
   const BACKEND_TOKEN_ALIASES = {
-    '--accent': '--an-sky',
-    '--ok': '--an-emerald',
-    '--warn': '--an-amber',
-    '--crit': '--an-rose',
+    '--accent': '--accent-soft',
   };
 
   const ALLOWED_TOKENS = new Set(Object.keys(TOKEN_DEFAULTS));
@@ -115,12 +109,12 @@
       }
     }
     if (token) {
-      return readCSSToken(token, TOKEN_DEFAULTS[token] || '#38bdf8');
+      return readCSSToken(token, TOKEN_DEFAULTS[token] || '#60a5fa');
     }
     if (series && COLOR_RE.test(series.color)) {
       return series.color;
     }
-    return readCSSToken('--an-sky', '#38bdf8');
+    return readCSSToken('--accent-soft', '#60a5fa');
   }
 
   // ── Shared GPU Bar & Count-Up Enhancers ───────────────────────────────────
@@ -305,7 +299,7 @@
     }
 
     const linePathsToAnimate = [];
-    const surfaceBg = readCSSToken('--an-surface', '#141926');
+    const surfaceBg = readCSSToken('--surface', '#141415');
 
     series.forEach((s, sIdx) => {
       if (!s.data || s.data.length === 0) return;
@@ -316,8 +310,8 @@
         id: gradId,
         x1: '0', y1: '0', x2: '0', y2: '1',
       });
-      grad.appendChild(createSVGEl('stop', { offset: '0%', 'stop-color': strokeColor, 'stop-opacity': '0.32' }));
-      grad.appendChild(createSVGEl('stop', { offset: '62%', 'stop-color': strokeColor, 'stop-opacity': '0.09' }));
+      grad.appendChild(createSVGEl('stop', { offset: '0%', 'stop-color': strokeColor, 'stop-opacity': '0.20' }));
+      grad.appendChild(createSVGEl('stop', { offset: '62%', 'stop-color': strokeColor, 'stop-opacity': '0.05' }));
       grad.appendChild(createSVGEl('stop', { offset: '100%', 'stop-color': strokeColor, 'stop-opacity': '0' }));
       defs.appendChild(grad);
 

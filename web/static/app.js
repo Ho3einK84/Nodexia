@@ -25,6 +25,7 @@ import { initActionMenus, initModals } from './modules/modals.js';
 import {
   initHomeWarnings,
   initDrawer,
+  initBottomNav,
   initServerCards,
   initAddServerTriggers,
   initServiceWorker,
@@ -81,6 +82,7 @@ function boot() {
   initActionMenus();
   initModals();
   initDrawer();
+  initBottomNav();
   initDesktopSidebar();
   initAddServerTriggers();
   initBackToTop();
