@@ -2,7 +2,7 @@
 
 > **Single-binary control plane for server fleet telemetry, bandwidth forecasting, SSH operations, and Rebecca / PasarGuard node management.**
 
-[![version](https://img.shields.io/badge/release-v0.9.4-3b82f6)](https://github.com/Ho3einK84/Nodexia/releases)
+[![version](https://img.shields.io/badge/release-v0.9.5-3b82f6)](https://github.com/Ho3einK84/Nodexia/releases)
 [![go](https://img.shields.io/badge/go-1.26-00ADD8)](https://go.dev/)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![frontend](https://img.shields.io/badge/frontend-zero--build-22c55e)](FRONTEND.md)
@@ -13,18 +13,19 @@ Nodexia connects to Linux servers over SSH, collects system and `vnStat` traffic
 
 ## Key Capabilities
 
-- **Fleet Telemetry & Forecasting:** Real-time CPU, RAM, swap, disk, load averages, hourly/daily metric rollups, minimal Bento layouts with 3-column micro-gauges optimized for mobile screens, host specification cards with animated uptime indicators and one-click copy, plus a Dark Graphite **Analytics** workspace with subtle semantic tinted shadows (4-tile fleet KPI strip with monthly fleet traffic & RX/TX split, resource health meters & dual-tone stacked traffic bars that adapt into responsive cards on mobile, interactive SVG charts with pulsing live beacons, touch scrubbing, series legend toggles, sliding `1H` / `24H` / `7D` / `30D` range tabs, and quota exhaustion trajectory bars calibrated to billing reset days).
+- **Fleet Telemetry & Forecasting:** Real-time CPU, RAM, swap, disk, load averages, hourly/daily metric rollups, minimal Bento layouts with 3-column micro-gauges optimized for mobile screens, host specification cards with animated uptime indicators and one-click copy, plus a Dark Graphite **Analytics** workspace with subtle semantic tinted shadows (4-tile fleet KPI strip with monthly fleet traffic & RX/TX split, resource health meters & dual-tone stacked traffic bars that adapt into responsive cards on mobile, interactive SVG charts with pulsing live beacons, touch scrubbing, series legend toggles, sliding `6H` / `24H` / `7D` / `30D` range tabs with automatic 7D/30D fallback for new servers, live quota meters, sortable/filterable fleet tables, an AJAX **Limits** admin with tag suggestions, and quota exhaustion trajectory bars calibrated to billing reset days that match the Overview and Alerts math).
 - **Node Discovery & Deployment:** Single-flight SSH discovery of Docker and systemd **Rebecca** and **PasarGuard** nodes, atomic snapshot tracking, 30-day UTC uptime strips, confidence & latency telemetry, interactive quick-action menus with outside-tap dismiss, unified Dark Graphite Properties, Node Update, and in-page **Add Server** modals (with live SSH test, smart paste, and tag chips), read-only SSH config inspection, live streaming log drawer, and a guided 3-step deploy wizard with preflight checks and secure PTY installs.
 - **Built-In Ops Suite:** Multi-pane workspace featuring an in-browser SSH WebSocket terminal (`xterm.js` with Termius-style smart command autocomplete, learned history, vector mobile controls, `/tmp` upload, and Dark/Light themes), SFTP file browser and inline code/config/log-tail editor, SSE command runner, and bulk batch tasks.
 - **Alerting & Operational Diagnostics:** Configurable threshold, predictive quota, anomaly, and host-down rules with per-server silences and Telegram digests; live runtime diagnostics (`/ops/diagnostics`), Kubernetes-style health probes (`/healthz`, `/healthz/live`, `/healthz/ready`), Prometheus exporter (`/metrics`), and AES-256-GCM encrypted backup/restore.
 - **Zero-Build Multi-Tab Workspace:** Open multiple servers, terminals, and analytics panes side by side without page reloads using browser-native ES Modules (`app.js` + 4 core modules `core.js`, `ui.js`, `modals.js`, `shell.js` and 5 lazy-loaded domain modules `stream.js`, `log-drawer.js`, `nodes.js`, `nodes-deploy.js`, `server-modal.js`), pure Dark Graphite CSS design tokens, 60fps mobile navigation animations (GPU sliding bottom-dock indicator, icon spring feedback, staggered slide-over drawer with swipe-linked backdrop fade, and animated tab switcher sheet), strict smoothness guardrails (zero `backdrop-filter`, zero `transition: all`, strictly scoped Lucide icons), intuitive server subnav ordering, and Go `embed.FS` SHA-256 asset fingerprinting—zero `npm` or bundler pipelines.
-- **Security Hardened:** Single-administrator session auth, rate-limited login, HMAC synchronizer CSRF tokens, TOFU SSH host-key pinning, external credential references (`env:` / `file:`), and strict CSP (`script-src 'self'`, `frame-ancestors 'none'`).
+- **Security Hardened:** Single-administrator session auth, rate-limited login, `RequireAuth` ahead of HMAC synchronizer CSRF tokens, TOFU SSH host-key pinning (in-memory cached), host+username-bound credential reuse, 32+ character session secrets enforced in production, right-to-left `X-Forwarded-For` parsing with IPv6 `/64` rate-limit buckets, bounded WebSocket frames, hardened SFTP uploads, external credential references (`env:` / `file:`), and strict CSP (`script-src 'self'`, `frame-ancestors 'none'`).
+- **Fast by Default:** Pooled SSH/SFTP connections, a dedicated SQLite WAL read pool with composite indexes, event-driven SSE, Gzip delivery, shell-less partial rendering for tab navigation (`X-Nodexia-Partial: 1`), immutable versioned ES modules, and a trimmed Lucide bundle.
 
 ---
 
 ## Interface Gallery (`v0.9.2`)
 
-> **Note:** The gallery screenshots below were captured on `v0.9.2` (prior to the `v0.9.3` unified Dark Graphite UI refactor and the `v0.9.4` Analytics & mobile navigation motion updates).
+> **Note:** The gallery screenshots below were captured on `v0.9.2` (prior to the `v0.9.3` unified Dark Graphite UI refactor, the `v0.9.4` motion updates, and the `v0.9.5` performance, security, and Analytics overhaul).
 
 ### Overview & Bilingual RTL Workspace
 Unified fleet summary, active warning banners, resource snapshots, and full bidirectional English / Persian (فارسی) layout parity.
@@ -82,10 +83,10 @@ Interactive WebSocket terminal with Termius-style smart command autocomplete and
 
 | Layer | Technology | Implementation |
 |---|---|---|
-| **Backend** | Go 1.26+ | Standard library `net/http` routing and middleware chain (`Recover` -> `Logging` -> `RequireAuth` -> `CSRF` -> `Session` -> `Locale`) |
+| **Backend** | Go 1.26+ | Standard library `net/http` routing and middleware chain (`RequestID` -> `SecurityHeaders` -> `Session` -> `Locale` -> `RequireAuth` -> `CSRF` -> `Logging` -> `Compress` -> `Recover`) |
 | **Database** | SQLite / MySQL 8+ | Embedded pure-Go SQLite (`modernc.org/sqlite`) default via shared `db.DBTX`; optional MySQL driver |
 | **Frontend** | Zero-Build Web Standards | Server-rendered Go `html/template` partials + modular ES Modules (`core.js`, `ui.js`, `modals.js`, `shell.js` + lazy `stream.js`, `log-drawer.js`, `nodes.js`, `nodes-deploy.js`, `server-modal.js`) + 5-layer CSS design tokens |
-| **Remote Ops** | SSH / SFTP / WebSocket | `golang.org/x/crypto/ssh` pooled runtime (`BatchSession`), `pkg/sftp`, and `coder/websocket` paired with vendored `xterm.js` + smart autocomplete |
+| **Remote Ops** | SSH / SFTP / WebSocket | `golang.org/x/crypto/ssh` pooled SSH/SFTP runtime (90s idle expiry, 30s keepalive, `BatchSession`), `pkg/sftp`, and `coder/websocket` paired with vendored `xterm.js` + smart autocomplete |
 | **Packaging** | Single Static Binary | Templates, locales (`en.json`, `fa.json`), fonts, and static assets embedded via `go:embed` (`CGO_ENABLED=0`) |
 
 ---
@@ -129,6 +130,7 @@ Environment variables are stored in `/opt/nodexia/.env.production` for productio
 | `NODEXIA_DB_DRIVER` | Database backend (`sqlite` or `mysql`) | `sqlite` |
 | `NODEXIA_TELEGRAM_BOT_TOKEN` | Telegram bot token for alerts and digests (env-only) | Optional |
 | `NODEXIA_DIGEST_ENABLED` | Enable scheduled Telegram traffic & alert digests | `false` (`24h` interval) |
+| `NODEXIA_HTTP_WRITE_TIMEOUT` | HTTP response write timeout (raise for slow SSH-backed pages) | `60s` |
 | `NODEXIA_METRICS_TOKEN` | Bearer/query token enabling Prometheus `/metrics` | Disabled when empty |
 
 ---
