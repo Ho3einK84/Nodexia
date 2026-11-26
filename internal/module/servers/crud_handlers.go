@@ -348,6 +348,11 @@ func (h UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.deps.SSH != nil {
+		h.deps.SSH.EvictHost(existing.Host, existing.Port)
+		h.deps.SSH.EvictHost(updated.Host, updated.Port)
+	}
+
 	// Host or credentials may have changed, so re-detect the country in the
 	// background. Non-blocking and best-effort, exactly like the create path.
 	if h.deps.CountryResolver != nil {
@@ -373,11 +378,16 @@ func (h DeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	existing, _ := h.repo.GetByID(r.Context(), serverID)
+
 	if err := h.repo.Delete(r.Context(), serverID); err != nil {
 		renderRepositoryError(w, r, h.deps, err, "servers.error.delete_title", "servers.error.delete_message")
 		return
 	}
 
+	if h.deps.SSH != nil && existing.Host != "" {
+		h.deps.SSH.EvictHost(existing.Host, existing.Port)
+	}
 	if h.deps.TerminalTickets != nil {
 		h.deps.TerminalTickets.RevokeServer(serverID)
 	}

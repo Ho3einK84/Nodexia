@@ -9,10 +9,6 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/sse"
 )
 
-// nodeSSEPollInterval mirrors the command stream: re-read the in-memory job
-// every 100ms for new output instead of reloading the whole page every 2s.
-const nodeSSEPollInterval = 100 * time.Millisecond
-
 // nodeSSEKeepAlive sends a comment frame on idle streams so reverse proxies do
 // not close a connection that is quietly waiting for the next chunk.
 const nodeSSEKeepAlive = 15 * time.Second
@@ -65,7 +61,7 @@ func (h *Handlers) InstallEvents(w http.ResponseWriter, r *http.Request) {
 
 	var sent int
 	var lastStage string
-	emit := func(snap installSnapshot) bool {
+	emit := func(snap installSnapshot, outDelta string) bool {
 		if snap.Stage != "" && snap.Stage != lastStage {
 			stagePayload, err := json.Marshal(map[string]any{
 				"stage":       snap.Stage,
@@ -79,27 +75,25 @@ func (h *Handlers) InstallEvents(w http.ResponseWriter, r *http.Request) {
 			}
 			lastStage = snap.Stage
 		}
-		if len(snap.Output) > sent {
-			if out.Event("output", snap.Output[sent:]) != nil {
+		if outDelta != "" {
+			if out.Event("output", outDelta) != nil {
 				return false
 			}
-			sent = len(snap.Output)
 		}
 		return true
 	}
 
-	snap := job.snapshot()
-	if !emit(snap) {
+	snap, delta, nextSent, waitCh := job.readDelta(sent)
+	if !emit(snap, delta) {
 		return
 	}
+	sent = nextSent
 	if snap.Status != installStatusRunning {
 		event, data := installTerminalFrame(snap)
 		_ = out.Event(event, data)
 		return
 	}
 
-	poll := time.NewTicker(nodeSSEPollInterval)
-	defer poll.Stop()
 	keepalive := time.NewTicker(nodeSSEKeepAlive)
 	defer keepalive.Stop()
 
@@ -111,11 +105,12 @@ func (h *Handlers) InstallEvents(w http.ResponseWriter, r *http.Request) {
 			if out.Comment("keep-alive") != nil {
 				return
 			}
-		case <-poll.C:
-			snap := job.snapshot()
-			if !emit(snap) {
+		case <-waitCh:
+			snap, delta, nextSent, waitCh = job.readDelta(sent)
+			if !emit(snap, delta) {
 				return
 			}
+			sent = nextSent
 			if snap.Status != installStatusRunning {
 				event, data := installTerminalFrame(snap)
 				_ = out.Event(event, data)

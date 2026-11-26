@@ -9,11 +9,6 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/sse"
 )
 
-// ssePollInterval is how often the SSE handler re-reads the snapshot for new
-// output. This is a cheap in-memory read; it replaces the browser reloading the
-// whole page every 2 seconds.
-const ssePollInterval = 100 * time.Millisecond
-
 // sseKeepAlive bounds how long the stream can sit silent before a comment frame
 // is sent, so idle reverse proxies do not close the connection.
 const sseKeepAlive = 15 * time.Second
@@ -30,46 +25,43 @@ type terminalPayload struct {
 // the session leaves the running state (or the client disconnects). Callers
 // must validate ownership (server scope) before invoking this.
 //
-// Output is streamed from offset 0 on connect — the browser resets its view on
-// each EventSource (re)connect — so a reconnect after a network blip re-syncs
-// the full buffer without duplicating lines.
+// Delivery is event-driven via the session's broadcast channel rather than
+// polling on a fixed ticker, so chunks flush immediately and idle streams do no
+// background work between keep-alives.
 func (s *Store) ServeSSE(w http.ResponseWriter, r *http.Request, id string) {
 	out := sse.NewWriter(w)
 	ctx := r.Context()
 
 	var sentOut, sentErr int
-	emit := func(snap Snapshot) bool {
-		if len(snap.Stdout) > sentOut {
-			if out.Event("output", snap.Stdout[sentOut:]) != nil {
+	emitDelta := func(outDelta, errDelta string) bool {
+		if outDelta != "" {
+			if out.Event("output", outDelta) != nil {
 				return false
 			}
-			sentOut = len(snap.Stdout)
 		}
-		if len(snap.Stderr) > sentErr {
-			if out.Event("stderr", snap.Stderr[sentErr:]) != nil {
+		if errDelta != "" {
+			if out.Event("stderr", errDelta) != nil {
 				return false
 			}
-			sentErr = len(snap.Stderr)
 		}
 		return true
 	}
 
-	snap, ok := s.Get(id)
+	snap, outDelta, errDelta, nextOut, nextErr, waitCh, ok := s.readDelta(id, sentOut, sentErr)
 	if !ok {
 		_ = out.Event("error", `{"status":"failed","message":"This live session is no longer available."}`)
 		return
 	}
-	if !emit(snap) {
+	if !emitDelta(outDelta, errDelta) {
 		return
 	}
+	sentOut, sentErr = nextOut, nextErr
 	if snap.Status != StatusRunning {
 		event, data := terminalFrame(snap)
 		_ = out.Event(event, data)
 		return
 	}
 
-	poll := time.NewTicker(ssePollInterval)
-	defer poll.Stop()
 	keepalive := time.NewTicker(sseKeepAlive)
 	defer keepalive.Stop()
 
@@ -81,15 +73,16 @@ func (s *Store) ServeSSE(w http.ResponseWriter, r *http.Request, id string) {
 			if out.Comment("keep-alive") != nil {
 				return
 			}
-		case <-poll.C:
-			snap, ok := s.Get(id)
+		case <-waitCh:
+			snap, outDelta, errDelta, nextOut, nextErr, waitCh, ok = s.readDelta(id, sentOut, sentErr)
 			if !ok {
 				_ = out.Event("error", `{"status":"failed","message":"This live session expired."}`)
 				return
 			}
-			if !emit(snap) {
+			if !emitDelta(outDelta, errDelta) {
 				return
 			}
+			sentOut, sentErr = nextOut, nextErr
 			if snap.Status != StatusRunning {
 				event, data := terminalFrame(snap)
 				_ = out.Event(event, data)

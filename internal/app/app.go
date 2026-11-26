@@ -37,6 +37,7 @@ func New(cfg config.Config) (*App, error) {
 			bootstrap.Scheduler.Close,
 			bootstrap.LiveMetrics.Close,
 			bootstrap.TerminalTickets.Close,
+			bootstrap.SSH.Close,
 			bootstrap.Database.Close,
 		},
 	}, nil

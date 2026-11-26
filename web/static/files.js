@@ -665,6 +665,11 @@
       }
     }).catch(function (err) {
       setRefreshSpinning(false);
+      var hint = qs('#file-connect-hint');
+      if (hint && hint.getAttribute('aria-busy') === 'true') {
+        hint.removeAttribute('aria-busy');
+        hint.textContent = err.message || T('js.files.request_failed', { status: 0 });
+      }
       toast(err.message || T('js.files.request_failed', { status: 0 }), 'error');
     });
   }
@@ -2446,7 +2451,11 @@
     var hasSavedSession = initCredPersistence();
     var c = context();
     var ws = qs('#file-workspace');
-    if (hasSavedSession && c && !c.hasStoredCreds && ws && ws.hidden) {
+    if (c && c.card && c.card.getAttribute('data-autoload') === '1' && ws && ws.hidden) {
+      c.card.removeAttribute('data-autoload');
+      var autoPath = c.card.getAttribute('data-autoload-path') || (qs('#file-path') && qs('#file-path').value) || '~';
+      navigateTo(autoPath, { pushHistory: true });
+    } else if (hasSavedSession && c && !c.hasStoredCreds && ws && ws.hidden) {
       navigateTo((qs('#file-path') && qs('#file-path').value) || '~');
     }
   }

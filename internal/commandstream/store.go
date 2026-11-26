@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Ho3einK84/Nodexia/internal/ansi"
 )
@@ -23,6 +24,8 @@ const (
 	// would report the session as expired even though it finished. Every run
 	// path is bounded by a command timeout, so this cap is purely defensive.
 	runningSessionMaxAge = 24 * time.Hour
+
+	minPruneInterval = 30 * time.Second
 )
 
 type Snapshot struct {
@@ -40,10 +43,18 @@ type Snapshot struct {
 	HistoryID   int64
 }
 
+type streamBuffer struct {
+	stdout []byte
+	stderr []byte
+	notify chan struct{}
+}
+
 type Store struct {
-	mu       sync.RWMutex
-	sessions map[string]Snapshot
-	ttl      time.Duration
+	mu        sync.RWMutex
+	sessions  map[string]Snapshot
+	buffers   map[string]*streamBuffer
+	ttl       time.Duration
+	lastPrune time.Time
 }
 
 func New(ttl time.Duration) *Store {
@@ -53,6 +64,7 @@ func New(ttl time.Duration) *Store {
 
 	return &Store{
 		sessions: make(map[string]Snapshot),
+		buffers:  make(map[string]*streamBuffer),
 		ttl:      ttl,
 	}
 }
@@ -69,7 +81,7 @@ func (s *Store) ActiveCount() int {
 }
 
 func (s *Store) Create(serverID int64, command string) Snapshot {
-	s.pruneExpired()
+	s.maybePrune()
 
 	now := time.Now().UTC()
 	snapshot := Snapshot{
@@ -82,7 +94,13 @@ func (s *Store) Create(serverID int64, command string) Snapshot {
 	}
 
 	s.mu.Lock()
+	if s.buffers == nil {
+		s.buffers = make(map[string]*streamBuffer)
+	}
 	s.sessions[snapshot.ID] = snapshot
+	s.buffers[snapshot.ID] = &streamBuffer{
+		notify: make(chan struct{}),
+	}
 	s.mu.Unlock()
 	return snapshot
 }
@@ -92,9 +110,7 @@ func (s *Store) AppendStdout(id string, chunk string) {
 	if chunk == "" {
 		return
 	}
-	s.update(id, func(snapshot *Snapshot) {
-		snapshot.Stdout = appendCapped(snapshot.Stdout, chunk)
-	})
+	s.appendStream(id, true, chunk)
 }
 
 func (s *Store) AppendStderr(id string, chunk string) {
@@ -102,20 +118,45 @@ func (s *Store) AppendStderr(id string, chunk string) {
 	if chunk == "" {
 		return
 	}
-	s.update(id, func(snapshot *Snapshot) {
-		snapshot.Stderr = appendCapped(snapshot.Stderr, chunk)
-	})
+	s.appendStream(id, false, chunk)
 }
 
-func appendCapped(buf, chunk string) string {
+func (s *Store) appendStream(id string, isStdout bool, chunk string) {
+	if id == "" || chunk == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	snapshot, ok := s.sessions[id]
+	if !ok {
+		return
+	}
+	buf := s.ensureBufferLocked(id)
+	if isStdout {
+		buf.stdout = appendCappedBytes(buf.stdout, chunk)
+	} else {
+		buf.stderr = appendCappedBytes(buf.stderr, chunk)
+	}
+	snapshot.UpdatedAt = time.Now().UTC()
+	s.sessions[id] = snapshot
+	signalLocked(buf)
+}
+
+func appendCappedBytes(buf []byte, chunk string) []byte {
 	if len(buf) >= maxStreamOutputBytes {
 		return buf
 	}
 	remaining := maxStreamOutputBytes - len(buf)
 	if len(chunk) > remaining {
-		return buf + chunk[:remaining] + "\n[output truncated at 1 MB]"
+		cut := remaining
+		for cut > 0 && !utf8.RuneStart(chunk[cut]) {
+			cut--
+		}
+		buf = append(buf, chunk[:cut]...)
+		return append(buf, "\n[output truncated at 1 MB]"...)
 	}
-	return buf + chunk
+	return append(buf, chunk...)
 }
 
 func (s *Store) Complete(id string, exitCode *int, completedAt time.Time, historyID int64) {
@@ -144,16 +185,65 @@ func (s *Store) Get(id string) (Snapshot, bool) {
 		return Snapshot{}, false
 	}
 
-	s.pruneExpired()
-
+	now := time.Now().UTC()
 	s.mu.RLock()
 	snapshot, ok := s.sessions[id]
-	s.mu.RUnlock()
-	if !ok {
+	if !ok || s.isExpiredLocked(snapshot, now) {
+		s.mu.RUnlock()
 		return Snapshot{}, false
 	}
-
+	if buf := s.buffers[id]; buf != nil {
+		if len(buf.stdout) > 0 {
+			snapshot.Stdout = string(buf.stdout)
+		}
+		if len(buf.stderr) > 0 {
+			snapshot.Stderr = string(buf.stderr)
+		}
+	}
+	s.mu.RUnlock()
 	return snapshot, true
+}
+
+// readDelta reads only the unread tail of stdout/stderr along with a broadcast
+// channel that closes on the next state change. This avoids copying the entire
+// accumulated output buffer on every SSE event.
+func (s *Store) readDelta(id string, sentOut, sentErr int) (snap Snapshot, outDelta, errDelta string, nextOut, nextErr int, waitCh <-chan struct{}, ok bool) {
+	if id == "" {
+		return Snapshot{}, "", "", sentOut, sentErr, nil, false
+	}
+
+	now := time.Now().UTC()
+	s.mu.RLock()
+	snapshot, exists := s.sessions[id]
+	if !exists || s.isExpiredLocked(snapshot, now) {
+		s.mu.RUnlock()
+		return Snapshot{}, "", "", sentOut, sentErr, nil, false
+	}
+
+	nextOut = sentOut
+	nextErr = sentErr
+	if buf := s.buffers[id]; buf != nil {
+		if len(buf.stdout) > sentOut {
+			outDelta = string(buf.stdout[sentOut:])
+			nextOut = len(buf.stdout)
+		}
+		if len(buf.stderr) > sentErr {
+			errDelta = string(buf.stderr[sentErr:])
+			nextErr = len(buf.stderr)
+		}
+		waitCh = buf.notify
+	} else {
+		if len(snapshot.Stdout) > sentOut {
+			outDelta = snapshot.Stdout[sentOut:]
+			nextOut = len(snapshot.Stdout)
+		}
+		if len(snapshot.Stderr) > sentErr {
+			errDelta = snapshot.Stderr[sentErr:]
+			nextErr = len(snapshot.Stderr)
+		}
+	}
+	s.mu.RUnlock()
+	return snapshot, outDelta, errDelta, nextOut, nextErr, waitCh, true
 }
 
 func (s *Store) update(id string, update func(snapshot *Snapshot)) {
@@ -172,34 +262,69 @@ func (s *Store) update(id string, update func(snapshot *Snapshot)) {
 	update(&snapshot)
 	snapshot.UpdatedAt = time.Now().UTC()
 	s.sessions[id] = snapshot
+	signalLocked(s.buffers[id])
+}
+
+func (s *Store) ensureBufferLocked(id string) *streamBuffer {
+	if s.buffers == nil {
+		s.buffers = make(map[string]*streamBuffer)
+	}
+	buf, ok := s.buffers[id]
+	if !ok || buf == nil {
+		buf = &streamBuffer{notify: make(chan struct{})}
+		s.buffers[id] = buf
+	}
+	return buf
+}
+
+func signalLocked(buf *streamBuffer) {
+	if buf == nil || buf.notify == nil {
+		return
+	}
+	close(buf.notify)
+	buf.notify = make(chan struct{})
+}
+
+func (s *Store) isExpiredLocked(snapshot Snapshot, now time.Time) bool {
+	timestamp := snapshot.UpdatedAt
+	if timestamp.IsZero() {
+		timestamp = snapshot.StartedAt
+	}
+	if timestamp.IsZero() {
+		return false
+	}
+	if snapshot.Status == StatusRunning {
+		return timestamp.Before(now.Add(-runningSessionMaxAge))
+	}
+	return timestamp.Before(now.Add(-s.ttl))
+}
+
+func (s *Store) maybePrune() {
+	s.mu.RLock()
+	shouldPrune := s.lastPrune.IsZero() || time.Since(s.lastPrune) >= minPruneInterval
+	s.mu.RUnlock()
+	if shouldPrune {
+		s.pruneExpired()
+	}
 }
 
 func (s *Store) pruneExpired() {
 	now := time.Now().UTC()
-	cutoff := now.Add(-s.ttl)
-	runningCutoff := now.Add(-runningSessionMaxAge)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.lastPrune = now
 	for id, snapshot := range s.sessions {
-		timestamp := snapshot.UpdatedAt
-		if timestamp.IsZero() {
-			timestamp = snapshot.StartedAt
-		}
-		if timestamp.IsZero() {
-			continue
-		}
-		// Running sessions are exempt from the normal TTL (quiet ≠ finished) and
-		// only fall to the defensive hard cap; finished ones expire on the TTL.
-		if snapshot.Status == StatusRunning {
-			if timestamp.Before(runningCutoff) {
-				delete(s.sessions, id)
-			}
-			continue
-		}
-		if timestamp.Before(cutoff) {
+		if s.isExpiredLocked(snapshot, now) {
 			delete(s.sessions, id)
+			if buf := s.buffers[id]; buf != nil {
+				if buf.notify != nil {
+					close(buf.notify)
+					buf.notify = nil
+				}
+				delete(s.buffers, id)
+			}
 		}
 	}
 }

@@ -33,6 +33,7 @@ type TrafficSnapshot struct {
 type TrafficRepository interface {
 	AppendTraffic(ctx context.Context, snapshot TrafficSnapshot) (TrafficSnapshot, error)
 	GetLatestTrafficByServer(ctx context.Context, serverID int64) (TrafficSnapshot, error)
+	GetLatestTrafficInterface(ctx context.Context, serverID int64) (string, error)
 	GetLatestTrafficByServerIDs(ctx context.Context, serverIDs []int64) ([]TrafficSnapshot, error)
 }
 
@@ -171,6 +172,28 @@ func (r SQLRepository) GetLatestTrafficByServer(ctx context.Context, serverID in
 	}
 	snapshot.CollectedAt = collectedAt
 	return normalizeTrafficSnapshot(snapshot), nil
+}
+
+// GetLatestTrafficInterface returns only the interface_name of the most recent
+// vnStat snapshot for a server, avoiding JSON unmarshaling of daily/monthly rows.
+func (r SQLRepository) GetLatestTrafficInterface(ctx context.Context, serverID int64) (string, error) {
+	var iface string
+	err := r.conn.QueryRowContext(
+		ctx,
+		`SELECT interface_name
+		 FROM vnstat_snapshots
+		 WHERE server_id = ?
+		 ORDER BY id DESC
+		 LIMIT 1`,
+		serverID,
+	).Scan(&iface)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("monitoring: get latest vnstat interface for server %d: %w", serverID, err)
+	}
+	return strings.TrimSpace(iface), nil
 }
 
 // GetLatestTrafficByServerIDs returns the most recent vnstat snapshot for each
