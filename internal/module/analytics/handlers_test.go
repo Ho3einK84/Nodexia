@@ -2,8 +2,10 @@ package analytics
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -200,5 +202,49 @@ func TestGlobalAndServerAnalyticsRenderPopulatedMetricsAndTraffic(t *testing.T) 
 		if !strings.Contains(batchBody, key) {
 			t.Errorf("batched /analytics/data missing %s", key)
 		}
+	}
+
+	// Inline JSON monthly limit save & clear.
+	saveForm := url.Values{"limit_value": {"500"}, "limit_unit": {"GB"}, "limit_kind": {"rx"}}
+	saveReq := httptest.NewRequest(http.MethodPost, "/servers/2/analytics/limit", strings.NewReader(saveForm.Encode()))
+	saveReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	saveReq.Header.Set("Accept", "application/json")
+	saveRec := httptest.NewRecorder()
+	mux.ServeHTTP(saveRec, saveReq)
+	if saveRec.Code != http.StatusOK {
+		t.Fatalf("POST JSON /analytics/limit save = %d, want 200\n%s", saveRec.Code, saveRec.Body.String())
+	}
+	var saveResp struct {
+		OK           bool   `json:"ok"`
+		HasLimit     bool   `json:"has_limit"`
+		BadgeVariant string `json:"badge_variant"`
+		BadgeText    string `json:"badge_text"`
+	}
+	if err := json.Unmarshal(saveRec.Body.Bytes(), &saveResp); err != nil {
+		t.Fatalf("decode limit save JSON: %v", err)
+	}
+	if !saveResp.OK || !saveResp.HasLimit || saveResp.BadgeVariant != "active" || saveResp.BadgeText == "" {
+		t.Fatalf("unexpected limit save JSON: %+v", saveResp)
+	}
+
+	clearForm := url.Values{"limit_value": {""}}
+	clearReq := httptest.NewRequest(http.MethodPost, "/servers/2/analytics/limit", strings.NewReader(clearForm.Encode()))
+	clearReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	clearReq.Header.Set("Accept", "application/json")
+	clearRec := httptest.NewRecorder()
+	mux.ServeHTTP(clearRec, clearReq)
+	if clearRec.Code != http.StatusOK {
+		t.Fatalf("POST JSON /analytics/limit clear = %d, want 200\n%s", clearRec.Code, clearRec.Body.String())
+	}
+	var clearResp struct {
+		OK       bool `json:"ok"`
+		Cleared  bool `json:"cleared"`
+		HasLimit bool `json:"has_limit"`
+	}
+	if err := json.Unmarshal(clearRec.Body.Bytes(), &clearResp); err != nil {
+		t.Fatalf("decode limit clear JSON: %v", err)
+	}
+	if !clearResp.OK || !clearResp.Cleared || clearResp.HasLimit {
+		t.Fatalf("unexpected limit clear JSON: %+v", clearResp)
 	}
 }

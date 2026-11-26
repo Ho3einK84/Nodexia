@@ -14,8 +14,10 @@ import {
   renderIcons,
   finishTopBar,
   scheduleLoadingOverlay,
+  showToast,
   tabNavigate
 } from './core.js';
+import { nxConfirm } from './modals.js';
 
 /* ── Loading overlay (180ms delay) + confirm + busy on form submit ────────── */
 function initForms() {
@@ -28,15 +30,36 @@ function initForms() {
       form.querySelector('button[type="submit"]:focus') ||
       form.querySelector('button[type="submit"]');
 
-    var confirmMsg = (submitter && submitter.getAttribute('data-confirm')) ||
-      form.getAttribute('data-confirm');
-    if (!confirmMsg && submitter && submitter.classList.contains('btn--danger')) {
-      confirmMsg = I18N.t('js.confirm_irreversible');
-    }
-    if (confirmMsg && !window.confirm(confirmMsg)) {
-      e.preventDefault();
-      finishTopBar();
-      return;
+    if (form.dataset.nxConfirmed === '1') {
+      delete form.dataset.nxConfirmed;
+    } else {
+      var confirmMsg = (submitter && submitter.getAttribute('data-confirm')) ||
+        form.getAttribute('data-confirm');
+      var isDanger = Boolean(
+        (submitter && (submitter.classList.contains('btn--danger') ||
+          submitter.classList.contains('btn--danger-ghost') ||
+          submitter.classList.contains('action-menu__item--danger')))
+      );
+      if (!confirmMsg && submitter && submitter.classList.contains('btn--danger')) {
+        confirmMsg = I18N.t('js.confirm_irreversible');
+      }
+      if (confirmMsg) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        finishTopBar();
+        var confirmDanger = isDanger || /delete|remove|restore|reboot|discard|حذف|بازگردانی|ریبوت/i.test(confirmMsg);
+        nxConfirm({ message: confirmMsg, danger: confirmDanger }).then(function (ok) {
+          if (!ok || !document.contains(form)) return;
+          form.dataset.nxConfirmed = '1';
+          if (typeof form.requestSubmit === 'function') {
+            if (submitter && form.contains(submitter)) form.requestSubmit(submitter);
+            else form.requestSubmit();
+          } else {
+            form.submit();
+          }
+        });
+        return;
+      }
     }
 
     startTopBar();
@@ -164,11 +187,17 @@ function initCopyTargets(root) {
         (selector ? document.querySelector(selector) : null);
       if (!target) return;
       var value = target.dataset.secretValue != null ? target.dataset.secretValue : target.textContent;
+      var iconOnly = btn.classList.contains('btn-copy-micro') || btn.textContent.trim() === '';
       copyText(value.replace(/\n$/, '')).then(function (ok) {
         btn.classList.add(ok ? 'is-copied' : 'is-failed');
-        btn.innerHTML = ok
-          ? '<i data-lucide="check"></i> ' + I18N.t('js.copy.copied')
-          : '<i data-lucide="x"></i> ' + I18N.t('js.failed');
+        if (iconOnly) {
+          btn.innerHTML = ok ? '<i data-lucide="check"></i>' : '<i data-lucide="x"></i>';
+          showToast(ok ? I18N.t('js.copy.copied') : I18N.t('js.failed'), ok ? 'ok' : 'error');
+        } else {
+          btn.innerHTML = ok
+            ? '<i data-lucide="check"></i> ' + I18N.t('js.copy.copied')
+            : '<i data-lucide="x"></i> ' + I18N.t('js.failed');
+        }
         renderIcons(btn);
         setTimeout(function () {
           btn.classList.remove('is-copied', 'is-failed');
@@ -280,7 +309,15 @@ function initShortcuts() {
     }
     var activeRoot = document.querySelector('.tab-pane:not([hidden])') || document;
     if (e.key === '/') {
-      var input = activeRoot.querySelector('input[type="text"], input[type="search"], textarea');
+      var isVisibleInput = function (el) {
+        return el && !el.disabled && !el.hidden && !el.closest('[hidden]') && el.offsetParent !== null;
+      };
+      var preferred = Array.prototype.slice.call(
+        activeRoot.querySelectorAll('[data-search-input], input[type="search"]')
+      ).find(isVisibleInput);
+      var input = preferred || Array.prototype.slice.call(
+        activeRoot.querySelectorAll('input[type="text"], textarea')
+      ).find(isVisibleInput);
       if (input) { e.preventDefault(); input.focus(); }
       return;
     }

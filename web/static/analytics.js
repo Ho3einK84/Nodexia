@@ -1141,6 +1141,110 @@
     loadBatchedCharts(serverID, ['cpu', 'ram', 'disk', 'load', 'traffic'], range);
   }
 
+  // ── Inline Monthly Limit Form (AJAX + forecast refresh) ──────────────────
+
+  function initLimitForms(serverID) {
+    const saveForm = rootScope.querySelector('[data-limit-form]');
+    const removeForm = rootScope.querySelector('[data-limit-remove-form]');
+    const badge = rootScope.querySelector('[data-limit-badge]');
+    const errorEl = rootScope.querySelector('[data-limit-error]');
+    if (!saveForm && !removeForm) return;
+
+    function postLimit(form, retried) {
+      const token = (typeof window.nxCSRF === 'function' ? window.nxCSRF(form) : '') ||
+        ((form.querySelector('input[name="_csrf_token"]') || {}).value || '');
+      const params = new URLSearchParams(new FormData(form));
+      if (token) params.set('_csrf_token', token);
+      const headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+      };
+      if (token) headers['X-CSRF-Token'] = token;
+
+      return fetch(form.getAttribute('action') || form.action, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: headers,
+        body: params.toString()
+      }).then(resp => {
+        const hdr = resp.headers && resp.headers.get('X-CSRF-Token');
+        if (hdr && typeof window.nxSetCSRF === 'function') window.nxSetCSRF(hdr);
+        if (resp.status === 403 && !retried && window.NodexiaTabs && typeof window.NodexiaTabs.refreshCSRFToken === 'function') {
+          return window.NodexiaTabs.refreshCSRFToken().then(() => postLimit(form, true));
+        }
+        return resp.json().catch(() => ({ ok: false }));
+      });
+    }
+
+    function applyLimitResponse(data) {
+      if (!data || !data.ok) {
+        if (errorEl) {
+          errorEl.textContent = (data && data.message) || T('js.failed');
+          errorEl.hidden = false;
+        }
+        if (typeof window.nxToast === 'function') window.nxToast((data && data.message) || T('js.failed'), 'error');
+        return;
+      }
+      if (errorEl) {
+        errorEl.textContent = '';
+        errorEl.hidden = true;
+      }
+      if (badge && data.badge_text) {
+        const variant = ['active', 'inherited', 'none'].includes(data.badge_variant) ? data.badge_variant : 'none';
+        badge.className = 'analytics-limit__current analytics-limit__current--' + variant;
+        badge.textContent = data.badge_text;
+      }
+      if (removeForm) removeForm.hidden = !data.has_limit;
+      if (saveForm && data.cleared) {
+        const valInput = saveForm.querySelector('input[name="limit_value"]');
+        if (valInput) valInput.value = '';
+      }
+      if (typeof window.nxToast === 'function' && data.message) {
+        window.nxToast(data.message, 'ok');
+      }
+      loadForecast(serverID);
+    }
+
+    if (saveForm && saveForm.dataset.limitAjaxReady !== '1') {
+      saveForm.dataset.limitAjaxReady = '1';
+      saveForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const btn = saveForm.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+        postLimit(saveForm, false)
+          .then(applyLimitResponse)
+          .catch(() => {
+            if (typeof window.nxToast === 'function') window.nxToast(T('js.failed'), 'error');
+          })
+          .finally(() => { if (btn) btn.disabled = false; });
+      });
+    }
+
+    if (removeForm && removeForm.dataset.limitAjaxReady !== '1') {
+      removeForm.dataset.limitAjaxReady = '1';
+      removeForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const btn = removeForm.querySelector('button[type="submit"]');
+        const msg = (btn && btn.getAttribute('data-confirm')) || T('js.confirm_irreversible');
+        const ask = typeof window.nxConfirm === 'function'
+          ? window.nxConfirm({ message: msg, danger: true })
+          : Promise.resolve(window.confirm(msg));
+        ask.then((ok) => {
+          if (!ok || !document.contains(removeForm)) return;
+          if (btn) btn.disabled = true;
+          postLimit(removeForm, false)
+            .then(applyLimitResponse)
+            .catch(() => {
+              if (typeof window.nxToast === 'function') window.nxToast(T('js.failed'), 'error');
+            })
+            .finally(() => { if (btn) btn.disabled = false; });
+        });
+      });
+    }
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────
 
   function init() {
@@ -1154,6 +1258,7 @@
     if (!serverID) return;
 
     initRangeTabs(serverID);
+    initLimitForms(serverID);
     loadAllCharts(serverID, currentRange);
     loadForecast(serverID);
   }

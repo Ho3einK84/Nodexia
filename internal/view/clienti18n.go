@@ -15,6 +15,10 @@ import (
 // clienti18n_test.go fails if any key here is missing from a catalog.
 var clientI18nKeys = []string{
 	// Shared (app.js)
+	"common.cancel",
+	"common.confirm",
+	"common.confirm_title",
+	"servers.empty.filter_no_match",
 	"js.working",
 	"js.loading",
 	"js.failed",

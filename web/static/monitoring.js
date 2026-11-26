@@ -109,10 +109,66 @@
     });
   }
 
+  function initSilenceForm() {
+    root.querySelectorAll('.silence-dropdown-form').forEach(function (form) {
+      if (form.dataset.silenceAjaxReady === '1') return;
+      form.dataset.silenceAjaxReady = '1';
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+
+        var sendSilence = function (retried) {
+          var token = (typeof window.nxCSRF === 'function' ? window.nxCSRF(form) : '') ||
+            ((form.querySelector('input[name="_csrf_token"]') || {}).value || '');
+          var params = new URLSearchParams(new FormData(form));
+          if (token) params.set('_csrf_token', token);
+          var headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+          };
+          if (token) headers['X-CSRF-Token'] = token;
+
+          return fetch(form.getAttribute('action') || form.action, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: headers,
+            body: params.toString()
+          }).then(function (resp) {
+            var hdr = resp.headers && resp.headers.get('X-CSRF-Token');
+            if (hdr && typeof window.nxSetCSRF === 'function') window.nxSetCSRF(hdr);
+            if (resp.status === 403 && !retried && window.NodexiaTabs && typeof window.NodexiaTabs.refreshCSRFToken === 'function') {
+              return window.NodexiaTabs.refreshCSRFToken().then(function () { return sendSilence(true); });
+            }
+            return resp.json().catch(function () { return { ok: resp.ok }; });
+          });
+        };
+
+        sendSilence(false).then(function (data) {
+          var menu = form.closest('[data-action-menu]');
+          if (menu) {
+            menu.classList.remove('is-open');
+            var toggle = menu.querySelector('.action-menu__toggle');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+          }
+          if (typeof window.nxToast === 'function') {
+            window.nxToast((data && data.message) || (window.nxT ? window.nxT('js.failed') : 'Failed'), data && data.ok ? 'ok' : 'error');
+          }
+        }).catch(function () {
+          if (typeof window.nxToast === 'function') window.nxToast(window.nxT ? window.nxT('js.failed') : 'Failed', 'error');
+        }).finally(function () {
+          if (btn) btn.disabled = false;
+        });
+      });
+    });
+  }
+
   function boot() {
     initGauges();
     initInterfaceHints();
     initTrafficDailyToggle();
+    initSilenceForm();
   }
 
   if (document.readyState === 'loading') {

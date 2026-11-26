@@ -2207,6 +2207,32 @@ code {
   inline-size: min(720px, 100%);
 }
 
+.modal__dialog--confirm {
+  inline-size: min(440px, 100%);
+}
+
+.modal--confirm .modal__title--danger svg {
+  color: var(--crit);
+}
+
+.modal__confirm-msg {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  white-space: pre-line;
+}
+
+.modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: 12px 18px;
+  border-block-start: 1px solid var(--border);
+  background: var(--surface-well);
+}
+
 .modal.is-open .modal__dialog {
   opacity: 1;
   transform: translateY(0) scale(1);
@@ -2737,5 +2763,28 @@ body.modal-open {
 @media (max-width: 480px) {
   .kpi-strip--compact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* RTL directional icon parity */
+[dir="rtl"] .server-context__actions .lucide-arrow-left,
+[dir="rtl"] .page-hero__actions .lucide-arrow-left,
+[dir="rtl"] .btn .lucide-arrow-left {
+  transform: scaleX(-1);
+}
+
+/* Touch-friendly minimum hit targets on coarse pointers */
+@media (pointer: coarse) {
+  .page-info__trigger::before {
+    inset: -10px;
+  }
+
+  .modal__close,
+  .action-menu__toggle,
+  .server-card__icon-btn,
+  .copy-btn,
+  .secret-toggle {
+    min-inline-size: 44px;
+    min-block-size: 44px;
   }
 }

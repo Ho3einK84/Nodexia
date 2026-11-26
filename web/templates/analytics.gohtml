@@ -220,16 +220,16 @@
         <span>{{ t "analytics.limit.title" }}</span>
       </h3>
       {{ if .HasLimit }}
-      <span class="analytics-limit__current analytics-limit__current--active">{{ t "analytics.limit.current_kind" "value" .LimitHuman "kind" .KindLabel }}</span>
+      <span class="analytics-limit__current analytics-limit__current--active" data-limit-badge>{{ t "analytics.limit.current_kind" "value" .LimitHuman "kind" .KindLabel }}</span>
       {{ else if .InheritedHuman }}
-      <span class="analytics-limit__current analytics-limit__current--inherited">{{ t "analytics.limit.inherited" "value" .InheritedHuman "source" .InheritedSource }}</span>
+      <span class="analytics-limit__current analytics-limit__current--inherited" data-limit-badge>{{ t "analytics.limit.inherited" "value" .InheritedHuman "source" .InheritedSource }}</span>
       {{ else }}
-      <span class="analytics-limit__current analytics-limit__current--none">{{ t "analytics.limit.none" }}</span>
+      <span class="analytics-limit__current analytics-limit__current--none" data-limit-badge>{{ t "analytics.limit.none" }}</span>
       {{ end }}
     </div>
     <p class="analytics-limit__hint">{{ t "analytics.limit.hint" }}</p>
     <div class="limit-form-row">
-      <form class="limit-form" method="post" action="{{ .Action }}">
+      <form class="limit-form" method="post" action="{{ .Action }}" data-limit-form>
         <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
         <label class="limit-form__field limit-form__field--value">
           <span>{{ t "analytics.limit.value_label" }}</span>
@@ -252,17 +252,15 @@
             <option value="total"{{ if eq .KindInput "total" }} selected{{ end }}>{{ t "analytics.limit.kind_total" }}</option>
           </select>
         </label>
-        <button type="submit" class="btn btn--primary btn--sm limit-form__submit"><i data-lucide="save" class="icon-in-button"></i> {{ t "analytics.limit.save" }}</button>
+        <button type="submit" class="btn btn--primary btn--sm limit-form__submit" data-no-loading><i data-lucide="save" class="icon-in-button"></i> {{ t "analytics.limit.save" }}</button>
       </form>
-      {{ if .HasLimit }}
-      <form method="post" action="{{ .Action }}" class="inline-form limit-remove">
+      <form method="post" action="{{ .Action }}" class="inline-form limit-remove" data-limit-remove-form{{ if not .HasLimit }} hidden{{ end }}>
         <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
         <input type="hidden" name="limit_value" value="">
-        <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" data-confirm="{{ t "analytics.limits.remove_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "analytics.limit.remove" }}</button>
+        <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" data-no-loading data-confirm="{{ t "analytics.limits.remove_confirm" }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "analytics.limit.remove" }}</button>
       </form>
-      {{ end }}
     </div>
-    {{ if .Error }}<p class="analytics-limit__error">{{ .Error }}</p>{{ end }}
+    <p class="analytics-limit__error" data-limit-error{{ if not .Error }} hidden{{ end }}>{{ .Error }}</p>
   </article>
   {{ end }}
 

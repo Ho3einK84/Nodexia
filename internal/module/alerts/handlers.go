@@ -2,6 +2,7 @@ package alerts
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -211,14 +212,37 @@ func (h Handlers) RuleUpdate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirectURL("rule-updated"), http.StatusSeeOther)
 }
 
+func wantsJSON(r *http.Request) bool {
+	return strings.Contains(strings.ToLower(r.Header.Get("Accept")), "application/json")
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
 func (h Handlers) RuleDelete(w http.ResponseWriter, r *http.Request) {
+	asJSON := wantsJSON(r)
 	id, ok := pathID(r)
 	if !ok {
+		if asJSON {
+			writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "message": localizerFromRequest(r).T("alerts.error.rule_not_found_message")})
+			return
+		}
 		renderError(w, r, h.deps, ErrNotFound, "alerts.error.rule_not_found_title", "alerts.error.rule_not_found_message")
 		return
 	}
 	if err := h.repo.DeleteRule(r.Context(), id); err != nil {
+		if asJSON {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "message": localizerFromRequest(r).T("alerts.error.delete_rule_message")})
+			return
+		}
 		renderError(w, r, h.deps, err, "alerts.error.delete_rule_title", "alerts.error.delete_rule_message")
+		return
+	}
+	if asJSON {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id, "message": localizerFromRequest(r).T("alerts.flash.rule_deleted")})
 		return
 	}
 	http.Redirect(w, r, redirectURL("rule-deleted"), http.StatusSeeOther)
@@ -310,13 +334,26 @@ func (h Handlers) ChannelUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) ChannelDelete(w http.ResponseWriter, r *http.Request) {
+	asJSON := wantsJSON(r)
 	id, ok := pathID(r)
 	if !ok {
+		if asJSON {
+			writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "message": localizerFromRequest(r).T("alerts.error.channel_not_found_message")})
+			return
+		}
 		renderError(w, r, h.deps, ErrNotFound, "alerts.error.channel_not_found_title", "alerts.error.channel_not_found_message")
 		return
 	}
 	if err := h.repo.DeleteChannel(r.Context(), id); err != nil {
+		if asJSON {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "message": localizerFromRequest(r).T("alerts.error.delete_channel_message")})
+			return
+		}
 		renderError(w, r, h.deps, err, "alerts.error.delete_channel_title", "alerts.error.delete_channel_message")
+		return
+	}
+	if asJSON {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id, "message": localizerFromRequest(r).T("alerts.flash.channel_deleted")})
 		return
 	}
 	http.Redirect(w, r, redirectURL("channel-deleted"), http.StatusSeeOther)
@@ -324,21 +361,37 @@ func (h Handlers) ChannelDelete(w http.ResponseWriter, r *http.Request) {
 
 // ChannelTest sends a fixed sample message to a channel's chat id using the
 // configured Telegram bot token, then re-renders the alerts overview with a
-// success or error flash. When no token is configured it shows a notice instead
-// of erroring.
+// success or error flash (or returns JSON when Accept: application/json is set).
 func (h Handlers) ChannelTest(w http.ResponseWriter, r *http.Request) {
+	asJSON := wantsJSON(r)
 	id, ok := pathID(r)
 	if !ok {
+		if asJSON {
+			writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "kind": "error", "message": localizerFromRequest(r).T("alerts.error.channel_not_found_message")})
+			return
+		}
 		renderError(w, r, h.deps, ErrNotFound, "alerts.error.channel_not_found_title", "alerts.error.channel_not_found_message")
 		return
 	}
 	channel, err := h.repo.GetChannel(r.Context(), id)
 	if err != nil {
+		if asJSON {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "kind": "error", "message": localizerFromRequest(r).T("alerts.error.load_channel_message")})
+			return
+		}
 		renderError(w, r, h.deps, err, "alerts.error.load_channel_title", "alerts.error.load_channel_message")
 		return
 	}
 
 	kind, message, statusCode := h.sendTestMessage(r.Context(), localizerFromRequest(r), channel)
+	if asJSON {
+		writeJSON(w, statusCode, map[string]any{
+			"ok":      kind == "success",
+			"kind":    kind,
+			"message": message,
+		})
+		return
+	}
 
 	overview, err := h.overviewModel(r.Context(), 1)
 	if err != nil {
@@ -411,13 +464,26 @@ func (h Handlers) SilenceCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) SilenceDelete(w http.ResponseWriter, r *http.Request) {
+	asJSON := wantsJSON(r)
 	id, ok := pathID(r)
 	if !ok {
+		if asJSON {
+			writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "message": localizerFromRequest(r).T("alerts.error.silence_not_found_message")})
+			return
+		}
 		renderError(w, r, h.deps, ErrNotFound, "alerts.error.silence_not_found_title", "alerts.error.silence_not_found_message")
 		return
 	}
 	if err := h.repo.DeleteSilence(r.Context(), id); err != nil {
+		if asJSON {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "message": localizerFromRequest(r).T("alerts.error.remove_silence_message")})
+			return
+		}
 		renderError(w, r, h.deps, err, "alerts.error.remove_silence_title", "alerts.error.remove_silence_message")
+		return
+	}
+	if asJSON {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id, "message": localizerFromRequest(r).T("alerts.flash.silence_removed")})
 		return
 	}
 	http.Redirect(w, r, redirectURL("silence-removed"), http.StatusSeeOther)
@@ -426,16 +492,29 @@ func (h Handlers) SilenceDelete(w http.ResponseWriter, r *http.Request) {
 // ServerSilence is the one-click "mute this metric for this server" action used
 // from a server-scoped page. It inserts (or refreshes) an indefinite silence.
 func (h Handlers) ServerSilence(w http.ResponseWriter, r *http.Request) {
+	asJSON := wantsJSON(r)
 	serverID, ok := pathID(r)
 	if !ok {
+		if asJSON {
+			writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "message": localizerFromRequest(r).T("alerts.error.server_not_found_message")})
+			return
+		}
 		renderError(w, r, h.deps, servers.ErrNotFound, "alerts.error.server_not_found_title", "alerts.error.server_not_found_message")
 		return
 	}
 	if _, err := h.serverRepo.GetByID(r.Context(), serverID); err != nil {
+		if asJSON {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "message": localizerFromRequest(r).T("alerts.error.load_server_message")})
+			return
+		}
 		renderError(w, r, h.deps, err, "alerts.error.load_server_title", "alerts.error.load_server_message")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
+		if asJSON {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "message": localizerFromRequest(r).T("alerts.error.invalid_silence_message")})
+			return
+		}
 		renderError(w, r, h.deps, err, "alerts.error.invalid_form_title", "alerts.error.invalid_silence_message")
 		return
 	}
@@ -447,12 +526,24 @@ func (h Handlers) ServerSilence(w http.ResponseWriter, r *http.Request) {
 	}
 	validated, errs := ValidateSilenceForm(input, time.Now())
 	if errs.HasAny() {
+		if asJSON {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"ok": false, "message": localizerFromRequest(r).T("alerts.error.invalid_silence_metric")})
+			return
+		}
 		renderError(w, r, h.deps, ErrNotFound, "alerts.error.invalid_silence_title", "alerts.error.invalid_silence_metric")
 		return
 	}
 
 	if _, err := h.repo.CreateSilence(r.Context(), validated.Silence); err != nil {
+		if asJSON {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "message": localizerFromRequest(r).T("alerts.error.create_silence_message")})
+			return
+		}
 		renderError(w, r, h.deps, err, "alerts.error.create_silence_title", "alerts.error.create_silence_message")
+		return
+	}
+	if asJSON {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": localizerFromRequest(r).T("alerts.flash.silenced")})
 		return
 	}
 	http.Redirect(w, r, redirectURL("silenced"), http.StatusSeeOther)

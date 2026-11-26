@@ -888,4 +888,17 @@ body.terminal-mobile-active .back-to-top { display: none !important; }
   .terminal-form__actions .btn { flex: 1 1 auto; justify-content: center; }
 }
 
+[dir="rtl"] .terminal-back svg {
+  transform: scaleX(-1);
+}
+
+@media (pointer: coarse) {
+  .terminal-tabs,
+  .terminal-back,
+  .terminal-tool-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 @keyframes term-sheet-mobile-in { from { transform: translateY(100%); } to { transform: translateY(0); } }

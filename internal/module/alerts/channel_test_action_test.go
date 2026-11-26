@@ -2,6 +2,7 @@ package alerts_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -113,5 +114,32 @@ func TestChannelTestNotConfigured(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "not configured") {
 		t.Fatalf("expected a 'not configured' notice in the rendered page")
+	}
+}
+
+func TestChannelTestReturnsJSONWhenAccepted(t *testing.T) {
+	notifier := &fakeNotifier{}
+	mux, channelID := newChannelTestMux(t, notifier)
+
+	req := httptest.NewRequest(http.MethodPost, "/alerts/channels/"+strconv.FormatInt(channelID, 10)+"/test",
+		strings.NewReader(url.Values{}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("JSON channel test = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		OK      bool   `json:"ok"`
+		Kind    string `json:"kind"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode JSON: %v (body=%s)", err, rec.Body.String())
+	}
+	if !payload.OK || payload.Kind != "success" || payload.Message == "" {
+		t.Fatalf("unexpected JSON response: %+v", payload)
 	}
 }

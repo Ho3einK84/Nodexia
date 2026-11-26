@@ -25,9 +25,11 @@
 
 .bulk-toolbar.is-empty { min-height: 40px; border-color: var(--border-subtle); padding-block: 7px; }
 .bulk-toolbar.is-empty .bulk-action-select,
+.bulk-toolbar.is-empty [data-bulk-submit],
 .bulk-toolbar.is-empty #bulk-submit { display: none; }
 .bulk-toolbar.is-empty .bulk-count { color: var(--text-dim); }
 .bulk-toolbar .bulk-action-select { margin-inline-start: auto; }
+[data-bulk-submit]:disabled,
 #bulk-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .bulk-select-all {

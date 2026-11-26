@@ -14,15 +14,15 @@
   var currentScript = document.currentScript;
   var root = (currentScript && currentScript.closest && currentScript.closest('.tab-pane')) || document;
 
-  var form = root.querySelector('#bulk-form');
+  var form = root.querySelector('[data-bulk-form], #bulk-form');
   if (!form || form.dataset.bulkReady === '1') return;
   form.dataset.bulkReady = '1';
 
-  var toolbar   = root.querySelector('#bulk-toolbar');
-  var selectAll = root.querySelector('#bulk-select-all');
-  var countEl   = root.querySelector('#bulk-count');
-  var actionEl  = root.querySelector('#bulk-action');
-  var submitBtn = root.querySelector('#bulk-submit');
+  var toolbar   = root.querySelector('[data-bulk-toolbar], #bulk-toolbar');
+  var selectAll = root.querySelector('[data-bulk-select-all], #bulk-select-all');
+  var countEl   = root.querySelector('[data-bulk-count], #bulk-count');
+  var actionEl  = root.querySelector('[data-bulk-action], #bulk-action');
+  var submitBtn = root.querySelector('[data-bulk-submit], #bulk-submit');
 
   if (root !== document) {
     var scopedFormId = 'bulk-form-' + Math.random().toString(36).slice(2, 8);
@@ -100,6 +100,8 @@
 
   function onSelectAllChange() {
     serverCheckboxes().forEach(function (cb) {
+      var card = cb.closest && cb.closest('[data-server-card]');
+      if (card && card.hidden) return;
       cb.checked = selectAll.checked;
     });
     updateState();
@@ -122,11 +124,13 @@
 
   // Scope delegated change listener to this pane and tear down cleanly when the tab closes/reloads.
   root.addEventListener('change', onRootChange);
+  root.addEventListener('nx:servers-changed', updateState);
 
   if (root !== document) {
     root.__nxCleanups = root.__nxCleanups || [];
     root.__nxCleanups.push(function () {
       root.removeEventListener('change', onRootChange);
+      root.removeEventListener('nx:servers-changed', updateState);
       if (selectAll) selectAll.removeEventListener('change', onSelectAllChange);
       if (actionEl) actionEl.removeEventListener('change', updateState);
     });

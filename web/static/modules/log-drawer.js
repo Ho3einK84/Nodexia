@@ -415,7 +415,7 @@ function wireLogDrawerInstance(drawer, scope) {
       if (e.key === 'Tab') {
         var focusables = Array.prototype.slice.call(
           panel.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')
-        ).filter(function (node) { return !node.hidden && !node.closest('[hidden]'); });
+        ).filter(function (node) { return !node.hidden && !node.closest('[hidden]') && (node.offsetParent !== null || node.getClientRects().length > 0); });
         if (!focusables.length) return;
         var first = focusables[0];
         var last = focusables[focusables.length - 1];

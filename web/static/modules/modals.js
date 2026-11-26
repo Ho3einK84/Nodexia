@@ -4,7 +4,7 @@
  * lock, pane cleanup) published as window.nxModal for classic page scripts,
  * plus accessible card overflow action menus.
  */
-import { prefersReducedMotion, registerCleanup } from './core.js';
+import { I18N, el, renderIcons, prefersReducedMotion, registerCleanup } from './core.js';
 
 /* ── Server / node card overflow action menus ─────────────────────────────── */
 var actionMenuDocWired = false;
@@ -225,6 +225,139 @@ window.nxModal = {
   syncScrollLock: syncBodyScrollLock
 };
 
+/* ── Unified Dark Graphite Confirm Modal (window.nxConfirm) ───────────────── */
+var confirmModalEl = null;
+var confirmPendingResolve = null;
+
+function resolveConfirm(answer) {
+  var fn = confirmPendingResolve;
+  confirmPendingResolve = null;
+  if (confirmModalEl && (confirmModalEl.classList.contains('is-open') || !confirmModalEl.hidden)) {
+    closeModal(confirmModalEl, true);
+  }
+  if (typeof fn === 'function') fn(!!answer);
+}
+
+function ensureConfirmModal() {
+  if (confirmModalEl && document.body.contains(confirmModalEl)) return confirmModalEl;
+
+  var backdrop = el('div', { class: 'modal__backdrop', 'data-confirm-cancel': '' });
+  var titleIcon = el('i', { 'data-lucide': 'alert-triangle', 'aria-hidden': 'true' });
+  var titleText = el('span', { 'data-confirm-title-text': '' });
+  var titleEl = el('h3', { class: 'modal__title', id: 'nx-confirm-title', 'data-confirm-title': '' }, [titleIcon, titleText]);
+  var closeBtn = el('button', {
+    type: 'button',
+    class: 'modal__close',
+    'data-confirm-cancel': '',
+    'aria-label': I18N.t('common.cancel')
+  }, [el('i', { 'data-lucide': 'x', 'aria-hidden': 'true' })]);
+
+  var msgEl = el('p', { class: 'modal__confirm-msg', id: 'nx-confirm-msg', 'data-confirm-msg': '' });
+  var cancelBtn = el('button', {
+    type: 'button',
+    class: 'btn btn--secondary',
+    'data-confirm-cancel': '',
+    text: I18N.t('common.cancel')
+  });
+  var okBtn = el('button', {
+    type: 'button',
+    class: 'btn btn--primary',
+    'data-confirm-ok': '',
+    text: I18N.t('common.confirm')
+  });
+
+  var dialog = el('div', { class: 'modal__dialog modal__dialog--confirm' }, [
+    el('div', { class: 'modal__header' }, [titleEl, closeBtn]),
+    el('div', { class: 'modal__body' }, [msgEl]),
+    el('div', { class: 'modal__footer' }, [cancelBtn, okBtn])
+  ]);
+
+  var modal = el('div', {
+    class: 'modal modal--confirm',
+    'data-modal': '',
+    'data-confirm-modal': '',
+    role: 'alertdialog',
+    'aria-modal': 'true',
+    'aria-labelledby': 'nx-confirm-title',
+    'aria-describedby': 'nx-confirm-msg',
+    hidden: true
+  }, [backdrop, dialog]);
+
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal || (e.target.closest && e.target.closest('[data-confirm-cancel]'))) {
+      e.preventDefault();
+      resolveConfirm(false);
+    } else if (e.target.closest && e.target.closest('[data-confirm-ok]')) {
+      e.preventDefault();
+      resolveConfirm(true);
+    }
+  });
+
+  modal.addEventListener('modal:beforeclose', function () {
+    if (confirmPendingResolve) {
+      var fn = confirmPendingResolve;
+      confirmPendingResolve = null;
+      fn(false);
+    }
+  });
+
+  modal.addEventListener('keydown', function (e) {
+    if (!modal.classList.contains('is-open')) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      resolveConfirm(false);
+      return;
+    }
+    if (e.key === 'Tab') {
+      var focusables = getFocusableElements(modal);
+      if (!focusables.length) return;
+      var first = focusables[0];
+      var last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
+
+  document.body.appendChild(modal);
+  renderIcons(modal);
+  confirmModalEl = modal;
+  return modal;
+}
+
+function nxConfirm(opts) {
+  if (typeof opts === 'string') opts = { message: opts };
+  opts = opts || {};
+  if (confirmPendingResolve) resolveConfirm(false);
+
+  var modal = ensureConfirmModal();
+  var isDanger = opts.danger !== false;
+  var titleEl = modal.querySelector('[data-confirm-title]');
+  var titleText = modal.querySelector('[data-confirm-title-text]');
+  var msgEl = modal.querySelector('[data-confirm-msg]');
+  var cancelBtn = modal.querySelector('.modal__footer [data-confirm-cancel]');
+  var okBtn = modal.querySelector('[data-confirm-ok]');
+
+  if (titleEl) titleEl.classList.toggle('modal__title--danger', isDanger);
+  if (titleText) titleText.textContent = opts.title || I18N.t('common.confirm_title');
+  if (msgEl) msgEl.textContent = opts.message || I18N.t('js.confirm_irreversible');
+  if (cancelBtn) cancelBtn.textContent = opts.cancelLabel || I18N.t('common.cancel');
+  if (okBtn) {
+    okBtn.textContent = opts.confirmLabel || I18N.t('common.confirm');
+    okBtn.className = 'btn ' + (isDanger ? 'btn--danger' : 'btn--primary');
+  }
+
+  return new Promise(function (resolve) {
+    confirmPendingResolve = resolve;
+    openModal(modal);
+    var focusTarget = isDanger ? cancelBtn : okBtn;
+    if (focusTarget && focusTarget.focus) {
+      try { focusTarget.focus({ preventScroll: true }); } catch (err) { focusTarget.focus(); }
+    }
+  });
+}
+window.nxConfirm = nxConfirm;
+
 function findModalForOpener(opener, root) {
   var key = opener.getAttribute('data-modal-open');
   if (!key) return null;
@@ -307,4 +440,4 @@ function initModals(root) {
   if (initial) openModal(initial);
 }
 
-export { openModal, closeModal, closeAllMenus, initActionMenus, initModals, syncBodyScrollLock };
+export { openModal, closeModal, closeAllMenus, initActionMenus, initModals, syncBodyScrollLock, nxConfirm };

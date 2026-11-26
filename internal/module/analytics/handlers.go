@@ -835,17 +835,22 @@ func NewLimitHandler(deps module.Dependencies, serverRepo servers.Repository, re
 	return LimitHandler{deps: deps, serverRepo: serverRepo, repo: repo}
 }
 
+func wantsJSON(r *http.Request) bool {
+	return strings.Contains(strings.ToLower(r.Header.Get("Accept")), "application/json")
+}
+
 // ServeHTTP handles POST of the monthly download-limit form. An empty value
 // clears the limit; a positive value sets it; zero, negative, or unparseable
-// input is rejected and the page is re-rendered with an inline error. CSRF is
-// enforced by the global middleware before this handler runs.
+// input is rejected and the page is re-rendered with an inline error (or JSON
+// when Accept: application/json is sent). CSRF is enforced by global middleware.
 func (h LimitHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	asJSON := wantsJSON(r)
 	server, ok := loadServer(w, r, h.deps, h.serverRepo)
 	if !ok {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		h.renderError(w, r, server, "", defaultLimitUnit, LimitKindRX, "analytics.limit.error_invalid")
+		h.respondError(w, r, asJSON, server, "", defaultLimitUnit, LimitKindRX, "analytics.limit.error_invalid")
 		return
 	}
 
@@ -859,7 +864,11 @@ func (h LimitHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Empty value means "clear the limit" — a first-class action, not an error.
 	if rawValue == "" {
 		if err := h.repo.DeleteTrafficLimit(r.Context(), server.ID); err != nil {
-			h.renderError(w, r, server, rawValue, unit, kind, "analytics.limit.error_save")
+			h.respondError(w, r, asJSON, server, rawValue, unit, kind, "analytics.limit.error_save")
+			return
+		}
+		if asJSON {
+			h.writeLimitJSON(w, r, server, true, "analytics.limit.flash_cleared")
 			return
 		}
 		http.Redirect(w, r, fmt.Sprintf("/servers/%d/analytics?flash=limit-cleared", server.ID), http.StatusSeeOther)
@@ -868,15 +877,56 @@ func (h LimitHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	limitBytes, ok := parseLimitBytes(rawValue, unit)
 	if !ok {
-		h.renderError(w, r, server, rawValue, unit, kind, "analytics.limit.error_positive")
+		h.respondError(w, r, asJSON, server, rawValue, unit, kind, "analytics.limit.error_positive")
 		return
 	}
 
 	if err := h.repo.SetTrafficLimit(r.Context(), server.ID, TrafficLimit{Bytes: limitBytes, Kind: kind}); err != nil {
-		h.renderError(w, r, server, rawValue, unit, kind, "analytics.limit.error_save")
+		h.respondError(w, r, asJSON, server, rawValue, unit, kind, "analytics.limit.error_save")
+		return
+	}
+	if asJSON {
+		h.writeLimitJSON(w, r, server, false, "analytics.limit.flash_saved")
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/servers/%d/analytics?flash=limit-saved", server.ID), http.StatusSeeOther)
+}
+
+func (h LimitHandler) respondError(w http.ResponseWriter, r *http.Request, asJSON bool, server servers.Server, value, unit, kind, errKey string) {
+	if asJSON {
+		page := view.NewPageData(h.deps.Config, r)
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"ok":      false,
+			"message": page.T(errKey),
+		})
+		return
+	}
+	h.renderError(w, r, server, value, unit, kind, errKey)
+}
+
+func (h LimitHandler) writeLimitJSON(w http.ResponseWriter, r *http.Request, server servers.Server, cleared bool, msgKey string) {
+	page := view.NewPageData(h.deps.Config, r)
+	lv := PageHandler(h).limitView(r, page, server)
+	badgeVariant := "none"
+	badgeText := page.T("analytics.limit.none")
+	if lv.HasLimit {
+		badgeVariant = "active"
+		badgeText = page.T("analytics.limit.current_kind", "value", lv.LimitHuman, "kind", lv.KindLabel)
+	} else if lv.InheritedHuman != "" {
+		badgeVariant = "inherited"
+		badgeText = page.T("analytics.limit.inherited", "value", lv.InheritedHuman, "source", lv.InheritedSource)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":            true,
+		"cleared":       cleared,
+		"has_limit":     lv.HasLimit,
+		"badge_variant": badgeVariant,
+		"badge_text":    badgeText,
+		"value_input":   lv.ValueInput,
+		"unit_input":    lv.UnitInput,
+		"kind_input":    lv.KindInput,
+		"message":       page.T(msgKey),
+	})
 }
 
 // renderError re-renders the analytics page with the limit form showing an

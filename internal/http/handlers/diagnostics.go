@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	goruntime "runtime"
 	"strconv"
@@ -88,19 +89,56 @@ func (h DiagnosticsHandler) renderPage(w http.ResponseWriter, r *http.Request, s
 }
 
 // SchedulerToggle handles POST /ops/scheduler/{serverID}/{jobType}/toggle.
-// It pauses a running job or resumes a paused one, then redirects back.
+// It pauses a running job or resumes a paused one, returning JSON when the
+// client asks for application/json or redirecting back for plain form submits.
 func (h DiagnosticsHandler) SchedulerToggle(w http.ResponseWriter, r *http.Request) {
+	asJSON := strings.Contains(strings.ToLower(r.Header.Get("Accept")), "application/json")
 	serverIDStr := strings.TrimSpace(r.PathValue("serverID"))
 	jobTypeStr := strings.TrimSpace(r.PathValue("jobType"))
 
 	serverID, err := strconv.ParseInt(serverIDStr, 10, 64)
 	if err != nil || serverID < 1 {
+		if asJSON {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "message": "Invalid server ID"})
+			return
+		}
 		http.Redirect(w, r, "/ops/diagnostics", http.StatusSeeOther)
 		return
 	}
 
+	paused := false
 	if h.scheduler != nil {
-		h.scheduler.ToggleJob(serverID, scheduler.JobType(jobTypeStr))
+		paused = h.scheduler.ToggleJob(serverID, scheduler.JobType(jobTypeStr))
+	}
+
+	if asJSON {
+		page := view.NewPageData(h.config, r)
+		statusLabel := "scheduled"
+		statusVariant := "ok"
+		buttonLabel := page.T("common.disable")
+		buttonTitle := page.T("diagnostics.pause_title")
+		msg := page.T("diagnostics.job_resumed")
+		if paused {
+			statusLabel = page.T("common.paused")
+			statusVariant = "idle"
+			buttonLabel = page.T("common.enable")
+			buttonTitle = page.T("diagnostics.resume_title")
+			msg = page.T("diagnostics.job_paused")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":             true,
+			"paused":         paused,
+			"status_label":   statusLabel,
+			"status_variant": statusVariant,
+			"button_label":   buttonLabel,
+			"button_title":   buttonTitle,
+			"message":        msg,
+		})
+		return
 	}
 
 	http.Redirect(w, r, "/ops/diagnostics", http.StatusSeeOther)

@@ -403,3 +403,43 @@ func TestListHandlerRendersAddServerModalAndQueryAutoOpen(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteHandlerJSON(t *testing.T) {
+	deps, repo := testServerDeps(t)
+	created, err := repo.Create(context.Background(), servers.Server{
+		Name:               "ephemeral-node",
+		Host:               "198.51.100.77",
+		Port:               22,
+		AuthMode:           servers.AuthModePassword,
+		Username:           "root",
+		CredentialStrategy: servers.CredentialStrategyRuntime,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	h := servers.NewDeleteHandler(deps, repo)
+	req := httptest.NewRequest(http.MethodPost, "/servers/"+strconv.FormatInt(created.ID, 10)+"/delete", nil)
+	req.SetPathValue("id", strconv.FormatInt(created.ID, 10))
+	req.Header.Set("Accept", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("JSON delete status = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		OK      bool   `json:"ok"`
+		ID      int64  `json:"id"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode delete JSON: %v", err)
+	}
+	if !payload.OK || payload.ID != created.ID || payload.Message == "" {
+		t.Fatalf("unexpected delete JSON payload: %+v", payload)
+	}
+	if _, err := repo.GetByID(context.Background(), created.ID); err == nil {
+		t.Fatal("expected server to be deleted from repository")
+	}
+}

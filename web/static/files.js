@@ -1002,12 +1002,27 @@
     }
   }
 
+  function trapModalTab(container, e) {
+    if (e.key !== 'Tab' || !container || container.hidden) return;
+    var focusables = Array.prototype.slice.call(
+      container.querySelectorAll('a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
+    ).filter(function (node) {
+      return !node.hidden && !node.closest('[hidden]') && (node.offsetParent !== null || node.getClientRects().length > 0);
+    });
+    if (!focusables.length) return;
+    var first = focusables[0];
+    var last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+
   function initDialog() {
     var nodes = getDialogNodes();
     if (!nodes) return;
     nodes.dialog.querySelectorAll('[data-file-dialog-close]').forEach(function (btn) {
       btn.addEventListener('click', function () { closeDialog(true); });
     });
+    nodes.dialog.addEventListener('keydown', function (e) { trapModalTab(nodes.dialog, e); });
     if (nodes.confirmBtn) nodes.confirmBtn.addEventListener('click', submitDialog);
     [nodes.input, nodes.input2].forEach(function (inp) {
       if (!inp) return;
@@ -1023,7 +1038,7 @@
   var editorState = {
     open: false, path: '', name: '', isNew: false, editable: false, dirty: false,
     isTail: false, wrapped: false, originalContent: '', autoTailTimer: null, findIndex: -1,
-    lastLineCount: -1, cursorRaf: 0
+    lastLineCount: -1, cursorRaf: 0, returnFocusTo: null
   };
 
   function stopAutoTail() {
@@ -1081,7 +1096,12 @@
     stopAutoTail();
     editorState.open = false;
     editorState.dirty = false;
+    var prev = editorState.returnFocusTo;
+    editorState.returnFocusTo = null;
     setModalVisible(qs('#file-editor-modal'), false);
+    if (prev && prev.isConnected && prev.focus) {
+      try { prev.focus({ preventScroll: true }); } catch (err) { prev.focus(); }
+    }
   }
 
   function closeEditorModal() {
@@ -1129,11 +1149,16 @@
     closeMenu();
     var modal = qs('#file-editor-modal');
     if (!modal) return;
+    if (modal.dataset.focusTrapReady !== '1') {
+      modal.dataset.focusTrapReady = '1';
+      modal.addEventListener('keydown', function (e) { trapModalTab(modal, e); });
+    }
 
     stopAutoTail();
     Object.assign(editorState, {
       open: true, path: filePath, name: opts.name || filePath.split('/').pop() || filePath,
-      isNew: !!opts.isNew, editable: false, dirty: false, isTail: !!opts.tail, originalContent: '', findIndex: -1
+      isNew: !!opts.isNew, editable: false, dirty: false, isTail: !!opts.tail, originalContent: '', findIndex: -1,
+      returnFocusTo: (document.activeElement && root.contains(document.activeElement)) ? document.activeElement : null
     });
 
     var hideIds = ['#file-editor-text-wrap', '#file-editor-image-wrap', '#file-editor-binary-wrap',

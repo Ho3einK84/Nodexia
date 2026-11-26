@@ -57,9 +57,9 @@
             <td>{{ if .Enabled }}<span class="badge badge--ok">{{ t "common.enabled" }}</span>{{ else }}<span class="badge badge--warn">{{ t "common.disabled" }}</span>{{ end }}</td>
             <td class="data-table__actions">
               <a class="btn btn--ghost btn--sm" href="{{ .EditURL }}" aria-label="{{ t "alerts.edit_rule_aria" }}"><i data-lucide="pencil"></i></a>
-              <form method="post" action="{{ .DeleteURL }}" class="inline-form">
+              <form method="post" action="{{ .DeleteURL }}" class="inline-form" data-alert-delete-form="rule">
                 <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-                <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" aria-label="{{ t "alerts.delete_rule_aria" }}" data-confirm="{{ t "alerts.delete_rule_confirm" }}"><i data-lucide="trash-2"></i></button>
+                <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" data-no-loading aria-label="{{ t "alerts.delete_rule_aria" }}" data-confirm="{{ t "alerts.delete_rule_confirm" }}"><i data-lucide="trash-2"></i></button>
               </form>
             </td>
           </tr>
@@ -100,14 +100,14 @@
             <td>{{ if .HasTemplate }}{{ t "alerts.tpl_custom" }}{{ else }}{{ t "alerts.tpl_default" }}{{ end }}</td>
             <td>{{ if .Enabled }}<span class="badge badge--ok">{{ t "common.enabled" }}</span>{{ else }}<span class="badge badge--warn">{{ t "common.disabled" }}</span>{{ end }}</td>
             <td class="data-table__actions">
-              <form method="post" action="{{ .TestURL }}" class="inline-form">
+              <form method="post" action="{{ .TestURL }}" class="inline-form" data-alert-test-form>
                 <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-                <button type="submit" class="btn btn--ghost btn--sm" aria-label="{{ t "alerts.send_test_aria" }}" title="{{ t "alerts.send_test_title" }}"><i data-lucide="send-horizontal"></i></button>
+                <button type="submit" class="btn btn--ghost btn--sm" data-no-loading aria-label="{{ t "alerts.send_test_aria" }}" title="{{ t "alerts.send_test_title" }}"><i data-lucide="send-horizontal"></i></button>
               </form>
               <a class="btn btn--ghost btn--sm" href="{{ .EditURL }}" aria-label="{{ t "alerts.edit_channel_aria" }}"><i data-lucide="pencil"></i></a>
-              <form method="post" action="{{ .DeleteURL }}" class="inline-form">
+              <form method="post" action="{{ .DeleteURL }}" class="inline-form" data-alert-delete-form="channel">
                 <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-                <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" aria-label="{{ t "alerts.delete_channel_aria" }}" data-confirm="{{ t "alerts.delete_channel_confirm" }}"><i data-lucide="trash-2"></i></button>
+                <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" data-no-loading aria-label="{{ t "alerts.delete_channel_aria" }}" data-confirm="{{ t "alerts.delete_channel_confirm" }}"><i data-lucide="trash-2"></i></button>
               </form>
             </td>
           </tr>
@@ -187,9 +187,9 @@
             <td>{{ .Expires }}</td>
             <td>{{ if .Active }}<span class="badge badge--ok">{{ t "alerts.silence_active" }}</span>{{ else }}<span class="badge badge--warn">{{ t "alerts.silence_expired" }}</span>{{ end }}</td>
             <td class="data-table__actions">
-              <form method="post" action="{{ .DeleteURL }}" class="inline-form">
+              <form method="post" action="{{ .DeleteURL }}" class="inline-form" data-alert-delete-form="silence">
                 <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
-                <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" aria-label="{{ t "alerts.remove_silence_aria" }}" data-confirm="{{ t "alerts.remove_silence_confirm" }}"><i data-lucide="trash-2"></i></button>
+                <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" data-no-loading aria-label="{{ t "alerts.remove_silence_aria" }}" data-confirm="{{ t "alerts.remove_silence_confirm" }}"><i data-lucide="trash-2"></i></button>
               </form>
             </td>
           </tr>

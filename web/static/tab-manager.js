@@ -1110,12 +1110,15 @@
       var items = Array.prototype.slice.call(menu.querySelectorAll('.tab-floating-menu__item'));
       var current = document.activeElement;
       var idx = items.indexOf(current);
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      var rtl = (document.documentElement.getAttribute('dir') || '').toLowerCase() === 'rtl';
+      var nextKey = rtl ? 'ArrowLeft' : 'ArrowRight';
+      var prevKey = rtl ? 'ArrowRight' : 'ArrowLeft';
+      if (e.key === 'ArrowDown' || e.key === nextKey) {
         e.preventDefault();
         focusMenuItem(items, idx + 1);
         return;
       }
-      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      if (e.key === 'ArrowUp' || e.key === prevKey) {
         e.preventDefault();
         focusMenuItem(items, idx - 1);
         return;

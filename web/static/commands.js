@@ -37,6 +37,16 @@
     }
   }
 
+  function commitCommand(next) {
+    applyingProgrammatic = true;
+    input.value = next;
+    editorDirty = false;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    applyingProgrammatic = false;
+    syncPresetStates();
+    input.focus();
+  }
+
   function applyCommand(cmd) {
     if (!input) return;
     var next = cmd || '';
@@ -45,18 +55,19 @@
       return;
     }
     if (editorDirty && input.value.trim() !== '') {
+      if (typeof window.nxConfirm === 'function') {
+        window.nxConfirm({ message: T('js.commands.confirm_replace'), danger: false }).then(function (ok) {
+          if (ok) commitCommand(next);
+          else input.focus();
+        });
+        return;
+      }
       if (!window.confirm(T('js.commands.confirm_replace'))) {
         input.focus();
         return;
       }
     }
-    applyingProgrammatic = true;
-    input.value = next;
-    editorDirty = false;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    applyingProgrammatic = false;
-    syncPresetStates();
-    input.focus();
+    commitCommand(next);
   }
 
   if (input) {

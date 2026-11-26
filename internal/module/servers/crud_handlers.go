@@ -372,8 +372,17 @@ func NewDeleteHandler(deps module.Dependencies, repo Repository) DeleteHandler {
 }
 
 func (h DeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	asJSON := wantsJSON(r)
 	serverID, ok := pathID(r)
 	if !ok {
+		if asJSON {
+			loc := localizerFromRequest(r)
+			writeJSON(w, http.StatusNotFound, map[string]any{
+				"ok":      false,
+				"message": loc.T("servers.error.not_found_message"),
+			})
+			return
+		}
 		renderRepositoryError(w, r, h.deps, ErrNotFound, "servers.error.not_found_title", "servers.error.not_found_message")
 		return
 	}
@@ -381,6 +390,14 @@ func (h DeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	existing, _ := h.repo.GetByID(r.Context(), serverID)
 
 	if err := h.repo.Delete(r.Context(), serverID); err != nil {
+		if asJSON {
+			loc := localizerFromRequest(r)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": loc.T("servers.error.delete_message"),
+			})
+			return
+		}
 		renderRepositoryError(w, r, h.deps, err, "servers.error.delete_title", "servers.error.delete_message")
 		return
 	}
@@ -390,6 +407,16 @@ func (h DeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.deps.TerminalTickets != nil {
 		h.deps.TerminalTickets.RevokeServer(serverID)
+	}
+
+	if asJSON {
+		loc := localizerFromRequest(r)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":      true,
+			"id":      serverID,
+			"message": loc.T("servers.flash.deleted"),
+		})
+		return
 	}
 
 	http.Redirect(w, r, "/servers?flash=deleted&id="+formatID(serverID), http.StatusSeeOther)
