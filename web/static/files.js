@@ -1022,7 +1022,8 @@
   /* ── File Viewer & Code/Config/Log Editor Modal ─────────────────────────── */
   var editorState = {
     open: false, path: '', name: '', isNew: false, editable: false, dirty: false,
-    isTail: false, wrapped: false, originalContent: '', autoTailTimer: null, findIndex: -1
+    isTail: false, wrapped: false, originalContent: '', autoTailTimer: null, findIndex: -1,
+    lastLineCount: -1, cursorRaf: 0
   };
 
   function stopAutoTail() {
@@ -1031,13 +1032,18 @@
     if (cb) cb.checked = false;
   }
 
-  function updateEditorGutter() {
+  function updateEditorGutter(force) {
     var ta = qs('#file-editor-textarea');
     var gutter = qs('#file-editor-gutter');
     if (!ta || !gutter) return;
     if (editorState.wrapped) { gutter.hidden = true; return; }
     gutter.hidden = false;
     var lines = (ta.value.match(/\n/g) || []).length + 1;
+    if (!force && lines === editorState.lastLineCount) {
+      gutter.scrollTop = ta.scrollTop;
+      return;
+    }
+    editorState.lastLineCount = lines;
     var nums = new Array(lines);
     for (var i = 0; i < lines; i++) nums[i] = i + 1;
     gutter.textContent = nums.join('\n');
@@ -1045,15 +1051,19 @@
   }
 
   function updateEditorCursorMeta() {
-    var ta = qs('#file-editor-textarea');
-    var cursorEl = qs('#file-editor-cursor');
-    if (!ta || !cursorEl) return;
-    var pos = ta.selectionStart || 0;
-    var before = ta.value.slice(0, pos);
-    cursorEl.textContent = T('js.files.editor_cursor', {
-      line: (before.match(/\n/g) || []).length + 1,
-      col: pos - before.lastIndexOf('\n'),
-      lines: (ta.value.match(/\n/g) || []).length + 1
+    if (editorState.cursorRaf) return;
+    editorState.cursorRaf = requestAnimationFrame(function () {
+      editorState.cursorRaf = 0;
+      var ta = qs('#file-editor-textarea');
+      var cursorEl = qs('#file-editor-cursor');
+      if (!ta || !cursorEl) return;
+      var pos = ta.selectionStart || 0;
+      var before = ta.value.slice(0, pos);
+      cursorEl.textContent = T('js.files.editor_cursor', {
+        line: (before.match(/\n/g) || []).length + 1,
+        col: pos - before.lastIndexOf('\n'),
+        lines: (ta.value.match(/\n/g) || []).length + 1
+      });
     });
   }
 
@@ -1328,6 +1338,7 @@
         if (editorState.autoTailTimer !== null) { clearInterval(editorState.autoTailTimer); editorState.autoTailTimer = null; }
         if (autoTailCb.checked && editorState.open && editorState.path) {
           editorState.autoTailTimer = setInterval(function () {
+            if (document.hidden || (root !== document && root.hidden)) return;
             if (editorState.open && editorState.path) loadEditorContent(editorState.path, true, true);
           }, 3000);
         }

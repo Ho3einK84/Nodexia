@@ -730,10 +730,19 @@
 .node-skeleton__row { display: flex; align-items: center; gap: var(--space-3); }
 
 .node-skeleton__bar {
+  position: relative;
   display: block;
+  overflow: hidden;
   border-radius: var(--radius-xs);
-  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-elevated) 50%, var(--surface-2) 75%);
-  background-size: 200% 100%;
+  background: var(--surface-2);
+}
+
+.node-skeleton__bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.055) 50%, transparent 100%);
+  transform: translate3d(-100%, 0, 0);
   animation: nodes-shimmer 1.4s ease-in-out infinite;
 }
 
@@ -743,8 +752,12 @@
 .node-skeleton__bar--strip { inline-size: 100%; block-size: 32px; border-radius: var(--radius-sm); }
 
 @keyframes nodes-shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0%   { transform: translate3d(-100%, 0, 0); }
+  100% { transform: translate3d(100%, 0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-skeleton__bar::after { animation: none; }
 }
 
 .nodes-inline-banner {

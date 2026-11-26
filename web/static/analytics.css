@@ -430,6 +430,7 @@
 .th-icon--ul { color: var(--ok); }
 
 .an-table thead th { border-block-end-color: var(--border); color: var(--text-muted); }
+.an-table tbody tr.an-row { content-visibility: auto; contain-intrinsic-size: auto 48px; }
 .an-table tbody td { border-block-end-color: var(--border-subtle); transition: background-color var(--transition-fast); }
 .an-table tbody tr.an-row:hover td { background: var(--surface-chip); }
 

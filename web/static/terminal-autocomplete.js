@@ -1116,18 +1116,17 @@
       var leftPx = Math.max(8, Math.min(cursorLeft, metrics.containerWidth - popupW - 8));
       popupEl.style.left = Math.round(leftPx) + 'px';
 
-      var popupH = popupEl.offsetHeight || 220;
       var belowSpace = metrics.containerHeight - (cursorTop + metrics.cellH + 4) - 6;
       var aboveSpace = cursorTop - 6;
-      var preferBelow = belowSpace >= popupH || belowSpace >= aboveSpace;
+      var estPopupH = Math.min(268, items.length * 34 + 34);
+      var preferBelow = belowSpace >= estPopupH || belowSpace >= aboveSpace;
       var availSpace = preferBelow ? belowSpace : aboveSpace;
-      var footerH = footer.offsetHeight || 26;
-      listEl.style.maxHeight = Math.round(Math.min(238, Math.max(76, availSpace - footerH - 8))) + 'px';
+      listEl.style.maxHeight = Math.round(Math.min(238, Math.max(76, availSpace - 34))) + 'px';
 
-      popupH = popupEl.offsetHeight || Math.min(220, availSpace);
       if (preferBelow) {
         popupEl.style.top = Math.round(cursorTop + metrics.cellH + 4) + 'px';
       } else {
+        var popupH = popupEl.offsetHeight || Math.min(220, availSpace);
         popupEl.style.top = Math.round(Math.max(6, cursorTop - popupH - 4)) + 'px';
       }
 

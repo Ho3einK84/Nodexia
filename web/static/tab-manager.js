@@ -1429,13 +1429,15 @@
     }
     var el = target;
     while (el && el !== contentEl && el !== document.body && el !== document.documentElement) {
-      try {
-        var style = window.getComputedStyle(el);
-        var ox = style ? (style.overflowX || '') : '';
-        if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth + 2) {
-          return true;
-        }
-      } catch (_) {}
+      if (el.scrollWidth > el.clientWidth + 2) {
+        try {
+          var style = window.getComputedStyle(el);
+          var ox = style ? (style.overflowX || '') : '';
+          if (ox === 'auto' || ox === 'scroll') {
+            return true;
+          }
+        } catch (_) {}
+      }
       el = el.parentElement;
     }
     return false;

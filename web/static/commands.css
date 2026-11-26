@@ -64,6 +64,8 @@
 .history-row {
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 48px;
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 

@@ -464,33 +464,37 @@ func renderTerminalPage(
 	}
 	page.TerminalForm = form
 	page.TerminalTicket = ticketID
-	// Each asset URL carries a content-hash query string so a corrected
-	// terminal.css/js can never be shadowed by a stale service-worker cache: when
-	// a file changes, its URL changes, so the browser/SW must fetch the new copy
-	// (no version bump required). See assets.StaticAssetVersion.
-	page.PageStyles = []string{
-		staticURL("xterm.min.css"),
-		staticURL("terminal.css"),
-	}
-	// xterm.js core, then its addons, then the theme catalog and keybinding
-	// handler, then terminal.js (which orchestrates them). All vendored locally —
-	// the panel runs under a strict `script-src 'self'` CSP, so no CDN is used.
-	page.PageScripts = []string{
-		staticURL("xterm.min.js"),
-		staticURL("xterm-addon-fit.min.js"),
-		staticURL("xterm-addon-unicode11.min.js"),
-		staticURL("xterm-addon-web-links.min.js"),
-		staticURL("xterm-addon-search.min.js"),
-		staticURL("xterm-addon-serialize.min.js"),
-		staticURL("xterm-addon-webgl.min.js"),
-		staticURL("xterm-addon-canvas.min.js"),
-		staticURL("xterm-themes.js"),
-		staticURL("terminal-persian.js"),
-		staticURL("terminal-keybindings.js"),
-		staticURL("terminal-input.js"),
-		staticURL("terminal-autocomplete.js"),
-		staticURL("terminal.js"),
-		staticURL("terminal-tab-adapter.js"),
+	// Only ship xterm.js and its 15 addons (~400 KB) once a ticket has been
+	// issued; the credential prompt form needs only terminal.css.
+	if ticketID == "" {
+		page.PageStyles = []string{
+			staticURL("terminal.css"),
+		}
+	} else {
+		page.PageStyles = []string{
+			staticURL("xterm.min.css"),
+			staticURL("terminal.css"),
+		}
+		// xterm.js core, then its addons, then the theme catalog and keybinding
+		// handler, then terminal.js (which orchestrates them). All vendored locally —
+		// the panel runs under a strict `script-src 'self'` CSP, so no CDN is used.
+		page.PageScripts = []string{
+			staticURL("xterm.min.js"),
+			staticURL("xterm-addon-fit.min.js"),
+			staticURL("xterm-addon-unicode11.min.js"),
+			staticURL("xterm-addon-web-links.min.js"),
+			staticURL("xterm-addon-search.min.js"),
+			staticURL("xterm-addon-serialize.min.js"),
+			staticURL("xterm-addon-webgl.min.js"),
+			staticURL("xterm-addon-canvas.min.js"),
+			staticURL("xterm-themes.js"),
+			staticURL("terminal-persian.js"),
+			staticURL("terminal-keybindings.js"),
+			staticURL("terminal-input.js"),
+			staticURL("terminal-autocomplete.js"),
+			staticURL("terminal.js"),
+			staticURL("terminal-tab-adapter.js"),
+		}
 	}
 
 	if err := deps.Renderer.Render(w, http.StatusOK, page); err != nil {

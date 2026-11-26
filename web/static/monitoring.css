@@ -105,7 +105,6 @@
   stroke: var(--gauge-color);
   stroke-width: 14;
   stroke-linecap: round;
-  filter: drop-shadow(0 0 5px var(--gauge-color));
   transition: stroke-dashoffset var(--transition-slow), stroke var(--transition-base);
 }
 

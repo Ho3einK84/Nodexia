@@ -7,6 +7,8 @@
   var scriptPane = document.currentScript && document.currentScript.closest('.tab-pane');
   var root = scriptPane || document;
 
+  var gaugeColorCache = null;
+
   function resolveGaugeColor(value) {
     var token = '--crit';
     if (value <= 60) {
@@ -14,9 +16,16 @@
     } else if (value <= 80) {
       token = '--warn';
     }
-    if (typeof window.getComputedStyle === 'function' && document.documentElement) {
-      var resolved = window.getComputedStyle(document.documentElement).getPropertyValue(token).trim();
-      if (resolved) return resolved;
+    if (!gaugeColorCache && typeof window.getComputedStyle === 'function' && document.documentElement) {
+      var cs = window.getComputedStyle(document.documentElement);
+      gaugeColorCache = {
+        '--ok': cs.getPropertyValue('--ok').trim(),
+        '--warn': cs.getPropertyValue('--warn').trim(),
+        '--crit': cs.getPropertyValue('--crit').trim()
+      };
+    }
+    if (gaugeColorCache && gaugeColorCache[token]) {
+      return gaugeColorCache[token];
     }
     return 'var(' + token + ')';
   }
@@ -29,8 +38,12 @@
     v = Math.max(0, Math.min(100, v));
 
     if (arc) {
-      var length = arc.getTotalLength();
-      arc.style.strokeDasharray = length;
+      var length = arc._totalLen;
+      if (!length) {
+        length = arc.getTotalLength();
+        arc._totalLen = length;
+        arc.style.strokeDasharray = length;
+      }
       var filled = length * (1 - v / 100);
       gauge.style.setProperty('--gauge-color', resolveGaugeColor(v));
       if (!animate || prefersReducedMotion) {

@@ -183,3 +183,58 @@ func TestNoUnscopedLucideCreateIcons(t *testing.T) {
 		t.Fatalf("WalkDir: %v", err)
 	}
 }
+
+var templateLucideIconRe = regexp.MustCompile(`data-lucide="([a-z0-9-]+)"`)
+
+func kebabToPascal(s string) string {
+	var b strings.Builder
+	for _, part := range strings.Split(s, "-") {
+		if part == "" {
+			continue
+		}
+		b.WriteString(strings.ToUpper(part[:1]))
+		b.WriteString(part[1:])
+	}
+	return b.String()
+}
+
+func TestLucideSubsetCoversAllTemplates(t *testing.T) {
+	lucideData, err := fs.ReadFile(staticFiles, "web/static/lucide.min.js")
+	if err != nil {
+		t.Fatalf("ReadFile lucide.min.js: %v", err)
+	}
+	if len(lucideData) > 100*1024 {
+		t.Fatalf("lucide.min.js is %d bytes (>100 KiB); keep it trimmed to the used icon subset", len(lucideData))
+	}
+	lucideSrc := string(lucideData)
+
+	tplSub, err := fs.Sub(templateFiles, "web/templates")
+	if err != nil {
+		t.Fatalf("fs.Sub templates: %v", err)
+	}
+	checked := 0
+	err = fs.WalkDir(tplSub, ".", func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() || !strings.HasSuffix(path, ".gohtml") {
+			return nil
+		}
+		data, readErr := fs.ReadFile(tplSub, path)
+		if readErr != nil {
+			t.Fatalf("ReadFile %s: %v", path, readErr)
+		}
+		for _, m := range templateLucideIconRe.FindAllStringSubmatch(string(data), -1) {
+			iconName := m[1]
+			pascal := kebabToPascal(iconName)
+			checked++
+			if !strings.Contains(lucideSrc, `"`+pascal+`":[`) {
+				t.Errorf("template %s references Lucide icon %q (PascalCase %q) missing from web/static/lucide.min.js", path, iconName, pascal)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WalkDir templates: %v", err)
+	}
+	if checked == 0 {
+		t.Fatal("expected to verify at least one data-lucide icon in templates")
+	}
+}

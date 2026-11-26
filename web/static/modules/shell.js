@@ -121,12 +121,13 @@ function initDrawer() {
   });
 
   function isRTL() { return document.documentElement.getAttribute('dir') === 'rtl'; }
-  var touchStartX = 0, touchStartY = 0, dragging = false, closingDx = 0;
+  var touchStartX = 0, touchStartY = 0, dragging = false, closingDx = 0, drawerWidth = 280;
 
   drawer.addEventListener('touchstart', function (e) {
     if (!drawer.classList.contains('is-open') || e.touches.length !== 1) return;
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
+    drawerWidth = Math.max(drawer.offsetWidth || 280, 160);
     dragging = true;
     closingDx = 0;
   }, { passive: true });
@@ -139,8 +140,7 @@ function initDrawer() {
     if (Math.abs(dy) > Math.abs(dx) && closingDx === 0) { dragging = false; return; }
     var candidate = rtl ? -dx : dx;
     closingDx = candidate > 0 ? candidate : 0;
-    var width = Math.max(drawer.offsetWidth || 280, 160);
-    var ratio = Math.max(0, Math.min(1, 1 - closingDx / width));
+    var ratio = Math.max(0, Math.min(1, 1 - closingDx / drawerWidth));
     drawer.style.transition = 'none';
     drawer.style.transform = closingDx > 0
       ? 'translate3d(' + (rtl ? -closingDx : closingDx) + 'px, 0, 0)'

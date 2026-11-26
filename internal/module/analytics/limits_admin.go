@@ -44,7 +44,6 @@ func (h LimitsAdminHandler) Page(w http.ResponseWriter, r *http.Request) {
 		page.FlashMessage = msg
 	}
 	page.PageStyles = []string{"/static/analytics.css"}
-	page.PageScripts = []string{"/static/analytics.js"}
 
 	if err := h.deps.Renderer.Render(w, http.StatusOK, page); err != nil {
 		http.Error(w, "render limits page", http.StatusInternalServerError)

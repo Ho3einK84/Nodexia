@@ -418,19 +418,20 @@
 
   function ensureResizeObserver(container) {
     if (container.__ro || typeof ResizeObserver === 'undefined') return;
-    let raf = 0;
+    let resizeTimer = null;
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const nw = Math.round(entry.contentRect.width);
         const nh = Math.round(entry.contentRect.height);
         if (nw > 0 && nh > 0 && (nw !== container.__lastW || nh !== container.__lastH)) {
-          if (!raf && container.__chartData && !container.hidden) {
-            raf = requestAnimationFrame(() => {
-              raf = 0;
+          if (container.__chartData && !container.hidden) {
+            if (resizeTimer) clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+              resizeTimer = null;
               if (container.__chartData && !container.hidden) {
                 buildChart(container, container.__chartData, { animate: false });
               }
-            });
+            }, 120);
           }
         }
       }
@@ -438,7 +439,7 @@
     ro.observe(container);
     container.__ro = ro;
     onCleanup(() => {
-      if (raf) cancelAnimationFrame(raf);
+      if (resizeTimer) { clearTimeout(resizeTimer); resizeTimer = null; }
       ro.disconnect();
     });
   }
@@ -449,143 +450,185 @@
       fill: 'transparent', cursor: 'crosshair',
     });
 
-    let tooltipEl = null;
-    let vline = null;
-    let dots = [];
-    let touchHideTimer = null;
-
-    onCleanup(() => {
-      if (touchHideTimer) {
-        clearTimeout(touchHideTimer);
-        touchHideTimer = null;
-      }
+    // Resolve series colors once per chart build instead of querying computed
+    // styles on every mousemove frame.
+    const seriesColors = series.map((s) => resolveSeriesColor(s, metricName));
+    const persistentDots = series.map((_, sIdx) => {
+      const dot = createSVGEl('circle', {
+        class: 'chart-tooltip-dot',
+        cx: 0, cy: 0, r: 4.5,
+        fill: seriesColors[sIdx],
+      });
+      dot.style.display = 'none';
+      plotG.appendChild(dot);
+      return dot;
     });
 
-    function showTooltip(x, clientX, clientY) {
+    let tooltipEl = null;
+    let vline = null;
+    let touchHideTimer = null;
+    let cachedSvgRect = null;
+    let cachedContainerRect = null;
+    let cachedTooltipW = 150;
+    let cachedTooltipH = 56;
+    let lastIdx = -1;
+    let moveRAF = 0;
+    let pendingPointer = null;
+
+    onCleanup(() => {
+      if (touchHideTimer) { clearTimeout(touchHideTimer); touchHideTimer = null; }
+      if (moveRAF) { cancelAnimationFrame(moveRAF); moveRAF = 0; }
+    });
+
+    function cacheBounds() {
+      const svgEl = rect.closest('svg');
+      cachedSvgRect = svgEl ? svgEl.getBoundingClientRect() : null;
+      cachedContainerRect = container.getBoundingClientRect();
+    }
+
+    function clearBounds() {
+      cachedSvgRect = null;
+      cachedContainerRect = null;
+    }
+
+    function paintAtPointer(clientX, clientY) {
       if (!labels.length) return;
       if (touchHideTimer) {
         clearTimeout(touchHideTimer);
         touchHideTimer = null;
       }
-      const clampedX = Math.max(0, Math.min(pw, x));
+      if (!cachedSvgRect || !cachedContainerRect) cacheBounds();
+      if (!cachedSvgRect || !cachedSvgRect.width) return;
+
+      const svgEl = rect.closest('svg');
+      const vbWidth = (svgEl && svgEl.viewBox && svgEl.viewBox.baseVal && svgEl.viewBox.baseVal.width) || cachedSvgRect.width;
+      const scaleX = vbWidth / cachedSvgRect.width;
+      const localX = (clientX - cachedSvgRect.left) * scaleX - CHART_PAD.left;
+      const clampedX = Math.max(0, Math.min(pw, localX));
       const idx = Math.round((clampedX / pw) * Math.max(labels.length - 1, 0));
       if (idx < 0 || idx >= labels.length) return;
 
-      const xPos = (idx / Math.max(labels.length - 1, 1)) * pw;
       const hidden = container.__hiddenSeries || new Set();
 
-      if (!vline) {
-        vline = createSVGEl('line', {
-          class: 'chart-tooltip-line',
-          y1: 0, y2: ph,
-        });
-        plotG.appendChild(vline);
+      if (idx !== lastIdx) {
+        lastIdx = idx;
+        const xPos = (idx / Math.max(labels.length - 1, 1)) * pw;
+
+        if (!vline) {
+          vline = createSVGEl('line', {
+            class: 'chart-tooltip-line',
+            y1: 0, y2: ph,
+          });
+          plotG.appendChild(vline);
+        }
+        vline.setAttribute('x1', xPos);
+        vline.setAttribute('x2', xPos);
+        vline.style.display = '';
+
+        let visibleRows = 0;
+        for (let sIdx = 0; sIdx < series.length; sIdx++) {
+          const s = series[sIdx];
+          const dot = persistentDots[sIdx];
+          if (hidden.has(sIdx) || !s.data || idx >= s.data.length) {
+            dot.style.display = 'none';
+            continue;
+          }
+          visibleRows++;
+          const v = s.data[idx];
+          const y = ph - ((v - yMin) / yRange) * ph;
+          dot.setAttribute('cx', xPos);
+          dot.setAttribute('cy', y);
+          dot.style.display = '';
+        }
+
+        if (!visibleRows) {
+          hideTooltip();
+          return;
+        }
+
+        if (!tooltipEl) {
+          tooltipEl = document.createElement('div');
+          tooltipEl.className = 'chart-tooltip';
+          container.appendChild(tooltipEl);
+        }
+
+        let html = `<div class="chart-tooltip__label">${escapeHTML(labels[idx])}</div>`;
+        for (let sIdx = 0; sIdx < series.length; sIdx++) {
+          const s = series[sIdx];
+          if (hidden.has(sIdx) || !s.data || idx >= s.data.length) continue;
+          const v = s.data[idx];
+          const formatted = unit === '%' ? v.toFixed(1) + '%'
+            : unit === 'GB' ? v.toFixed(3) + ' GB'
+            : v.toFixed(2) + (unit ? ' ' + unit : '');
+          html += `<div class="chart-tooltip__row">
+            <span class="chart-tooltip__series">
+              <span class="chart-tooltip__dot" style="background:${seriesColors[sIdx]}"></span>
+              <span>${escapeHTML(s.label)}</span>
+            </span>
+            <span class="chart-tooltip__value">${formatted}</span>
+          </div>`;
+        }
+        tooltipEl.innerHTML = html;
+        cachedTooltipW = tooltipEl.offsetWidth || 150;
+        cachedTooltipH = tooltipEl.offsetHeight || 56;
       }
-      vline.setAttribute('x1', xPos);
-      vline.setAttribute('x2', xPos);
-      vline.style.display = '';
 
-      dots.forEach(d => d.remove());
-      dots = [];
-      let visibleRows = 0;
-      series.forEach((s, sIdx) => {
-        if (hidden.has(sIdx) || !s.data || idx >= s.data.length) return;
-        visibleRows++;
-        const v = s.data[idx];
-        const y = ph - ((v - yMin) / yRange) * ph;
-        const color = resolveSeriesColor(s, metricName);
-        const dot = createSVGEl('circle', {
-          class: 'chart-tooltip-dot',
-          cx: xPos, cy: y, r: 4.5,
-          fill: color,
-        });
-        plotG.appendChild(dot);
-        dots.push(dot);
-      });
-
-      if (!visibleRows) {
-        hideTooltip();
-        return;
-      }
-
-      if (!tooltipEl) {
-        tooltipEl = document.createElement('div');
-        tooltipEl.className = 'chart-tooltip';
-        container.appendChild(tooltipEl);
-      }
-
-      let html = `<div class="chart-tooltip__label">${escapeHTML(labels[idx])}</div>`;
-      series.forEach((s, sIdx) => {
-        if (hidden.has(sIdx) || !s.data || idx >= s.data.length) return;
-        const v = s.data[idx];
-        const color = resolveSeriesColor(s, metricName);
-        const formatted = unit === '%' ? v.toFixed(1) + '%'
-          : unit === 'GB' ? v.toFixed(3) + ' GB'
-          : v.toFixed(2) + (unit ? ' ' + unit : '');
-        html += `<div class="chart-tooltip__row">
-          <span class="chart-tooltip__series">
-            <span class="chart-tooltip__dot" style="background:${color}"></span>
-            <span>${escapeHTML(s.label)}</span>
-          </span>
-          <span class="chart-tooltip__value">${formatted}</span>
-        </div>`;
-      });
-      tooltipEl.innerHTML = html;
-
-      // Position tooltip cleanly inside container bounds using GPU transform
-      const cRect = container.getBoundingClientRect();
+      if (!tooltipEl) return;
+      const cRect = cachedContainerRect;
       const pointerX = clientX - cRect.left;
       const pointerY = clientY - cRect.top;
-      const tWidth = tooltipEl.offsetWidth || 150;
-      const tHeight = tooltipEl.offsetHeight || 56;
       let tx = pointerX + 14;
-      if (tx + tWidth > cRect.width - 8) {
-        tx = pointerX - tWidth - 14;
+      if (tx + cachedTooltipW > cRect.width - 8) {
+        tx = pointerX - cachedTooltipW - 14;
       }
-      tx = Math.max(8, Math.min(tx, Math.max(8, cRect.width - tWidth - 8)));
+      tx = Math.max(8, Math.min(tx, Math.max(8, cRect.width - cachedTooltipW - 8)));
       let ty = pointerY - 14;
-      ty = Math.max(4, Math.min(ty, Math.max(4, cRect.height - tHeight - 4)));
+      ty = Math.max(4, Math.min(ty, Math.max(4, cRect.height - cachedTooltipH - 4)));
 
       tooltipEl.style.transform = `translate3d(${Math.round(tx)}px, ${Math.round(ty)}px, 0)`;
       tooltipEl.style.opacity = '1';
     }
 
+    function schedulePointer(clientX, clientY) {
+      pendingPointer = { x: clientX, y: clientY };
+      if (moveRAF) return;
+      moveRAF = requestAnimationFrame(() => {
+        moveRAF = 0;
+        const p = pendingPointer;
+        pendingPointer = null;
+        if (p) paintAtPointer(p.x, p.y);
+      });
+    }
+
     function hideTooltip() {
+      if (moveRAF) { cancelAnimationFrame(moveRAF); moveRAF = 0; }
+      pendingPointer = null;
+      lastIdx = -1;
+      clearBounds();
       if (vline) vline.style.display = 'none';
-      dots.forEach(d => d.remove());
-      dots = [];
+      for (let i = 0; i < persistentDots.length; i++) {
+        persistentDots[i].style.display = 'none';
+      }
       if (tooltipEl) tooltipEl.style.opacity = '0';
     }
 
-    function pointerToLocalX(clientX) {
-      const svgEl = rect.closest('svg');
-      if (!svgEl) return null;
-      const svgRect = svgEl.getBoundingClientRect();
-      if (!svgRect.width) return null;
-      const vbWidth = (svgEl.viewBox && svgEl.viewBox.baseVal && svgEl.viewBox.baseVal.width) || svgRect.width;
-      const scaleX = vbWidth / svgRect.width;
-      return (clientX - svgRect.left) * scaleX - CHART_PAD.left;
-    }
-
+    rect.addEventListener('mouseenter', cacheBounds);
     rect.addEventListener('mousemove', (e) => {
-      const localX = pointerToLocalX(e.clientX);
-      if (localX !== null) showTooltip(localX, e.clientX, e.clientY);
+      schedulePointer(e.clientX, e.clientY);
     });
-
     rect.addEventListener('mouseleave', hideTooltip);
 
     rect.addEventListener('touchstart', (e) => {
       if (!e.touches || !e.touches.length) return;
+      cacheBounds();
       const t = e.touches[0];
-      const localX = pointerToLocalX(t.clientX);
-      if (localX !== null) showTooltip(localX, t.clientX, t.clientY);
+      paintAtPointer(t.clientX, t.clientY);
     }, { passive: true });
 
     rect.addEventListener('touchmove', (e) => {
       if (!e.touches || !e.touches.length) return;
       const t = e.touches[0];
-      const localX = pointerToLocalX(t.clientX);
-      if (localX !== null) showTooltip(localX, t.clientX, t.clientY);
+      schedulePointer(t.clientX, t.clientY);
     }, { passive: true });
 
     rect.addEventListener('touchend', () => {
@@ -767,30 +810,55 @@
     });
   }
 
-  async function loadChart(serverID, metric, range) {
-    showSkeleton(metric);
+  let batchAbort = null;
+  let batchGen = 0;
+
+  onCleanup(() => {
+    if (batchAbort) { try { batchAbort.abort(); } catch (e) {} batchAbort = null; }
+  });
+
+  function renderChartPayload(metric, data) {
+    if (!data || !data.series || data.series.length === 0 || !data.series.some(s => s.data && s.data.length > 0)) {
+      showEmpty(metric);
+      return;
+    }
+    showChart(metric);
+    const ct = byId('chart-' + metric);
+    if (ct) {
+      requestAnimationFrame(() => {
+        buildChart(ct, data, { animate: true });
+        updateCardLiveBadge(metric, data);
+        updateFooter(metric, data, ct);
+      });
+    }
+    if (metric === 'traffic') {
+      buildLegend('legend-traffic', data.series, data.metric, ct);
+    }
+  }
+
+  async function loadBatchedCharts(serverID, metrics, range) {
+    if (batchAbort) {
+      try { batchAbort.abort(); } catch (e) {}
+    }
+    const ctrl = new AbortController();
+    batchAbort = ctrl;
+    const gen = ++batchGen;
+
+    metrics.forEach((m) => showSkeleton(m));
     try {
-      const resp = await fetch(`/servers/${serverID}/analytics/data?metric=${metric}&range=${range}`);
+      const url = `/servers/${serverID}/analytics/data?metrics=${encodeURIComponent(metrics.join(','))}&range=${encodeURIComponent(range)}`;
+      const resp = await fetch(url, { credentials: 'same-origin', signal: ctrl.signal });
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const data = await resp.json();
-      if (!data.series || data.series.length === 0 || !data.series.some(s => s.data && s.data.length > 0)) {
-        showEmpty(metric);
-        return;
-      }
-      showChart(metric);
-      const ct = byId('chart-' + metric);
-      if (ct) {
-        requestAnimationFrame(() => {
-          buildChart(ct, data, { animate: true });
-          updateCardLiveBadge(metric, data);
-          updateFooter(metric, data, ct);
-        });
-      }
-      if (metric === 'traffic') {
-        buildLegend('legend-traffic', data.series, data.metric, ct);
-      }
+      const payload = await resp.json();
+      if (gen !== batchGen) return;
+      const charts = (payload && payload.charts) || {};
+      metrics.forEach((m) => renderChartPayload(m, charts[m]));
     } catch (e) {
-      showError(metric);
+      if (e && e.name === 'AbortError') return;
+      if (gen !== batchGen) return;
+      metrics.forEach((m) => showError(m));
+    } finally {
+      if (batchAbort === ctrl) batchAbort = null;
     }
   }
 
@@ -1065,15 +1133,12 @@
   }
 
   function loadResourceCharts(serverID, range) {
-    for (const metric of ['cpu', 'ram', 'disk', 'load']) {
-      loadChart(serverID, metric, range);
-    }
+    loadBatchedCharts(serverID, ['cpu', 'ram', 'disk', 'load'], range);
   }
 
   function loadAllCharts(serverID, range) {
-    loadResourceCharts(serverID, range);
-    // Traffic is always 30d (vnstat provides daily totals)
-    loadChart(serverID, 'traffic', '30d');
+    // Load resource series and 30d traffic in one batched HTTP request + 1 DB scan.
+    loadBatchedCharts(serverID, ['cpu', 'ram', 'disk', 'load', 'traffic'], range);
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
