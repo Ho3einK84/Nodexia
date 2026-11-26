@@ -660,3 +660,54 @@ func TestMobileNavAnimationAndCSSSmoothnessContract(t *testing.T) {
 		}
 	}
 }
+
+// The monthly cap is measured against download (RX) by default, so the quota
+// pill must sit in the Download cell and never under Total.
+func TestAnalyticsGlobalQuotaPillFollowsLimitKind(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+	cases := []struct{ kind, cell string }{
+		{"rx", "an-cell-traffic--dl"},
+		{"tx", "an-cell-traffic--ul"},
+		{"total", "an-cell-traffic--total"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.kind, func(t *testing.T) {
+			page := NewPageData(config.Config{App: config.AppConfig{Name: "Nodexia"}}, requestWithLang(t, "en"))
+			page.ContentTemplate = "content-analytics-global"
+			page.PageTitle = page.T("analytics.global_title")
+			page.GlobalAnalytics = GlobalAnalyticsView{
+				ServerCount: 1,
+				TopTraffic: []TopServerTrafficView{{
+					Rank: 1, ServerID: 1, ServerName: "Germany", Download: "4.72 TB", Upload: "4.67 TB", MonthBytes: "9.39 TB",
+					HasQuota: true, QuotaKind: tc.kind, QuotaPct: 24, QuotaLevel: "ok", QuotaLimitHuman: "20.00 TB",
+				}},
+			}
+			rec := httptest.NewRecorder()
+			if err := renderer.Render(rec, 200, page); err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			body := rec.Body.String()
+			if n := strings.Count(body, "an-quota-pill an-quota-pill--ok"); n != 1 {
+				t.Fatalf("expected exactly one quota pill, got %d", n)
+			}
+			start := strings.Index(body, tc.cell)
+			end := strings.Index(body, "an-cell-action")
+			pill := strings.Index(body, "an-quota-pill an-quota-pill--ok")
+			if start < 0 || pill < start || pill > end {
+				t.Fatalf("quota pill not inside %s cell", tc.cell)
+			}
+			for _, other := range []string{"an-cell-traffic--dl", "an-cell-traffic--ul", "an-cell-traffic--total"} {
+				if other == tc.cell {
+					continue
+				}
+				o := strings.Index(body, other)
+				if o >= 0 && o > start && o < pill {
+					t.Fatalf("quota pill rendered after %s cell, expected in %s", other, tc.cell)
+				}
+			}
+		})
+	}
+}

@@ -37,7 +37,7 @@
   }
   to {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: none;
   }
 }
 
@@ -72,7 +72,9 @@
 }
 
 .an-enter {
-  animation: an-fade-up 0.38s var(--ease-out) both;
+  /* `backwards` (not `both`): a retained end-state transform would turn the card
+     into a containing block and misplace position:fixed descendants (info popover). */
+  animation: an-fade-up 0.38s var(--ease-out) backwards;
   animation-delay: calc(var(--stagger, 0) * 45ms);
 }
 
@@ -158,6 +160,12 @@
   box-shadow: inset 0 -18px 28px -22px rgba(139, 156, 247, 0.20);
 }
 .an-kpi--violet .kpi-strip__label svg { color: var(--text-muted); }
+
+.an-kpi .kpi-strip__value.an-kpi__value--text {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
 
 .an-kpi__sub {
   display: inline-flex;
@@ -745,6 +753,7 @@
 .an-share-pill,
 .an-quota-pill {
   display: inline-flex;
+  white-space: nowrap;
   align-items: center;
   padding: 2px 6px;
   border-radius: var(--radius-full);
@@ -2279,6 +2288,8 @@
 
 @media (max-width: 480px) {
   .an-kpi { padding: 11px 12px; }
+  .an-kpi .kpi-strip__label { white-space: normal; line-height: 1.3; }
+  .an-kpi .kpi-strip__value.an-kpi__value--text { font-size: var(--text-base, 1rem); line-height: 1.3; }
   .an-avg-pills { width: 100%; }
   .range-tab { padding: 5px 9px; font-size: 0.75rem; }
   .an-table--resource tbody tr.an-row,

@@ -513,6 +513,7 @@ func (h GlobalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				qPct := int(math.Round(float64(max(int64(0), used)) * 100 / float64(eff.Bytes)))
 				tv.HasQuota = true
+				tv.QuotaKind = NormalizeLimitKind(eff.Kind)
 				tv.QuotaLimitHuman = humanize.Bytes(eff.Bytes)
 				tv.QuotaPct = qPct
 				tv.QuotaLevel = quotaLevel(qPct)

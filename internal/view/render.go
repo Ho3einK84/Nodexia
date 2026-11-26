@@ -1233,6 +1233,9 @@ type TopServerTrafficView struct {
 	QuotaLimitHuman string
 	QuotaPct        int
 	QuotaLevel      string
+	// QuotaKind is the traffic series the cap measures ("rx"/"tx"/"total"); the
+	// badge is rendered in the matching column (download by default).
+	QuotaKind string
 }
 
 type GlobalAnalyticsView struct {

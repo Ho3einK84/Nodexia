@@ -162,23 +162,10 @@
 
     if (!pending.length) return;
 
-    if (typeof IntersectionObserver === 'undefined') {
-      pending.forEach((bar) => revealBarElement(bar, bar.dataset.anBarTarget));
-      return;
-    }
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        const bar = entry.target;
-        const target = bar.dataset.anBarTarget;
-        if (target !== undefined) revealBarElement(bar, target);
-        observer.unobserve(bar);
-      });
-    }, { threshold: 0.05, rootMargin: '40px' });
-
-    pending.forEach((bar) => observer.observe(bar));
-    onCleanup(() => observer.disconnect());
+    // Reveal immediately. Gating on IntersectionObserver left bars empty: a bar
+    // collapsed to scaleX(0) has a zero-area box and may never report as
+    // intersecting, so its fill was never restored.
+    pending.forEach((bar) => revealBarElement(bar, bar.dataset.anBarTarget));
   }
 
   function initCountUp(scope) {

@@ -28,9 +28,9 @@
       <div class="kpi-strip__item an-kpi{{ if $hasAnyRule }} an-kpi--ok kpi-strip__item--ok{{ else }} an-kpi--amber kpi-strip__item--warn{{ end }}">
         <span class="kpi-strip__label"><i data-lucide="gauge" aria-hidden="true"></i> {{ t "analytics.limits.banner_title" }}</span>
         {{ if .GlobalAnalytics.HasGlobalLimit }}
-        <span class="kpi-strip__value">{{ .GlobalAnalytics.GlobalLimitHuman }}</span>
+        <span class="kpi-strip__value an-kpi__value--text">{{ .GlobalAnalytics.GlobalLimitHuman }}</span>
         {{ else if gt .GlobalAnalytics.ActiveLimitRules 0 }}
-        <span class="kpi-strip__value">{{ t "analytics.limits.active_rules" "count" .GlobalAnalytics.ActiveLimitRules }}</span>
+        <span class="kpi-strip__value an-kpi__value--text">{{ t "analytics.limits.active_rules" "count" .GlobalAnalytics.ActiveLimitRules }}</span>
         {{ else }}
         <span class="kpi-strip__value">—</span>
         {{ end }}
@@ -256,18 +256,24 @@
             </td>
             <td class="an-cell-traffic an-cell-traffic--dl text-right">
               <span class="an-mobile-label"><i data-lucide="arrow-down" aria-hidden="true"></i> {{ t "analytics.download" }}</span>
-              <span class="traffic-badge traffic-badge--dl"><i data-lucide="arrow-down" class="an-dir-icon" aria-hidden="true"></i> {{ .Download }}</span>
+              <div class="an-total-wrap an-quota-wrap">
+                <span class="traffic-badge traffic-badge--dl"><i data-lucide="arrow-down" class="an-dir-icon" aria-hidden="true"></i> {{ .Download }}</span>
+                {{ if and .HasQuota (ne .QuotaKind "tx") (ne .QuotaKind "total") }}{{ template "an-quota-pill" . }}{{ end }}
+              </div>
             </td>
             <td class="an-cell-traffic an-cell-traffic--ul text-right">
               <span class="an-mobile-label"><i data-lucide="arrow-up" aria-hidden="true"></i> {{ t "analytics.upload" }}</span>
-              <span class="traffic-badge traffic-badge--ul"><i data-lucide="arrow-up" class="an-dir-icon" aria-hidden="true"></i> {{ .Upload }}</span>
+              <div class="an-total-wrap an-quota-wrap">
+                <span class="traffic-badge traffic-badge--ul"><i data-lucide="arrow-up" class="an-dir-icon" aria-hidden="true"></i> {{ .Upload }}</span>
+                {{ if and .HasQuota (eq .QuotaKind "tx") }}{{ template "an-quota-pill" . }}{{ end }}
+              </div>
             </td>
             <td class="an-cell-traffic an-cell-traffic--total text-right">
               <span class="an-mobile-label"><i data-lucide="arrow-up-down" aria-hidden="true"></i> {{ t "analytics.total" }}</span>
               <div class="an-total-wrap">
                 <span class="traffic-badge traffic-badge--total">{{ .MonthBytes }}</span>
                 {{ if gt .SharePct 0 }}<span class="an-share-pill" title="{{ t "analytics.share_of_fleet" "pct" .SharePct }}">{{ .SharePct }}%</span>{{ end }}
-                {{ if .HasQuota }}<span class="an-quota-pill an-quota-pill--{{ .QuotaLevel }}" dir="ltr" title="{{ t "analytics.quota_badge_title" "pct" .QuotaPct "limit" .QuotaLimitHuman }}">{{ .QuotaPct }}% / {{ .QuotaLimitHuman }}</span>{{ end }}
+                {{ if and .HasQuota (eq .QuotaKind "total") }}{{ template "an-quota-pill" . }}{{ end }}
               </div>
             </td>
             <td class="an-cell-action text-right">
@@ -290,3 +296,5 @@
   {{ end }}
 </section>
 {{ end }}
+
+{{ define "an-quota-pill" }}<span class="an-quota-pill an-quota-pill--{{ .QuotaLevel }}" dir="ltr" title="{{ t "analytics.quota_badge_title" "pct" .QuotaPct "limit" .QuotaLimitHuman }}">{{ .QuotaPct }}% / {{ .QuotaLimitHuman }}</span>{{ end }}
