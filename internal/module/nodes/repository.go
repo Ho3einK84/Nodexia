@@ -164,11 +164,15 @@ func NewSQLRepository(conn db.DBTX) SQLRepository {
 }
 
 func (r SQLRepository) HasAny(ctx context.Context, serverID int64) (bool, error) {
-	var count int
-	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM node_snapshots WHERE server_id = ?`, serverID).Scan(&count); err != nil {
+	var exists int
+	err := r.db.QueryRowContext(ctx, `SELECT 1 FROM node_snapshots WHERE server_id = ? LIMIT 1`, serverID).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
 		return false, fmt.Errorf("nodes: check snapshots for server %d: %w", serverID, err)
 	}
-	return count > 0, nil
+	return true, nil
 }
 
 func (r SQLRepository) ReplaceLatest(ctx context.Context, serverID int64, snapshots []Snapshot, collectedAt time.Time) error {
@@ -484,10 +488,13 @@ func (r SQLRepository) UptimeStatsAt(ctx context.Context, serverID int64, since,
 	since = since.UTC()
 
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT node_type, service_name, health_status, observed_at
+		`SELECT node_type, service_name,
+		        SUBSTR(observed_at, 1, 10) AS obs_day,
+		        COUNT(*) AS checks,
+		        SUM(CASE WHEN LOWER(TRIM(health_status)) IN ('running', 'active', 'healthy') THEN 1 ELSE 0 END) AS running
 		 FROM node_status_history
 		 WHERE server_id = ? AND observed_at >= ?
-		 ORDER BY observed_at ASC`,
+		 GROUP BY node_type, service_name, SUBSTR(observed_at, 1, 10)`,
 		serverID,
 		since,
 	)
@@ -506,14 +513,10 @@ func (r SQLRepository) UptimeStatsAt(ctx context.Context, serverID int64, since,
 	totals := map[string]*NodeUptime{}
 
 	for rows.Next() {
-		var nodeType, serviceName, health string
-		var observedRaw any
-		if err := rows.Scan(&nodeType, &serviceName, &health, &observedRaw); err != nil {
+		var nodeType, serviceName, dayKey string
+		var checks, running int
+		if err := rows.Scan(&nodeType, &serviceName, &dayKey, &checks, &running); err != nil {
 			return nil, fmt.Errorf("nodes: scan uptime row: %w", err)
-		}
-		observedAt, err := parseDatabaseTime(observedRaw)
-		if err != nil {
-			return nil, fmt.Errorf("nodes: parse uptime observed_at: %w", err)
 		}
 
 		key := UptimeKey(nodeType, serviceName)
@@ -524,19 +527,15 @@ func (r SQLRepository) UptimeStatsAt(ctx context.Context, serverID int64, since,
 			perNodeDay[key] = map[string]*dayAccum{}
 		}
 
-		stat.Checks++
-		dayKey := observedAt.UTC().Format("2006-01-02")
+		stat.Checks += checks
+		stat.Running += running
 		dayAcc := perNodeDay[key][dayKey]
 		if dayAcc == nil {
 			dayAcc = &dayAccum{}
 			perNodeDay[key][dayKey] = dayAcc
 		}
-		dayAcc.checks++
-
-		if IsRunningHealth(health) {
-			stat.Running++
-			dayAcc.running++
-		}
+		dayAcc.checks += checks
+		dayAcc.running += running
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -56,7 +56,7 @@ func (h DiagnosticsHandler) renderPage(w http.ResponseWriter, r *http.Request, s
 	page.PageStyles = []string{"/static/diagnostics.css"}
 	page.PageScripts = []string{"/static/diagnostics.js"}
 	if page.BackupCanRun {
-		if counts, err := backup.SummarizeDB(r.Context(), h.database.SQL); err == nil {
+		if counts, err := backup.SummarizeDB(r.Context(), h.database.Reader()); err == nil {
 			page.BackupOverview = view.BackupOverviewView{
 				Servers:             counts.Servers,
 				ServerTags:          counts.ServerTags,

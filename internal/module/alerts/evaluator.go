@@ -194,17 +194,31 @@ func (e *Evaluator) Evaluate(ctx context.Context, target Target, metrics Metrics
 	if err != nil {
 		return fmt.Errorf("alerts: list rules for server %d: %w", target.ID, err)
 	}
+	if len(rules) == 0 {
+		return nil
+	}
+
+	// Preload active streaks once so healthy rules skip redundant SQLite DELETE
+	// write transactions on every monitoring sweep.
+	ruleIDs := make([]int64, 0, len(rules))
+	for _, r := range rules {
+		ruleIDs = append(ruleIDs, r.ID)
+	}
+	activeStreaks, streakErr := e.repo.ListStreaksForRules(ctx, ruleIDs)
+	if streakErr != nil {
+		activeStreaks = nil // fall back to unconditional reset on read error
+	}
 
 	var firstErr error
 	for _, rule := range rules {
-		if err := e.evaluateRule(ctx, target, rule, metrics); err != nil && firstErr == nil {
+		if err := e.evaluateRule(ctx, target, rule, metrics, activeStreaks); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
 	return firstErr
 }
 
-func (e *Evaluator) evaluateRule(ctx context.Context, target Target, rule Rule, metrics Metrics) error {
+func (e *Evaluator) evaluateRule(ctx context.Context, target Target, rule Rule, metrics Metrics, activeStreaks map[streakKey]int) error {
 	value, ok := metrics.valueFor(rule.Metric)
 	if !ok {
 		// Metric not collected this cycle (e.g. traffic snapshot unavailable).
@@ -239,8 +253,10 @@ func (e *Evaluator) evaluateRule(ctx context.Context, target Target, rule Rule, 
 	// Recovery: value is back below the threshold. Resolve any open event,
 	// regardless of silence (a silence suppresses firing, not resolution).
 	if !breach {
-		if err := e.resetStreak(ctx, rule, target); err != nil {
-			return err
+		if activeStreaks == nil || activeStreaks[streakKey{ruleID: rule.ID, serverID: target.ID}] > 0 {
+			if err := e.resetStreak(ctx, rule, target); err != nil {
+				return err
+			}
 		}
 		if hasOpen {
 			slog.Info("alert: metric recovered — resolving open event",
@@ -266,8 +282,10 @@ func (e *Evaluator) evaluateRule(ctx context.Context, target Target, rule Rule, 
 			slog.Int64("server_id", target.ID),
 			slog.String("metric", rule.Metric),
 		)
-		if err := e.resetStreak(ctx, rule, target); err != nil {
-			return err
+		if activeStreaks == nil || activeStreaks[streakKey{ruleID: rule.ID, serverID: target.ID}] > 0 {
+			if err := e.resetStreak(ctx, rule, target); err != nil {
+				return err
+			}
 		}
 		return nil
 	}

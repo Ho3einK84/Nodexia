@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	assets "github.com/Ho3einK84/Nodexia"
@@ -60,8 +61,16 @@ func NewBootstrapMigratorFor(dialect Dialect) (BootstrapMigrator, error) {
 	return BootstrapMigrator{migrations: migrations}, nil
 }
 
-func BootstrapMigrationCount() int {
+var bootstrapMigrationCount = sync.OnceValue(func() int {
 	return len(splitStatements(assets.Schema()))
+})
+
+func BootstrapMigrationCount() int {
+	return bootstrapMigrationCount()
+}
+
+func (m BootstrapMigrator) Count() int {
+	return len(m.migrations)
 }
 
 func (m BootstrapMigrator) Migrations() []Migration {

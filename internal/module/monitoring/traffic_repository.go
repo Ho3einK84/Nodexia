@@ -60,7 +60,13 @@ func (r SQLRepository) AppendTraffic(ctx context.Context, snapshot TrafficSnapsh
 		available = 1
 	}
 
-	result, err := r.conn.ExecContext(
+	tx, err := r.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return TrafficSnapshot{}, fmt.Errorf("monitoring: begin vnstat snapshot tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	result, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO vnstat_snapshots (
 			server_id,
@@ -92,6 +98,19 @@ func (r SQLRepository) AppendTraffic(ctx context.Context, snapshot TrafficSnapsh
 	snapshot.ID, err = result.LastInsertId()
 	if err != nil {
 		return TrafficSnapshot{}, fmt.Errorf("monitoring: read vnstat snapshot last insert id: %w", err)
+	}
+
+	// Keep vnstat_snapshots bounded: a fresh available snapshot supersedes all
+	// prior rows for this server; an unavailable snapshot prunes only earlier
+	// unavailable rows so the last valid traffic history stays intact for analytics.
+	if snapshot.Available {
+		_, _ = tx.ExecContext(ctx, `DELETE FROM vnstat_snapshots WHERE server_id = ? AND id < ?`, snapshot.ServerID, snapshot.ID)
+	} else {
+		_, _ = tx.ExecContext(ctx, `DELETE FROM vnstat_snapshots WHERE server_id = ? AND available = 0 AND id < ?`, snapshot.ServerID, snapshot.ID)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return TrafficSnapshot{}, fmt.Errorf("monitoring: commit vnstat snapshot: %w", err)
 	}
 
 	return snapshot, nil

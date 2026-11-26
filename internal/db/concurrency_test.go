@@ -109,6 +109,35 @@ func TestSQLiteConcurrentWritesAndReads(t *testing.T) {
 	}
 }
 
+// TestSQLiteReaderDoesNotBlockOnOpenWriteTx verifies that the separate WAL
+// ReadSQL pool serves concurrent HTTP reads immediately even while a write
+// transaction holds the single writer connection open.
+func TestSQLiteReaderDoesNotBlockOnOpenWriteTx(t *testing.T) {
+	cfg := config.DatabaseConfig{
+		Driver:     config.DriverSQLite,
+		SQLitePath: filepath.Join(t.TempDir(), "wal-reader.sqlite3"),
+	}
+	runtime, err := db.Open(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = runtime.Close() })
+
+	ctx := context.Background()
+	tx, err := runtime.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin write tx: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	readCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	var n int
+	if err := runtime.Reader().QueryRowContext(readCtx, `SELECT COUNT(*) FROM servers`).Scan(&n); err != nil {
+		t.Fatalf("Reader().QueryRowContext blocked or failed while write tx was open: %v", err)
+	}
+}
+
 // replaceLatest mirrors nodes.ReplaceLatest: a single write transaction that
 // clears the server's rows and inserts a fresh one.
 func replaceLatest(ctx context.Context, conn *sql.DB, serverID int64, n int) error {

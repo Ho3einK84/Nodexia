@@ -178,9 +178,15 @@ func (r historyRepository) trimServerHistory(ctx context.Context, serverID int64
 	}
 	_ = rows.Close()
 
-	for _, id := range staleIDs {
-		_, _ = r.conn.ExecContext(ctx, `DELETE FROM terminal_command_history WHERE id = ?`, id)
+	if len(staleIDs) == 0 {
+		return
 	}
+	placeholders := strings.Repeat("?,", len(staleIDs)-1) + "?"
+	args := make([]any, len(staleIDs))
+	for i, id := range staleIDs {
+		args[i] = id
+	}
+	_, _ = r.conn.ExecContext(ctx, `DELETE FROM terminal_command_history WHERE id IN (`+placeholders+`)`, args...)
 }
 
 func (r historyRepository) ListForServer(ctx context.Context, serverID int64) (serverItems []HistoryItem, globalItems []HistoryItem, err error) {

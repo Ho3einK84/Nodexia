@@ -88,11 +88,15 @@ func (r SQLRepository) Append(ctx context.Context, snapshot Snapshot) (Snapshot,
 }
 
 func (r SQLRepository) HasAny(ctx context.Context, serverID int64) (bool, error) {
-	var count int
-	if err := r.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM system_snapshots WHERE server_id = ?`, serverID).Scan(&count); err != nil {
+	var exists int
+	err := r.conn.QueryRowContext(ctx, `SELECT 1 FROM system_snapshots WHERE server_id = ? LIMIT 1`, serverID).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
 		return false, fmt.Errorf("monitoring: check snapshots for server %d: %w", serverID, err)
 	}
-	return count > 0, nil
+	return true, nil
 }
 
 func (r SQLRepository) GetLatestByServer(ctx context.Context, serverID int64) (Snapshot, error) {

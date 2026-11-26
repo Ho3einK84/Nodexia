@@ -188,4 +188,17 @@ func TestGlobalAndServerAnalyticsRenderPopulatedMetricsAndTraffic(t *testing.T) 
 	if !strings.Contains(recLim.Body.String(), `precedence-step--1`) {
 		t.Errorf("GET /analytics/limits missing precedence-step--1")
 	}
+
+	// Batched metrics data endpoint (1 DB scan for all 5 system series).
+	recBatch := httptest.NewRecorder()
+	mux.ServeHTTP(recBatch, httptest.NewRequest(http.MethodGet, "/servers/2/analytics/data?metrics=cpu,ram,disk,swap,load&range=24h", nil))
+	if recBatch.Code != http.StatusOK {
+		t.Fatalf("GET batched /analytics/data = %d, want 200\n%s", recBatch.Code, recBatch.Body.String())
+	}
+	batchBody := recBatch.Body.String()
+	for _, key := range []string{`"charts"`, `"cpu"`, `"ram"`, `"disk"`, `"swap"`, `"load"`} {
+		if !strings.Contains(batchBody, key) {
+			t.Errorf("batched /analytics/data missing %s", key)
+		}
+	}
 }

@@ -58,8 +58,32 @@ func (s *RollupService) ComputeDailyRollups(ctx context.Context) {
 	}
 }
 
+type incrementalRollupRepo interface {
+	LatestHourlyPeriod(ctx context.Context, serverID int64) (time.Time, bool, error)
+	LatestDailyPeriod(ctx context.Context, serverID int64) (time.Time, bool, error)
+	InsertHourlyRollupsBatch(ctx context.Context, serverID int64, rollups []HourlyRollup) error
+	InsertDailyRollupsBatch(ctx context.Context, serverID int64, rollups []DailyRollup) error
+}
+
 func (s *RollupService) computeHourlyForServer(ctx context.Context, serverID int64, since time.Time) error {
-	points, err := s.repo.ListRawSince(ctx, serverID, since)
+	incRepo, hasInc := s.repo.(incrementalRollupRepo)
+	effectiveSince := since
+	if hasInc {
+		if latest, ok, err := incRepo.LatestHourlyPeriod(ctx, serverID); err == nil && ok {
+			nextHour := truncateToHour(latest).Add(time.Hour)
+			if nextHour.After(effectiveSince) {
+				effectiveSince = nextHour
+			}
+		}
+	}
+
+	now := time.Now().UTC()
+	currentHour := truncateToHour(now)
+	if !effectiveSince.Before(currentHour) {
+		return nil
+	}
+
+	points, err := s.repo.ListRawSince(ctx, serverID, effectiveSince)
 	if err != nil {
 		return err
 	}
@@ -71,17 +95,26 @@ func (s *RollupService) computeHourlyForServer(ctx context.Context, serverID int
 	buckets := make(map[time.Time][]RawPoint)
 	for _, p := range points {
 		hour := truncateToHour(p.RecordedAt)
-		buckets[hour] = append(buckets[hour], p)
-	}
-
-	now := time.Now().UTC()
-	currentHour := truncateToHour(now)
-
-	for hour, pts := range buckets {
-		// Never roll up the current (incomplete) hour.
 		if !hour.Before(currentHour) {
 			continue
 		}
+		buckets[hour] = append(buckets[hour], p)
+	}
+	if len(buckets) == 0 {
+		return nil
+	}
+
+	if hasInc {
+		batch := make([]HourlyRollup, 0, len(buckets))
+		for hour, pts := range buckets {
+			rollup := aggregateHourly(pts)
+			rollup.PeriodStart = hour
+			batch = append(batch, rollup)
+		}
+		return incRepo.InsertHourlyRollupsBatch(ctx, serverID, batch)
+	}
+
+	for hour, pts := range buckets {
 		exists, err := s.repo.HasHourlyRollup(ctx, serverID, hour)
 		if err != nil {
 			return err
@@ -99,7 +132,24 @@ func (s *RollupService) computeHourlyForServer(ctx context.Context, serverID int
 }
 
 func (s *RollupService) computeDailyForServer(ctx context.Context, serverID int64, since time.Time) error {
-	rollups, err := s.repo.ListHourlyRollups(ctx, serverID, since)
+	incRepo, hasInc := s.repo.(incrementalRollupRepo)
+	effectiveSince := since
+	if hasInc {
+		if latest, ok, err := incRepo.LatestDailyPeriod(ctx, serverID); err == nil && ok {
+			nextDay := truncateToDay(latest).AddDate(0, 0, 1)
+			if nextDay.After(effectiveSince) {
+				effectiveSince = nextDay
+			}
+		}
+	}
+
+	now := time.Now().UTC()
+	currentDay := truncateToDay(now)
+	if !effectiveSince.Before(currentDay) {
+		return nil
+	}
+
+	rollups, err := s.repo.ListHourlyRollups(ctx, serverID, effectiveSince)
 	if err != nil {
 		return err
 	}
@@ -114,19 +164,29 @@ func (s *RollupService) computeDailyForServer(ctx context.Context, serverID int6
 	buckets := make(map[time.Time]*hourlyGroup)
 	for _, r := range rollups {
 		day := truncateToDay(r.PeriodStart)
+		if !day.Before(currentDay) {
+			continue
+		}
 		if buckets[day] == nil {
 			buckets[day] = &hourlyGroup{}
 		}
 		buckets[day].rollups = append(buckets[day].rollups, r)
 	}
+	if len(buckets) == 0 {
+		return nil
+	}
 
-	now := time.Now().UTC()
-	currentDay := truncateToDay(now)
+	if hasInc {
+		batch := make([]DailyRollup, 0, len(buckets))
+		for day, group := range buckets {
+			rollup := aggregateDaily(group.rollups)
+			rollup.PeriodStart = day
+			batch = append(batch, rollup)
+		}
+		return incRepo.InsertDailyRollupsBatch(ctx, serverID, batch)
+	}
 
 	for day, group := range buckets {
-		if !day.Before(currentDay) {
-			continue
-		}
 		exists, err := s.repo.HasDailyRollup(ctx, serverID, day)
 		if err != nil {
 			return err

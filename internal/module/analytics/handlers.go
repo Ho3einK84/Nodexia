@@ -129,7 +129,7 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		CredentialStrategy: server.CredentialStrategy,
 	}
 	page.AnalyticsTrafficMonth = h.currentPeriodTraffic(r, server)
-	page.AnalyticsLimit = h.limitView(r, server)
+	page.AnalyticsLimit = h.limitView(r, page, server)
 	if kind, msg := limitFlash(r, page); kind != "" {
 		page.FlashKind = kind
 		page.FlashMessage = msg
@@ -145,30 +145,27 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // limitView builds the monthly download-limit form state for a server. On any
 // read error it renders the form as "no limit" rather than failing the page —
 // the limit is an optional convenience, never a hard dependency of analytics.
-func (h PageHandler) limitView(r *http.Request, server servers.Server) view.AnalyticsLimitView {
+func (h PageHandler) limitView(r *http.Request, page view.PageData, server servers.Server) view.AnalyticsLimitView {
 	v := view.AnalyticsLimitView{
 		Action:      fmt.Sprintf("/servers/%d/analytics/limit", server.ID),
 		UnitInput:   defaultLimitUnit,
 		UnitOptions: limitUnitOptions,
+		KindInput:   LimitKindRX,
 	}
-	page := view.NewPageData(h.deps.Config, r)
-	v.KindInput = LimitKindRX
-	limit, ok, err := h.repo.GetTrafficLimit(r.Context(), server.ID)
-	if err == nil && ok {
-		v.HasLimit = true
-		v.LimitHuman = humanize.Bytes(limit.Bytes)
-		v.ValueInput, v.UnitInput = limitToValueUnit(limit.Bytes)
-		v.KindInput = limit.Kind
-		v.KindLabel = limitKindLabel(page, limit.Kind)
+	eff, source, ok, err := h.repo.ResolveEffectiveLimit(r.Context(), server.ID, server.Tags)
+	if err != nil || !ok {
 		return v
 	}
-
-	// No per-server override: surface the inherited group/global cap (if any) so
-	// the operator sees the limit the forecast actually uses.
-	if eff, source, ok, err := h.repo.ResolveEffectiveLimit(r.Context(), server.ID, server.Tags); err == nil && ok {
-		v.InheritedHuman = humanize.Bytes(eff.Bytes)
-		v.InheritedSource = limitSourceLabel(page, source)
+	if source == "server" {
+		v.HasLimit = true
+		v.LimitHuman = humanize.Bytes(eff.Bytes)
+		v.ValueInput, v.UnitInput = limitToValueUnit(eff.Bytes)
+		v.KindInput = eff.Kind
+		v.KindLabel = limitKindLabel(page, eff.Kind)
+		return v
 	}
+	v.InheritedHuman = humanize.Bytes(eff.Bytes)
+	v.InheritedSource = limitSourceLabel(page, source)
 	return v
 }
 
@@ -440,11 +437,27 @@ func (h DataHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	metric := strings.TrimSpace(r.URL.Query().Get("metric"))
+	metricsParam := strings.TrimSpace(r.URL.Query().Get("metrics"))
 	rangeStr := strings.TrimSpace(r.URL.Query().Get("range"))
 
 	since, rangeLabel, err := parseRange(rangeStr)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid range parameter")
+		return
+	}
+
+	// Batched endpoint: ?metrics=cpu,ram,disk,swap,load loads the time-series
+	// table ONCE and returns every requested chart in a single response.
+	if metricsParam != "" {
+		charts, batchErr := h.buildBatchedCharts(r, server.ID, strings.Split(metricsParam, ","), since, rangeLabel)
+		if batchErr != nil {
+			writeJSONError(w, http.StatusBadRequest, batchErr.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"range":  rangeLabel,
+			"charts": charts,
+		})
 		return
 	}
 
@@ -468,6 +481,121 @@ func (h DataHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h DataHandler) buildBatchedCharts(r *http.Request, serverID int64, rawMetrics []string, since time.Time, rangeLabel string) (map[string]ChartDataResponse, error) {
+	want := make([]string, 0, len(rawMetrics))
+	needSystem := false
+	needTraffic := false
+	seen := make(map[string]bool, len(rawMetrics))
+	for _, raw := range rawMetrics {
+		m := strings.TrimSpace(raw)
+		if m == "" || seen[m] {
+			continue
+		}
+		switch m {
+		case "cpu", "ram", "disk", "swap", "load":
+			needSystem = true
+		case "traffic":
+			needTraffic = true
+		default:
+			return nil, fmt.Errorf("unknown metric %q", m)
+		}
+		seen[m] = true
+		want = append(want, m)
+	}
+	if len(want) == 0 {
+		return nil, fmt.Errorf("no valid metrics requested")
+	}
+
+	var labels []string
+	var cpuVals, ramVals, diskVals, swapVals, load1, load5, load15 []float64
+	if needSystem {
+		if rangeLabel == "7d" || rangeLabel == "30d" {
+			rollups, err := h.repo.ListHourlyRollups(r.Context(), serverID, since)
+			if err != nil {
+				return nil, err
+			}
+			labels = make([]string, 0, len(rollups))
+			for _, rp := range rollups {
+				labels = append(labels, rp.PeriodStart.Format("01/02 15:04"))
+				cpuVals = append(cpuVals, rp.AvgCPU)
+				ramVals = append(ramVals, rp.AvgRAM)
+				diskVals = append(diskVals, rp.AvgDisk)
+				swapVals = append(swapVals, rp.AvgSwap)
+				load1 = append(load1, rp.AvgLoad1)
+				load5 = append(load5, rp.AvgLoad5)
+				load15 = append(load15, rp.AvgLoad15)
+			}
+		} else {
+			points, err := h.repo.ListRawSince(r.Context(), serverID, since)
+			if err != nil {
+				return nil, err
+			}
+			labels = make([]string, 0, len(points))
+			for _, p := range points {
+				labels = append(labels, formatLabel(p.RecordedAt, rangeLabel))
+				cpuVals = append(cpuVals, p.CPUUsage)
+				ramVals = append(ramVals, p.RAMUsage)
+				diskVals = append(diskVals, p.DiskUsage)
+				swapVals = append(swapVals, p.SwapUsage)
+				load1 = append(load1, p.LoadAvg1)
+				load5 = append(load5, p.LoadAvg5)
+				load15 = append(load15, p.LoadAvg15)
+			}
+		}
+	}
+
+	out := make(map[string]ChartDataResponse, len(want))
+	for _, m := range want {
+		switch m {
+		case "cpu", "ram", "disk", "swap":
+			color, label := metricStyle(m)
+			var vals []float64
+			switch m {
+			case "cpu":
+				vals = cpuVals
+			case "ram":
+				vals = ramVals
+			case "disk":
+				vals = diskVals
+			case "swap":
+				vals = swapVals
+			}
+			out[m] = ChartDataResponse{
+				Metric: m,
+				Range:  rangeLabel,
+				Unit:   "%",
+				Labels: labels,
+				Series: []ChartSeries{{Metric: m, Label: label, Color: color, Data: vals}},
+				Min:    0,
+				Max:    100,
+			}
+		case "load":
+			out["load"] = ChartDataResponse{
+				Metric: "load",
+				Range:  rangeLabel,
+				Unit:   "",
+				Labels: labels,
+				Series: []ChartSeries{
+					{Metric: "load1", Label: "Load 1m", Color: "--accent", Data: load1},
+					{Metric: "load5", Label: "Load 5m", Color: "--ok", Data: load5},
+					{Metric: "load15", Label: "Load 15m", Color: "--text-muted", Data: load15},
+				},
+				Min: 0,
+				Max: autoMax(load1, load5, load15),
+			}
+		case "traffic":
+			if needTraffic {
+				tc, err := h.buildTrafficChart(r, serverID)
+				if err != nil {
+					return nil, err
+				}
+				out["traffic"] = tc
+			}
+		}
+	}
+	return out, nil
 }
 
 func (h DataHandler) buildSystemChart(r *http.Request, serverID int64, metric string, since time.Time, rangeLabel string) (ChartDataResponse, error) {
@@ -778,7 +906,7 @@ func (h LimitHandler) renderError(w http.ResponseWriter, r *http.Request, server
 
 	pageHandler := PageHandler(h)
 	page.AnalyticsTrafficMonth = pageHandler.currentPeriodTraffic(r, server)
-	limitView := pageHandler.limitView(r, server)
+	limitView := pageHandler.limitView(r, page, server)
 	limitView.ValueInput = value
 	limitView.UnitInput = unit
 	limitView.KindInput = NormalizeLimitKind(kind)

@@ -31,19 +31,21 @@ func (Module) RegisterRoutes(mux *http.ServeMux, deps module.Dependencies) {
 		return
 	}
 
-	repo := NewSQLRepository(deps.Database.SQL)
+	writeRepo := NewSQLRepository(deps.Database.SQL)
+	readDB := deps.Database.Reader()
+	readRepo := NewSQLRepository(readDB)
 	forecastSvc := NewForecastService()
-	serverRepo := servers.NewSQLRepository(deps.Database.SQL)
+	readServerRepo := servers.NewSQLRepository(readDB)
 
-	limitsAdmin := NewLimitsAdminHandler(deps, repo)
+	limitsAdmin := NewLimitsAdminHandler(deps, writeRepo)
 
-	mux.Handle("GET /analytics", NewGlobalHandler(deps, repo))
+	mux.Handle("GET /analytics", NewGlobalHandler(deps, readRepo))
 	mux.HandleFunc("GET /analytics/limits", limitsAdmin.Page)
 	mux.HandleFunc("POST /analytics/limits", limitsAdmin.SetGlobal)
 	mux.HandleFunc("POST /analytics/limits/tags", limitsAdmin.SetTag)
 	mux.HandleFunc("POST /analytics/limits/tags/delete", limitsAdmin.DeleteTag)
-	mux.Handle("GET /servers/{id}/analytics", NewPageHandler(deps, serverRepo, repo))
-	mux.Handle("GET /servers/{id}/analytics/data", NewDataHandler(deps, serverRepo, repo))
-	mux.Handle("GET /servers/{id}/analytics/forecast", NewForecastHandler(deps, serverRepo, repo, forecastSvc))
-	mux.Handle("POST /servers/{id}/analytics/limit", NewLimitHandler(deps, serverRepo, repo))
+	mux.Handle("GET /servers/{id}/analytics", NewPageHandler(deps, readServerRepo, readRepo))
+	mux.Handle("GET /servers/{id}/analytics/data", NewDataHandler(deps, readServerRepo, readRepo))
+	mux.Handle("GET /servers/{id}/analytics/forecast", NewForecastHandler(deps, readServerRepo, readRepo, forecastSvc))
+	mux.Handle("POST /servers/{id}/analytics/limit", NewLimitHandler(deps, readServerRepo, writeRepo))
 }

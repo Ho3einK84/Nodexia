@@ -63,4 +63,31 @@ func TestSQLitePragmasApplied(t *testing.T) {
 	if synchronous != 1 { // 1 == NORMAL
 		t.Fatalf("synchronous = %d, want 1 (NORMAL)", synchronous)
 	}
+
+	var cacheSize int
+	if err := runtime.SQL.QueryRowContext(ctx, "PRAGMA cache_size").Scan(&cacheSize); err != nil {
+		t.Fatalf("read cache_size: %v", err)
+	}
+	if cacheSize != -65536 {
+		t.Fatalf("cache_size = %d, want -65536", cacheSize)
+	}
+
+	var tempStore int
+	if err := runtime.SQL.QueryRowContext(ctx, "PRAGMA temp_store").Scan(&tempStore); err != nil {
+		t.Fatalf("read temp_store: %v", err)
+	}
+	if tempStore != 2 { // 2 == MEMORY
+		t.Fatalf("temp_store = %d, want 2 (MEMORY)", tempStore)
+	}
+
+	if runtime.ReadSQL == nil || runtime.ReadSQL == runtime.SQL {
+		t.Fatal("expected distinct SQLite ReadSQL pool for file-backed database")
+	}
+	var queryOnly int
+	if err := runtime.Reader().QueryRowContext(ctx, "PRAGMA query_only").Scan(&queryOnly); err != nil {
+		t.Fatalf("read reader query_only: %v", err)
+	}
+	if queryOnly != 1 {
+		t.Fatalf("reader query_only = %d, want 1", queryOnly)
+	}
 }

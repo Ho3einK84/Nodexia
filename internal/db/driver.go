@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 
 	"github.com/Ho3einK84/Nodexia/internal/config"
@@ -68,6 +69,12 @@ func (sqliteDialect) DataSourceName(cfg config.DatabaseConfig) (string, error) {
 	// foreign_keys: SQLite disables FK enforcement per-connection by default;
 	// keep it on (previously handled by a global connection hook).
 	params.Add("_pragma", "foreign_keys(ON)")
+	// Performance pragmas: 64 MiB page cache (vs 2 MiB default), 256 MiB mmap
+	// for zero-copy B-tree reads, RAM temp B-trees, and 64 MiB WAL size cap.
+	params.Add("_pragma", "cache_size(-65536)")
+	params.Add("_pragma", "mmap_size(268435456)")
+	params.Add("_pragma", "temp_store(MEMORY)")
+	params.Add("_pragma", "journal_size_limit(67108864)")
 	// _txlock=immediate begins write transactions with BEGIN IMMEDIATE so the
 	// busy_timeout handler covers lock acquisition. A DEFERRED transaction that
 	// starts reading and later upgrades to a write returns SQLITE_BUSY
@@ -77,6 +84,34 @@ func (sqliteDialect) DataSourceName(cfg config.DatabaseConfig) (string, error) {
 	params.Set("_txlock", "immediate")
 
 	return filepath.Clean(path) + "?" + params.Encode(), nil
+}
+
+// sqliteReadDataSourceName returns a query-only DSN for the concurrent SQLite
+// WAL reader pool. In-memory databases return ("", false) because separate
+// connections to ":memory:" do not share a database instance.
+func sqliteReadDataSourceName(cfg config.DatabaseConfig) (string, bool) {
+	path := strings.TrimSpace(cfg.SQLitePath)
+	if path == "" || path == ":memory:" || strings.HasPrefix(path, "file::memory:") || strings.Contains(path, "mode=memory") {
+		return "", false
+	}
+	params := url.Values{}
+	params.Add("_pragma", "busy_timeout(5000)")
+	params.Add("_pragma", "journal_mode(WAL)")
+	params.Add("_pragma", "query_only(ON)")
+	params.Add("_pragma", "cache_size(-65536)")
+	params.Add("_pragma", "mmap_size(268435456)")
+	params.Add("_pragma", "temp_store(MEMORY)")
+	return filepath.Clean(path) + "?" + params.Encode(), true
+}
+
+func configureSQLiteReadPool(conn *sql.DB) {
+	n := goruntime.NumCPU()
+	if n < 4 {
+		n = 4
+	}
+	conn.SetMaxOpenConns(n)
+	conn.SetMaxIdleConns(n)
+	conn.SetConnMaxLifetime(0)
 }
 
 // ConfigurePool pins SQLite to a single connection. SQLite serializes writes at

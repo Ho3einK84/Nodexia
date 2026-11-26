@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync/atomic"
 	"time"
 )
 
@@ -33,7 +34,8 @@ const maxRetainedJobRuns = 1000
 // package (not a module) because the runs describe scheduler behaviour, but it
 // follows the modules' portable-SQL conventions.
 type jobRunsRepository struct {
-	conn *sql.DB
+	conn        *sql.DB
+	insertCount atomic.Uint64
 }
 
 func newJobRunsRepository(conn *sql.DB) *jobRunsRepository {
@@ -69,7 +71,12 @@ func (r *jobRunsRepository) Record(ctx context.Context, run JobRun) error {
 		return fmt.Errorf("scheduler: record job run: %w", err)
 	}
 
-	return r.trim(ctx)
+	// Amortize retention trimming across every 10 inserts to avoid running
+	// an OFFSET scan + DELETE write lock on every completed job.
+	if r.insertCount.Add(1)%10 == 0 {
+		return r.trim(ctx)
+	}
+	return nil
 }
 
 // trim deletes rows beyond the global retention cap, oldest first. The cutoff
