@@ -120,7 +120,7 @@
 
 {{ define "mobile-drawer" }}
 <div class="drawer-backdrop" data-drawer-backdrop></div>
-<aside id="mobile-drawer" class="drawer" role="dialog" aria-modal="true" aria-label="{{ t "shell.menu.title" }}" aria-hidden="true">
+<aside id="mobile-drawer" class="drawer" role="dialog" aria-modal="true" aria-label="{{ t "shell.menu.title" }}" aria-hidden="true" inert>
   <div class="drawer__header">
     <div class="drawer__brand">
       <span class="shell-brand__mark" aria-hidden="true">{{ template "brand-icon" . }}</span>
@@ -145,7 +145,7 @@
   <div class="drawer__section">
     <p class="drawer__section-title">{{ t "drawer.session" }}</p>
     <ul class="drawer__meta">
-      <li><i data-lucide="settings"></i> {{ t "drawer.environment" }} <code>{{ .Environment }}</code></li>
+      <li><i data-lucide="settings"></i> {{ t "drawer.environment" }} <code class="drawer__env{{ if eq .Environment "production" }} is-prod{{ end }}">{{ .Environment }}</code></li>
       <li><i data-lucide="tag"></i> {{ t "drawer.version" }} <code>{{ .Version }}</code></li>
       <li><i data-lucide="database"></i> {{ t "drawer.database" }} <code>{{ .DatabaseDriver }}</code></li>
     </ul>

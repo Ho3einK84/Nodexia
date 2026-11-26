@@ -71,6 +71,7 @@ function initDrawer() {
     drawer.classList.add('is-open');
     backdrop.classList.add('is-open');
     drawer.setAttribute('aria-hidden', 'false');
+    drawer.removeAttribute('inert');
     document.body.classList.add('drawer-open');
     setExpanded(true);
     var closeBtn = drawer.querySelector('[data-drawer-close]');
@@ -81,6 +82,7 @@ function initDrawer() {
     drawer.classList.remove('is-open');
     backdrop.classList.remove('is-open');
     drawer.setAttribute('aria-hidden', 'true');
+    drawer.setAttribute('inert', '');
     document.body.classList.remove('drawer-open');
     drawer.style.transition = '';
     drawer.style.transform = '';
