@@ -10,6 +10,7 @@ import (
 
 	assets "github.com/Ho3einK84/Nodexia"
 	"github.com/Ho3einK84/Nodexia/internal/config"
+	"github.com/Ho3einK84/Nodexia/internal/i18n"
 )
 
 // PWA assets (the web app manifest and the service worker) are served from
@@ -22,9 +23,13 @@ import (
 //     "Service-Worker-Allowed: /" so it controls the whole origin, and with
 //     "Cache-Control: no-cache" so update checks are prompt.
 
-// ManifestHandler renders the web app manifest from the running configuration.
+// ManifestHandler renders the web app manifest from the running configuration,
+// pre-encoding one variant per supported language so dir/lang match the user's
+// chosen locale without per-request marshaling.
 type ManifestHandler struct {
-	body []byte
+	bundle   *i18n.Bundle
+	byLang   map[string][]byte
+	fallback []byte
 }
 
 type manifestIcon struct {
@@ -72,80 +77,107 @@ type webManifest struct {
 	Shortcuts       []manifestShortcut `json:"shortcuts"`
 }
 
-// NewManifestHandler builds the manifest once at startup; it depends only on
-// static configuration, so there is no need to re-encode it per request.
+// NewManifestHandler builds the manifest variants once at startup; they depend
+// only on static configuration and locale metadata.
 func NewManifestHandler(cfg config.Config) ManifestHandler {
 	name := strings.TrimSpace(cfg.App.Name)
 	if name == "" {
 		name = "Nodexia"
 	}
 
-	manifest := webManifest{
-		Name:            name,
-		ShortName:       name,
-		Description:     "Self-hosted control panel for monitoring and managing Rebecca and PasarGuard panel nodes.",
-		ID:              "/",
-		StartURL:        "/",
-		Scope:           "/",
-		Display:         "standalone",
-		Orientation:     "portrait",
-		ThemeColor:      "#0f0f10",
-		BackgroundColor: "#0f0f10",
-		Lang:            "en",
-		Dir:             "ltr",
-		Categories:      []string{"productivity", "utilities"},
-		Icons: []manifestIcon{
-			{Src: "/static/icon-192.png", Sizes: "192x192", Type: "image/png", Purpose: "any"},
-			{Src: "/static/icon-512.png", Sizes: "512x512", Type: "image/png", Purpose: "any"},
-			{Src: "/static/icon-maskable-512.png", Sizes: "512x512", Type: "image/png", Purpose: "maskable"},
-		},
-		Shortcuts: []manifestShortcut{
-			{
-				Name:        "Servers",
-				ShortName:   "Servers",
-				Description: "Browse the managed server registry.",
-				URL:         "/servers",
-				Icons: []manifestIcon{
-					{Src: "/static/shortcut-servers.png", Sizes: "96x96", Type: "image/png", Purpose: "any"},
+	build := func(lang, dir string) []byte {
+		manifest := webManifest{
+			Name:            name,
+			ShortName:       name,
+			Description:     "Self-hosted control panel for monitoring and managing Rebecca and PasarGuard panel nodes.",
+			ID:              "/",
+			StartURL:        "/",
+			Scope:           "/",
+			Display:         "standalone",
+			Orientation:     "portrait",
+			ThemeColor:      "#0f0f10",
+			BackgroundColor: "#0f0f10",
+			Lang:            lang,
+			Dir:             dir,
+			Categories:      []string{"productivity", "utilities"},
+			Icons: []manifestIcon{
+				{Src: "/static/icon-192.png", Sizes: "192x192", Type: "image/png", Purpose: "any"},
+				{Src: "/static/icon-512.png", Sizes: "512x512", Type: "image/png", Purpose: "any"},
+				{Src: "/static/icon-maskable-512.png", Sizes: "512x512", Type: "image/png", Purpose: "maskable"},
+			},
+			Shortcuts: []manifestShortcut{
+				{
+					Name:        "Servers",
+					ShortName:   "Servers",
+					Description: "Browse the managed server registry.",
+					URL:         "/servers",
+					Icons: []manifestIcon{
+						{Src: "/static/shortcut-servers.png", Sizes: "96x96", Type: "image/png", Purpose: "any"},
+					},
+				},
+				{
+					Name:        "Diagnostics",
+					ShortName:   "Diagnostics",
+					Description: "Check system health and background jobs.",
+					URL:         "/ops/diagnostics",
+					Icons: []manifestIcon{
+						{Src: "/static/shortcut-diagnostics.png", Sizes: "96x96", Type: "image/png", Purpose: "any"},
+					},
+				},
+				{
+					Name:        "Alerts",
+					ShortName:   "Alerts",
+					Description: "Review alert rules, channels, and events.",
+					URL:         "/alerts",
+					Icons: []manifestIcon{
+						{Src: "/static/shortcut-alerts.png", Sizes: "96x96", Type: "image/png", Purpose: "any"},
+					},
 				},
 			},
-			{
-				Name:        "Diagnostics",
-				ShortName:   "Diagnostics",
-				Description: "Check system health and background jobs.",
-				URL:         "/ops/diagnostics",
-				Icons: []manifestIcon{
-					{Src: "/static/shortcut-diagnostics.png", Sizes: "96x96", Type: "image/png", Purpose: "any"},
-				},
-			},
-			{
-				Name:        "Alerts",
-				ShortName:   "Alerts",
-				Description: "Review alert rules, channels, and events.",
-				URL:         "/alerts",
-				Icons: []manifestIcon{
-					{Src: "/static/shortcut-alerts.png", Sizes: "96x96", Type: "image/png", Purpose: "any"},
-				},
-			},
-		},
+		}
+
+		body, err := json.MarshalIndent(manifest, "", "  ")
+		if err != nil {
+			return []byte("{}")
+		}
+		return body
 	}
 
-	body, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		// The manifest is built from static, known-good values; a marshal error
-		// here is a programming error. Fall back to an empty object so the route
-		// still responds rather than panicking at startup.
-		body = []byte("{}")
+	bundle := i18n.MustDefault()
+	byLang := make(map[string][]byte)
+	for _, lang := range bundle.Languages() {
+		byLang[lang.Code] = build(lang.Code, string(lang.Dir))
+	}
+	fallback := byLang[i18n.DefaultLanguage]
+	if len(fallback) == 0 {
+		fallback = build("en", "ltr")
 	}
 
-	return ManifestHandler{body: body}
+	return ManifestHandler{
+		bundle:   bundle,
+		byLang:   byLang,
+		fallback: fallback,
+	}
 }
 
-func (h ManifestHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+func (h ManifestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	body := h.fallback
+	if h.bundle != nil && r != nil {
+		cookieValue := ""
+		if cookie, err := r.Cookie(i18n.CookieName); err == nil {
+			cookieValue = cookie.Value
+		}
+		code := h.bundle.Resolve(cookieValue, r.Header.Get("Accept-Language"))
+		if localized, ok := h.byLang[code]; ok && len(localized) > 0 {
+			body = localized
+		}
+	}
 	w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Header().Add("Vary", "Cookie")
+	w.Header().Add("Vary", "Accept-Language")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(h.body)
+	_, _ = w.Write(body)
 }
 
 // ServiceWorkerHandler serves the embedded service worker script from the site

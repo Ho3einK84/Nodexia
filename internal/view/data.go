@@ -32,6 +32,7 @@ func NewPageData(cfg config.Config, r *http.Request) PageData {
 		DatabaseTarget:  DatabaseTarget(cfg),
 		EnvFile:         cfg.Install.EnvFile,
 		NavigationItems: defaultNavigation(""),
+		Partial:         r != nil && r.Header.Get("X-Nodexia-Partial") == "1",
 	}
 	data.SetLocalizer(localizerFor(r))
 	// Localized after SetLocalizer so the footer and meta description follow the

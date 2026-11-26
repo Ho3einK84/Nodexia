@@ -289,7 +289,7 @@
       if (passFieldWrap) passFieldWrap.classList.remove('is-needs-passphrase');
       setInspectStatus('info', t('js.backup.inspecting'), true);
 
-      getFreshCSRFToken(form).then(function (token) {
+      var sendInspect = function (token, retried) {
         var fd = new FormData();
         fd.append('backup_file', file);
         fd.append('passphrase', passInput ? passInput.value : '');
@@ -305,11 +305,20 @@
           body: fd,
           signal: inspectController.signal
         }).then(function (resp) {
+          var hdrToken = resp.headers && resp.headers.get('X-CSRF-Token');
+          if (hdrToken && typeof window.nxSetCSRF === 'function') window.nxSetCSRF(hdrToken);
+          if (resp.status === 403 && !retried) {
+            return getFreshCSRFToken(form).then(function (fresh) { return sendInspect(fresh, true); });
+          }
           return resp.json().catch(function () {
             return { ok: false, error: t('js.backup.inspect_failed') };
           });
         });
-      }).then(function (data) {
+      };
+
+      var initialToken = (typeof window.nxCSRF === 'function' ? window.nxCSRF(form) : '') ||
+        ((form.querySelector('input[name="_csrf_token"]') || {}).value || '');
+      sendInspect(initialToken, false).then(function (data) {
         if (!data || !data.ok) {
           hidePreview();
           var kind = (data && data.code === 'passphrase_required') ? 'warn' : 'error';

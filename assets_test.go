@@ -24,6 +24,11 @@ func TestStaticAssetURL(t *testing.T) {
 			t.Fatalf("unexpected StaticAssetURL for %s: %s (expected prefix %s)", assetName, u, prefix)
 		}
 	}
+	modURL := StaticModuleURL("/static/app.js")
+	wantMod := "/static/v/" + StaticAssetsDigest() + "/app.js"
+	if modURL != wantMod {
+		t.Fatalf("StaticModuleURL(/static/app.js) = %q, want %q", modURL, wantMod)
+	}
 }
 
 func TestCSSBraceBalance(t *testing.T) {

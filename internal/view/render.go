@@ -2,10 +2,13 @@ package view
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"html"
 	"html/template"
 	"net/http"
 	"strings"
+	"sync"
 
 	assets "github.com/Ho3einK84/Nodexia"
 	"github.com/Ho3einK84/Nodexia/internal/geoip"
@@ -145,6 +148,7 @@ type PageData struct {
 	Lang            string
 	Dir             string
 	LanguageOptions []LanguageOption
+	Partial         bool // true when X-Nodexia-Partial: 1 requests a shell-free tab pane payload
 	localizer       *i18n.Localizer
 }
 
@@ -1305,7 +1309,9 @@ type TrafficLimitTagView struct {
 
 type Renderer struct {
 	templates *template.Template
+	byLang    map[string]*template.Template
 	bundle    *i18n.Bundle
+	bufPool   sync.Pool
 }
 
 func NewRenderer() (*Renderer, error) {
@@ -1337,27 +1343,98 @@ func NewRenderer() (*Renderer, error) {
 		// countryCode normalizes an ISO 3166-1 alpha-2 code or decodes a
 		// regional-indicator flag emoji back to its 2-letter uppercase code.
 		"countryCode": resolveCountryCode,
-		// t/tn/tsafe are placeholders so the templates parse; Render rebinds them
-		// to the request's active language by cloning the template set per render.
-		"t":     func(key string, _ ...any) string { return key },
-		"tn":    func(key string, _ int, _ ...any) string { return key },
-		"tsafe": func(key string, _ ...any) template.HTML { return template.HTML(key) },
-		// clientI18nJSON ships the client-needed strings to the browser; rebound
-		// per render to the active language (placeholder emits an empty object).
+		// t/tn/tsafe are placeholders so the base templates parse; NewRenderer
+		// pre-clones one compiled set per supported language with bound funcs.
+		"t":              func(key string, _ ...any) string { return key },
+		"tn":             func(key string, _ int, _ ...any) string { return key },
+		"tsafe":          func(key string, _ ...any) template.HTML { return template.HTML(key) },
 		"clientI18nJSON": func() template.JS { return template.JS("{}") },
 		"asset":          assets.StaticAssetURL,
+		"moduleAsset":    assets.StaticModuleURL,
 	}
 	templates, err := template.New("").Funcs(funcMap).ParseFS(assets.Templates(), "web/templates/*.gohtml")
 	if err != nil {
 		return nil, err
 	}
 
-	return &Renderer{templates: templates, bundle: bundle}, nil
+	byLang := make(map[string]*template.Template)
+	for _, lang := range bundle.Languages() {
+		loc := bundle.Localizer(lang.Code)
+		if loc == nil {
+			continue
+		}
+		cloned, cloneErr := templates.Clone()
+		if cloneErr != nil {
+			return nil, fmt.Errorf("view: pre-clone templates for %s: %w", lang.Code, cloneErr)
+		}
+		precomputedI18n := clientI18nJSON(loc)
+		cloned.Funcs(template.FuncMap{
+			"t":              loc.T,
+			"tn":             loc.Tn,
+			"tsafe":          func(key string, args ...any) template.HTML { return template.HTML(loc.Tsafe(key, args...)) },
+			"clientI18nJSON": func() template.JS { return precomputedI18n },
+			"asset":          assets.StaticAssetURL,
+			"moduleAsset":    assets.StaticModuleURL,
+		})
+		byLang[lang.Code] = cloned
+	}
+
+	return &Renderer{
+		templates: templates,
+		byLang:    byLang,
+		bundle:    bundle,
+		bufPool: sync.Pool{
+			New: func() any {
+				return bytes.NewBuffer(make([]byte, 0, 16*1024))
+			},
+		},
+	}, nil
+}
+
+func (r *Renderer) templateFor(loc *i18n.Localizer) (*template.Template, error) {
+	if loc != nil {
+		if tmpl, ok := r.byLang[loc.Lang()]; ok && tmpl != nil {
+			return tmpl, nil
+		}
+	}
+	if tmpl, ok := r.byLang[i18n.DefaultLanguage]; ok && tmpl != nil {
+		return tmpl, nil
+	}
+	tmpl, err := r.templates.Clone()
+	if err != nil {
+		return nil, fmt.Errorf("view: clone templates: %w", err)
+	}
+	if loc != nil {
+		precomputedI18n := clientI18nJSON(loc)
+		tmpl.Funcs(template.FuncMap{
+			"t":              loc.T,
+			"tn":             loc.Tn,
+			"tsafe":          func(key string, args ...any) template.HTML { return template.HTML(loc.Tsafe(key, args...)) },
+			"clientI18nJSON": func() template.JS { return precomputedI18n },
+			"asset":          assets.StaticAssetURL,
+			"moduleAsset":    assets.StaticModuleURL,
+		})
+	}
+	return tmpl, nil
+}
+
+func (r *Renderer) getBuffer() *bytes.Buffer {
+	buf := r.bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	return buf
+}
+
+func (r *Renderer) putBuffer(buf *bytes.Buffer) {
+	// Avoid retaining oversized buffers in the pool.
+	if buf.Cap() <= 256*1024 {
+		buf.Reset()
+		r.bufPool.Put(buf)
+	}
 }
 
 func (r *Renderer) Render(w http.ResponseWriter, statusCode int, data PageData) error {
 	// Ensure the page has an active localizer (default language for request
-	// paths that never set one), then bind the {{ t }}/{{ tn }} funcs to it.
+	// paths that never set one).
 	if data.localizer == nil {
 		data.SetLocalizer(r.bundle.Localizer(i18n.DefaultLanguage))
 	}
@@ -1368,38 +1445,80 @@ func (r *Renderer) Render(w http.ResponseWriter, statusCode int, data PageData) 
 		return fmt.Errorf("view: content template name is required")
 	}
 
-	// Clone the parsed set per render and rebind the translation funcs to the
-	// active language. Cloning is cheap relative to the work a request already
-	// does, and it lets {{ t "key" }} resolve the right language anywhere in the
-	// templates — including inside range blocks — without threading the dot.
-	tmpl, err := r.templates.Clone()
+	tmpl, err := r.templateFor(data.localizer)
 	if err != nil {
-		return fmt.Errorf("view: clone templates: %w", err)
+		return err
 	}
-	loc := data.localizer
-	tmpl.Funcs(template.FuncMap{
-		"t":              loc.T,
-		"tn":             loc.Tn,
-		"tsafe":          func(key string, args ...any) template.HTML { return template.HTML(loc.Tsafe(key, args...)) },
-		"clientI18nJSON": func() template.JS { return clientI18nJSON(loc) },
-		"asset":          assets.StaticAssetURL,
-	})
 
-	var content bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&content, contentName, data); err != nil {
+	content := r.getBuffer()
+	defer r.putBuffer(content)
+	if err := tmpl.ExecuteTemplate(content, contentName, data); err != nil {
 		return fmt.Errorf("view: render %s: %w", contentName, err)
-	}
-	data.MainHTML = template.HTML(content.String())
-
-	var buffer bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&buffer, "layout", data); err != nil {
-		return fmt.Errorf("view: render layout: %w", err)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Add("Vary", "X-Nodexia-Partial")
+	if data.CSRFToken != "" {
+		w.Header().Set("X-CSRF-Token", data.CSRFToken)
+	}
+
+	// Fast path for in-tab navigations (`X-Nodexia-Partial: 1`): skip the shell
+	// layout, sidebar, drawers, and 12 KB i18n JSON island; emit only the
+	// #tab-content envelope with resolved asset metadata so tab-manager.js
+	// parses and injects it in one pass.
+	if data.Partial && contentName != "content-login" {
+		out := r.getBuffer()
+		defer r.putBuffer(out)
+
+		styles := resolveAssetList(data.PageStyles)
+		scripts := resolveAssetList(data.PageScripts)
+		stylesJSON, _ := json.Marshal(styles)
+		scriptsJSON, _ := json.Marshal(scripts)
+
+		out.WriteString(`<div id="tab-content" data-partial="1" data-page-title="`)
+		out.WriteString(html.EscapeString(data.Title))
+		out.WriteString(`" data-page-styles="`)
+		out.WriteString(html.EscapeString(string(stylesJSON)))
+		out.WriteString(`" data-page-scripts="`)
+		out.WriteString(html.EscapeString(string(scriptsJSON)))
+		if data.CSRFToken != "" {
+			out.WriteString(`" data-csrf="`)
+			out.WriteString(html.EscapeString(data.CSRFToken))
+		}
+		out.WriteString(`">`)
+		_, _ = out.Write(content.Bytes())
+		out.WriteString(`</div>`)
+
+		w.WriteHeader(statusCode)
+		_, err = out.WriteTo(w)
+		return err
+	}
+
+	data.MainHTML = template.HTML(content.String())
+
+	buffer := r.getBuffer()
+	defer r.putBuffer(buffer)
+	if err := tmpl.ExecuteTemplate(buffer, "layout", data); err != nil {
+		return fmt.Errorf("view: render layout: %w", err)
+	}
+
 	w.WriteHeader(statusCode)
 	_, err = buffer.WriteTo(w)
 	return err
+}
+
+func resolveAssetList(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item) == "" {
+			continue
+		}
+		out = append(out, assets.StaticAssetURL(item))
+	}
+	return out
 }
 
 func normalizePageData(data PageData) PageData {

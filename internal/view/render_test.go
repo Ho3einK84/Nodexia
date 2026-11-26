@@ -1,8 +1,12 @@
 package view
 
 import (
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/Ho3einK84/Nodexia/internal/config"
 )
 
 // renderSmoke executes a content template through the full layout with the
@@ -122,4 +126,46 @@ func TestRenderNodeInstallPage(t *testing.T) {
 		},
 	}
 	renderSmoke(t, data)
+}
+
+func TestRenderPartialSkipsLayoutAndEmitsMetadata(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/servers", nil)
+	req.Header.Set("X-Nodexia-Partial", "1")
+	page := NewPageData(config.Config{App: config.AppConfig{Name: "Nodexia"}}, req)
+	page.Title = "Servers"
+	page.ContentTemplate = "content-servers-list"
+	page.CSRFToken = "tok-123"
+	page.PageStyles = []string{"/static/servers.css"}
+	page.PageScripts = []string{"/static/bulk.js"}
+
+	rec := httptest.NewRecorder()
+	if err := renderer.Render(rec, http.StatusOK, page); err != nil {
+		t.Fatalf("Render partial: %v", err)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "<!doctype html>") || strings.Contains(body, `id="nodexia-i18n"`) || strings.Contains(body, `id="shell-sidebar"`) {
+		t.Fatalf("partial response must not include full layout shell or i18n island")
+	}
+	for _, want := range []string{
+		`<div id="tab-content" data-partial="1"`,
+		`data-page-title="Servers"`,
+		`data-csrf="tok-123"`,
+		`/static/servers.css?v=`,
+		`/static/bulk.js?v=`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("partial response missing %q", want)
+		}
+	}
+	if got := rec.Header().Get("X-CSRF-Token"); got != "tok-123" {
+		t.Errorf("X-CSRF-Token header = %q, want tok-123", got)
+	}
+	if vary := rec.Header().Get("Vary"); !strings.Contains(vary, "X-Nodexia-Partial") {
+		t.Errorf("Vary header = %q, want X-Nodexia-Partial", vary)
+	}
 }

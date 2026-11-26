@@ -17,6 +17,7 @@ import {
   el,
   escapeHTML,
   getCSRF,
+  setCSRF,
   showToast,
   renderIcons,
   registerCleanup,
@@ -30,13 +31,37 @@ function fetchFreshCSRF(form) {
     .then(function (resp) { return resp.ok ? resp.json() : null; })
     .then(function (data) {
       if (data && data.csrf_token) {
-        var input = form && form.querySelector('input[name="_csrf_token"]');
-        if (input) input.value = data.csrf_token;
+        setCSRF(data.csrf_token);
         return data.csrf_token;
       }
       return getCSRF(form);
     })
     .catch(function () { return getCSRF(form); });
+}
+
+function postFormWithCSRFRetry(url, form, signal) {
+  var send = function (token, retried) {
+    var body = new URLSearchParams(new FormData(form));
+    if (token) body.set('_csrf_token', token);
+    return fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      signal: signal,
+      headers: {
+        'Accept': 'application/json',
+        'X-CSRF-Token': token || ''
+      },
+      body: body
+    }).then(function (resp) {
+      var hdrToken = resp.headers && resp.headers.get('X-CSRF-Token');
+      if (hdrToken) setCSRF(hdrToken);
+      if (resp.status === 403 && !retried) {
+        return fetchFreshCSRF(form).then(function (fresh) { return send(fresh, true); });
+      }
+      return resp;
+    });
+  };
+  return send(getCSRF(form), false);
 }
 
 /* ── Smart SSH target parser ──────────────────────────────────────────────── */
@@ -579,19 +604,7 @@ function wireServerForm(form, owningPane) {
     setTestBusy(true);
     setTestBanner('testing', I18N.t('js.servers.testing'));
 
-    fetchFreshCSRF(form).then(function (token) {
-      var body = new URLSearchParams(new FormData(form));
-      return fetch('/servers/test-connection', {
-        method: 'POST',
-        credentials: 'same-origin',
-        signal: ctrl.signal,
-        headers: {
-          'Accept': 'application/json',
-          'X-CSRF-Token': token || ''
-        },
-        body: body
-      });
-    }).then(function (resp) {
+    postFormWithCSRFRetry('/servers/test-connection', form, ctrl.signal).then(function (resp) {
       return resp.json().then(function (data) { return { status: resp.status, data: data }; });
     }).then(function (res) {
       if (testAbort !== ctrl) return;
@@ -684,18 +697,7 @@ function wireServerForm(form, owningPane) {
     isSubmitting = true;
     setSubmitBusy(true);
 
-    fetchFreshCSRF(form).then(function (token) {
-      var body = new URLSearchParams(new FormData(form));
-      return fetch(form.getAttribute('action') || '/servers', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'Accept': 'application/json',
-          'X-CSRF-Token': token || ''
-        },
-        body: body
-      });
-    }).then(function (resp) {
+    postFormWithCSRFRetry(form.getAttribute('action') || '/servers', form, undefined).then(function (resp) {
       return resp.json().then(function (data) { return { status: resp.status, data: data }; });
     }).then(function (res) {
       var data = res.data || {};

@@ -72,6 +72,7 @@ func Session(cfg config.Config) Middleware {
 			}
 
 			csrfToken := DeriveCSRFToken(sessionID, secret)
+			w.Header().Set(csrfHeaderName, csrfToken)
 			ctx := r.Context()
 			ctx = context.WithValue(ctx, sessionIDKey, sessionID)
 			ctx = context.WithValue(ctx, csrfTokenKey, csrfToken)
