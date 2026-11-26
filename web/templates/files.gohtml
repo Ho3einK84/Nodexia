@@ -13,6 +13,7 @@
     data-home-dir="{{ .FileListing.HomeDir }}"
     data-max-upload="{{ .FileForm.MaxUploadBytes }}"
     data-max-edit="{{ .FileForm.MaxEditBytes }}"
+    {{ if and .FileForm.StoredCredentialsAvailable (not .FileListing.Available) (not .FileDownload.Available) }}data-autoload="1" data-autoload-path="{{ .FileForm.Path }}"{{ end }}
   >
     <div class="file-dropzone" id="file-dropzone" hidden aria-hidden="true">
       <div class="file-dropzone__inner">
@@ -402,7 +403,11 @@
       </div>
 
       {{ if and (not .FileListing.Available) (not .FileDownload.Available) }}
+      {{ if .FileForm.StoredCredentialsAvailable }}
+      <div class="empty-state" id="file-connect-hint" aria-busy="true"><span class="spinner" aria-hidden="true"></span></div>
+      {{ else }}
       <p class="empty-state" id="file-connect-hint">{{ t "files.browse_hint" }}</p>
+      {{ end }}
       {{ end }}
     </div>
   </article>

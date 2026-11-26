@@ -433,3 +433,34 @@ ALTER TABLE node_status_history ADD COLUMN source VARCHAR(16) NOT NULL DEFAULT '
 
 CREATE INDEX IF NOT EXISTS idx_node_status_history_lookup
   ON node_status_history (server_id, node_type, service_name, observed_at);
+
+-- ── Performance Indexes (v0.9.5+) ────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_system_snapshots_server_created
+  ON system_snapshots (server_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_system_snapshots_created_at
+  ON system_snapshots (created_at);
+
+CREATE INDEX IF NOT EXISTS idx_vnstat_snapshots_server_avail_id
+  ON vnstat_snapshots (server_id, available, id);
+
+CREATE INDEX IF NOT EXISTS idx_alert_events_rule_server_state
+  ON alert_events (rule_id, server_id, state);
+
+CREATE INDEX IF NOT EXISTS idx_alert_events_state_resolved_id
+  ON alert_events (state, resolved_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_alert_rules_channel_id
+  ON alert_rules (channel_id);
+
+CREATE INDEX IF NOT EXISTS idx_scheduler_job_runs_server_id
+  ON scheduler_job_runs (server_id);
+
+CREATE INDEX IF NOT EXISTS idx_terminal_history_global_rank
+  ON terminal_command_history (last_used_at, use_count, id);
+
+CREATE INDEX IF NOT EXISTS idx_metric_rollups_hourly_period
+  ON metric_rollups_hourly (period_start);
+
+CREATE INDEX IF NOT EXISTS idx_metric_rollups_daily_period
+  ON metric_rollups_daily (period_start);

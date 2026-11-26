@@ -26,8 +26,9 @@ import (
 type JobType string
 
 const (
-	JobMonitoring JobType = "monitoring"
-	JobNodes      JobType = "nodes"
+	JobMonitoring     JobType = "monitoring"
+	JobNodes          JobType = "nodes"
+	maxConcurrentJobs         = 8
 )
 
 type Overview struct {
@@ -81,6 +82,7 @@ type Runtime struct {
 	mu     sync.RWMutex
 	jobs   map[string]*jobState
 	paused map[string]struct{} // keys from jobKey(); protected by mu
+	jobSem chan struct{}
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
@@ -141,6 +143,7 @@ func New(cfg config.Config, conn *sql.DB, ssh *sshclient.Service) *Runtime {
 		jobRuns:       newJobRunsRepository(conn),
 		jobs:          map[string]*jobState{},
 		paused:        map[string]struct{}{},
+		jobSem:        make(chan struct{}, maxConcurrentJobs),
 	}
 	runtime.refresh(context.Background(), false)
 	return runtime
@@ -486,6 +489,20 @@ func (r *Runtime) launchJob(parent context.Context, server servers.Server, jobTy
 	go func() {
 		defer r.wg.Done()
 
+		if r.jobSem != nil {
+			select {
+			case r.jobSem <- struct{}{}:
+				defer func() { <-r.jobSem }()
+			case <-parent.Done():
+				r.mu.Lock()
+				if st := r.jobs[jobKey(server.ID, jobType)]; st != nil {
+					st.Running = false
+				}
+				r.mu.Unlock()
+				return
+			}
+		}
+
 		timeout := r.cfg.ConnectTimeout + r.cfg.CommandTimeout + (5 * time.Second)
 		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
@@ -605,8 +622,8 @@ func (r *Runtime) executeMonitoringJob(ctx context.Context, server servers.Serve
 
 	preferredInterface := strings.TrimSpace(credentials.TrafficInterface)
 	if preferredInterface == "" {
-		if latestTraffic, err := r.trafficRepo.GetLatestTrafficByServer(ctx, server.ID); err == nil {
-			preferredInterface = latestTraffic.InterfaceName
+		if iface, err := r.trafficRepo.GetLatestTrafficInterface(ctx, server.ID); err == nil {
+			preferredInterface = iface
 		}
 	}
 

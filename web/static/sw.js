@@ -149,11 +149,42 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  // Static assets: stale-while-revalidate.
+  // Static assets:
+  //   - Immutable content-hashed URLs (/static/v/<digest>/..., ?v=<hash>, fonts):
+  //     Cache-First — never waste a background network fetch on bytes whose URL
+  //     already guarantees immutability for this build's CACHE_VERSION.
+  //   - Unversioned static URLs (offline.html, icons): stale-while-revalidate.
   if (url.pathname.indexOf('/static/') === 0) {
-    event.respondWith(staleWhileRevalidate(req));
+    if (isImmutableStaticURL(url)) {
+      event.respondWith(cacheFirst(req));
+    } else {
+      event.respondWith(staleWhileRevalidate(req));
+    }
   }
 });
+
+function isImmutableStaticURL(url) {
+  return url.pathname.indexOf('/static/v/') === 0 ||
+    url.pathname.indexOf('/static/fonts/') === 0 ||
+    url.searchParams.has('v');
+}
+
+function cacheFirst(req) {
+  return caches.open(STATIC_CACHE).then(function (cache) {
+    return cache.match(req).then(function (cached) {
+      if (cached) return cached;
+      return fetch(req).then(function (resp) {
+        if (resp && resp.status === 200 && resp.type === 'basic') {
+          cache.put(req, resp.clone());
+        }
+        return resp;
+      }).catch(function () {
+        // Offline fallback: match precached unversioned entry if present.
+        return cache.match(req, { ignoreSearch: true });
+      });
+    });
+  });
+}
 
 function staleWhileRevalidate(req) {
   return caches.open(STATIC_CACHE).then(function (cache) {
@@ -165,7 +196,7 @@ function staleWhileRevalidate(req) {
         }
         return resp;
       }).catch(function () {
-        return cached; // offline and not cached → undefined → handled by caller
+        return cached || cache.match(req, { ignoreSearch: true });
       });
       return cached || network;
     });

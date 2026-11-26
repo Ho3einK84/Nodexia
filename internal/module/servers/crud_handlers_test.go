@@ -333,6 +333,52 @@ func TestConnectionHandlerValidatesAndHandlesUnavailableSSH(t *testing.T) {
 	}
 }
 
+func TestUpdateAndTestConnectionRefuseCredentialReuseAcrossChangedHostOrUser(t *testing.T) {
+	deps, repo := testServerDeps(t)
+	const secret = "VictimServerPassword#2026"
+	created, err := repo.Create(context.Background(), servers.Server{
+		Name:               "victim-1",
+		Host:               "198.51.100.50",
+		Port:               22,
+		AuthMode:           servers.AuthModePassword,
+		Username:           "root",
+		CredentialStrategy: servers.CredentialStrategyStored,
+		CredentialRef:      secret,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	sid := strconv.FormatInt(created.ID, 10)
+
+	// 1. UpdateHandler must reject changing host without re-entering credentials.
+	updH := servers.NewUpdateHandler(deps, repo)
+	updForm := url.Values{
+		"name":                {"victim-1"},
+		"host":                {"203.0.113.99"}, // changed host!
+		"port":                {"22"},
+		"auth_mode":           {servers.AuthModePassword},
+		"username":            {"root"},
+		"credential_strategy": {servers.CredentialStrategyStored},
+		"credential_ref":      {""},
+	}
+	updReq := httptest.NewRequest(http.MethodPost, "/servers/"+sid+"/edit", strings.NewReader(updForm.Encode()))
+	updReq.SetPathValue("id", sid)
+	updReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	updRec := httptest.NewRecorder()
+	updH.ServeHTTP(updRec, updReq)
+
+	if updRec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("host change without credential status = %d, want 422", updRec.Code)
+	}
+	after, err := repo.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if after.Host != "198.51.100.50" || after.CredentialRef != secret {
+		t.Fatalf("server unexpectedly mutated on rejected update: %+v", after)
+	}
+}
+
 func TestListHandlerRendersAddServerModalAndQueryAutoOpen(t *testing.T) {
 	deps, repo := testServerDeps(t)
 	h := servers.NewListHandler(deps, repo)
@@ -355,5 +401,45 @@ func TestListHandlerRendersAddServerModalAndQueryAutoOpen(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("/servers?add=1 missing %q", want)
 		}
+	}
+}
+
+func TestDeleteHandlerJSON(t *testing.T) {
+	deps, repo := testServerDeps(t)
+	created, err := repo.Create(context.Background(), servers.Server{
+		Name:               "ephemeral-node",
+		Host:               "198.51.100.77",
+		Port:               22,
+		AuthMode:           servers.AuthModePassword,
+		Username:           "root",
+		CredentialStrategy: servers.CredentialStrategyRuntime,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	h := servers.NewDeleteHandler(deps, repo)
+	req := httptest.NewRequest(http.MethodPost, "/servers/"+strconv.FormatInt(created.ID, 10)+"/delete", nil)
+	req.SetPathValue("id", strconv.FormatInt(created.ID, 10))
+	req.Header.Set("Accept", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("JSON delete status = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		OK      bool   `json:"ok"`
+		ID      int64  `json:"id"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode delete JSON: %v", err)
+	}
+	if !payload.OK || payload.ID != created.ID || payload.Message == "" {
+		t.Fatalf("unexpected delete JSON payload: %+v", payload)
+	}
+	if _, err := repo.GetByID(context.Background(), created.ID); err == nil {
+		t.Fatal("expected server to be deleted from repository")
 	}
 }

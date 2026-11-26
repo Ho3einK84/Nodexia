@@ -48,7 +48,13 @@ func (r SQLRepository) Append(ctx context.Context, snapshot FactSnapshot) (FactS
 		snapshot.CollectedAt = time.Now().UTC()
 	}
 
-	result, err := r.conn.ExecContext(
+	tx, err := r.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return FactSnapshot{}, fmt.Errorf("system: begin snapshot tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	result, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO server_system_facts (
 			server_id,
@@ -88,15 +94,26 @@ func (r SQLRepository) Append(ctx context.Context, snapshot FactSnapshot) (FactS
 		return FactSnapshot{}, fmt.Errorf("system: read snapshot last insert id: %w", err)
 	}
 
+	// Only the latest facts row per server is ever read; prune superseded rows.
+	_, _ = tx.ExecContext(ctx, `DELETE FROM server_system_facts WHERE server_id = ? AND id < ?`, snapshot.ServerID, snapshot.ID)
+
+	if err := tx.Commit(); err != nil {
+		return FactSnapshot{}, fmt.Errorf("system: commit snapshot: %w", err)
+	}
+
 	return snapshot, nil
 }
 
 func (r SQLRepository) HasAny(ctx context.Context, serverID int64) (bool, error) {
-	var count int
-	if err := r.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM server_system_facts WHERE server_id = ?`, serverID).Scan(&count); err != nil {
+	var exists int
+	err := r.conn.QueryRowContext(ctx, `SELECT 1 FROM server_system_facts WHERE server_id = ? LIMIT 1`, serverID).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
 		return false, fmt.Errorf("system: check facts for server %d: %w", serverID, err)
 	}
-	return count > 0, nil
+	return true, nil
 }
 
 func (r SQLRepository) GetLatestByServer(ctx context.Context, serverID int64) (FactSnapshot, error) {

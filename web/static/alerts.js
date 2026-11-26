@@ -218,6 +218,89 @@
     }
   }
 
+  function postAlertJSON(form, retried) {
+    var token = (typeof window.nxCSRF === 'function' ? window.nxCSRF(form) : '') ||
+      ((form.querySelector('input[name="_csrf_token"]') || {}).value || '');
+    var body = new URLSearchParams();
+    if (token) body.set('_csrf_token', token);
+    var headers = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+    };
+    if (token) headers['X-CSRF-Token'] = token;
+
+    return fetch(form.getAttribute('action') || form.action, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: headers,
+      body: body.toString()
+    }).then(function (resp) {
+      var hdr = resp.headers && resp.headers.get('X-CSRF-Token');
+      if (hdr && typeof window.nxSetCSRF === 'function') window.nxSetCSRF(hdr);
+      if (resp.status === 403 && !retried && window.NodexiaTabs && typeof window.NodexiaTabs.refreshCSRFToken === 'function') {
+        return window.NodexiaTabs.refreshCSRFToken().then(function () { return postAlertJSON(form, true); });
+      }
+      return resp.json().catch(function () { return { ok: resp.ok }; });
+    });
+  }
+
+  function initInlineActions() {
+    root.querySelectorAll('[data-alert-test-form]').forEach(function (form) {
+      if (form.dataset.alertTestReady === '1') return;
+      form.dataset.alertTestReady = '1';
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+        postAlertJSON(form, false).then(function (data) {
+          var kind = (data && data.kind) || (data && data.ok ? 'ok' : 'error');
+          var msg = (data && data.message) || (window.nxT ? window.nxT('js.failed') : 'Failed');
+          if (typeof window.nxToast === 'function') window.nxToast(msg, kind);
+        }).catch(function () {
+          if (typeof window.nxToast === 'function') window.nxToast(window.nxT ? window.nxT('js.failed') : 'Failed', 'error');
+        }).finally(function () {
+          if (btn) btn.disabled = false;
+        });
+      });
+    });
+
+    root.querySelectorAll('[data-alert-delete-form]').forEach(function (form) {
+      if (form.dataset.alertDeleteReady === '1') return;
+      form.dataset.alertDeleteReady = '1';
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var btn = form.querySelector('button[type="submit"]');
+        var row = form.closest('tr');
+        var msg = (btn && btn.getAttribute('data-confirm')) || (window.nxT ? window.nxT('js.confirm_irreversible') : 'Continue?');
+        var ask = typeof window.nxConfirm === 'function'
+          ? window.nxConfirm({ message: msg, danger: true })
+          : Promise.resolve(window.confirm(msg));
+        ask.then(function (ok) {
+          if (!ok || !document.contains(form)) return;
+          if (btn) btn.disabled = true;
+          if (row) row.style.opacity = '0.45';
+          postAlertJSON(form, false).then(function (data) {
+            if (!data || !data.ok) {
+              if (row) row.style.opacity = '';
+              if (btn) btn.disabled = false;
+              if (typeof window.nxToast === 'function') window.nxToast((data && data.message) || 'Failed', 'error');
+              return;
+            }
+            if (row) row.remove();
+            if (typeof window.nxToast === 'function' && data.message) window.nxToast(data.message, 'ok');
+          }).catch(function () {
+            if (row) row.style.opacity = '';
+            if (btn) btn.disabled = false;
+            if (typeof window.nxToast === 'function') window.nxToast(window.nxT ? window.nxT('js.failed') : 'Failed', 'error');
+          });
+        });
+      });
+    });
+  }
+
   initRuleForm();
   initHistoryFilter();
+  initInlineActions();
 })();

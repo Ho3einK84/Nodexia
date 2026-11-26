@@ -127,16 +127,16 @@
           <h4><i data-lucide="server" class="icon-in-button"></i> {{ .ServerName }}{{ template "country-tag" (dict "Code" "" "Flag" .FlagEmoji "Name" .CountryName) }} &middot; <span class="dashboard-item__sub">{{ .JobType }}</span></h4>
           <div class="dashboard-item__actions">
             {{ if .Paused }}
-            <span class="status-pill status-pill--idle">{{ t "common.paused" }}</span>
+            <span class="status-pill status-pill--idle" data-scheduler-status-pill>{{ t "common.paused" }}</span>
             {{ else }}
-            <span class="status-pill status-pill--{{ if or (eq .Status "running") (eq .Status "scheduled") }}ok{{ else if eq .Status "retrying" }}crit{{ else if eq .Status "blocked" }}warn{{ else }}idle{{ end }}">{{ .Status }}</span>
+            <span class="status-pill status-pill--{{ if or (eq .Status "running") (eq .Status "scheduled") }}ok{{ else if eq .Status "retrying" }}crit{{ else if eq .Status "blocked" }}warn{{ else }}idle{{ end }}" data-scheduler-status-pill>{{ .Status }}</span>
             {{ end }}
-            <form method="post" action="{{ .ToggleURL }}" class="inline-form">
+            <form method="post" action="{{ .ToggleURL }}" class="inline-form" data-scheduler-toggle-form>
               <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
               {{ if .Paused }}
-              <button type="submit" class="btn btn--ghost btn--sm" title="{{ t "diagnostics.resume_title" }}"><i data-lucide="play" class="icon-in-button"></i> {{ t "common.enable" }}</button>
+              <button type="submit" class="btn btn--ghost btn--sm" data-no-loading title="{{ t "diagnostics.resume_title" }}"><i data-lucide="play" class="icon-in-button"></i> {{ t "common.enable" }}</button>
               {{ else }}
-              <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" title="{{ t "diagnostics.pause_title" }}"><i data-lucide="pause" class="icon-in-button"></i> {{ t "common.disable" }}</button>
+              <button type="submit" class="btn btn--ghost btn--sm btn--danger-ghost" data-no-loading title="{{ t "diagnostics.pause_title" }}"><i data-lucide="pause" class="icon-in-button"></i> {{ t "common.disable" }}</button>
               {{ end }}
             </form>
           </div>

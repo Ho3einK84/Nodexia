@@ -271,6 +271,7 @@
 .history-filter-tab.is-active { background: var(--surface-elevated); color: var(--text-bright); font-weight: var(--fw-semibold); }
 .history-filter-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+.history-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 48px; }
 .history-table td { font-variant-numeric: var(--num); }
 .history-table td.history-time { color: var(--text-muted); font-size: 0.84rem; }
 .history-table tr[hidden] { display: none; }

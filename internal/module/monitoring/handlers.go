@@ -62,16 +62,8 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hasStoredCreds := servers.HasStoredCredentials(server)
 	refreshParam := strings.TrimSpace(r.URL.Query().Get("refresh"))
 	wantRefresh := refreshParam == "1"
-	shouldCollect := hasStoredCreds && wantRefresh
 
-	if hasStoredCreds && !wantRefresh && refreshParam != "0" {
-		_, err := h.snapshotRepo.GetLatestByServer(r.Context(), server.ID)
-		if err != nil && errors.Is(err, ErrNotFound) {
-			shouldCollect = true
-		}
-	}
-
-	if shouldCollect {
+	if hasStoredCreds && wantRefresh {
 		h.collectAndRender(w, r, server)
 		return
 	}
@@ -121,8 +113,8 @@ func (h PageHandler) collectAndRender(w http.ResponseWriter, r *http.Request, se
 	// Use the previously stored interface as a hint; selectTrafficInterface will
 	// fall back to the busiest interface if the hint has zero accumulated traffic.
 	trafficInterface := ""
-	if latestTraffic, trafficErr := h.trafficRepo.GetLatestTrafficByServer(r.Context(), server.ID); trafficErr == nil {
-		trafficInterface = latestTraffic.InterfaceName
+	if iface, trafficErr := h.trafficRepo.GetLatestTrafficInterface(r.Context(), server.ID); trafficErr == nil {
+		trafficInterface = iface
 	}
 
 	var (

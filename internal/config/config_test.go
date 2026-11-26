@@ -102,12 +102,24 @@ func TestLoadRejectsDevDefaultSecretInProduction(t *testing.T) {
 func TestLoadRejectsShortSecretInProduction(t *testing.T) {
 	testutil.ClearNodexiaEnv(t)
 	t.Setenv("NODEXIA_ENV", "production")
-	t.Setenv("NODEXIA_SESSION_SECRET", "tooshort")
+	t.Setenv("NODEXIA_SESSION_SECRET", "short-24-char-secret-key")
 	t.Setenv("NODEXIA_AUTH_USERNAME", "admin")
 	t.Setenv("NODEXIA_AUTH_PASSWORD", "a-strong-password")
 
 	if _, err := config.Load("v0.1.0"); err == nil {
-		t.Fatal("expected validation error for short production session secret")
+		t.Fatal("expected validation error for short production session secret (< 32 chars)")
+	}
+}
+
+func TestLoadRejectsExampleProdSecretInProduction(t *testing.T) {
+	testutil.ClearNodexiaEnv(t)
+	t.Setenv("NODEXIA_ENV", "production")
+	t.Setenv("NODEXIA_SESSION_SECRET", "change-this-production-secret")
+	t.Setenv("NODEXIA_AUTH_USERNAME", "admin")
+	t.Setenv("NODEXIA_AUTH_PASSWORD", "a-strong-password")
+
+	if _, err := config.Load("v0.1.0"); err == nil {
+		t.Fatal("expected validation error for example production session secret")
 	}
 }
 

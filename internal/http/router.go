@@ -64,7 +64,7 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 	loginHandler := handlers.NewLoginHandler(cfg, renderer, loginThrottle)
 	mux.HandleFunc("GET /login", loginHandler.ServeHTTP)
 	mux.HandleFunc("POST /login", loginHandler.ServeHTTP)
-	mux.Handle("POST /logout", handlers.NewLogoutHandler(cfg))
+	mux.Handle("POST /logout", handlers.NewLogoutHandlerWithTickets(cfg, terminalTickets))
 
 	mux.Handle("GET /{$}", handlers.NewHomeHandler(cfg, database, renderer, backgroundScheduler, registry.RouteGroups(modules)))
 	diagHandler := handlers.NewDiagnosticsHandler(cfg, database, renderer, backgroundScheduler, commandStreams)
@@ -106,34 +106,41 @@ func NewRouter(cfg config.Config, database *db.Runtime, sshService *sshclient.Se
 		middleware.SecurityHeaders(),
 		middleware.Session(cfg),
 		middleware.Locale(localeBundle),
-		middleware.CSRF(cfg),
 		middleware.RequireAuth(cfg),
+		middleware.CSRF(cfg),
 		middleware.Logging(),
+		middleware.Compress(),
 		middleware.Recover(cfg, renderer),
 	)
 }
 
 // staticAssetHandler serves the embedded /static tree with cache validators.
 //
-// The assets are embedded via go:embed, whose files report a zero modtime, so
-// net/http emits no Last-Modified or ETag and the browser cannot revalidate —
-// it re-downloads every asset on every navigation (a ~550 KB tax dominated by
-// lucide.min.js, painfully slow on mobile, e.g. when switching language). We
-// fix that by attaching a content-hash ETag to every file plus a Cache-Control
-// directive: fonts never change under a name so they are immutable for a year;
-// everything else is cached for an hour and then cheaply revalidated via the
-// ETag (a 304 instead of a full re-download). http.ServeContent honours the
-// pre-set ETag for If-None-Match, so conditional requests get the 304.
+// In addition to `/static/<file>?v=<hash>`, it supports `/static/v/<digest>/<file>`
+// so native ES module entry points and all of their relative `./modules/*.js`
+// imports inherit immutable 1-year browser and Service Worker caching with zero
+// cross-release version skew.
 func staticAssetHandler(staticFiles fs.FS) http.Handler {
 	etags := staticETags(staticFiles)
 	fileServer := http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if etag := etags[strings.TrimPrefix(r.URL.Path, "/static/")]; etag != "" {
+		relPath := strings.TrimPrefix(r.URL.Path, "/static/")
+		isImmutablePrefix := false
+		if strings.HasPrefix(relPath, "v/") {
+			rest := strings.TrimPrefix(relPath, "v/")
+			if slash := strings.IndexByte(rest, '/'); slash > 0 && slash+1 < len(rest) {
+				relPath = rest[slash+1:]
+				isImmutablePrefix = true
+				r2 := r.Clone(r.Context())
+				r2.URL.Path = "/static/" + relPath
+				r = r2
+			}
+		}
+
+		if etag := etags[relPath]; etag != "" {
 			w.Header().Set("ETag", etag)
 		}
-		if strings.HasPrefix(r.URL.Path, "/static/fonts/") {
-			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		} else if r.URL.Query().Get("v") != "" {
+		if isImmutablePrefix || strings.HasPrefix(relPath, "fonts/") || r.URL.Query().Get("v") != "" {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
 			w.Header().Set("Cache-Control", "public, max-age=3600")

@@ -1,16 +1,9 @@
 /* Offline fallback page behaviour. Kept separate from app.js so the page stays
- * self-contained and CSP-clean (no inline handlers). */
+ * self-contained, lightweight (no lucide bundle), and CSP-clean. */
 (function () {
   'use strict';
 
-  function renderIcons() {
-    if (typeof lucide !== 'undefined' && lucide.createIcons) {
-      try { lucide.createIcons(); } catch (err) { /* ignore */ }
-    }
-  }
-
   function boot() {
-    renderIcons();
     var retry = document.querySelector('[data-offline-retry]');
     if (retry) {
       retry.addEventListener('click', function () { window.location.reload(); });

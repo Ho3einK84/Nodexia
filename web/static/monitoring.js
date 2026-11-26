@@ -7,6 +7,8 @@
   var scriptPane = document.currentScript && document.currentScript.closest('.tab-pane');
   var root = scriptPane || document;
 
+  var gaugeColorCache = null;
+
   function resolveGaugeColor(value) {
     var token = '--crit';
     if (value <= 60) {
@@ -14,9 +16,16 @@
     } else if (value <= 80) {
       token = '--warn';
     }
-    if (typeof window.getComputedStyle === 'function' && document.documentElement) {
-      var resolved = window.getComputedStyle(document.documentElement).getPropertyValue(token).trim();
-      if (resolved) return resolved;
+    if (!gaugeColorCache && typeof window.getComputedStyle === 'function' && document.documentElement) {
+      var cs = window.getComputedStyle(document.documentElement);
+      gaugeColorCache = {
+        '--ok': cs.getPropertyValue('--ok').trim(),
+        '--warn': cs.getPropertyValue('--warn').trim(),
+        '--crit': cs.getPropertyValue('--crit').trim()
+      };
+    }
+    if (gaugeColorCache && gaugeColorCache[token]) {
+      return gaugeColorCache[token];
     }
     return 'var(' + token + ')';
   }
@@ -29,8 +38,12 @@
     v = Math.max(0, Math.min(100, v));
 
     if (arc) {
-      var length = arc.getTotalLength();
-      arc.style.strokeDasharray = length;
+      var length = arc._totalLen;
+      if (!length) {
+        length = arc.getTotalLength();
+        arc._totalLen = length;
+        arc.style.strokeDasharray = length;
+      }
       var filled = length * (1 - v / 100);
       gauge.style.setProperty('--gauge-color', resolveGaugeColor(v));
       if (!animate || prefersReducedMotion) {
@@ -96,10 +109,66 @@
     });
   }
 
+  function initSilenceForm() {
+    root.querySelectorAll('.silence-dropdown-form').forEach(function (form) {
+      if (form.dataset.silenceAjaxReady === '1') return;
+      form.dataset.silenceAjaxReady = '1';
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+
+        var sendSilence = function (retried) {
+          var token = (typeof window.nxCSRF === 'function' ? window.nxCSRF(form) : '') ||
+            ((form.querySelector('input[name="_csrf_token"]') || {}).value || '');
+          var params = new URLSearchParams(new FormData(form));
+          if (token) params.set('_csrf_token', token);
+          var headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+          };
+          if (token) headers['X-CSRF-Token'] = token;
+
+          return fetch(form.getAttribute('action') || form.action, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: headers,
+            body: params.toString()
+          }).then(function (resp) {
+            var hdr = resp.headers && resp.headers.get('X-CSRF-Token');
+            if (hdr && typeof window.nxSetCSRF === 'function') window.nxSetCSRF(hdr);
+            if (resp.status === 403 && !retried && window.NodexiaTabs && typeof window.NodexiaTabs.refreshCSRFToken === 'function') {
+              return window.NodexiaTabs.refreshCSRFToken().then(function () { return sendSilence(true); });
+            }
+            return resp.json().catch(function () { return { ok: resp.ok }; });
+          });
+        };
+
+        sendSilence(false).then(function (data) {
+          var menu = form.closest('[data-action-menu]');
+          if (menu) {
+            menu.classList.remove('is-open');
+            var toggle = menu.querySelector('.action-menu__toggle');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+          }
+          if (typeof window.nxToast === 'function') {
+            window.nxToast((data && data.message) || (window.nxT ? window.nxT('js.failed') : 'Failed'), data && data.ok ? 'ok' : 'error');
+          }
+        }).catch(function () {
+          if (typeof window.nxToast === 'function') window.nxToast(window.nxT ? window.nxT('js.failed') : 'Failed', 'error');
+        }).finally(function () {
+          if (btn) btn.disabled = false;
+        });
+      });
+    });
+  }
+
   function boot() {
     initGauges();
     initInterfaceHints();
     initTrafficDailyToggle();
+    initSilenceForm();
   }
 
   if (document.readyState === 'loading') {

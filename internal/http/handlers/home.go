@@ -15,6 +15,7 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/geoip"
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
 	"github.com/Ho3einK84/Nodexia/internal/humanize"
+	"github.com/Ho3einK84/Nodexia/internal/module/analytics"
 	"github.com/Ho3einK84/Nodexia/internal/module/monitoring"
 	"github.com/Ho3einK84/Nodexia/internal/module/nodes"
 	"github.com/Ho3einK84/Nodexia/internal/module/servers"
@@ -64,74 +65,95 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	page.MigrationCount = db.BootstrapMigrationCount()
 	page.RouteGroups = h.routeGroups
 
-	// Resolve each server's detected country once so both dashboard listings
-	// (resource snapshots and scheduler jobs) can show a flag next to the name
-	// without any extra per-row query.
-	countries := serverCountryBadges(r.Context(), h.database)
+	ctx := r.Context()
+	readDB := h.database.Reader()
 
-	// Fleet warnings lead the dashboard: exhaustion before the traffic reset,
-	// resources at/above 90%, and forecast anomalies. Dismissals are client-side
-	// (localStorage) so the server always renders the full, current set.
-	page.HomeWarnings = homeWarnings(r.Context(), h.database, &page)
+	// Load servers, latest snapshots, traffic snapshots, and traffic limits ONCE
+	// so countries, warnings, and dashboard cards all share the same in-memory
+	// datasets without N+1 or duplicate SQL queries.
+	var serversList []servers.Server
+	countries := map[int64]countryBadge{}
+	var allSnaps []monitoring.Snapshot
+	snapshotByID := map[int64]monitoring.Snapshot{}
+	trafficByServer := map[int64]monitoring.TrafficSnapshot{}
+	var limitResolver *analytics.LimitResolver
+
+	if readDB != nil {
+		if list, err := servers.NewSQLRepository(readDB).List(ctx); err == nil {
+			serversList = list
+			for _, server := range list {
+				if flag := geoip.FlagEmoji(server.CountryCode); flag != "" {
+					countries[server.ID] = countryBadge{Flag: flag, Name: server.CountryName}
+				}
+			}
+		}
+
+		snapshotRepo := monitoring.NewSQLRepository(readDB)
+		if snaps, err := snapshotRepo.ListAllLatestByServer(ctx); err == nil {
+			allSnaps = snaps
+			for _, snap := range snaps {
+				snapshotByID[snap.ServerID] = snap
+			}
+		}
+
+		if len(serversList) > 0 {
+			allIDs := make([]int64, 0, len(serversList))
+			for _, s := range serversList {
+				allIDs = append(allIDs, s.ID)
+			}
+			if trafficSnaps, err := snapshotRepo.GetLatestTrafficByServerIDs(ctx, allIDs); err == nil {
+				for _, ts := range trafficSnaps {
+					trafficByServer[ts.ServerID] = ts
+				}
+			}
+			if lr, err := analytics.NewSQLRepository(readDB).LoadLimitResolver(ctx); err == nil {
+				limitResolver = lr
+			}
+		}
+
+		// Fleet node-status glance: one row per server with discovered nodes,
+		// highlighting any that are stopped.
+		nodeRepo := nodes.NewSQLRepository(readDB)
+		if statuses, err := nodeRepo.ListLatestNodeStatus(ctx); err == nil {
+			page.DashboardNodeStatus = fleetNodeStatusView(statuses, countries)
+		}
+	}
+
+	page.HomeWarnings = computeHomeWarnings(serversList, snapshotByID, trafficByServer, limitResolver, &page)
 
 	page.SchedulerOverview = schedulerOverviewView(h.scheduler, schedPage, 8, countries, func(p int) string {
 		return homeURL(snapPage, p)
 	})
 
-	if h.database != nil && h.database.SQL != nil {
-		ctx := r.Context()
-		snapshotRepo := monitoring.NewSQLRepository(h.database.SQL)
-		if allSnaps, err := snapshotRepo.ListAllLatestByServer(ctx); err == nil {
-			total := len(allSnaps)
-			totalPages, currentPage, start, end := paginateSlice(total, snapPage, homeDashboardPerPage)
+	if len(allSnaps) > 0 {
+		total := len(allSnaps)
+		totalPages, currentPage, start, end := paginateSlice(total, snapPage, homeDashboardPerPage)
 
-			page.DashboardSnapshotTotal = total
-			page.DashboardSnapshotPagination = buildPaginationView(currentPage, totalPages, func(p int) string {
-				return homeURL(p, schedPage)
-			})
+		page.DashboardSnapshotTotal = total
+		page.DashboardSnapshotPagination = buildPaginationView(currentPage, totalPages, func(p int) string {
+			return homeURL(p, schedPage)
+		})
 
-			// Batch-fetch the latest traffic snapshot for every visible server
-			// instead of issuing one query per row.
-			visibleIDs := make([]int64, 0, end-start)
-			for _, snapshot := range allSnaps[start:end] {
-				visibleIDs = append(visibleIDs, snapshot.ServerID)
+		page.DashboardSnapshots = make([]view.DashboardMonitoringView, 0, end-start)
+		currentMonth := time.Now().UTC().Format("2006-01")
+		for _, snapshot := range allSnaps[start:end] {
+			v := monitoringDashboardView(snapshot)
+			if badge, ok := countries[snapshot.ServerID]; ok {
+				v.FlagEmoji = badge.Flag
+				v.CountryName = badge.Name
 			}
-			trafficByServer := make(map[int64]monitoring.TrafficSnapshot)
-			if trafficSnaps, err := snapshotRepo.GetLatestTrafficByServerIDs(ctx, visibleIDs); err == nil {
-				for _, ts := range trafficSnaps {
-					trafficByServer[ts.ServerID] = ts
-				}
-			}
-
-			page.DashboardSnapshots = make([]view.DashboardMonitoringView, 0, end-start)
-			currentMonth := time.Now().UTC().Format("2006-01")
-			for _, snapshot := range allSnaps[start:end] {
-				v := monitoringDashboardView(snapshot)
-				if badge, ok := countries[snapshot.ServerID]; ok {
-					v.FlagEmoji = badge.Flag
-					v.CountryName = badge.Name
-				}
-				if traffic, ok := trafficByServer[snapshot.ServerID]; ok && traffic.Available {
-					for _, row := range traffic.MonthlyRows {
-						if row.Label == currentMonth {
-							v.CurrentMonthDL = humanize.Bytes(row.RXBytes, humanize.WithNonPositiveFallback("-"))
-							break
-						}
-					}
-					if traffic.PeakMbps > 0 {
-						v.PeakBandwidth = dashboardFormatMbps(traffic.PeakMbps)
+			if traffic, ok := trafficByServer[snapshot.ServerID]; ok && traffic.Available {
+				for _, row := range traffic.MonthlyRows {
+					if row.Label == currentMonth {
+						v.CurrentMonthDL = humanize.Bytes(row.RXBytes, humanize.WithNonPositiveFallback("-"))
+						break
 					}
 				}
-				page.DashboardSnapshots = append(page.DashboardSnapshots, v)
+				if traffic.PeakMbps > 0 {
+					v.PeakBandwidth = dashboardFormatMbps(traffic.PeakMbps)
+				}
 			}
-		}
-
-		// Fleet node-status glance: one row per server with discovered nodes,
-		// highlighting any that are stopped. Best-effort — a query error simply
-		// omits the section.
-		nodeRepo := nodes.NewSQLRepository(h.database.SQL)
-		if statuses, err := nodeRepo.ListLatestNodeStatus(ctx); err == nil {
-			page.DashboardNodeStatus = fleetNodeStatusView(statuses, countries)
+			page.DashboardSnapshots = append(page.DashboardSnapshots, v)
 		}
 	}
 
@@ -147,10 +169,11 @@ func (h HomeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // dashboard and the diagnostics scheduler view.
 func serverCountryBadges(ctx context.Context, database *db.Runtime) map[int64]countryBadge {
 	badges := map[int64]countryBadge{}
-	if database == nil || database.SQL == nil {
+	readDB := database.Reader()
+	if readDB == nil {
 		return badges
 	}
-	repo := servers.NewSQLRepository(database.SQL)
+	repo := servers.NewSQLRepository(readDB)
 	list, err := repo.List(ctx)
 	if err != nil {
 		return badges

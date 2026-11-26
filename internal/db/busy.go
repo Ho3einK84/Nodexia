@@ -26,7 +26,7 @@ func IsBusy(err error) bool {
 
 	var coder interface{ Code() int }
 	if errors.As(err, &coder) {
-		switch coder.Code() {
+		switch coder.Code() & 0xff {
 		case sqliteBusy, sqliteLocked:
 			return true
 		}

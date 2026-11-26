@@ -821,3 +821,12 @@
   .file-chmod__row { grid-template-columns: 1fr repeat(3, 56px); }
   .file-props__row { grid-template-columns: 1fr; gap: 2px; }
 }
+
+@media (pointer: coarse) {
+  .file-row__menu-btn,
+  .file-nav__btn,
+  .file-icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

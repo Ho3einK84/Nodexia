@@ -78,6 +78,12 @@ const (
 	// maxInputFrameBytes caps the size of a single client→server input frame.
 	maxInputFrameBytes = 64 * 1024
 
+	// wsReadLimitBytes sets the maximum incoming WebSocket message size.
+	// coder/websocket defaults to 32 KiB, which disconnects clients pasting
+	// 16 KiB UTF-8 / JSON-escaped chunks; 128 KiB safely accommodates a full
+	// 64 KiB JSON-encoded input frame while bounding per-frame memory.
+	wsReadLimitBytes = 128 * 1024
+
 	// wsOutputChunkBytes is the maximum number of bytes forwarded per WS frame.
 	wsOutputChunkBytes = 32 * 1024
 
@@ -281,6 +287,7 @@ func (h wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
+		conn.SetReadLimit(wsReadLimitBytes)
 		if !session.attach(conn) {
 			_ = conn.Close(cwebsocket.StatusTryAgainLater, "session is no longer available")
 			return
@@ -315,6 +322,7 @@ func (h wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.deps.TerminalTickets.Release(ticketID)
 		return
 	}
+	conn.SetReadLimit(wsReadLimitBytes)
 	session := h.sessions.create(ticket, username)
 	if !session.attach(conn) {
 		session.finishShell(context.Canceled)
@@ -456,33 +464,37 @@ func renderTerminalPage(
 	}
 	page.TerminalForm = form
 	page.TerminalTicket = ticketID
-	// Each asset URL carries a content-hash query string so a corrected
-	// terminal.css/js can never be shadowed by a stale service-worker cache: when
-	// a file changes, its URL changes, so the browser/SW must fetch the new copy
-	// (no version bump required). See assets.StaticAssetVersion.
-	page.PageStyles = []string{
-		staticURL("xterm.min.css"),
-		staticURL("terminal.css"),
-	}
-	// xterm.js core, then its addons, then the theme catalog and keybinding
-	// handler, then terminal.js (which orchestrates them). All vendored locally —
-	// the panel runs under a strict `script-src 'self'` CSP, so no CDN is used.
-	page.PageScripts = []string{
-		staticURL("xterm.min.js"),
-		staticURL("xterm-addon-fit.min.js"),
-		staticURL("xterm-addon-unicode11.min.js"),
-		staticURL("xterm-addon-web-links.min.js"),
-		staticURL("xterm-addon-search.min.js"),
-		staticURL("xterm-addon-serialize.min.js"),
-		staticURL("xterm-addon-webgl.min.js"),
-		staticURL("xterm-addon-canvas.min.js"),
-		staticURL("xterm-themes.js"),
-		staticURL("terminal-persian.js"),
-		staticURL("terminal-keybindings.js"),
-		staticURL("terminal-input.js"),
-		staticURL("terminal-autocomplete.js"),
-		staticURL("terminal.js"),
-		staticURL("terminal-tab-adapter.js"),
+	// Only ship xterm.js and its 15 addons (~400 KB) once a ticket has been
+	// issued; the credential prompt form needs only terminal.css.
+	if ticketID == "" {
+		page.PageStyles = []string{
+			staticURL("terminal.css"),
+		}
+	} else {
+		page.PageStyles = []string{
+			staticURL("xterm.min.css"),
+			staticURL("terminal.css"),
+		}
+		// xterm.js core, then its addons, then the theme catalog and keybinding
+		// handler, then terminal.js (which orchestrates them). All vendored locally —
+		// the panel runs under a strict `script-src 'self'` CSP, so no CDN is used.
+		page.PageScripts = []string{
+			staticURL("xterm.min.js"),
+			staticURL("xterm-addon-fit.min.js"),
+			staticURL("xterm-addon-unicode11.min.js"),
+			staticURL("xterm-addon-web-links.min.js"),
+			staticURL("xterm-addon-search.min.js"),
+			staticURL("xterm-addon-serialize.min.js"),
+			staticURL("xterm-addon-webgl.min.js"),
+			staticURL("xterm-addon-canvas.min.js"),
+			staticURL("xterm-themes.js"),
+			staticURL("terminal-persian.js"),
+			staticURL("terminal-keybindings.js"),
+			staticURL("terminal-input.js"),
+			staticURL("terminal-autocomplete.js"),
+			staticURL("terminal.js"),
+			staticURL("terminal-tab-adapter.js"),
+		}
 	}
 
 	if err := deps.Renderer.Render(w, http.StatusOK, page); err != nil {
@@ -529,7 +541,7 @@ func sanitizeInitCommand(raw string) string {
 		return ""
 	}
 	s = strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\r' || r == 0 {
+		if r < 0x20 || r == 0x7f {
 			return -1
 		}
 		return r

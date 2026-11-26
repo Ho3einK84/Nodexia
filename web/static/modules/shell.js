@@ -4,8 +4,8 @@
  * collapsible server cards, desktop collapsible sidebar rail, and PWA hooks.
  * Live Log Drawer lives in lazy-loaded ./log-drawer.js.
  */
-import { I18N, prefersReducedMotion, tabNavigate } from './core.js';
-import { openModal } from './modals.js';
+import { I18N, getCSRF, setCSRF, showToast, prefersReducedMotion, tabNavigate } from './core.js';
+import { openModal, closeAllMenus, nxConfirm } from './modals.js';
 
 /* ── Home fleet warnings: reveal undismissed, dismiss to localStorage ─────── */
 var WARNING_DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -71,6 +71,7 @@ function initDrawer() {
     drawer.classList.add('is-open');
     backdrop.classList.add('is-open');
     drawer.setAttribute('aria-hidden', 'false');
+    drawer.removeAttribute('inert');
     document.body.classList.add('drawer-open');
     setExpanded(true);
     var closeBtn = drawer.querySelector('[data-drawer-close]');
@@ -81,6 +82,7 @@ function initDrawer() {
     drawer.classList.remove('is-open');
     backdrop.classList.remove('is-open');
     drawer.setAttribute('aria-hidden', 'true');
+    drawer.setAttribute('inert', '');
     document.body.classList.remove('drawer-open');
     drawer.style.transition = '';
     drawer.style.transform = '';
@@ -121,12 +123,13 @@ function initDrawer() {
   });
 
   function isRTL() { return document.documentElement.getAttribute('dir') === 'rtl'; }
-  var touchStartX = 0, touchStartY = 0, dragging = false, closingDx = 0;
+  var touchStartX = 0, touchStartY = 0, dragging = false, closingDx = 0, drawerWidth = 280;
 
   drawer.addEventListener('touchstart', function (e) {
     if (!drawer.classList.contains('is-open') || e.touches.length !== 1) return;
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
+    drawerWidth = Math.max(drawer.offsetWidth || 280, 160);
     dragging = true;
     closingDx = 0;
   }, { passive: true });
@@ -139,8 +142,7 @@ function initDrawer() {
     if (Math.abs(dy) > Math.abs(dx) && closingDx === 0) { dragging = false; return; }
     var candidate = rtl ? -dx : dx;
     closingDx = candidate > 0 ? candidate : 0;
-    var width = Math.max(drawer.offsetWidth || 280, 160);
-    var ratio = Math.max(0, Math.min(1, 1 - closingDx / width));
+    var ratio = Math.max(0, Math.min(1, 1 - closingDx / drawerWidth));
     drawer.style.transition = 'none';
     drawer.style.transform = closingDx > 0
       ? 'translate3d(' + (rtl ? -closingDx : closingDx) + 'px, 0, 0)'
@@ -274,14 +276,18 @@ function initBottomNav() {
   });
 }
 
-/* ── Collapsible server cards & expand/collapse all ───────────────────────── */
+/* ── Collapsible server cards, instant search & optimistic delete ─────────── */
 function initServerCards(root) {
   root = root || document;
-  var cards = root.querySelectorAll('[data-server-card]');
+  var cards = Array.prototype.slice.call(root.querySelectorAll('[data-server-card]'));
   if (!cards.length) return;
 
-  var toggleAllBtn = root.querySelector('#server-toggle-all');
-  var toggleAllLabel = root.querySelector('#server-toggle-all-label');
+  var toggleAllBtn = root.querySelector('[data-server-toggle-all], #server-toggle-all');
+  var toggleAllLabel = root.querySelector('[data-server-toggle-all-label], #server-toggle-all-label');
+
+  function liveCards() {
+    return Array.prototype.slice.call(root.querySelectorAll('[data-server-card]'));
+  }
 
   function updateCard(card, open, persist) {
     var body = card.querySelector('[data-server-body]');
@@ -308,6 +314,34 @@ function initServerCards(root) {
     menu.classList.toggle('action-menu--below', spaceBelow >= (panelH + 12) || spaceBelow >= spaceAbove);
   }
 
+  function postDeleteServer(form, retried) {
+    var csrf = getCSRF(form);
+    var body = new URLSearchParams();
+    if (csrf) body.set('_csrf_token', csrf);
+    return fetch(form.getAttribute('action') || form.action, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'X-CSRF-Token': csrf
+      },
+      body: body.toString()
+    }).then(function (resp) {
+      var hdr = resp.headers && resp.headers.get('X-CSRF-Token');
+      if (hdr) setCSRF(hdr);
+      if (resp.status === 403 && !retried && window.NodexiaTabs && typeof window.NodexiaTabs.refreshCSRFToken === 'function') {
+        return window.NodexiaTabs.refreshCSRFToken().then(function () { return postDeleteServer(form, true); });
+      }
+      return resp.json().catch(function () { return { ok: resp.ok }; }).then(function (data) {
+        if (!resp.ok || !data.ok) {
+          throw new Error((data && data.message) || I18N.t('js.failed'));
+        }
+        return data;
+      });
+    });
+  }
+
   cards.forEach(function (card) {
     if (card.dataset.serverCardReady === '1') return;
     card.dataset.serverCardReady = '1';
@@ -328,6 +362,38 @@ function initServerCards(root) {
       menuToggle.addEventListener('click', function () {
         if (!menu.classList.contains('is-open')) positionActionMenu(menu, menuToggle);
       }, true);
+    }
+
+    var deleteForm = card.querySelector('[data-server-delete-form]');
+    if (deleteForm && deleteForm.dataset.deleteAjaxReady !== '1') {
+      deleteForm.dataset.deleteAjaxReady = '1';
+      deleteForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var btn = deleteForm.querySelector('button[type="submit"]');
+        var msg = (btn && btn.getAttribute('data-confirm')) || I18N.t('js.confirm_irreversible');
+        closeAllMenus(null);
+        nxConfirm({ message: msg, danger: true }).then(function (ok) {
+          if (!ok || !document.contains(card)) return;
+          card.style.opacity = '0.45';
+          card.style.pointerEvents = 'none';
+          postDeleteServer(deleteForm, false).then(function (data) {
+            card.remove();
+            var regCount = root.querySelector('[data-servers-registered-count]');
+            if (regCount) {
+              var cur = parseInt(regCount.textContent, 10);
+              if (!isNaN(cur) && cur > 0) regCount.textContent = String(cur - 1);
+            }
+            root.dispatchEvent(new CustomEvent('nx:servers-changed', { bubbles: false }));
+            showToast(data.message || I18N.t('servers.flash.deleted'), 'ok');
+            checkAllState();
+          }).catch(function (err) {
+            card.style.opacity = '';
+            card.style.pointerEvents = '';
+            showToast((err && err.message) || I18N.t('js.failed'), 'error');
+          });
+        });
+      });
     }
 
     var header = card.querySelector('[data-server-toggle]');
@@ -351,8 +417,9 @@ function initServerCards(root) {
 
   function checkAllState() {
     if (!toggleAllBtn) return;
-    var allExpanded = true;
-    cards.forEach(function (card) {
+    var currentCards = liveCards();
+    var allExpanded = currentCards.length > 0;
+    currentCards.forEach(function (card) {
       if (!card.classList.contains('server-card--expanded')) allExpanded = false;
     });
     var label = allExpanded
@@ -366,12 +433,38 @@ function initServerCards(root) {
   if (toggleAllBtn && toggleAllBtn.dataset.toggleAllReady !== '1') {
     toggleAllBtn.dataset.toggleAllReady = '1';
     toggleAllBtn.addEventListener('click', function () {
+      var currentCards = liveCards();
       var anyClosed = false;
-      cards.forEach(function (card) { if (!card.classList.contains('server-card--expanded')) anyClosed = true; });
-      cards.forEach(function (card) { updateCard(card, anyClosed, true); });
+      currentCards.forEach(function (card) { if (!card.classList.contains('server-card--expanded')) anyClosed = true; });
+      currentCards.forEach(function (card) { updateCard(card, anyClosed, true); });
       checkAllState();
     });
     checkAllState();
+  }
+
+  /* Instant client-side filter when the entire list fits on one page */
+  var pageSection = root.querySelector('[data-servers-page]');
+  var searchInput = root.querySelector('[data-server-search-input]');
+  var emptyFilterEl = root.querySelector('[data-server-filter-empty]');
+  var totalPages = pageSection ? parseInt(pageSection.getAttribute('data-total-pages') || '1', 10) : 1;
+  if (searchInput && totalPages <= 1 && searchInput.dataset.instantFilterReady !== '1') {
+    searchInput.dataset.instantFilterReady = '1';
+    var filterTimer = null;
+    var applyInstantFilter = function () {
+      var q = (searchInput.value || '').trim().toLowerCase();
+      var visible = 0;
+      liveCards().forEach(function (card) {
+        var hay = (card.getAttribute('data-server-search-text') || card.textContent || '').toLowerCase();
+        var match = !q || hay.indexOf(q) !== -1;
+        card.hidden = !match;
+        if (match) visible++;
+      });
+      if (emptyFilterEl) emptyFilterEl.hidden = !q || visible > 0;
+    };
+    searchInput.addEventListener('input', function () {
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(applyInstantFilter, 40);
+    });
   }
 }
 

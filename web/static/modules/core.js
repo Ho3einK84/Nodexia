@@ -67,7 +67,17 @@ function escapeHTML(value) {
 }
 window.nxEscape = escapeHTML;
 
+function setCSRF(token) {
+  if (!token) return;
+  window.__nxCSRFToken = token;
+  document.querySelectorAll('input[name="_csrf_token"]').forEach(function (input) {
+    input.value = token;
+  });
+}
+window.nxSetCSRF = setCSRF;
+
 function getCSRF(root) {
+  if (window.__nxCSRFToken) return window.__nxCSRFToken;
   var scope = (root && root.querySelector) ? root : document;
   var holder = scope.querySelector('[data-csrf-token], [data-csrf]') ||
     (scope !== document ? document.querySelector('[data-csrf-token], [data-csrf]') : null);
@@ -310,6 +320,7 @@ export {
   humanBytes,
   escapeHTML,
   getCSRF,
+  setCSRF,
   el,
   paneScope,
   showToast,

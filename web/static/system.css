@@ -164,6 +164,7 @@
 }
 
 .btn-copy-micro {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -178,6 +179,14 @@
   transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
   opacity: 0.65;
   flex-shrink: 0;
+}
+
+@media (pointer: coarse) {
+  .btn-copy-micro::after {
+    content: '';
+    position: absolute;
+    inset: -11px;
+  }
 }
 
 .btn-copy-micro svg { width: 12px; height: 12px; }

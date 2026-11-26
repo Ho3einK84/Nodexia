@@ -38,6 +38,14 @@ type Ticket struct {
 	CreatedAt time.Time
 }
 
+// SessionCleaner is implemented by the terminal session hub to tear down
+// active or detached PTY sessions on logout, server deletion, or shutdown.
+type SessionCleaner interface {
+	Close() error
+	CloseForServer(serverID int64)
+	CloseForUser(username string)
+}
+
 // Store is a concurrent-safe in-memory ticket store.  It also tracks the
 // number of active terminal sessions per authenticated user so that the
 // WebSocket handler can enforce a per-user concurrency limit.
@@ -49,6 +57,9 @@ type Store struct {
 	// sessionCounts maps username → current live terminal count.
 	sessionMu     sync.Mutex
 	sessionCounts map[string]int32
+
+	cleanersMu sync.Mutex
+	cleaners   []SessionCleaner
 }
 
 type ticketState struct {
@@ -142,6 +153,71 @@ func (s *Store) ReleaseSession(username string) {
 			delete(s.sessionCounts, username)
 		}
 	}
+}
+
+// RegisterSessionCleaner registers a live terminal session hub for lifecycle
+// teardown on shutdown, logout, and server deletion.
+func (s *Store) RegisterSessionCleaner(cleaner SessionCleaner) {
+	if s == nil || cleaner == nil {
+		return
+	}
+	s.cleanersMu.Lock()
+	s.cleaners = append(s.cleaners, cleaner)
+	s.cleanersMu.Unlock()
+}
+
+func (s *Store) snapshotCleaners() []SessionCleaner {
+	s.cleanersMu.Lock()
+	defer s.cleanersMu.Unlock()
+	out := make([]SessionCleaner, len(s.cleaners))
+	copy(out, s.cleaners)
+	return out
+}
+
+// RevokeServer purges pending tickets and closes active/detached PTY shells
+// associated with serverID.
+func (s *Store) RevokeServer(serverID int64) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	for id, st := range s.tickets {
+		if st.ticket.ServerID == serverID {
+			delete(s.tickets, id)
+		}
+	}
+	s.mu.Unlock()
+	for _, cleaner := range s.snapshotCleaners() {
+		cleaner.CloseForServer(serverID)
+	}
+}
+
+// RevokeUser closes active/detached PTY shells associated with username.
+func (s *Store) RevokeUser(username string) {
+	if s == nil || username == "" {
+		return
+	}
+	for _, cleaner := range s.snapshotCleaners() {
+		cleaner.CloseForUser(username)
+	}
+}
+
+// Close tears down all registered terminal session hubs during graceful
+// shutdown so remote PTY shells do not leak.
+func (s *Store) Close() error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	clear(s.tickets)
+	s.mu.Unlock()
+	var firstErr error
+	for _, cleaner := range s.snapshotCleaners() {
+		if err := cleaner.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func (s *Store) pruneExpired() {

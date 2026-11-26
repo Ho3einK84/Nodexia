@@ -491,8 +491,82 @@
     schedulePersist();
   }
 
-  /* ── Pane content: fetch + DOMParser extraction (§1.2, §1.2.1) ─ */
+  /* ── Pane content: fetch + single-pass DOMParser extraction ── */
+  var PREFETCH_TTL_MS = 15000;
+  var PREFETCH_MAX_ENTRIES = 12;
+  var prefetchCache = new Map();
+
+  function clearPrefetchCache() {
+    prefetchCache.clear();
+  }
+
+  function isPrefetchableURL(url) {
+    if (!url || url.origin !== window.location.origin) return false;
+    var p = url.pathname;
+    if (/^\/(login|logout|lang|api|sw\.js|manifest)/.test(p)) return false;
+    if (/\/(terminal|download|export|events|ws)(\/|$)/.test(p)) return false;
+    if (url.search && /(?:^|[?&])refresh=1(?:&|$)/.test(url.search)) return false;
+    return true;
+  }
+
+  function prefetchURL(rawUrl) {
+    var key = pathAndSearch(rawUrl);
+    if (!key) return;
+    var existing = prefetchCache.get(key);
+    if (existing && (Date.now() - existing.ts) < PREFETCH_TTL_MS) return;
+    if (prefetchCache.size >= PREFETCH_MAX_ENTRIES) {
+      var oldest = prefetchCache.keys().next().value;
+      if (oldest !== undefined) prefetchCache.delete(oldest);
+    }
+    var reqOpts = {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { 'X-Nodexia-Partial': '1', 'Accept': 'text/html' }
+    };
+    var promise = fetch(key, reqOpts).then(function (resp) {
+      if (!resp.ok) throw new Error('prefetch ' + resp.status);
+      syncCSRFFromResponse(resp);
+      var dlName = parseDownloadFilename(resp.headers.get('Content-Disposition') || '');
+      if (dlName !== null) throw new Error('prefetch download');
+      return resp.text().then(function (text) {
+        return { kind: 'html', resp: resp, text: text };
+      });
+    }).catch(function () {
+      prefetchCache.delete(key);
+      return null;
+    });
+    prefetchCache.set(key, { ts: Date.now(), promise: promise });
+  }
+
+  function takePrefetch(url) {
+    var key = pathAndSearch(url);
+    var entry = prefetchCache.get(key);
+    if (!entry) return null;
+    prefetchCache.delete(key);
+    if ((Date.now() - entry.ts) >= PREFETCH_TTL_MS) return null;
+    return entry.promise;
+  }
+
+  function syncCSRFValue(token) {
+    if (!token) return;
+    window.__nxCSRFToken = token;
+    if (typeof window.nxSetCSRF === 'function') {
+      window.nxSetCSRF(token);
+      return;
+    }
+    document.querySelectorAll('input[name="_csrf_token"]').forEach(function (input) {
+      input.value = token;
+    });
+  }
+
+  function syncCSRFFromResponse(resp) {
+    if (!resp || !resp.headers) return;
+    var token = resp.headers.get('X-CSRF-Token');
+    if (token) syncCSRFValue(token);
+  }
+
   function showPaneLoading(pane) {
+    pane.classList.remove('is-transitioning');
     pane.innerHTML = '';
     var wrap = document.createElement('div');
     wrap.className = 'tab-pane__loading';
@@ -500,6 +574,7 @@
     pane.appendChild(wrap);
   }
   function showPaneError(pane, tab, url, status) {
+    pane.classList.remove('is-transitioning');
     pane.innerHTML = '';
     var wrap = document.createElement('div');
     wrap.className = 'tab-pane__error';
@@ -517,42 +592,51 @@
     retry.type = 'button';
     retry.className = 'btn btn--ghost btn--sm';
     retry.textContent = T('js.tabs.retry');
-    retry.addEventListener('click', function () { loadPane(tab, url, {}); });
+    retry.addEventListener('click', function () { loadPane(tab, url, { bypassPrefetch: true }); });
     wrap.appendChild(retry);
     pane.appendChild(wrap);
   }
 
-  // hasTabContent checks whether a fetched HTML document contains the
-  // #tab-content wrapper the SSR layout always emits — even for error pages
-  // (404, 422, 502, 500).  If it does, the response is renderable in a pane
-  // regardless of its HTTP status code.
-  function hasTabContent(htmlText) {
+  function parseJSONAttr(node, attr) {
+    if (!node) return [];
+    var raw = node.getAttribute(attr);
+    if (!raw) return [];
     try {
-      var doc = new DOMParser().parseFromString(htmlText, 'text/html');
-      return !!doc.getElementById('tab-content');
-    } catch (err) { return false; }
+      var parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) { return []; }
   }
 
-  // Extracts #tab-content's children plus PER_PANE_SCRIPTS (§1.2.1) from a
-  // fetched HTML document's text into `pane`. Returns the fetched <title>.
-  function extractAndInject(pane, htmlText) {
-    var doc = new DOMParser().parseFromString(htmlText, 'text/html');
-
-    var source = doc.getElementById('tab-content');
+  // Extracts #tab-content's children plus per-pane styles & scripts from an
+  // already-parsed HTMLDocument (either a shell-free X-Nodexia-Partial envelope
+  // or a full SSR document) into `pane`.
+  function extractAndInject(pane, doc, source) {
     var nodes = source ? Array.prototype.slice.call(source.children) : [];
+    pane.classList.remove('is-transitioning');
     pane.innerHTML = '';
-    nodes.forEach(function (node) { pane.appendChild(document.importNode(node, true)); });
+    var frag = document.createDocumentFragment();
+    nodes.forEach(function (node) { frag.appendChild(document.importNode(node, true)); });
+    pane.appendChild(frag);
+
+    var isPartial = source && source.getAttribute('data-partial') === '1';
+    if (source) {
+      var partialCSRF = source.getAttribute('data-csrf');
+      if (partialCSRF) syncCSRFValue(partialCSRF);
+    }
 
     // Hoist any stylesheet the real document doesn't have yet, deduped by
-    // the exact href string (cache-busting hash makes an identical asset
-    // always produce an identical href). Never removed once added.
+    // the exact href string. Never removed once added.
     var existingHrefs = {};
     Array.prototype.forEach.call(document.head.querySelectorAll('link[rel="stylesheet"]'), function (l) {
       existingHrefs[l.getAttribute('href')] = true;
     });
+    var styleHrefs = isPartial
+      ? parseJSONAttr(source, 'data-page-styles')
+      : Array.prototype.map.call(doc.querySelectorAll('head link[rel="stylesheet"]'), function (l) {
+        return l.getAttribute('href') || '';
+      });
     var pendingStyles = [];
-    Array.prototype.forEach.call(doc.querySelectorAll('head link[rel="stylesheet"]'), function (l) {
-      var href = l.getAttribute('href');
+    styleHrefs.forEach(function (href) {
       if (!href || existingHrefs[href]) return;
       existingHrefs[href] = true;
       var clone = document.createElement('link');
@@ -568,20 +652,23 @@
       document.head.appendChild(clone);
     });
 
-    // Clone every <script src> that follows /static/app.js in the fetched
-    // document (that page's own PageScripts chain), appended INSIDE this
-    // pane so document.currentScript.closest('.tab-pane') resolves for
-    // pane-aware scripts (terminal.js, terminal-tab-adapter.js, etc.).
-    var scripts = Array.prototype.slice.call(doc.querySelectorAll('script[src]'));
-    var appIdx = -1;
-    for (var i = 0; i < scripts.length; i++) {
-      if (/\/static\/app\.js(\?|$)/.test(scripts[i].getAttribute('src') || '')) { appIdx = i; break; }
+    // Inject page-specific scripts inside `pane` so document.currentScript.closest('.tab-pane')
+    // resolves cleanly, with async=false so they download in parallel and execute in order.
+    var scriptSrcs;
+    if (isPartial) {
+      scriptSrcs = parseJSONAttr(source, 'data-page-scripts');
+    } else {
+      var scripts = Array.prototype.slice.call(doc.querySelectorAll('script[src]'));
+      var appIdx = -1;
+      for (var i = 0; i < scripts.length; i++) {
+        if (/\/static\/(?:v\/[^/]+\/)?app\.js(\?|$)/.test(scripts[i].getAttribute('src') || '')) { appIdx = i; break; }
+      }
+      var after = appIdx === -1 ? scripts : scripts.slice(appIdx + 1);
+      scriptSrcs = after.map(function (s) { return s.getAttribute('src') || ''; });
     }
-    var after = appIdx === -1 ? scripts : scripts.slice(appIdx + 1);
     var pendingScripts = [];
-    after.forEach(function (s) {
-      var src = s.getAttribute('src') || '';
-      if (/\/static\/(app|tab-manager)\.js(\?|$)/.test(src)) return;
+    scriptSrcs.forEach(function (src) {
+      if (!src || /\/static\/(?:v\/[^/]+\/)?(app|tab-manager)\.js(\?|$)/.test(src)) return;
       var clone = document.createElement('script');
       clone.src = src;
       clone.async = false;
@@ -594,8 +681,9 @@
 
     var pendingAll = pendingStyles.concat(pendingScripts);
     var scriptsReady = pendingAll.length ? Promise.all(pendingAll) : Promise.resolve();
+    var pageTitle = (isPartial ? source.getAttribute('data-page-title') : '') || doc.title || '';
     return {
-      title: (doc.title || '').trim(),
+      title: pageTitle.trim(),
       scriptsReady: scriptsReady
     };
   }
@@ -620,30 +708,68 @@
     }
     tab.abortController = new AbortController();
     tab.loading = true;
+    var method = (opts.method || 'GET').toUpperCase();
+    if (method !== 'GET') clearPrefetchCache();
+
+    var hasExistingContent = pane.childElementCount > 0 && !pane.querySelector('.tab-pane__loading');
     var loadSpinnerTimer = null;
     if (!opts.deferPaneTeardown) {
-      loadSpinnerTimer = setTimeout(function () {
-        loadSpinnerTimer = null;
-        if (tab.loading) showPaneLoading(pane);
-      }, 150);
+      if (hasExistingContent) {
+        pane.classList.add('is-transitioning');
+      } else {
+        loadSpinnerTimer = setTimeout(function () {
+          loadSpinnerTimer = null;
+          if (tab.loading) showPaneLoading(pane);
+        }, 150);
+      }
     }
     function clearLoadSpinner() {
       if (loadSpinnerTimer) { clearTimeout(loadSpinnerTimer); loadSpinnerTimer = null; }
+      pane.classList.remove('is-transitioning');
     }
-    var fetchOpts = {
-      method: opts.method || 'GET',
-      credentials: 'same-origin',
-      signal: tab.abortController.signal
-    };
-    if (opts.headers) fetchOpts.headers = opts.headers;
-    if (opts.body) fetchOpts.body = opts.body;
-    return fetch(url, fetchOpts).then(function (resp) {
-      var dlName = resp.ok ? parseDownloadFilename(resp.headers.get('Content-Disposition') || '') : null;
-      if (dlName !== null) {
-        return resp.blob().then(function (blob) { return { kind: 'download', resp: resp, blob: blob, filename: dlName }; });
-      }
-      return resp.text().then(function (text) { return { kind: 'html', resp: resp, text: text }; });
-    }).then(function (result) {
+
+    function executeFetch(overrideHeaders) {
+      var headers = Object.assign({
+        'X-Nodexia-Partial': '1',
+        'Accept': 'text/html'
+      }, opts.headers || {}, overrideHeaders || {});
+      var fetchOpts = {
+        method: method,
+        credentials: 'same-origin',
+        headers: headers,
+        signal: tab.abortController.signal
+      };
+      if (opts.body) fetchOpts.body = opts.body;
+      return fetch(url, fetchOpts).then(function (resp) {
+        syncCSRFFromResponse(resp);
+        if (resp.status === 403 && method !== 'GET' && !opts.__csrfRetried) {
+          opts.__csrfRetried = true;
+          return refreshCSRFToken().then(function (freshToken) {
+            if (!freshToken) {
+              return resp.text().then(function (text) { return { kind: 'html', resp: resp, text: text }; });
+            }
+            if (opts.body instanceof URLSearchParams) {
+              opts.body.set('_csrf_token', freshToken);
+            } else if (opts.body instanceof FormData) {
+              opts.body.set('_csrf_token', freshToken);
+            }
+            return executeFetch({ 'X-CSRF-Token': freshToken });
+          });
+        }
+        var dlName = resp.ok ? parseDownloadFilename(resp.headers.get('Content-Disposition') || '') : null;
+        if (dlName !== null) {
+          return resp.blob().then(function (blob) { return { kind: 'download', resp: resp, blob: blob, filename: dlName }; });
+        }
+        return resp.text().then(function (text) { return { kind: 'html', resp: resp, text: text }; });
+      });
+    }
+
+    var prefetched = (method === 'GET' && !opts.bypassPrefetch) ? takePrefetch(url) : null;
+    var responsePromise = prefetched
+      ? prefetched.then(function (hit) { return hit || executeFetch(); })
+      : executeFetch();
+
+    return responsePromise.then(function (result) {
       if (result.kind === 'download') {
         clearLoadSpinner();
         tab.loading = false;
@@ -665,24 +791,26 @@
         window.location.href = finalURL;
         return { redirected: true };
       }
-      // Non-2xx responses that still carry the SSR layout (#tab-content) are
-      // renderable error pages (502 SSH failure, 422 validation, 404 not
-      // found, etc.) — inject them rather than masking the real error behind
-      // a generic "Failed to load" message.
-      if (!result.resp.ok && !hasTabContent(result.text)) {
+
+      // Single DOMParser pass: check for #tab-content and reuse the parsed doc.
+      var doc = new DOMParser().parseFromString(result.text, 'text/html');
+      var source = doc.getElementById('tab-content');
+      if (!result.resp.ok && !source) {
         throw new Error('http ' + result.resp.status);
       }
       if (opts.deferPaneTeardown) {
         if (!teardownPaneContent(tab)) {
+          clearLoadSpinner();
           tab.loading = false;
           return { cancelled: true };
         }
       }
       clearLoadSpinner();
-      var extracted = extractAndInject(pane, result.text);
+      var extracted = extractAndInject(pane, doc, source);
       var title = extracted.title;
       tab.loading = false;
       tab.loaded = true;
+      tab.needsLoad = false;
       tab.url = pathAndSearch(finalURL);
       if (!opts.keepTitle) tab.title = title || T('js.tabs.untitled');
       if (!opts.keepIcon) tab.icon = iconForURL(tab.url);
@@ -751,7 +879,8 @@
         if (pushHistory) {
           try { window.history.pushState({ nodexiaTabId: tab.id }, '', tab.url); } catch (err) { /* ignore */ }
         }
-        if (tab.pane) tab.pane.scrollTop = 0;
+        tab.scrollY = 0;
+        if (tab.id === activeTabId) window.scrollTo(0, 0);
         updateNavHighlight(pathnameOf(tab.url));
       }
       finishTopBar();
@@ -810,7 +939,8 @@
 
     loadPane(tab, tab.url, { keepTitle: !!opts.title, keepIcon: !!opts.icon })
       .then(function () {
-        if (!opts.background && tab.pane) tab.pane.scrollTop = 0;
+        tab.scrollY = 0;
+        if (!opts.background && tab.id === activeTabId) window.scrollTo(0, 0);
       })
       .finally(function () {
         finishTopBar();
@@ -867,6 +997,7 @@
     if (!tab || id === activeTabId) return;
     var prev = tabsById[activeTabId];
     if (prev) {
+      prev.scrollY = window.scrollY || 0;
       fire('tab-deactivated', paneDetail(prev), false);
       if (prev.pane) { prev.pane.classList.remove('is-active'); prev.pane.setAttribute('hidden', ''); }
       setTabButtonActive(prev, false);
@@ -877,8 +1008,13 @@
     if (tab.btn && tab.btn.scrollIntoView) {
       try { tab.btn.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (err) { /* ignore */ }
     }
+    if (tab.needsLoad && !tab.loading && !tab.loaded) {
+      tab.needsLoad = false;
+      loadPane(tab, tab.url, { keepTitle: true, keepIcon: true });
+    }
     syncDocumentState(tab);
     updateNavHighlight(pathnameOf(tab.url));
+    window.scrollTo(0, tab.scrollY || 0);
     fire('tab-activated', paneDetail(tab), false);
     schedulePersist();
   }
@@ -908,7 +1044,7 @@
     var tab = tabsById[id];
     if (!tab || !tab.pane) return;
     if (!teardownPaneContent(tab)) return;
-    loadPane(tab, tab.url, {});
+    loadPane(tab, tab.url, { bypassPrefetch: true });
   }
 
   function reopenClosed() {
@@ -974,12 +1110,15 @@
       var items = Array.prototype.slice.call(menu.querySelectorAll('.tab-floating-menu__item'));
       var current = document.activeElement;
       var idx = items.indexOf(current);
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      var rtl = (document.documentElement.getAttribute('dir') || '').toLowerCase() === 'rtl';
+      var nextKey = rtl ? 'ArrowLeft' : 'ArrowRight';
+      var prevKey = rtl ? 'ArrowRight' : 'ArrowLeft';
+      if (e.key === 'ArrowDown' || e.key === nextKey) {
         e.preventDefault();
         focusMenuItem(items, idx + 1);
         return;
       }
-      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      if (e.key === 'ArrowUp' || e.key === prevKey) {
         e.preventDefault();
         focusMenuItem(items, idx - 1);
         return;
@@ -1153,9 +1292,7 @@
       if (!resp.ok) return '';
       return resp.json().then(function (data) {
         if (data && data.csrf_token) {
-          document.querySelectorAll('input[name="_csrf_token"]').forEach(function (input) {
-            input.value = data.csrf_token;
-          });
+          syncCSRFValue(data.csrf_token);
           return data.csrf_token;
         }
         return '';
@@ -1166,11 +1303,50 @@
     });
   }
 
+  /* ── Hover / pointerdown prefetch for safe GET links ──────── */
+  function initLinkPrefetch() {
+    var hoverTimer = null;
+    document.addEventListener('pointerenter', function (e) {
+      if (e.pointerType && e.pointerType !== 'mouse') return;
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a || shouldBypassLink(a)) return;
+      var url = toURL(a.href);
+      if (!isPrefetchableURL(url)) return;
+      clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(function () { prefetchURL(url.pathname + url.search); }, 65);
+    }, true);
+    document.addEventListener('pointerleave', function (e) {
+      if (e.target && e.target.matches && e.target.matches('a[href]')) {
+        clearTimeout(hoverTimer);
+      }
+    }, true);
+    document.addEventListener('pointerdown', function (e) {
+      if (e.button && e.button !== 0) return;
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a || shouldBypassLink(a)) return;
+      var url = toURL(a.href);
+      if (!isPrefetchableURL(url)) return;
+      prefetchURL(url.pathname + url.search);
+    }, { capture: true, passive: true });
+  }
+
   /* ── In-tab form submission (never a full top-level navigation) ─ */
   function initFormInterception() {
     document.addEventListener('submit', function (e) {
       var form = e.target;
       if (!form || !form.matches || !form.matches('form')) return;
+      // Clear ephemeral in-memory runtime credentials and tab metadata on logout.
+      var rawAction = (form.getAttribute('action') || '').trim();
+      if (rawAction === '/logout') {
+        try {
+          if (window.__nxRuntimeFileCreds && typeof window.__nxRuntimeFileCreds.clear === 'function') {
+            window.__nxRuntimeFileCreds.clear();
+          }
+          sessionStorage.removeItem(STORAGE_KEY);
+          sessionStorage.removeItem(CLOSED_KEY);
+        } catch (_) {}
+        return;
+      }
       if (e.defaultPrevented) return; // a confirm()-guard upstream already cancelled it
       if (form.hasAttribute('data-tab-bypass') || form.target === '_blank') return;
       var pane = form.closest('.tab-pane');
@@ -1195,7 +1371,7 @@
         };
         if (method !== 'GET') {
           var csrfInput = form.querySelector('input[name="_csrf_token"]');
-          var token = freshToken || (csrfInput ? csrfInput.value : '');
+          var token = freshToken || window.__nxCSRFToken || (csrfInput ? csrfInput.value : '');
           if (token) {
             fetchOpts.headers = { 'X-CSRF-Token': token };
           }
@@ -1215,11 +1391,9 @@
           .catch(function () { restoreFormUI(submitter); });
       }
 
-      if (method !== 'GET') {
-        refreshCSRFToken().then(doNavigate);
-      } else {
-        doNavigate('');
-      }
+      // Submit immediately with the synced CSRF token (loadPane automatically
+      // refreshes /api/csrf-token and retries once on HTTP 403).
+      doNavigate('');
     });
   }
 
@@ -1258,13 +1432,15 @@
     }
     var el = target;
     while (el && el !== contentEl && el !== document.body && el !== document.documentElement) {
-      try {
-        var style = window.getComputedStyle(el);
-        var ox = style ? (style.overflowX || '') : '';
-        if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth + 2) {
-          return true;
-        }
-      } catch (_) {}
+      if (el.scrollWidth > el.clientWidth + 2) {
+        try {
+          var style = window.getComputedStyle(el);
+          var ox = style ? (style.overflowX || '') : '';
+          if (ox === 'auto' || ox === 'scroll') {
+            return true;
+          }
+        } catch (_) {}
+      }
       el = el.parentElement;
     }
     return false;
@@ -1616,14 +1792,13 @@
       activeTabId = bootTab.id;
       renderTabButton(bootTab);
 
-      // Every other restored tab reopens as a background tab, fetched fresh
-      // (sessionStorage only ever held metadata — live WS/xterm state can't
-      // survive a real reload and isn't meant to, §6).
+      // Restored background tabs stay lazy until first activation so cold boot
+      // never fires a burst of hidden fetches against the server.
       restList.forEach(function (t) {
         var tab = {
           id: t.id, url: t.url, title: t.title, icon: t.icon, kind: t.kind,
           pinned: !!t.pinned, order: t.order, createdAt: t.createdAt || Date.now(),
-          loading: false, loaded: false
+          loading: false, loaded: false, needsLoad: true, scrollY: 0
         };
         var pane = document.createElement('div');
         pane.className = 'tab-pane';
@@ -1636,7 +1811,6 @@
         contentEl.appendChild(pane);
         registerTab(tab);
         renderTabButton(tab);
-        loadPane(tab, tab.url, {});
       });
 
       relayoutTabs();
@@ -1645,6 +1819,7 @@
       if (newBtn) newBtn.addEventListener('click', function () { actionNewTab(); });
       initSwitcherUI();
       initLinkInterception();
+      initLinkPrefetch();
       initFormInterception();
       initHistory();
       initKeyboard();

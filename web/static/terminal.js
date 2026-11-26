@@ -1131,6 +1131,35 @@
   bindClick('terminal-persian-backdrop', closePersianModal);
   bindClick('terminal-persian-close', closePersianModal);
 
+  function bindTerminalModalA11y(modalEl, closeFn) {
+    if (!modalEl || modalEl.dataset.modalA11yReady === '1') return;
+    modalEl.dataset.modalA11yReady = '1';
+    modalEl.addEventListener('keydown', function (e) {
+      if (modalEl.hidden) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeFn();
+        return;
+      }
+      if (e.key === 'Tab') {
+        var focusables = Array.prototype.slice.call(
+          modalEl.querySelectorAll('a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
+        ).filter(function (node) {
+          return !node.hidden && !node.closest('[hidden]') && (node.offsetParent !== null || node.getClientRects().length > 0);
+        });
+        if (!focusables.length) return;
+        var first = focusables[0];
+        var last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
+  }
+
+  bindTerminalModalA11y(snippetsModal, closeSnippetsModal);
+  bindTerminalModalA11y(persianModal, closePersianModal);
+
   setShown(snippetsModal, false, 'flex');
   setShown(persianModal, false, 'flex');
 

@@ -476,6 +476,305 @@ func (r SQLRepository) DeleteHourlyBefore(ctx context.Context, before time.Time)
 	return n, nil
 }
 
+// LimitResolver resolves effective traffic caps for many servers in memory
+// using a single batch load of server_traffic_limits and traffic_limit_rules.
+type LimitResolver struct {
+	perServer map[int64]TrafficLimit
+	byTag     map[string]int64
+	global    int64
+	hasGlobal bool
+}
+
+// Resolve mirrors SQLRepository.ResolveEffectiveLimit precedence in memory:
+// server override > smallest tag cap > global default.
+func (lr *LimitResolver) Resolve(serverID int64, tags []string) (TrafficLimit, string, bool) {
+	if lr == nil {
+		return TrafficLimit{}, "", false
+	}
+	if lim, ok := lr.perServer[serverID]; ok {
+		return lim, "server", true
+	}
+	var bestTag string
+	var bestBytes int64
+	hasTag := false
+	for _, raw := range tags {
+		tag := strings.TrimSpace(raw)
+		if tag == "" {
+			continue
+		}
+		b, ok := lr.byTag[tag]
+		if !ok {
+			continue
+		}
+		if !hasTag || b < bestBytes || (b == bestBytes && tag < bestTag) {
+			bestTag = tag
+			bestBytes = b
+			hasTag = true
+		}
+	}
+	if hasTag {
+		return TrafficLimit{Bytes: bestBytes, Kind: LimitKindRX}, "tag:" + bestTag, true
+	}
+	if lr.hasGlobal {
+		return TrafficLimit{Bytes: lr.global, Kind: LimitKindRX}, "global", true
+	}
+	return TrafficLimit{}, "", false
+}
+
+// LoadLimitResolver preloads all per-server and scoped traffic limits in 2
+// tiny queries so fleet pages (e.g. dashboard warnings) never issue N+1 lookups.
+func (r SQLRepository) LoadLimitResolver(ctx context.Context) (*LimitResolver, error) {
+	lr := &LimitResolver{
+		perServer: make(map[int64]TrafficLimit),
+		byTag:     make(map[string]int64),
+	}
+
+	rows, err := r.conn.QueryContext(ctx, `SELECT server_id, monthly_limit_bytes, limit_kind FROM server_traffic_limits`)
+	if err != nil {
+		return nil, fmt.Errorf("analytics: load server traffic limits: %w", err)
+	}
+	for rows.Next() {
+		var sid, bytes int64
+		var kind string
+		if scanErr := rows.Scan(&sid, &bytes, &kind); scanErr != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("analytics: scan server traffic limit: %w", scanErr)
+		}
+		lr.perServer[sid] = TrafficLimit{Bytes: bytes, Kind: NormalizeLimitKind(kind)}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, err
+	}
+	_ = rows.Close()
+
+	scoped, err := r.ListScopedLimits(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range scoped {
+		switch s.Scope {
+		case LimitScopeGlobal:
+			lr.global = s.LimitBytes
+			lr.hasGlobal = true
+		case LimitScopeTag:
+			lr.byTag[strings.TrimSpace(s.Ref)] = s.LimitBytes
+		}
+	}
+	return lr, nil
+}
+
+// LatestHourlyPeriod returns the newest rolled-up hourly period_start for serverID.
+func (r SQLRepository) LatestHourlyPeriod(ctx context.Context, serverID int64) (time.Time, bool, error) {
+	var raw any
+	err := r.conn.QueryRowContext(ctx,
+		`SELECT MAX(period_start) FROM metric_rollups_hourly WHERE server_id = ?`, serverID,
+	).Scan(&raw)
+	if err != nil || raw == nil {
+		if err == sql.ErrNoRows || raw == nil {
+			return time.Time{}, false, nil
+		}
+		return time.Time{}, false, fmt.Errorf("analytics: latest hourly period: %w", err)
+	}
+	t, err := parseDatabaseTime(raw)
+	if err != nil || t.IsZero() {
+		return time.Time{}, false, err
+	}
+	return t, true, nil
+}
+
+// LatestDailyPeriod returns the newest rolled-up daily period_start for serverID.
+func (r SQLRepository) LatestDailyPeriod(ctx context.Context, serverID int64) (time.Time, bool, error) {
+	var raw any
+	err := r.conn.QueryRowContext(ctx,
+		`SELECT MAX(period_start) FROM metric_rollups_daily WHERE server_id = ?`, serverID,
+	).Scan(&raw)
+	if err != nil || raw == nil {
+		if err == sql.ErrNoRows || raw == nil {
+			return time.Time{}, false, nil
+		}
+		return time.Time{}, false, fmt.Errorf("analytics: latest daily period: %w", err)
+	}
+	t, err := parseDatabaseTime(raw)
+	if err != nil || t.IsZero() {
+		return time.Time{}, false, err
+	}
+	return t, true, nil
+}
+
+// InsertHourlyRollupsBatch inserts missing hourly rollups inside one transaction.
+func (r SQLRepository) InsertHourlyRollupsBatch(ctx context.Context, serverID int64, rollups []HourlyRollup) error {
+	if len(rollups) == 0 {
+		return nil
+	}
+	tx, err := r.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("analytics: begin hourly rollup batch: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now().UTC()
+	for _, rp := range rollups {
+		var exists int
+		scanErr := tx.QueryRowContext(ctx,
+			`SELECT 1 FROM metric_rollups_hourly WHERE server_id = ? AND period_start = ? LIMIT 1`,
+			serverID, rp.PeriodStart,
+		).Scan(&exists)
+		if scanErr == nil {
+			continue
+		}
+		if scanErr != sql.ErrNoRows {
+			return fmt.Errorf("analytics: check hourly rollup in batch: %w", scanErr)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO metric_rollups_hourly
+			  (server_id, period_start, avg_cpu, avg_ram, avg_disk, avg_swap,
+			   avg_load1, avg_load5, avg_load15, sample_count, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			serverID, rp.PeriodStart, rp.AvgCPU, rp.AvgRAM, rp.AvgDisk, rp.AvgSwap,
+			rp.AvgLoad1, rp.AvgLoad5, rp.AvgLoad15, rp.SampleCount, now,
+		); err != nil {
+			return fmt.Errorf("analytics: insert hourly rollup in batch: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// InsertDailyRollupsBatch inserts missing daily rollups inside one transaction.
+func (r SQLRepository) InsertDailyRollupsBatch(ctx context.Context, serverID int64, rollups []DailyRollup) error {
+	if len(rollups) == 0 {
+		return nil
+	}
+	tx, err := r.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("analytics: begin daily rollup batch: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now().UTC()
+	for _, rp := range rollups {
+		var exists int
+		scanErr := tx.QueryRowContext(ctx,
+			`SELECT 1 FROM metric_rollups_daily WHERE server_id = ? AND period_start = ? LIMIT 1`,
+			serverID, rp.PeriodStart,
+		).Scan(&exists)
+		if scanErr == nil {
+			continue
+		}
+		if scanErr != sql.ErrNoRows {
+			return fmt.Errorf("analytics: check daily rollup in batch: %w", scanErr)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO metric_rollups_daily
+			  (server_id, period_start, avg_cpu, avg_ram, avg_disk, avg_swap,
+			   avg_load1, avg_load5, avg_load15, sample_count, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			serverID, rp.PeriodStart, rp.AvgCPU, rp.AvgRAM, rp.AvgDisk, rp.AvgSwap,
+			rp.AvgLoad1, rp.AvgLoad5, rp.AvgLoad15, rp.SampleCount, now,
+		); err != nil {
+			return fmt.Errorf("analytics: insert daily rollup in batch: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// PruneSupersededTraffic removes historical vnstat_snapshots rows superseded by
+// a newer available snapshot for the same server (cleaning up legacy DBs).
+func (r SQLRepository) PruneSupersededTraffic(ctx context.Context) (int64, error) {
+	rows, err := r.conn.QueryContext(ctx,
+		`SELECT server_id, MAX(id) FROM vnstat_snapshots WHERE available = 1 GROUP BY server_id`,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("analytics: find latest vnstat ids: %w", err)
+	}
+	type pair struct{ serverID, keepID int64 }
+	var pairs []pair
+	for rows.Next() {
+		var p pair
+		if err := rows.Scan(&p.serverID, &p.keepID); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		pairs = append(pairs, p)
+	}
+	_ = rows.Close()
+
+	var total int64
+	for _, p := range pairs {
+		res, err := r.conn.ExecContext(ctx,
+			`DELETE FROM vnstat_snapshots WHERE server_id = ? AND id < ?`, p.serverID, p.keepID,
+		)
+		if err != nil {
+			return total, fmt.Errorf("analytics: prune vnstat for server %d: %w", p.serverID, err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			total += n
+		}
+	}
+	return total, nil
+}
+
+// DeleteResolvedAlertsBefore deletes resolved alert_events older than before,
+// leaving active (firing) alert events untouched.
+func (r SQLRepository) DeleteResolvedAlertsBefore(ctx context.Context, before time.Time) (int64, error) {
+	res, err := r.conn.ExecContext(ctx,
+		`DELETE FROM alert_events WHERE state = 'resolved' AND resolved_at IS NOT NULL AND resolved_at < ?`,
+		before,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("analytics: delete resolved alerts before %v: %w", before, err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+// TrimCommandHistoryPerServer trims command_history to at most keepPerServer
+// newest rows per server.
+func (r SQLRepository) TrimCommandHistoryPerServer(ctx context.Context, keepPerServer int) (int64, error) {
+	if keepPerServer <= 0 {
+		return 0, nil
+	}
+	rows, err := r.conn.QueryContext(ctx, `SELECT DISTINCT server_id FROM command_history`)
+	if err != nil {
+		return 0, fmt.Errorf("analytics: list command_history servers: %w", err)
+	}
+	var serverIDs []int64
+	for rows.Next() {
+		var sid int64
+		if err := rows.Scan(&sid); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		serverIDs = append(serverIDs, sid)
+	}
+	_ = rows.Close()
+
+	var total int64
+	for _, sid := range serverIDs {
+		var cutoff int64
+		err := r.conn.QueryRowContext(ctx,
+			`SELECT id FROM command_history WHERE server_id = ? ORDER BY id DESC LIMIT 1 OFFSET ?`,
+			sid, keepPerServer-1,
+		).Scan(&cutoff)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				continue
+			}
+			return total, fmt.Errorf("analytics: find command_history cutoff for server %d: %w", sid, err)
+		}
+		res, err := r.conn.ExecContext(ctx,
+			`DELETE FROM command_history WHERE server_id = ? AND id < ?`, sid, cutoff,
+		)
+		if err != nil {
+			return total, fmt.Errorf("analytics: trim command_history for server %d: %w", sid, err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			total += n
+		}
+	}
+	return total, nil
+}
+
 func (r SQLRepository) DeleteDailyBefore(ctx context.Context, before time.Time) (int64, error) {
 	result, err := r.conn.ExecContext(ctx,
 		`DELETE FROM metric_rollups_daily WHERE period_start < ?`, before)
@@ -487,12 +786,8 @@ func (r SQLRepository) DeleteDailyBefore(ctx context.Context, before time.Time) 
 }
 
 func (r SQLRepository) ListServerMetricSummaries(ctx context.Context, limit int) ([]ServerMetricSummary, error) {
-	if limit <= 0 {
-		limit = 10
-	}
-	rows, err := r.conn.QueryContext(ctx,
-		`SELECT ss.server_id, s.name, s.country_code,
-		        ss.cpu_usage, ss.ram_usage, ss.disk_usage, ss.swap_usage
+	query := `SELECT ss.server_id, s.name, s.country_code,
+		        ss.cpu_usage, ss.ram_usage, ss.disk_usage, ss.swap_usage, ss.load_average_1, ss.created_at
 		 FROM system_snapshots ss
 		 JOIN servers s ON s.id = ss.server_id
 		 JOIN (
@@ -500,9 +795,13 @@ func (r SQLRepository) ListServerMetricSummaries(ctx context.Context, limit int)
 		   FROM system_snapshots
 		   GROUP BY server_id
 		 ) latest ON latest.latest_id = ss.id
-		 ORDER BY ss.cpu_usage DESC
-		 LIMIT ?`, limit,
-	)
+		 ORDER BY ss.cpu_usage DESC`
+	var args []any
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+	rows, err := r.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("analytics: list server metric summaries: %w", err)
 	}
@@ -513,22 +812,88 @@ func (r SQLRepository) ListServerMetricSummaries(ctx context.Context, limit int)
 	var summaries []ServerMetricSummary
 	for rows.Next() {
 		var s ServerMetricSummary
-		if err := rows.Scan(&s.ServerID, &s.ServerName, &s.CountryCode, &s.AvgCPU, &s.AvgRAM, &s.AvgDisk, &s.AvgSwap); err != nil {
+		var rawTime any
+		if err := rows.Scan(&s.ServerID, &s.ServerName, &s.CountryCode, &s.AvgCPU, &s.AvgRAM, &s.AvgDisk, &s.AvgSwap, &s.LoadAvg1, &rawTime); err != nil {
 			return nil, fmt.Errorf("analytics: scan server metric summary: %w", err)
+		}
+		if t, parseErr := parseDatabaseTime(rawTime); parseErr == nil {
+			s.RecordedAt = t
 		}
 		summaries = append(summaries, s)
 	}
 	return summaries, rows.Err()
 }
 
-// ListServerTrafficSummaries returns the current-month RX/TX/total for every
-// server with vnstat data. It does NOT apply a SQL LIMIT: the "top N" ordering
-// is by monthly total, which lives inside the JSON blob and can't be sorted in
-// SQL, so the caller sorts and truncates. (The previous LIMIT picked an
-// arbitrary N rows before sorting, so the real top consumers could be dropped.)
+// CountServers returns the total number of registered servers in the fleet.
+func (r SQLRepository) CountServers(ctx context.Context) (int, error) {
+	var n int
+	if err := r.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM servers`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("analytics: count servers: %w", err)
+	}
+	return n, nil
+}
+
+// ListFleetTagCounts returns every distinct server tag in use across the fleet
+// mapped to the number of servers carrying that tag.
+func (r SQLRepository) ListFleetTagCounts(ctx context.Context) (map[string]int, error) {
+	rows, err := r.conn.QueryContext(ctx, `SELECT tag, COUNT(*) FROM server_tags GROUP BY tag ORDER BY tag ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("analytics: list fleet tag counts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make(map[string]int)
+	for rows.Next() {
+		var tag string
+		var cnt int
+		if err := rows.Scan(&tag, &cnt); err != nil {
+			return nil, fmt.Errorf("analytics: scan fleet tag count: %w", err)
+		}
+		tag = strings.TrimSpace(tag)
+		if tag != "" {
+			out[tag] = cnt
+		}
+	}
+	return out, rows.Err()
+}
+
+// ListServerTagsMap loads all server_id -> []tag mappings in one query so fleet
+// analytics views can resolve tag-inherited limits without N+1 queries.
+func (r SQLRepository) ListServerTagsMap(ctx context.Context) (map[int64][]string, error) {
+	rows, err := r.conn.QueryContext(ctx, `SELECT server_id, tag FROM server_tags ORDER BY tag ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("analytics: list server tags map: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make(map[int64][]string)
+	for rows.Next() {
+		var sid int64
+		var tag string
+		if err := rows.Scan(&sid, &tag); err != nil {
+			return nil, fmt.Errorf("analytics: scan server tag: %w", err)
+		}
+		if tag = strings.TrimSpace(tag); tag != "" {
+			out[sid] = append(out[sid], tag)
+		}
+	}
+	return out, rows.Err()
+}
+
+// ServerLimitCount returns how many per-server overrides exist in memory.
+func (lr *LimitResolver) ServerLimitCount() int {
+	if lr == nil {
+		return 0
+	}
+	return len(lr.perServer)
+}
+
+// ListServerTrafficSummaries returns the current accounting period RX/TX/total
+// for every server with vnstat data, honouring each server's traffic_reset_day
+// so the global overview matches per-server analytics and forecasts.
 func (r SQLRepository) ListServerTrafficSummaries(ctx context.Context, limit int) ([]ServerTrafficSummary, error) {
 	rows, err := r.conn.QueryContext(ctx,
-		`SELECT vs.server_id, s.name, s.country_code, vs.monthly_rows_json
+		`SELECT vs.server_id, s.name, s.country_code, s.traffic_reset_day, vs.daily_rows_json, vs.monthly_rows_json
 		 FROM vnstat_snapshots vs
 		 JOIN servers s ON s.id = vs.server_id
 		 JOIN (
@@ -545,7 +910,9 @@ func (r SQLRepository) ListServerTrafficSummaries(ctx context.Context, limit int
 		_ = rows.Close()
 	}()
 
-	currentMonth := time.Now().UTC().Format("2006-01")
+	now := time.Now().UTC()
+	currentMonth := now.Format("2006-01")
+	monthStartLabel := currentMonth + "-01"
 	type rawRow struct {
 		Label string `json:"label"`
 		RX    int64  `json:"rx_bytes"`
@@ -556,32 +923,83 @@ func (r SQLRepository) ListServerTrafficSummaries(ctx context.Context, limit int
 	var summaries []ServerTrafficSummary
 	for rows.Next() {
 		var serverID int64
-		var serverName, countryCode, monthlyJSON string
-		if err := rows.Scan(&serverID, &serverName, &countryCode, &monthlyJSON); err != nil {
+		var resetDay int
+		var serverName, countryCode, dailyJSON, monthlyJSON string
+		if err := rows.Scan(&serverID, &serverName, &countryCode, &resetDay, &dailyJSON, &monthlyJSON); err != nil {
 			return nil, fmt.Errorf("analytics: scan server traffic summary: %w", err)
 		}
+		var dailyRows []rawRow
+		if dailyJSON != "" {
+			_ = json.Unmarshal([]byte(dailyJSON), &dailyRows)
+		}
 		var monthlyRows []rawRow
-		_ = json.Unmarshal([]byte(monthlyJSON), &monthlyRows)
+		if monthlyJSON != "" {
+			_ = json.Unmarshal([]byte(monthlyJSON), &monthlyRows)
+		}
 
 		var rx, tx, monthBytes int64
-		for _, m := range monthlyRows {
-			if m.Label == currentMonth {
-				rx, tx = m.RX, m.TX
-				monthBytes = m.Total
-				if monthBytes == 0 {
-					monthBytes = m.RX + m.TX
+		periodLabel := currentMonth
+		anchored := false
+
+		if resetDay > 1 {
+			anchored = true
+			start := trafficPeriodStart(now, resetDay)
+			end := start.AddDate(0, 1, 0)
+			startLabel := start.Format("2006-01-02")
+			periodLabel = startLabel + " → " + end.AddDate(0, 0, -1).Format("2006-01-02")
+			for _, d := range dailyRows {
+				if d.Label < startLabel {
+					continue
 				}
-				break
+				rx += d.RX
+				tx += d.TX
+				rowTot := d.Total
+				if rowTot == 0 {
+					rowTot = d.RX + d.TX
+				}
+				monthBytes += rowTot
+			}
+		} else {
+			foundMonth := false
+			for _, m := range monthlyRows {
+				if m.Label == currentMonth {
+					foundMonth = true
+					rx, tx = m.RX, m.TX
+					monthBytes = m.Total
+					if monthBytes == 0 {
+						monthBytes = m.RX + m.TX
+					}
+					break
+				}
+			}
+			// Fallback to daily rows from YYYY-MM-01 on the 1st of the month if
+			// vnstat's monthly table has not rolled over yet.
+			if !foundMonth && len(dailyRows) > 0 {
+				for _, d := range dailyRows {
+					if d.Label < monthStartLabel {
+						continue
+					}
+					rx += d.RX
+					tx += d.TX
+					rowTot := d.Total
+					if rowTot == 0 {
+						rowTot = d.RX + d.TX
+					}
+					monthBytes += rowTot
+				}
 			}
 		}
+
 		summaries = append(summaries, ServerTrafficSummary{
-			ServerID:    serverID,
-			ServerName:  serverName,
-			CountryCode: countryCode,
-			MonthRX:     rx,
-			MonthTX:     tx,
-			MonthBytes:  monthBytes,
-			MonthLabel:  currentMonth,
+			ServerID:       serverID,
+			ServerName:     serverName,
+			CountryCode:    countryCode,
+			ResetDay:       resetDay,
+			PeriodAnchored: anchored,
+			MonthRX:        rx,
+			MonthTX:        tx,
+			MonthBytes:     monthBytes,
+			MonthLabel:     periodLabel,
 		})
 	}
 	return summaries, rows.Err()

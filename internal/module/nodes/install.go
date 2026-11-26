@@ -147,11 +147,12 @@ type installJob struct {
 	createdAt  time.Time
 	finishedAt time.Time
 	status     string
-	output     string
+	outputBuf  []byte
 	errMessage string
 	info       *RegistrationInfo
 	cancelFn   context.CancelFunc
 	canceled   bool
+	notify     chan struct{}
 
 	// stream is the line-oriented stage-marker extractor for this job.
 	stream *streamProcessor
@@ -195,6 +196,13 @@ func (j *installJob) isCanceled() bool {
 	return j.canceled
 }
 
+func (j *installJob) notifyLocked() {
+	if j.notify != nil {
+		close(j.notify)
+		j.notify = make(chan struct{})
+	}
+}
+
 // appendOutput appends already-parsed text to the job log (used for the
 // runner's own notices, which contain no stage markers).
 func (j *installJob) appendOutput(chunk string) {
@@ -205,6 +213,7 @@ func (j *installJob) appendOutput(chunk string) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.appendLocked(chunk)
+	j.notifyLocked()
 }
 
 // streamProcessor turns a chunked remote byte stream into a clean log while
@@ -312,13 +321,16 @@ func (j *installJob) appendStream(chunk string) {
 		}
 	}
 	j.stream.feed(chunk)
+	j.notifyLocked()
 }
 
 // trimTrailingNewlineLocked drops exactly one trailing newline from the log so
 // a marker does not duplicate the line break the previous output already made.
 // Caller holds j.mu.
 func (j *installJob) trimTrailingNewlineLocked() {
-	j.output = strings.TrimSuffix(j.output, "\n")
+	if n := len(j.outputBuf); n > 0 && j.outputBuf[n-1] == '\n' {
+		j.outputBuf = j.outputBuf[:n-1]
+	}
 }
 
 // flushPending emits any buffered partial line. Called when a stage session
@@ -328,21 +340,23 @@ func (j *installJob) flushPending() {
 	defer j.mu.Unlock()
 	if j.stream != nil {
 		j.stream.flush()
+		j.notifyLocked()
 	}
 }
 
 // appendLocked writes text honoring the output cap without splitting UTF-8
 // runes across byte boundaries. Caller holds j.mu.
 func (j *installJob) appendLocked(chunk string) {
-	if len(j.output) >= maxInstallOutputBytes {
+	if len(j.outputBuf) >= maxInstallOutputBytes {
 		return
 	}
-	remaining := maxInstallOutputBytes - len(j.output)
+	remaining := maxInstallOutputBytes - len(j.outputBuf)
 	if len(chunk) > remaining {
-		j.output += truncateUTF8Bytes(chunk, remaining) + "\n[output truncated at 1 MB]"
+		j.outputBuf = append(j.outputBuf, truncateUTF8Bytes(chunk, remaining)...)
+		j.outputBuf = append(j.outputBuf, "\n[output truncated at 1 MB]"...)
 		return
 	}
-	j.output += chunk
+	j.outputBuf = append(j.outputBuf, chunk...)
 }
 
 func truncateUTF8Bytes(s string, maxBytes int) string {
@@ -388,6 +402,7 @@ func (j *installJob) setStage(stage string) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.advanceLocked(stage)
+	j.notifyLocked()
 }
 
 func (j *installJob) complete(info *RegistrationInfo) {
@@ -396,6 +411,7 @@ func (j *installJob) complete(info *RegistrationInfo) {
 	j.status = installStatusCompleted
 	j.info = info
 	j.finishedAt = time.Now().UTC()
+	j.notifyLocked()
 }
 
 func (j *installJob) fail(message string) {
@@ -408,6 +424,7 @@ func (j *installJob) fail(message string) {
 	}
 	j.errMessage = message
 	j.finishedAt = time.Now().UTC()
+	j.notifyLocked()
 }
 
 // installSnapshot is a render-safe copy of the mutable job state.
@@ -430,10 +447,41 @@ type installSnapshot struct {
 func (j *installJob) snapshot() installSnapshot {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	output := j.output
-	if j.stream != nil {
+	output := string(j.outputBuf)
+	if j.stream != nil && j.stream.pending != "" {
 		output += j.stream.pending
 	}
+	return j.snapshotMetaLocked(output)
+}
+
+// readDelta returns only the unread tail of the job output along with the
+// broadcast channel that closes on the next job mutation.
+func (j *installJob) readDelta(sent int) (installSnapshot, string, int, <-chan struct{}) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.notify == nil {
+		j.notify = make(chan struct{})
+	}
+	pending := ""
+	if j.stream != nil {
+		pending = j.stream.pending
+	}
+	bufLen := len(j.outputBuf)
+	totalLen := bufLen + len(pending)
+	delta := ""
+	nextSent := sent
+	if totalLen > sent {
+		if sent < bufLen {
+			delta = string(j.outputBuf[sent:]) + pending
+		} else {
+			delta = pending[sent-bufLen:]
+		}
+		nextSent = totalLen
+	}
+	return j.snapshotMetaLocked(""), delta, nextSent, j.notify
+}
+
+func (j *installJob) snapshotMetaLocked(output string) installSnapshot {
 	snap := installSnapshot{
 		ID:             j.id,
 		ServerID:       j.serverID,
@@ -482,6 +530,7 @@ func (s *installStore) create(serverID int64, nodeType, nodeName string, plan In
 		plan:      plan,
 		status:    installStatusRunning,
 		createdAt: time.Now().UTC(),
+		notify:    make(chan struct{}),
 	}
 	job.stream = &streamProcessor{
 		emit:      job.appendLocked,

@@ -2,10 +2,13 @@ package view
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"html"
 	"html/template"
 	"net/http"
 	"strings"
+	"sync"
 
 	assets "github.com/Ho3einK84/Nodexia"
 	"github.com/Ho3einK84/Nodexia/internal/geoip"
@@ -102,22 +105,22 @@ type PageData struct {
 	SchedulerOverview SchedulerOverviewView
 	// BackupCanRun gates the diagnostics backup/restore section; it is false
 	// when the database runtime is unavailable.
-	BackupCanRun   bool
-	BackupOverview BackupOverviewView
-	NodeTarget             NodeTargetView
-	NodeForm               NodeFormView
-	NodeSnapshots          []NodeSnapshotView
-	NodeFleet              NodeFleetView
-	NodeCollection         NodeCollectionResultView
-	NodeStream             CommandStreamView
-	NodeDeployForm         NodeDeployFormView
-	NodeDeployOpen         bool
-	NodeInstall            NodeInstallView
-	AlertsOverview         AlertsOverviewView
-	AlertRuleForm          AlertRuleFormView
-	AlertChannelForm       AlertChannelFormView
-	IsEditingAlertRule     bool
-	IsEditingAlertChannel  bool
+	BackupCanRun          bool
+	BackupOverview        BackupOverviewView
+	NodeTarget            NodeTargetView
+	NodeForm              NodeFormView
+	NodeSnapshots         []NodeSnapshotView
+	NodeFleet             NodeFleetView
+	NodeCollection        NodeCollectionResultView
+	NodeStream            CommandStreamView
+	NodeDeployForm        NodeDeployFormView
+	NodeDeployOpen        bool
+	NodeInstall           NodeInstallView
+	AlertsOverview        AlertsOverviewView
+	AlertRuleForm         AlertRuleFormView
+	AlertChannelForm      AlertChannelFormView
+	IsEditingAlertRule    bool
+	IsEditingAlertChannel bool
 
 	// Bulk actions result page.
 	BulkActionResult BulkActionResultView
@@ -126,7 +129,7 @@ type PageData struct {
 	TerminalTarget TerminalTargetView
 
 	// ServerHeader represents the unified identity & sub-navigation for server-scoped pages.
-	ServerHeader ServerHeaderView
+	ServerHeader   ServerHeaderView
 	TerminalTicket string
 	TerminalForm   TerminalFormView
 
@@ -145,6 +148,7 @@ type PageData struct {
 	Lang            string
 	Dir             string
 	LanguageOptions []LanguageOption
+	Partial         bool // true when X-Nodexia-Partial: 1 requests a shell-free tab pane payload
 	localizer       *i18n.Localizer
 }
 
@@ -736,33 +740,33 @@ type NodeUptimeDayView struct {
 // dynamic instance name (e.g. "node", "node2", "rebecca-node") and Actions
 // the provider's management operations.
 type NodeSnapshotView struct {
-	Name           string              `json:"name"`
-	NodeType       string              `json:"node_type"`
-	TypeLabel      string              `json:"type_label"`
-	EngineKind     string              `json:"engine_kind"`
-	InstallMode    string              `json:"install_mode"`
-	Version        string              `json:"version"`
-	HealthStatus   string              `json:"health_status"`
-	IsRunning      bool                `json:"is_running"`
-	IsDegraded     bool                `json:"is_degraded"`
-	IsRestarting   bool                `json:"is_restarting"`
-	IsStopped      bool                `json:"is_stopped"`
-	ActivePorts    []string            `json:"active_ports"`
-	XrayPorts      []string            `json:"xray_ports"`
-	ServicePort    string              `json:"service_port"`
-	APIPort        string              `json:"api_port"`
-	Protocol       string              `json:"protocol"`
-	DataDir        string              `json:"data_dir"`
-	Confidence     string              `json:"confidence"`
-	Dependencies   []string            `json:"dependencies"`
-	Evidence       []string            `json:"evidence"`
-	CollectedAt    string              `json:"collected_at"`
-	LastSeenAt     string              `json:"last_seen_at"`
-	LastSeenISO    string              `json:"last_seen_iso"`
-	LatencyMS      int                 `json:"latency_ms"`
-	LatencyLabel   string              `json:"latency_label"`
-	Actions        []NodeActionView    `json:"actions"`
-	ActionsEnabled bool                `json:"actions_enabled"`
+	Name           string           `json:"name"`
+	NodeType       string           `json:"node_type"`
+	TypeLabel      string           `json:"type_label"`
+	EngineKind     string           `json:"engine_kind"`
+	InstallMode    string           `json:"install_mode"`
+	Version        string           `json:"version"`
+	HealthStatus   string           `json:"health_status"`
+	IsRunning      bool             `json:"is_running"`
+	IsDegraded     bool             `json:"is_degraded"`
+	IsRestarting   bool             `json:"is_restarting"`
+	IsStopped      bool             `json:"is_stopped"`
+	ActivePorts    []string         `json:"active_ports"`
+	XrayPorts      []string         `json:"xray_ports"`
+	ServicePort    string           `json:"service_port"`
+	APIPort        string           `json:"api_port"`
+	Protocol       string           `json:"protocol"`
+	DataDir        string           `json:"data_dir"`
+	Confidence     string           `json:"confidence"`
+	Dependencies   []string         `json:"dependencies"`
+	Evidence       []string         `json:"evidence"`
+	CollectedAt    string           `json:"collected_at"`
+	LastSeenAt     string           `json:"last_seen_at"`
+	LastSeenISO    string           `json:"last_seen_iso"`
+	LatencyMS      int              `json:"latency_ms"`
+	LatencyLabel   string           `json:"latency_label"`
+	Actions        []NodeActionView `json:"actions"`
+	ActionsEnabled bool             `json:"actions_enabled"`
 	// UptimeKnown is true once at least one persisted status observation exists
 	// for this node; UptimePct is the 30-day running percentage, UptimeDetail
 	// is the "N/M checks" breakdown, and UptimeDays has the 30 UTC daily buckets.
@@ -836,9 +840,9 @@ type NodeDeployFormView struct {
 	// Rebecca fields.
 	Bundle string
 	// Shared: release channel (both engines offer one).
-	Channel         string `json:"channel"`
+	Channel         string                   `json:"channel"`
 	Channels        []NodeInstallChannelView `json:"channels"`
-	ConfirmOverride bool `json:"confirm_override"`
+	ConfirmOverride bool                     `json:"confirm_override"`
 
 	Enabled bool              `json:"enabled"`
 	Errors  map[string]string `json:"errors"`
@@ -1194,6 +1198,10 @@ type TopServerMetricView struct {
 	CPUPct      float64
 	RAMPct      float64
 	DiskPct     float64
+	Swap        string
+	SwapPct     float64
+	Load1       float64
+	CountryCode string
 	CPULevel    string
 	RAMLevel    string
 	DiskLevel   string
@@ -1206,22 +1214,37 @@ type TopServerTrafficView struct {
 	// FlagEmoji is the server's country flag (or "" when undetected); CountryName
 	// is shown on hover. Mirrors the servers-list badge so the overview stays
 	// visually consistent.
+	CountryCode string
 	FlagEmoji   string
 	CountryName string
 	Download    string // current-month RX, human-readable
 	Upload      string // current-month TX, human-readable
 	MonthBytes  string // current-month total, human-readable
+	RawRX       int64
+	RawTX       int64
+	RawTotal    int64
 	MonthLabel  string
 	SharePct    int
 	BarPct      float64
 	RXBarPct    float64
 	TXBarPct    float64
+	// Effective quota status (populated when a server, tag, or global cap applies).
+	HasQuota        bool
+	QuotaLimitHuman string
+	QuotaPct        int
+	QuotaLevel      string
+	// QuotaKind is the traffic series the cap measures ("rx"/"tx"/"total"); the
+	// badge is rendered in the matching column (download by default).
+	QuotaKind string
 }
 
 type GlobalAnalyticsView struct {
-	ServerCount int
-	TopMetrics  []TopServerMetricView
-	TopTraffic  []TopServerTrafficView
+	ServerCount      int
+	MonitoredCount   int
+	ServerLimitCount int
+	ActiveLimitRules int
+	TopMetrics       []TopServerMetricView
+	TopTraffic       []TopServerTrafficView
 	// Traffic-limit summary for the banner that links to /analytics/limits:
 	// the current global default cap (if any) and how many per-tag caps exist.
 	HasGlobalLimit   bool
@@ -1248,13 +1271,21 @@ type GlobalAnalyticsView struct {
 // shown on a single server's analytics page. HasData is false when the server
 // has no vnstat row for the current month.
 type AnalyticsTrafficSummaryView struct {
-	HasData     bool
-	MonthLabel  string
-	Download    string
-	Upload      string
-	Total       string
-	DownloadPct int
-	UploadPct   int
+	HasData         bool
+	PeriodAnchored  bool
+	MonthLabel      string
+	Download        string
+	Upload          string
+	Total           string
+	DownloadPct     int
+	UploadPct       int
+	HasQuota        bool
+	QuotaUsedHuman  string
+	QuotaLimitHuman string
+	QuotaKindLabel  string
+	QuotaPct        int
+	QuotaBarPct     int
+	QuotaLevel      string
 }
 
 // AnalyticsLimitView powers the per-server monthly download (RX) limit form on
@@ -1270,15 +1301,32 @@ type AnalyticsLimitView struct {
 	UnitOptions []string
 	// KindInput is the selected limit kind ("rx"/"tx"/"total"); KindLabel is its
 	// localized label shown next to the current cap.
-	KindInput string
-	KindLabel string
-	Error     string
+	KindInput     string
+	KindLabel     string
+	EffectiveKind string
+	Error         string
 	// Inherited describes a group/global cap that applies when this server has no
 	// per-server limit of its own. InheritedHuman is the effective cap and
 	// InheritedSource is a human-readable origin ("global default" / tag "x").
 	// Both are empty when no limit applies at any level.
 	InheritedHuman  string
 	InheritedSource string
+	// Live current-period quota telemetry when any cap (explicit or inherited) applies.
+	HasQuota        bool
+	QuotaUsedHuman  string
+	QuotaLimitHuman string
+	QuotaKindLabel  string
+	QuotaPct        int
+	QuotaBarPct     int
+	QuotaLevel      string
+}
+
+// FleetTagSuggestionView represents an existing server tag across the fleet on
+// the limits admin page so operators can click to assign or edit its cap.
+type FleetTagSuggestionView struct {
+	Tag         string `json:"tag"`
+	ServerCount int    `json:"server_count"`
+	HasCap      bool   `json:"has_cap"`
 }
 
 // TrafficLimitsView powers the fleet-level group/global limits admin page. The
@@ -1294,18 +1342,24 @@ type TrafficLimitsView struct {
 	GlobalUnit      string
 	UnitOptions     []string
 	Tags            []TrafficLimitTagView
+	KnownTags       []FleetTagSuggestionView
 	Error           string
 }
 
 // TrafficLimitTagView is one per-tag cap row on the limits admin page.
 type TrafficLimitTagView struct {
-	Tag        string
-	LimitHuman string
+	Tag         string `json:"tag"`
+	LimitHuman  string `json:"limit_human"`
+	ValueInput  string `json:"value_input"`
+	UnitInput   string `json:"unit_input"`
+	ServerCount int    `json:"server_count"`
 }
 
 type Renderer struct {
 	templates *template.Template
+	byLang    map[string]*template.Template
 	bundle    *i18n.Bundle
+	bufPool   sync.Pool
 }
 
 func NewRenderer() (*Renderer, error) {
@@ -1337,27 +1391,98 @@ func NewRenderer() (*Renderer, error) {
 		// countryCode normalizes an ISO 3166-1 alpha-2 code or decodes a
 		// regional-indicator flag emoji back to its 2-letter uppercase code.
 		"countryCode": resolveCountryCode,
-		// t/tn/tsafe are placeholders so the templates parse; Render rebinds them
-		// to the request's active language by cloning the template set per render.
-		"t":     func(key string, _ ...any) string { return key },
-		"tn":    func(key string, _ int, _ ...any) string { return key },
-		"tsafe": func(key string, _ ...any) template.HTML { return template.HTML(key) },
-		// clientI18nJSON ships the client-needed strings to the browser; rebound
-		// per render to the active language (placeholder emits an empty object).
+		// t/tn/tsafe are placeholders so the base templates parse; NewRenderer
+		// pre-clones one compiled set per supported language with bound funcs.
+		"t":              func(key string, _ ...any) string { return key },
+		"tn":             func(key string, _ int, _ ...any) string { return key },
+		"tsafe":          func(key string, _ ...any) template.HTML { return template.HTML(key) },
 		"clientI18nJSON": func() template.JS { return template.JS("{}") },
 		"asset":          assets.StaticAssetURL,
+		"moduleAsset":    assets.StaticModuleURL,
 	}
 	templates, err := template.New("").Funcs(funcMap).ParseFS(assets.Templates(), "web/templates/*.gohtml")
 	if err != nil {
 		return nil, err
 	}
 
-	return &Renderer{templates: templates, bundle: bundle}, nil
+	byLang := make(map[string]*template.Template)
+	for _, lang := range bundle.Languages() {
+		loc := bundle.Localizer(lang.Code)
+		if loc == nil {
+			continue
+		}
+		cloned, cloneErr := templates.Clone()
+		if cloneErr != nil {
+			return nil, fmt.Errorf("view: pre-clone templates for %s: %w", lang.Code, cloneErr)
+		}
+		precomputedI18n := clientI18nJSON(loc)
+		cloned.Funcs(template.FuncMap{
+			"t":              loc.T,
+			"tn":             loc.Tn,
+			"tsafe":          func(key string, args ...any) template.HTML { return template.HTML(loc.Tsafe(key, args...)) },
+			"clientI18nJSON": func() template.JS { return precomputedI18n },
+			"asset":          assets.StaticAssetURL,
+			"moduleAsset":    assets.StaticModuleURL,
+		})
+		byLang[lang.Code] = cloned
+	}
+
+	return &Renderer{
+		templates: templates,
+		byLang:    byLang,
+		bundle:    bundle,
+		bufPool: sync.Pool{
+			New: func() any {
+				return bytes.NewBuffer(make([]byte, 0, 16*1024))
+			},
+		},
+	}, nil
+}
+
+func (r *Renderer) templateFor(loc *i18n.Localizer) (*template.Template, error) {
+	if loc != nil {
+		if tmpl, ok := r.byLang[loc.Lang()]; ok && tmpl != nil {
+			return tmpl, nil
+		}
+	}
+	if tmpl, ok := r.byLang[i18n.DefaultLanguage]; ok && tmpl != nil {
+		return tmpl, nil
+	}
+	tmpl, err := r.templates.Clone()
+	if err != nil {
+		return nil, fmt.Errorf("view: clone templates: %w", err)
+	}
+	if loc != nil {
+		precomputedI18n := clientI18nJSON(loc)
+		tmpl.Funcs(template.FuncMap{
+			"t":              loc.T,
+			"tn":             loc.Tn,
+			"tsafe":          func(key string, args ...any) template.HTML { return template.HTML(loc.Tsafe(key, args...)) },
+			"clientI18nJSON": func() template.JS { return precomputedI18n },
+			"asset":          assets.StaticAssetURL,
+			"moduleAsset":    assets.StaticModuleURL,
+		})
+	}
+	return tmpl, nil
+}
+
+func (r *Renderer) getBuffer() *bytes.Buffer {
+	buf := r.bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	return buf
+}
+
+func (r *Renderer) putBuffer(buf *bytes.Buffer) {
+	// Avoid retaining oversized buffers in the pool.
+	if buf.Cap() <= 256*1024 {
+		buf.Reset()
+		r.bufPool.Put(buf)
+	}
 }
 
 func (r *Renderer) Render(w http.ResponseWriter, statusCode int, data PageData) error {
 	// Ensure the page has an active localizer (default language for request
-	// paths that never set one), then bind the {{ t }}/{{ tn }} funcs to it.
+	// paths that never set one).
 	if data.localizer == nil {
 		data.SetLocalizer(r.bundle.Localizer(i18n.DefaultLanguage))
 	}
@@ -1368,38 +1493,80 @@ func (r *Renderer) Render(w http.ResponseWriter, statusCode int, data PageData) 
 		return fmt.Errorf("view: content template name is required")
 	}
 
-	// Clone the parsed set per render and rebind the translation funcs to the
-	// active language. Cloning is cheap relative to the work a request already
-	// does, and it lets {{ t "key" }} resolve the right language anywhere in the
-	// templates — including inside range blocks — without threading the dot.
-	tmpl, err := r.templates.Clone()
+	tmpl, err := r.templateFor(data.localizer)
 	if err != nil {
-		return fmt.Errorf("view: clone templates: %w", err)
+		return err
 	}
-	loc := data.localizer
-	tmpl.Funcs(template.FuncMap{
-		"t":              loc.T,
-		"tn":             loc.Tn,
-		"tsafe":          func(key string, args ...any) template.HTML { return template.HTML(loc.Tsafe(key, args...)) },
-		"clientI18nJSON": func() template.JS { return clientI18nJSON(loc) },
-		"asset":          assets.StaticAssetURL,
-	})
 
-	var content bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&content, contentName, data); err != nil {
+	content := r.getBuffer()
+	defer r.putBuffer(content)
+	if err := tmpl.ExecuteTemplate(content, contentName, data); err != nil {
 		return fmt.Errorf("view: render %s: %w", contentName, err)
-	}
-	data.MainHTML = template.HTML(content.String())
-
-	var buffer bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&buffer, "layout", data); err != nil {
-		return fmt.Errorf("view: render layout: %w", err)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Add("Vary", "X-Nodexia-Partial")
+	if data.CSRFToken != "" {
+		w.Header().Set("X-CSRF-Token", data.CSRFToken)
+	}
+
+	// Fast path for in-tab navigations (`X-Nodexia-Partial: 1`): skip the shell
+	// layout, sidebar, drawers, and 12 KB i18n JSON island; emit only the
+	// #tab-content envelope with resolved asset metadata so tab-manager.js
+	// parses and injects it in one pass.
+	if data.Partial && contentName != "content-login" {
+		out := r.getBuffer()
+		defer r.putBuffer(out)
+
+		styles := resolveAssetList(data.PageStyles)
+		scripts := resolveAssetList(data.PageScripts)
+		stylesJSON, _ := json.Marshal(styles)
+		scriptsJSON, _ := json.Marshal(scripts)
+
+		out.WriteString(`<div id="tab-content" data-partial="1" data-page-title="`)
+		out.WriteString(html.EscapeString(data.Title))
+		out.WriteString(`" data-page-styles="`)
+		out.WriteString(html.EscapeString(string(stylesJSON)))
+		out.WriteString(`" data-page-scripts="`)
+		out.WriteString(html.EscapeString(string(scriptsJSON)))
+		if data.CSRFToken != "" {
+			out.WriteString(`" data-csrf="`)
+			out.WriteString(html.EscapeString(data.CSRFToken))
+		}
+		out.WriteString(`">`)
+		_, _ = out.Write(content.Bytes())
+		out.WriteString(`</div>`)
+
+		w.WriteHeader(statusCode)
+		_, err = out.WriteTo(w)
+		return err
+	}
+
+	data.MainHTML = template.HTML(content.String())
+
+	buffer := r.getBuffer()
+	defer r.putBuffer(buffer)
+	if err := tmpl.ExecuteTemplate(buffer, "layout", data); err != nil {
+		return fmt.Errorf("view: render layout: %w", err)
+	}
+
 	w.WriteHeader(statusCode)
 	_, err = buffer.WriteTo(w)
 	return err
+}
+
+func resolveAssetList(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item) == "" {
+			continue
+		}
+		out = append(out, assets.StaticAssetURL(item))
+	}
+	return out
 }
 
 func normalizePageData(data PageData) PageData {

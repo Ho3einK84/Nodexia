@@ -330,6 +330,10 @@
   transition: transform var(--transition-base);
 }
 
+[dir="rtl"] .mini-metric__fill {
+  transform-origin: right center;
+}
+
 .mini-metric__fill--green { background: var(--ok); }
 .mini-metric__fill--yellow { background: var(--warn); }
 .mini-metric__fill--red { background: var(--crit); }
@@ -502,4 +506,16 @@
   .mini-metric__value { font-size: 0.72rem; }
   .mini-bw-stats { grid-template-columns: 1fr; gap: 6px; }
   .snap-meta-pill--time { margin-inline-start: 0; }
+}
+
+@media (pointer: coarse) {
+  .home-warning__close {
+    min-inline-size: 44px;
+    min-block-size: 44px;
+  }
+
+  .snap-card__btn {
+    min-block-size: 40px;
+    min-inline-size: 40px;
+  }
 }

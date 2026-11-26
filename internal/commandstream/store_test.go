@@ -1,6 +1,9 @@
 package commandstream
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -63,5 +66,46 @@ func TestPruneDropsExpiredSessions(t *testing.T) {
 	}
 	if _, ok := store.Get(zombie.ID); ok {
 		t.Fatal("running session older than the hard cap must be pruned")
+	}
+}
+
+func TestServeSSEEventDrivenDelivery(t *testing.T) {
+	store := New(time.Minute)
+	session := store.Create(1, "echo hello")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		store.ServeSSE(rec, req, session.ID)
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	start := time.Now()
+	store.AppendStdout(session.ID, "hello world\n")
+	store.AppendStderr(session.ID, "warn\n")
+	exit := 0
+	store.Complete(session.ID, &exit, time.Now().UTC(), 7)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("ServeSSE did not finish promptly after Complete")
+	}
+
+	if elapsed := time.Since(start); elapsed > 80*time.Millisecond {
+		t.Fatalf("ServeSSE took %v after Complete; expected event-driven immediate wake", elapsed)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "event: output\ndata: hello world") {
+		t.Fatalf("missing output event in SSE body:\n%s", body)
+	}
+	if !strings.Contains(body, "event: stderr\ndata: warn") {
+		t.Fatalf("missing stderr event in SSE body:\n%s", body)
+	}
+	if !strings.Contains(body, "event: done\n") {
+		t.Fatalf("missing done event in SSE body:\n%s", body)
 	}
 }

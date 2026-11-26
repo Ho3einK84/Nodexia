@@ -13,7 +13,7 @@ import (
 
 const collectCommand = `sh -c 'set -eu
 cpu_before="$(grep "^cpu " /proc/stat)"
-sleep 1
+sleep 0.25 2>/dev/null || sleep 1
 cpu_after="$(grep "^cpu " /proc/stat)"
 cpu_usage="$(printf "%s\n%s\n" "$cpu_before" "$cpu_after" | awk "
   NR==1 {u1=\$2+\$3+\$4+\$7+\$8; t1=u1+\$5+\$6; next}

@@ -64,6 +64,7 @@ function wireAutoRefreshSelect(select, root) {
 
   var tickTimer = null;
   var deadline = 0;
+  var lastRemaining = -1;
 
   function triggerRefresh() {
     if (owningPane && owningPane.hidden) return;
@@ -83,11 +84,14 @@ function wireAutoRefreshSelect(select, root) {
 
   function stop() {
     if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    lastRemaining = -1;
     pill.hidden = true;
   }
 
   function updatePill() {
     var remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    if (remaining === lastRemaining) return;
+    lastRemaining = remaining;
     textSpan.textContent = I18N.t('js.refresh.next_in', { seconds: remaining });
   }
 

@@ -191,6 +191,16 @@ func (h TestConnectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			if id, err := strconv.ParseInt(rawID, 10, 64); err == nil && id > 0 {
 				if existing, err := h.repo.GetByID(r.Context(), id); err == nil &&
 					hasStoredSecret(existing.CredentialStrategy, existing.CredentialRef) {
+					if !sameCredentialTarget(server, existing) {
+						writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+							"ok":      false,
+							"message": loc.T("servers.form.fix_fields"),
+							"errors": map[string]string{
+								"credential_ref": "Re-enter credentials when changing host or username.",
+							},
+						})
+						return
+					}
 					server.CredentialRef = existing.CredentialRef
 				}
 			}
@@ -300,7 +310,11 @@ func (h UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if validated.Server.CredentialRef == "" &&
 		(validated.Server.CredentialStrategy == CredentialStrategyStored || validated.Server.CredentialStrategy == CredentialStrategyRuntime) &&
 		hasStoredSecret(existing.CredentialStrategy, existing.CredentialRef) {
-		validated.Server.CredentialRef = existing.CredentialRef
+		if sameCredentialTarget(validated.Server, existing) {
+			validated.Server.CredentialRef = existing.CredentialRef
+		} else if validated.Server.CredentialStrategy == CredentialStrategyStored {
+			validationErrors["credential_ref"] = "Re-enter credentials when changing host or username."
+		}
 	}
 	if validationErrors.HasAny() {
 		form := EditFormViewData(validated.Server, validationErrors)
@@ -334,6 +348,11 @@ func (h UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.deps.SSH != nil {
+		h.deps.SSH.EvictHost(existing.Host, existing.Port)
+		h.deps.SSH.EvictHost(updated.Host, updated.Port)
+	}
+
 	// Host or credentials may have changed, so re-detect the country in the
 	// background. Non-blocking and best-effort, exactly like the create path.
 	if h.deps.CountryResolver != nil {
@@ -353,14 +372,50 @@ func NewDeleteHandler(deps module.Dependencies, repo Repository) DeleteHandler {
 }
 
 func (h DeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	asJSON := wantsJSON(r)
 	serverID, ok := pathID(r)
 	if !ok {
+		if asJSON {
+			loc := localizerFromRequest(r)
+			writeJSON(w, http.StatusNotFound, map[string]any{
+				"ok":      false,
+				"message": loc.T("servers.error.not_found_message"),
+			})
+			return
+		}
 		renderRepositoryError(w, r, h.deps, ErrNotFound, "servers.error.not_found_title", "servers.error.not_found_message")
 		return
 	}
 
+	existing, _ := h.repo.GetByID(r.Context(), serverID)
+
 	if err := h.repo.Delete(r.Context(), serverID); err != nil {
+		if asJSON {
+			loc := localizerFromRequest(r)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": loc.T("servers.error.delete_message"),
+			})
+			return
+		}
 		renderRepositoryError(w, r, h.deps, err, "servers.error.delete_title", "servers.error.delete_message")
+		return
+	}
+
+	if h.deps.SSH != nil && existing.Host != "" {
+		h.deps.SSH.EvictHost(existing.Host, existing.Port)
+	}
+	if h.deps.TerminalTickets != nil {
+		h.deps.TerminalTickets.RevokeServer(serverID)
+	}
+
+	if asJSON {
+		loc := localizerFromRequest(r)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":      true,
+			"id":      serverID,
+			"message": loc.T("servers.flash.deleted"),
+		})
 		return
 	}
 
@@ -432,4 +487,13 @@ func formInputFromRequest(r *http.Request) FormInput {
 
 func formatID(id int64) string {
 	return strconv.FormatInt(id, 10)
+}
+
+// sameCredentialTarget reports whether a candidate server targets the same
+// remote host and username as an existing record. Stored SSH secrets may only
+// be reused across edits or connection tests when both match, preventing
+// exfiltration of a stored password/key to a different host or account.
+func sameCredentialTarget(candidate, existing Server) bool {
+	return strings.EqualFold(strings.TrimSpace(candidate.Host), strings.TrimSpace(existing.Host)) &&
+		strings.TrimSpace(candidate.Username) == strings.TrimSpace(existing.Username)
 }

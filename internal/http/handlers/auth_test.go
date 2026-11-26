@@ -200,4 +200,22 @@ func TestLoginClientKey_UsesRightmostValidForwardedIPOnlyWhenProxied(t *testing.
 	if got := proxied.clientKey(r2); got != "203.0.113.77" {
 		t.Errorf("proxied clientKey = %q, want rightmost valid IP 203.0.113.77", got)
 	}
+
+	// Multiple X-Forwarded-For headers must inspect rightmost header first.
+	r3 := httptest.NewRequest(http.MethodPost, "/login", nil)
+	r3.RemoteAddr = "127.0.0.1:4444"
+	r3.Header.Add("X-Forwarded-For", "198.51.100.1")
+	r3.Header.Add("X-Forwarded-For", "203.0.113.88")
+	if got := proxied.clientKey(r3); got != "203.0.113.88" {
+		t.Errorf("multi-header XFF clientKey = %q, want 203.0.113.88", got)
+	}
+
+	// IPv6 addresses in the same /64 must share one throttle bucket.
+	r4 := httptest.NewRequest(http.MethodPost, "/login", nil)
+	r4.RemoteAddr = "[2001:db8:abcd:1234::1]:5000"
+	r5 := httptest.NewRequest(http.MethodPost, "/login", nil)
+	r5.RemoteAddr = "[2001:db8:abcd:1234::dead:beef]:5001"
+	if k4, k5 := direct.clientKey(r4), direct.clientKey(r5); k4 != "2001:db8:abcd:1234::/64" || k4 != k5 {
+		t.Errorf("IPv6 /64 normalization failed: k4=%q k5=%q", k4, k5)
+	}
 }

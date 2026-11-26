@@ -25,9 +25,11 @@
 
 .bulk-toolbar.is-empty { min-height: 40px; border-color: var(--border-subtle); padding-block: 7px; }
 .bulk-toolbar.is-empty .bulk-action-select,
+.bulk-toolbar.is-empty [data-bulk-submit],
 .bulk-toolbar.is-empty #bulk-submit { display: none; }
 .bulk-toolbar.is-empty .bulk-count { color: var(--text-dim); }
 .bulk-toolbar .bulk-action-select { margin-inline-start: auto; }
+[data-bulk-submit]:disabled,
 #bulk-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .bulk-select-all {
@@ -146,6 +148,7 @@
 .bulk-stream-alert[hidden] { display: none; }
 
 .bulk-result-table-wrap { display: block; }
+.bulk-result-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 48px; }
 .bulk-result__name { font-weight: var(--fw-medium); max-width: 200px; word-break: break-word; }
 .bulk-result__code { font-family: var(--font-mono); font-variant-numeric: var(--num); font-size: 0.8125rem; color: var(--text-muted); }
 .bulk-result__reason { font-size: 0.85rem; color: var(--text-muted); max-width: 340px; word-break: break-word; }

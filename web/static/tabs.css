@@ -178,8 +178,9 @@
 /* ── 3. Content / Pane Area ────────────────────────────────────────────────── */
 
 .tab-content { touch-action: pan-y; }
-.tab-pane { overscroll-behavior-y: contain; }
+.tab-pane { overscroll-behavior-y: contain; transition: opacity 140ms ease; }
 .tab-pane.is-active { position: relative; }
+.tab-pane.is-transitioning { opacity: 0.55; pointer-events: none; }
 
 .tab-pane__loading,
 .tab-pane__error {

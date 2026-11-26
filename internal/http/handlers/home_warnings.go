@@ -26,35 +26,45 @@ const resourceWarnThreshold = 90.0
 //
 // Banner ordering is severity-first (danger before warning), then server name,
 // so the most urgent problem always leads.
-func homeWarnings(ctx context.Context, database *db.Runtime, loc interface {
-	T(key string, args ...any) string
-}) []view.HomeWarningView {
-	if database == nil || database.SQL == nil {
+// computeHomeWarnings computes the fleet warning banners from preloaded
+// in-memory snapshots, traffic rows, and traffic limits (zero SQL queries).
+func computeHomeWarnings(
+	serversList []servers.Server,
+	snapshotByID map[int64]monitoring.Snapshot,
+	trafficByServer map[int64]monitoring.TrafficSnapshot,
+	limitResolver *analytics.LimitResolver,
+	loc interface {
+		T(key string, args ...any) string
+	},
+) []view.HomeWarningView {
+	if len(serversList) == 0 {
 		return nil
 	}
-
-	serverRepo := servers.NewSQLRepository(database.SQL)
-	serversList, err := serverRepo.List(ctx)
-	if err != nil || len(serversList) == 0 {
-		return nil
-	}
-
-	analyticsRepo := analytics.NewSQLRepository(database.SQL)
-	monitoringRepo := monitoring.NewSQLRepository(database.SQL)
 	forecastSvc := analytics.NewForecastService()
-
-	// Latest resource snapshot per server, indexed by id.
-	snapshotByID := map[int64]monitoring.Snapshot{}
-	if snaps, err := monitoringRepo.ListAllLatestByServer(ctx); err == nil {
-		for _, snap := range snaps {
-			snapshotByID[snap.ServerID] = snap
-		}
-	}
 
 	var warnings []view.HomeWarningView
 	for _, server := range serversList {
 		warnings = append(warnings, resourceWarnings(loc, server, snapshotByID)...)
-		warnings = append(warnings, trafficWarnings(ctx, loc, analyticsRepo, forecastSvc, server)...)
+		if traffic, ok := trafficByServer[server.ID]; ok && traffic.Available && len(traffic.DailyRows) > 0 {
+			days := make([]analytics.TrafficDay, 0, len(traffic.DailyRows))
+			for _, d := range traffic.DailyRows {
+				total := d.TotalBytes
+				if total == 0 {
+					total = d.RXBytes + d.TXBytes
+				}
+				days = append(days, analytics.TrafficDay{Label: d.Label, RX: d.RXBytes, TX: d.TXBytes, Total: total})
+			}
+			months := make([]analytics.TrafficMonth, 0, len(traffic.MonthlyRows))
+			for _, m := range traffic.MonthlyRows {
+				total := m.TotalBytes
+				if total == 0 {
+					total = m.RXBytes + m.TXBytes
+				}
+				months = append(months, analytics.TrafficMonth{Label: m.Label, RX: m.RXBytes, TX: m.TXBytes, Total: total})
+			}
+			limit, _, _ := limitResolver.Resolve(server.ID, server.Tags)
+			warnings = append(warnings, trafficWarningsFromData(loc, forecastSvc, server, days, months, limit)...)
+		}
 	}
 
 	sort.SliceStable(warnings, func(i, j int) bool {
@@ -64,6 +74,41 @@ func homeWarnings(ctx context.Context, database *db.Runtime, loc interface {
 		return warnings[i].ServerName < warnings[j].ServerName
 	})
 	return warnings
+}
+
+func homeWarnings(ctx context.Context, database *db.Runtime, loc interface {
+	T(key string, args ...any) string
+}) []view.HomeWarningView {
+	readDB := database.Reader()
+	if readDB == nil {
+		return nil
+	}
+
+	serverRepo := servers.NewSQLRepository(readDB)
+	serversList, err := serverRepo.List(ctx)
+	if err != nil || len(serversList) == 0 {
+		return nil
+	}
+
+	monitoringRepo := monitoring.NewSQLRepository(readDB)
+	snapshotByID := map[int64]monitoring.Snapshot{}
+	if snaps, err := monitoringRepo.ListAllLatestByServer(ctx); err == nil {
+		for _, snap := range snaps {
+			snapshotByID[snap.ServerID] = snap
+		}
+	}
+	ids := make([]int64, 0, len(serversList))
+	for _, s := range serversList {
+		ids = append(ids, s.ID)
+	}
+	trafficByServer := map[int64]monitoring.TrafficSnapshot{}
+	if snaps, err := monitoringRepo.GetLatestTrafficByServerIDs(ctx, ids); err == nil {
+		for _, ts := range snaps {
+			trafficByServer[ts.ServerID] = ts
+		}
+	}
+	limitResolver, _ := analytics.NewSQLRepository(readDB).LoadLimitResolver(ctx)
+	return computeHomeWarnings(serversList, snapshotByID, trafficByServer, limitResolver, loc)
 }
 
 // resourceWarnings flags any of CPU/RAM/disk at or above the threshold in the
@@ -107,19 +152,13 @@ func resourceWarnings(loc interface {
 	return out
 }
 
-// trafficWarnings runs the shared forecast for one server and flags exhaustion
-// before the period reset plus anomaly risks. Servers without traffic history
-// produce nothing; the forecast honours the billing anchor and limit kind.
-func trafficWarnings(ctx context.Context, loc interface {
+// trafficWarningsFromData runs the shared forecast for one server using
+// preloaded traffic rows and effective limit.
+func trafficWarningsFromData(loc interface {
 	T(key string, args ...any) string
-}, repo analytics.Repository, svc *analytics.ForecastService, server servers.Server) []view.HomeWarningView {
-	days, months, err := repo.GetLatestTrafficForServer(ctx, server.ID)
-	if err != nil || len(days) == 0 {
+}, svc *analytics.ForecastService, server servers.Server, days []analytics.TrafficDay, months []analytics.TrafficMonth, limit analytics.TrafficLimit) []view.HomeWarningView {
+	if len(days) == 0 {
 		return nil
-	}
-	limit, _, ok, err := repo.ResolveEffectiveLimit(ctx, server.ID, server.Tags)
-	if err != nil || !ok {
-		limit = analytics.TrafficLimit{}
 	}
 	out := svc.ComputeWithConfig(days, months, analytics.ForecastConfig{Limit: limit, ResetDay: server.TrafficResetDay})
 

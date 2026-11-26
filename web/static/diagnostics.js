@@ -289,7 +289,7 @@
       if (passFieldWrap) passFieldWrap.classList.remove('is-needs-passphrase');
       setInspectStatus('info', t('js.backup.inspecting'), true);
 
-      getFreshCSRFToken(form).then(function (token) {
+      var sendInspect = function (token, retried) {
         var fd = new FormData();
         fd.append('backup_file', file);
         fd.append('passphrase', passInput ? passInput.value : '');
@@ -305,11 +305,20 @@
           body: fd,
           signal: inspectController.signal
         }).then(function (resp) {
+          var hdrToken = resp.headers && resp.headers.get('X-CSRF-Token');
+          if (hdrToken && typeof window.nxSetCSRF === 'function') window.nxSetCSRF(hdrToken);
+          if (resp.status === 403 && !retried) {
+            return getFreshCSRFToken(form).then(function (fresh) { return sendInspect(fresh, true); });
+          }
           return resp.json().catch(function () {
             return { ok: false, error: t('js.backup.inspect_failed') };
           });
         });
-      }).then(function (data) {
+      };
+
+      var initialToken = (typeof window.nxCSRF === 'function' ? window.nxCSRF(form) : '') ||
+        ((form.querySelector('input[name="_csrf_token"]') || {}).value || '');
+      sendInspect(initialToken, false).then(function (data) {
         if (!data || !data.ok) {
           hidePreview();
           var kind = (data && data.code === 'passphrase_required') ? 'warn' : 'error';
@@ -460,6 +469,79 @@
     updateControls();
   }
 
+  function initSchedulerToggles(container) {
+    container.querySelectorAll('[data-scheduler-toggle-form]').forEach(function (form) {
+      if (form.dataset.toggleAjaxReady === '1') return;
+      form.dataset.toggleAjaxReady = '1';
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        var btn = form.querySelector('button[type="submit"]');
+        var actionsWrap = form.closest('.dashboard-item__actions');
+        var pill = actionsWrap && actionsWrap.querySelector('[data-scheduler-status-pill]');
+        if (btn) btn.disabled = true;
+
+        var sendToggle = function (token, retried) {
+          var body = new URLSearchParams();
+          if (token) body.set('_csrf_token', token);
+          var headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+          };
+          if (token) headers['X-CSRF-Token'] = token;
+
+          return fetch(form.getAttribute('action') || form.action, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: headers,
+            body: body.toString()
+          }).then(function (resp) {
+            var hdr = resp.headers && resp.headers.get('X-CSRF-Token');
+            if (hdr && typeof window.nxSetCSRF === 'function') window.nxSetCSRF(hdr);
+            if (resp.status === 403 && !retried) {
+              return getFreshCSRFToken(form).then(function (fresh) { return sendToggle(fresh, true); });
+            }
+            return resp.json().catch(function () { return { ok: false }; });
+          });
+        };
+
+        var initialToken = (typeof window.nxCSRF === 'function' ? window.nxCSRF(form) : '') ||
+          ((form.querySelector('input[name="_csrf_token"]') || {}).value || '');
+
+        sendToggle(initialToken, false).then(function (data) {
+          if (!data || !data.ok) {
+            if (typeof window.nxToast === 'function') window.nxToast((data && data.message) || t('js.failed'), 'error');
+            return;
+          }
+          if (pill) {
+            pill.textContent = data.status_label || (data.paused ? 'paused' : 'scheduled');
+            pill.className = 'status-pill status-pill--' + (data.status_variant || (data.paused ? 'idle' : 'ok'));
+          }
+          if (btn) {
+            btn.classList.toggle('btn--danger-ghost', !data.paused);
+            if (data.button_title) btn.setAttribute('title', data.button_title);
+            btn.textContent = '';
+            var ic = document.createElement('i');
+            ic.setAttribute('data-lucide', data.paused ? 'play' : 'pause');
+            ic.className = 'icon-in-button';
+            btn.appendChild(ic);
+            btn.appendChild(document.createTextNode(' ' + (data.button_label || '')));
+            renderIcons(btn);
+          }
+          if (typeof window.nxToast === 'function' && data.message) {
+            window.nxToast(data.message, 'ok');
+          }
+        }).catch(function () {
+          if (typeof window.nxToast === 'function') window.nxToast(t('js.failed'), 'error');
+        }).finally(function () {
+          if (btn) btn.disabled = false;
+        });
+      });
+    });
+  }
+
   function init() {
     var scope = paneScope || document;
     var container = scope.querySelector('[data-diagnostics-root]');
@@ -470,6 +552,7 @@
     initPasswordToggles(container);
     initExportCard(container);
     initRestoreCard(container);
+    initSchedulerToggles(container);
     renderIcons(container);
   }
 

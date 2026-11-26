@@ -95,6 +95,23 @@ func StaticAssetURL(name string) string {
 	return "/static/" + name
 }
 
+// StaticModuleURL returns a path-prefixed immutable URL (`/static/v/<digest>/<path>`)
+// for native ES module entry points (e.g. `app.js`). Because relative ES module
+// imports (`import './modules/core.js'`) resolve against the importer's directory,
+// prefixing the digest into the path ensures every transitive static and dynamic
+// module import inherits the same immutable versioned cache key with zero skew.
+func StaticModuleURL(name string) string {
+	clean := strings.TrimPrefix(name, "/static/")
+	clean = strings.TrimPrefix(clean, "/")
+	if idx := strings.Index(clean, "?"); idx != -1 {
+		clean = clean[:idx]
+	}
+	if StaticAssetVersion(clean) != "" {
+		return "/static/v/" + StaticAssetsDigest() + "/" + clean
+	}
+	return StaticAssetURL(name)
+}
+
 // StaticAssetsDigest returns an aggregate fingerprint (12 hex characters)
 // representing the content of all embedded static assets. It changes whenever
 // any static file is modified, and can be used to version service worker caches.

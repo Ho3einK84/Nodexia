@@ -110,6 +110,11 @@
     <span class="empty-state-icon"><i data-lucide="server"></i></span>
     <p class="empty-state-title">{{ t "system.empty_title" }}</p>
     <p class="empty-state-desc">{{ t "system.empty_desc" }}</p>
+    {{ if .SystemForm.StoredCredentialsAvailable }}
+    <button type="button" class="btn btn--primary btn--sm sys-btn-refresh" data-refresh-now="{{ .SystemForm.RefreshURL }}?refresh=1">
+      <i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "system.collect_now" }}
+    </button>
+    {{ end }}
   </div>
   {{ end }}
 

@@ -33,6 +33,7 @@ type TrafficSnapshot struct {
 type TrafficRepository interface {
 	AppendTraffic(ctx context.Context, snapshot TrafficSnapshot) (TrafficSnapshot, error)
 	GetLatestTrafficByServer(ctx context.Context, serverID int64) (TrafficSnapshot, error)
+	GetLatestTrafficInterface(ctx context.Context, serverID int64) (string, error)
 	GetLatestTrafficByServerIDs(ctx context.Context, serverIDs []int64) ([]TrafficSnapshot, error)
 }
 
@@ -60,7 +61,13 @@ func (r SQLRepository) AppendTraffic(ctx context.Context, snapshot TrafficSnapsh
 		available = 1
 	}
 
-	result, err := r.conn.ExecContext(
+	tx, err := r.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return TrafficSnapshot{}, fmt.Errorf("monitoring: begin vnstat snapshot tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	result, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO vnstat_snapshots (
 			server_id,
@@ -92,6 +99,19 @@ func (r SQLRepository) AppendTraffic(ctx context.Context, snapshot TrafficSnapsh
 	snapshot.ID, err = result.LastInsertId()
 	if err != nil {
 		return TrafficSnapshot{}, fmt.Errorf("monitoring: read vnstat snapshot last insert id: %w", err)
+	}
+
+	// Keep vnstat_snapshots bounded: a fresh available snapshot supersedes all
+	// prior rows for this server; an unavailable snapshot prunes only earlier
+	// unavailable rows so the last valid traffic history stays intact for analytics.
+	if snapshot.Available {
+		_, _ = tx.ExecContext(ctx, `DELETE FROM vnstat_snapshots WHERE server_id = ? AND id < ?`, snapshot.ServerID, snapshot.ID)
+	} else {
+		_, _ = tx.ExecContext(ctx, `DELETE FROM vnstat_snapshots WHERE server_id = ? AND available = 0 AND id < ?`, snapshot.ServerID, snapshot.ID)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return TrafficSnapshot{}, fmt.Errorf("monitoring: commit vnstat snapshot: %w", err)
 	}
 
 	return snapshot, nil
@@ -152,6 +172,28 @@ func (r SQLRepository) GetLatestTrafficByServer(ctx context.Context, serverID in
 	}
 	snapshot.CollectedAt = collectedAt
 	return normalizeTrafficSnapshot(snapshot), nil
+}
+
+// GetLatestTrafficInterface returns only the interface_name of the most recent
+// vnStat snapshot for a server, avoiding JSON unmarshaling of daily/monthly rows.
+func (r SQLRepository) GetLatestTrafficInterface(ctx context.Context, serverID int64) (string, error) {
+	var iface string
+	err := r.conn.QueryRowContext(
+		ctx,
+		`SELECT interface_name
+		 FROM vnstat_snapshots
+		 WHERE server_id = ?
+		 ORDER BY id DESC
+		 LIMIT 1`,
+		serverID,
+	).Scan(&iface)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("monitoring: get latest vnstat interface for server %d: %w", serverID, err)
+	}
+	return strings.TrimSpace(iface), nil
 }
 
 // GetLatestTrafficByServerIDs returns the most recent vnstat snapshot for each

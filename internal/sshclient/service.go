@@ -28,10 +28,15 @@ type Service struct {
 	commandTimeout time.Duration
 	hostKeyPolicy  string
 	knownHostsPath string
-	// hostKeysMu guards all reads and writes of the known-hosts file.
+	// hostKeysMu guards the in-memory known-hosts cache and on-disk persistence.
 	// IMPORTANT: Service methods use *Service (pointer) receivers so that this
 	// mutex is shared across all callers rather than copied per call.
-	hostKeysMu sync.Mutex
+	hostKeysMu     sync.RWMutex
+	hostKeysLoaded bool
+	hostKeysCache  map[string]knownHostEntry
+
+	poolInit sync.Once
+	pool     *connPool
 }
 
 type ConnectionRequest struct {
@@ -156,14 +161,31 @@ func (s *Service) StreamCommand(ctx context.Context, req CommandRequest, handler
 		return CommandResult{}, errors.New("sshclient: command cannot be empty")
 	}
 
-	client, _, err := s.connect(ctx, req.ConnectionRequest)
+	entry, reused, err := s.acquirePooled(ctx, req.ConnectionRequest)
 	if err != nil {
 		return CommandResult{}, err
 	}
-	defer func() { _ = client.Close() }()
 
-	return s.runClientCommand(ctx, client, req, handlers)
+	res, err := s.runClientCommand(ctx, entry.client, req, handlers)
+	if err != nil && reused && errors.Is(err, errSessionOpenFailed) {
+		// Stale pooled TCP/SSH transport: evict and redial cleanly once.
+		s.ensurePool().evict(entry)
+		entry.release()
+
+		entry, _, err = s.acquirePooled(ctx, req.ConnectionRequest)
+		if err != nil {
+			return CommandResult{}, err
+		}
+		res, err = s.runClientCommand(ctx, entry.client, req, handlers)
+	}
+	if err != nil && errors.Is(err, errSessionOpenFailed) {
+		s.ensurePool().evict(entry)
+	}
+	entry.release()
+	return res, err
 }
+
+var errSessionOpenFailed = errors.New("sshclient: create session")
 
 // BatchSession holds a single authenticated SSH connection across multiple
 // sequential commands (for example node discovery probes) to avoid redundant
@@ -257,7 +279,7 @@ func (s *Service) runClientCommand(ctx context.Context, client *xssh.Client, req
 	startedAt := time.Now()
 	session, err := client.NewSession()
 	if err != nil {
-		return CommandResult{}, fmt.Errorf("sshclient: create session: %w", err)
+		return CommandResult{}, fmt.Errorf("%w: %v", errSessionOpenFailed, err)
 	}
 	defer func() { _ = session.Close() }()
 
@@ -522,12 +544,33 @@ func (s *Service) OpenShell(ctx context.Context, req ConnectionRequest, pio Inte
 		return fmt.Errorf("sshclient: start shell: %w", err)
 	}
 
-	// Forward resize requests until ctx ends.
+	shellCtx, shellCancel := context.WithCancel(ctx)
+	defer shellCancel()
+
+	// Keep the long-lived SSH transport alive across idle NAT/conntrack windows
+	// (e.g. during 10-minute mobile/PWA resume grace periods).
+	go func() {
+		ticker := time.NewTicker(poolKeepaliveInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-shellCtx.Done():
+				return
+			case <-ticker.C:
+				if !probeSSHKeepalive(client, poolKeepaliveTimeout) {
+					_ = client.Close()
+					return
+				}
+			}
+		}
+	}()
+
+	// Forward resize requests until the shell exits or ctx ends.
 	if pio.Resize != nil {
 		go func() {
 			for {
 				select {
-				case <-ctx.Done():
+				case <-shellCtx.Done():
 					return
 				case r, ok := <-pio.Resize:
 					if !ok {
@@ -549,6 +592,7 @@ func (s *Service) OpenShell(ctx context.Context, req ConnectionRequest, pio Inte
 		<-waitDone
 		return ctx.Err()
 	case err := <-waitDone:
+		_ = session.Close()
 		_ = client.Close()
 		return err
 	}
@@ -693,26 +737,37 @@ func (s *Service) hostKeyCallback(address string) xssh.HostKeyCallback {
 }
 
 func (s *Service) verifyOrTrustHostKey(address string, key xssh.PublicKey) error {
+	serializedKey := marshalAuthorizedKey(key)
+	fingerprint := xssh.FingerprintSHA256(key)
+
+	// Fast path: verify against the in-memory cache under a shared read lock —
+	// zero disk reads, zero disk writes, zero write-lock serialization across
+	// concurrent SSH handshakes.
+	s.hostKeysMu.RLock()
+	if s.hostKeysLoaded {
+		if entry, exists := s.hostKeysCache[address]; exists && entry.AuthorizedKey == serializedKey {
+			s.hostKeysMu.RUnlock()
+			return nil
+		}
+	}
+	s.hostKeysMu.RUnlock()
+
 	s.hostKeysMu.Lock()
 	defer s.hostKeysMu.Unlock()
 
-	store, err := s.loadKnownHosts()
-	if err != nil {
-		return err
+	if !s.hostKeysLoaded {
+		store, err := s.loadKnownHosts()
+		if err != nil {
+			return err
+		}
+		s.hostKeysCache = store
+		s.hostKeysLoaded = true
 	}
 
-	serializedKey := marshalAuthorizedKey(key)
-	fingerprint := xssh.FingerprintSHA256(key)
-	entry, exists := store[address]
+	entry, exists := s.hostKeysCache[address]
 	if exists {
 		if entry.AuthorizedKey == serializedKey {
-			slog.Debug("sshclient: host key verified",
-				slog.String("address", address),
-				slog.String("fingerprint", fingerprint),
-			)
-			entry.LastSeenAt = time.Now().UTC()
-			store[address] = entry
-			return s.saveKnownHosts(store)
+			return nil
 		}
 		slog.Warn("sshclient: host key mismatch — possible MITM or key rotation",
 			slog.String("address", address),
@@ -727,49 +782,88 @@ func (s *Service) verifyOrTrustHostKey(address string, key xssh.PublicKey) error
 		slog.String("fingerprint", fingerprint),
 		slog.String("key_type", key.Type()),
 	)
-	store[address] = knownHostEntry{
+	now := time.Now().UTC()
+	s.hostKeysCache[address] = knownHostEntry{
 		AuthorizedKey: serializedKey,
 		Fingerprint:   fingerprint,
-		TrustedAt:     time.Now().UTC(),
-		LastSeenAt:    time.Now().UTC(),
+		TrustedAt:     now,
+		LastSeenAt:    now,
 	}
-	return s.saveKnownHosts(store)
+	return s.saveKnownHosts(s.hostKeysCache)
 }
 
 func (s *Service) ForgetHostKey(address string) error {
 	s.hostKeysMu.Lock()
 	defer s.hostKeysMu.Unlock()
 
-	store, err := s.loadKnownHosts()
-	if err != nil {
-		return err
+	if !s.hostKeysLoaded {
+		store, err := s.loadKnownHosts()
+		if err != nil {
+			return err
+		}
+		s.hostKeysCache = store
+		s.hostKeysLoaded = true
 	}
 
-	if _, exists := store[address]; !exists {
+	if _, exists := s.hostKeysCache[address]; !exists {
+		if s.pool != nil {
+			s.pool.evictAddress(address)
+		}
 		return nil
 	}
 
-	delete(store, address)
+	delete(s.hostKeysCache, address)
+	if s.pool != nil {
+		s.pool.evictAddress(address)
+	}
 	slog.Info("sshclient: host key forgotten", slog.String("address", address))
-	return s.saveKnownHosts(store)
+	return s.saveKnownHosts(s.hostKeysCache)
 }
 
 func (s *Service) openSFTP(ctx context.Context, req ConnectionRequest) (*xssh.Client, *sftp.Client, func(), error) {
-	client, _, err := s.connect(ctx, req)
+	entry, reused, err := s.acquirePooled(ctx, req)
 	if err != nil {
 		return nil, nil, func() {}, err
 	}
 
-	sftpClient, err := sftp.NewClient(client)
+	sftpClient, err := entry.getOrCreateSFTP()
+	if err != nil && reused {
+		// Pooled SSH connection may have been closed remotely; evict and redial once.
+		s.ensurePool().evict(entry)
+		entry.release()
+
+		entry, _, err = s.acquirePooled(ctx, req)
+		if err != nil {
+			return nil, nil, func() {}, err
+		}
+		sftpClient, err = entry.getOrCreateSFTP()
+	}
 	if err != nil {
-		_ = client.Close()
-		return nil, nil, func() {}, fmt.Errorf("sshclient: create sftp client: %w", err)
+		s.ensurePool().evict(entry)
+		entry.release()
+		return nil, nil, func() {}, err
 	}
 
-	return client, sftpClient, func() {
-		_ = sftpClient.Close()
-		_ = client.Close()
-	}, nil
+	// Quick liveness probe when reusing an older idle SFTP client (>20s idle).
+	if reused && time.Since(time.Unix(0, entry.lastUsed.Load())) > 20*time.Second {
+		if _, statErr := sftpClient.Getwd(); statErr != nil {
+			s.ensurePool().evict(entry)
+			entry.release()
+
+			entry, _, err = s.acquirePooled(ctx, req)
+			if err != nil {
+				return nil, nil, func() {}, err
+			}
+			sftpClient, err = entry.getOrCreateSFTP()
+			if err != nil {
+				s.ensurePool().evict(entry)
+				entry.release()
+				return nil, nil, func() {}, err
+			}
+		}
+	}
+
+	return entry.client, sftpClient, entry.release, nil
 }
 
 // authMethods resolves the auth methods for a connection request. The returned

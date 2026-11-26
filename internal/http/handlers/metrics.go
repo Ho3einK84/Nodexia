@@ -90,11 +90,12 @@ func (h MetricsHandler) writeBuildInfo(b *strings.Builder) {
 // usage), the current-month traffic totals, node status counts, and the open
 // alert count. Every read is best-effort: a failed query just omits its family.
 func (h MetricsHandler) writeFleetMetrics(ctx context.Context, b *strings.Builder) {
-	if h.database == nil || h.database.SQL == nil {
+	readDB := h.database.Reader()
+	if readDB == nil {
 		return
 	}
 
-	if snaps, err := monitoring.NewSQLRepository(h.database.SQL).ListAllLatestByServer(ctx); err == nil && len(snaps) > 0 {
+	if snaps, err := monitoring.NewSQLRepository(readDB).ListAllLatestByServer(ctx); err == nil && len(snaps) > 0 {
 		fmt.Fprintf(b, "# HELP nodexia_server_cpu_percent Latest stored CPU usage per server.\n# TYPE nodexia_server_cpu_percent gauge\n")
 		for _, s := range snaps {
 			fmt.Fprintf(b, "nodexia_server_cpu_percent{server=%q} %.2f\n", s.ServerName, s.CPUUsage)
@@ -113,12 +114,12 @@ func (h MetricsHandler) writeFleetMetrics(ctx context.Context, b *strings.Builde
 		}
 	}
 
-	if open, err := alerts.NewSQLRepository(h.database.SQL).ListOpenEvents(ctx); err == nil {
+	if open, err := alerts.NewSQLRepository(readDB).ListOpenEvents(ctx); err == nil {
 		fmt.Fprintf(b, "# HELP nodexia_alerts_open Currently firing alert events.\n# TYPE nodexia_alerts_open gauge\n")
 		fmt.Fprintf(b, "nodexia_alerts_open %d\n", len(open))
 	}
 
-	if statuses, err := nodes.NewSQLRepository(h.database.SQL).ListLatestNodeStatus(ctx); err == nil && len(statuses) > 0 {
+	if statuses, err := nodes.NewSQLRepository(readDB).ListLatestNodeStatus(ctx); err == nil && len(statuses) > 0 {
 		fmt.Fprintf(b, "# HELP nodexia_nodes_running Running nodes per server (latest discovery).\n# TYPE nodexia_nodes_running gauge\n")
 		for _, st := range statuses {
 			if st.Total == 0 {

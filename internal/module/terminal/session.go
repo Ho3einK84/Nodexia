@@ -90,6 +90,47 @@ func (h *terminalSessionHub) remove(s *terminalSession) {
 	}
 }
 
+func (h *terminalSessionHub) Close() error {
+	h.mu.Lock()
+	list := make([]*terminalSession, 0, len(h.sessions))
+	for _, s := range h.sessions {
+		list = append(list, s)
+	}
+	h.mu.Unlock()
+	for _, s := range list {
+		s.stop()
+	}
+	return nil
+}
+
+func (h *terminalSessionHub) CloseForServer(serverID int64) {
+	h.mu.Lock()
+	var list []*terminalSession
+	for _, s := range h.sessions {
+		if s.serverID == serverID {
+			list = append(list, s)
+		}
+	}
+	h.mu.Unlock()
+	for _, s := range list {
+		s.stop()
+	}
+}
+
+func (h *terminalSessionHub) CloseForUser(username string) {
+	h.mu.Lock()
+	var list []*terminalSession
+	for _, s := range h.sessions {
+		if s.username == username {
+			list = append(list, s)
+		}
+	}
+	h.mu.Unlock()
+	for _, s := range list {
+		s.stop()
+	}
+}
+
 type terminalSession struct {
 	id       string
 	serverID int64

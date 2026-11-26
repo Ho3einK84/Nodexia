@@ -69,9 +69,6 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	flashMessage := ""
 
 	if hasStoredCreds {
-		password, privateKey, keyPassphrase := servers.ResolveCredentials(server)
-		connectTimeout := h.deps.Config.SSH.ConnectTimeout
-
 		rawQueryPath := strings.TrimSpace(r.URL.Query().Get("path"))
 		remotePath := "~"
 		if rawQueryPath != "" && rawQueryPath != "~" && !strings.HasPrefix(rawQueryPath, "~/") {
@@ -84,34 +81,49 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			remotePath = rawQueryPath
 		}
 
-		req := sshclient.ConnectionRequest{
-			Host:           server.Host,
-			Port:           server.Port,
-			Username:       server.Username,
-			AuthMode:       server.AuthMode,
-			Password:       password,
-			PrivateKeyPEM:  privateKey,
-			KeyPassphrase:  keyPassphrase,
-			ConnectTimeout: connectTimeout,
-		}
-
-		result, err := h.deps.SSH.ListDirectory(r.Context(), req, remotePath)
-		if err == nil {
-			listing = listingViewFromResult(result)
-			form.Path = result.Path
+		// For partial/async tab loads, skip synchronous SSH so the shell renders
+		// immediately (<2ms) and files.js loads the directory asynchronously via
+		// POST /files/ops?intent=list. Direct SSR requests still pre-populate the
+		// listing (fast via the warm SFTP pool) with a tight dial cap.
+		deferListing := r.Header.Get("X-Nodexia-Partial") == "1" || r.URL.Query().Get("async") == "1"
+		if deferListing {
+			form.Path = remotePath
 		} else {
-			fallbackPath := defaultRemotePath(server)
-			if remotePath != "~" && !strings.HasPrefix(remotePath, "~/") {
-				fallbackPath = remotePath
+			password, privateKey, keyPassphrase := servers.ResolveCredentials(server)
+			connectTimeout := h.deps.Config.SSH.ConnectTimeout
+			if connectTimeout <= 0 || connectTimeout > 3*time.Second {
+				connectTimeout = 3 * time.Second
 			}
-			form.Path = fallbackPath
-			download = view.FileDownloadView{
-				Available: true,
-				Path:      fallbackPath,
-				Error:     err.Error(),
+
+			req := sshclient.ConnectionRequest{
+				Host:           server.Host,
+				Port:           server.Port,
+				Username:       server.Username,
+				AuthMode:       server.AuthMode,
+				Password:       password,
+				PrivateKeyPEM:  privateKey,
+				KeyPassphrase:  keyPassphrase,
+				ConnectTimeout: connectTimeout,
 			}
-			flashKind = "error"
-			flashMessage = "Directory listing failed."
+
+			result, err := h.deps.SSH.ListDirectory(r.Context(), req, remotePath)
+			if err == nil {
+				listing = listingViewFromResult(result)
+				form.Path = result.Path
+			} else {
+				fallbackPath := defaultRemotePath(server)
+				if remotePath != "~" && !strings.HasPrefix(remotePath, "~/") {
+					fallbackPath = remotePath
+				}
+				form.Path = fallbackPath
+				download = view.FileDownloadView{
+					Available: true,
+					Path:      fallbackPath,
+					Error:     err.Error(),
+				}
+				flashKind = "error"
+				flashMessage = "Directory listing failed."
+			}
 		}
 	}
 

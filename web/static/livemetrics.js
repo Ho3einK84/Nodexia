@@ -65,6 +65,7 @@
   var backoff = 1000;
   var reconnectTimer = null;
   var stopped = false;
+  var paused = false;
   // Previous network counters, for deriving current bandwidth (rate) from the
   // delta between consecutive frames. Reset on every (re)connect so a gap never
   // shows up as a misleading averaged-over-the-gap spike.
@@ -230,7 +231,7 @@
   }
 
   function scheduleReconnect() {
-    if (stopped || reconnectTimer) return;
+    if (stopped || paused || reconnectTimer) return;
     setStatus('error', T('js.live.reconnecting'));
     reconnectTimer = setTimeout(function () {
       reconnectTimer = null;
@@ -240,7 +241,7 @@
   }
 
   function connect() {
-    if (stopped) return;
+    if (stopped || paused || socket) return;
     setStatus('connecting', T('monitoring.connecting'));
     var ws;
     try {
@@ -267,12 +268,45 @@
       }
     };
     ws.onclose = function () {
-      socket = null;
+      if (socket === ws) socket = null;
       scheduleReconnect();
     };
     ws.onerror = function () {
       try { ws.close(); } catch (err) {}
     };
+  }
+
+  function pauseStream() {
+    if (stopped || paused) return;
+    paused = true;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (socket) {
+      var ws = socket;
+      socket = null;
+      try { ws.close(); } catch (err) {}
+    }
+  }
+
+  function resumeStream() {
+    if (stopped || !paused) return;
+    if (document.hidden || (cleanupRoot && cleanupRoot.hidden)) return;
+    paused = false;
+    backoff = 1000;
+    connect();
+  }
+
+  function onTabActivated(e) {
+    if (cleanupRoot && e && e.detail && e.detail.pane === cleanupRoot) resumeStream();
+  }
+  function onTabDeactivated(e) {
+    if (cleanupRoot && e && e.detail && e.detail.pane === cleanupRoot) pauseStream();
+  }
+  function onVisibilityChange() {
+    if (document.hidden) pauseStream();
+    else resumeStream();
   }
 
   function stop() {
@@ -284,15 +318,25 @@
     }
     if (socket) { try { socket.close(); } catch (err) {} }
     socket = null;
+    document.removeEventListener('tab-activated', onTabActivated);
+    document.removeEventListener('tab-deactivated', onTabDeactivated);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
   }
 
   var cleanupRoot = card.closest('.tab-pane');
   if (cleanupRoot) {
     if (!cleanupRoot.__nxCleanups) cleanupRoot.__nxCleanups = [];
     cleanupRoot.__nxCleanups.push(stop);
+    document.addEventListener('tab-activated', onTabActivated);
+    document.addEventListener('tab-deactivated', onTabDeactivated);
   } else {
+    document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('beforeunload', stop, { once: true });
   }
 
-  connect();
+  if (document.hidden || (cleanupRoot && cleanupRoot.hidden)) {
+    paused = true;
+  } else {
+    connect();
+  }
 })();

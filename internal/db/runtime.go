@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 type Runtime struct {
 	SQL      *sql.DB
+	ReadSQL  *sql.DB // concurrent read-only WAL pool on file-backed SQLite; equals SQL otherwise
 	Dialect  Dialect
 	Migrator BootstrapMigrator
 }
@@ -62,15 +64,47 @@ func Open(ctx context.Context, cfg config.DatabaseConfig) (*Runtime, error) {
 		return nil, err
 	}
 
+	readConn := conn
 	if dialect.Name() == config.DriverSQLite {
 		hardenSQLiteFilePermissions(cfg.SQLitePath)
+		if readDSN, ok := sqliteReadDataSourceName(cfg); ok {
+			rc, openErr := sql.Open(dialect.DriverName(), readDSN)
+			if openErr != nil {
+				_ = conn.Close()
+				return nil, fmt.Errorf("db: open sqlite reader pool: %w", openErr)
+			}
+			configureSQLiteReadPool(rc)
+			rPingCtx, rCancel := context.WithTimeout(ctx, 5*time.Second)
+			pingErr := rc.PingContext(rPingCtx)
+			rCancel()
+			if pingErr != nil {
+				_ = rc.Close()
+				_ = conn.Close()
+				return nil, fmt.Errorf("db: ping sqlite reader pool: %w", pingErr)
+			}
+			readConn = rc
+		}
 	}
 
 	return &Runtime{
 		SQL:      conn,
+		ReadSQL:  readConn,
 		Dialect:  dialect,
 		Migrator: migrator,
 	}, nil
+}
+
+// Reader returns the concurrent read-only connection pool when available (on
+// file-backed SQLite WAL), falling back to the primary SQL pool on MySQL or
+// in-memory SQLite databases.
+func (r *Runtime) Reader() *sql.DB {
+	if r == nil {
+		return nil
+	}
+	if r.ReadSQL != nil {
+		return r.ReadSQL
+	}
+	return r.SQL
 }
 
 func hardenSQLiteFilePermissions(rawPath string) {
@@ -87,11 +121,22 @@ func hardenSQLiteFilePermissions(rawPath string) {
 }
 
 func (r *Runtime) Close() error {
-	if r == nil || r.SQL == nil {
+	if r == nil {
 		return nil
 	}
 
-	return r.SQL.Close()
+	var combined error
+	if r.ReadSQL != nil && r.ReadSQL != r.SQL {
+		if err := r.ReadSQL.Close(); err != nil {
+			combined = errors.Join(combined, err)
+		}
+	}
+	if r.SQL != nil {
+		if err := r.SQL.Close(); err != nil {
+			combined = errors.Join(combined, err)
+		}
+	}
+	return combined
 }
 
 func (r *Runtime) MigrationCount() int {
@@ -99,5 +144,5 @@ func (r *Runtime) MigrationCount() int {
 		return 0
 	}
 
-	return len(r.Migrator.Migrations())
+	return r.Migrator.Count()
 }

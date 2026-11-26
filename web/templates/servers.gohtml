@@ -1,5 +1,5 @@
 {{ define "content-servers-list" }}
-<section class="hero servers-page">
+<section class="hero servers-page" data-servers-page data-total-pages="{{ .ServerPagination.TotalPages }}">
   <header class="page-hero">
     <div class="page-hero__top">
       {{ template "page-hero-head" (dict "Page" . "Icon" "server" "Eyebrow" (t "servers.hero.eyebrow")) }}
@@ -8,7 +8,7 @@
     <div class="kpi-strip" role="region" aria-label="{{ t "servers.title" }}">
       <div class="kpi-strip__item">
         <span class="kpi-strip__label"><i data-lucide="layers" aria-hidden="true"></i> {{ t "servers.stats.registered" }}</span>
-        <span class="kpi-strip__value">{{ .ServerCount }}</span>
+        <span class="kpi-strip__value" data-servers-registered-count>{{ .ServerCount }}</span>
       </div>
       <div class="kpi-strip__item{{ if gt .ServersUpCount 0 }} kpi-strip__item--ok{{ end }}">
         <span class="kpi-strip__label"><i data-lucide="activity" aria-hidden="true"></i> {{ t "servers.stats.online" }}</span>
@@ -32,7 +32,7 @@
   <div class="server-toolbar">
     <form class="server-search" method="get" action="/servers" role="search">
       <i data-lucide="search" class="server-search__icon"></i>
-      <input type="search" name="q" value="{{ .ServerSearch }}" placeholder="{{ t "servers.search_placeholder" }}" autocomplete="off" aria-label="{{ t "servers.search_aria" }}">
+      <input type="search" name="q" value="{{ .ServerSearch }}" data-search-input data-server-search-input placeholder="{{ t "servers.search_placeholder" }}" autocomplete="off" aria-label="{{ t "servers.search_aria" }}">
       {{ if .ServerSearch }}
       <a class="server-search__clear" href="/servers" aria-label="{{ t "servers.search_clear" }}"><i data-lucide="x"></i></a>
       {{ else }}
@@ -41,8 +41,8 @@
     </form>
     <div class="server-toolbar__aside">
       {{ if .Servers }}
-      <button type="button" class="btn btn--ghost server-toggle-all-btn" id="server-toggle-all" data-collapse-label="{{ t "servers.collapse_all" }}" data-expand-label="{{ t "servers.expand_all" }}" aria-label="{{ t "servers.expand_all" }}" title="{{ t "servers.expand_all" }}">
-        <i data-lucide="chevrons-up-down" class="icon-in-button"></i> <span class="btn-label" id="server-toggle-all-label">{{ t "servers.expand_all" }}</span>
+      <button type="button" class="btn btn--ghost server-toggle-all-btn" data-server-toggle-all data-collapse-label="{{ t "servers.collapse_all" }}" data-expand-label="{{ t "servers.expand_all" }}" aria-label="{{ t "servers.expand_all" }}" title="{{ t "servers.expand_all" }}">
+        <i data-lucide="chevrons-up-down" class="icon-in-button"></i> <span class="btn-label" data-server-toggle-all-label>{{ t "servers.expand_all" }}</span>
       </button>
       {{ end }}
       <a href="/servers/new" class="btn btn--primary server-add-btn" data-modal-open="add-server-modal" data-tab-bypass><i data-lucide="plus" class="icon-in-button" aria-hidden="true"></i> {{ t "servers.add" }}</a>
@@ -68,15 +68,15 @@
   </p>
   {{ end }}
 
-  <form id="bulk-form" method="post" action="/servers/bulk" class="bulk-form">
+  <form id="bulk-form" data-bulk-form method="post" action="/servers/bulk" class="bulk-form">
     <input type="hidden" name="_csrf_token" value="{{ .CSRFToken }}">
-    <div class="bulk-toolbar" id="bulk-toolbar">
-      <label class="bulk-select-all" for="bulk-select-all">
-        <input type="checkbox" id="bulk-select-all" aria-label="{{ t "servers.bulk.select_all_aria" }}">
+    <div class="bulk-toolbar" data-bulk-toolbar>
+      <label class="bulk-select-all">
+        <input type="checkbox" data-bulk-select-all aria-label="{{ t "servers.bulk.select_all_aria" }}">
         <span>{{ t "servers.bulk.select_all" }}</span>
       </label>
-      <span class="bulk-count" id="bulk-count" aria-live="polite">{{ t "servers.bulk.selected_count" "count" 0 }}</span>
-      <select name="action" id="bulk-action" class="bulk-action-select" required aria-label="{{ t "servers.bulk.action_aria" }}">
+      <span class="bulk-count" data-bulk-count aria-live="polite">{{ t "servers.bulk.selected_count" "count" 0 }}</span>
+      <select name="action" data-bulk-action class="bulk-action-select" required aria-label="{{ t "servers.bulk.action_aria" }}">
         <option value="">{{ t "servers.bulk.choose_action" }}</option>
         <option value="reboot">{{ t "servers.bulk.reboot" }}</option>
         <option value="update">{{ t "servers.bulk.update_packages" }}</option>
@@ -84,15 +84,15 @@
         <option value="node-update">{{ t "servers.bulk.update_nodes" }}</option>
         <option value="delete">{{ t "common.delete" }}</option>
       </select>
-      <button type="submit" id="bulk-submit" class="btn btn--primary" data-confirm="{{ t "servers.bulk.confirm" }}">
+      <button type="submit" data-bulk-submit class="btn btn--primary" data-confirm="{{ t "servers.bulk.confirm" }}">
         <i data-lucide="play" class="icon-in-button"></i> {{ t "servers.bulk.run" }}
       </button>
     </div>
   </form>
 
-  <div class="server-list">
+  <div class="server-list" data-server-list>
     {{ range .Servers }}
-    <article class="server-card server-card--collapsible{{ if eq .Status "up" }} server-card--up{{ else if eq .Status "down" }} server-card--down{{ end }}" data-server-card data-server-id="{{ .ID }}">
+    <article class="server-card server-card--collapsible{{ if eq .Status "up" }} server-card--up{{ else if eq .Status "down" }} server-card--down{{ end }}" data-server-card data-server-id="{{ .ID }}" data-server-search-text="{{ .Name }} {{ .Host }} {{ .Username }} {{ .CountryCode }} {{ range .Tags }}{{ . }} {{ end }}">
       <div class="server-card__header" data-server-toggle>
         <div class="server-card__lead">
           <div class="server-card__checkbox-wrap">
@@ -151,7 +151,7 @@
                 <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/system"><i data-lucide="info" class="icon-in-button"></i> {{ t "common.system" }}</a>
                 <a class="action-menu__item" role="menuitem" href="/servers/{{ .ID }}/commands"><i data-lucide="terminal" class="icon-in-button"></i> {{ t "common.commands" }}</a>
                 <div class="action-menu__divider" role="separator"></div>
-                <form method="post" action="/servers/{{ .ID }}/delete" class="action-menu__form">
+                <form method="post" action="/servers/{{ .ID }}/delete" class="action-menu__form" data-server-delete-form>
                   <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
                   <button type="submit" class="action-menu__item action-menu__item--danger" role="menuitem" data-confirm="{{ t "servers.card.delete_confirm" "name" .Name }}"><i data-lucide="trash-2" class="icon-in-button"></i> {{ t "common.delete" }}</button>
                 </form>
@@ -180,6 +180,7 @@
     </article>
     {{ end }}
   </div>
+  <p class="empty-state" data-server-filter-empty hidden>{{ t "servers.empty.filter_no_match" }}</p>
 
   {{ template "pagination" .ServerPagination }}
 

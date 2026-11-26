@@ -9,7 +9,7 @@ set -euo pipefail
 readonly DEFAULT_INSTALL_DIR="/opt/nodexia"
 readonly DEFAULT_REPO_URL="https://github.com/Ho3einK84/Nodexia.git"
 readonly DEFAULT_GIT_REF="main"
-readonly DEFAULT_IMAGE_VERSION="v0.9.4"
+readonly DEFAULT_IMAGE_VERSION="v0.9.5"
 readonly COMPOSE_FILE="compose.production.yml"
 readonly ENV_FILE=".env.production"
 readonly BUILD_ENV_FILE=".env"
@@ -509,12 +509,24 @@ generate_session_secret() {
   fi
 }
 
+validate_safe_inputs() {
+  if [[ -n "$DOMAIN" ]] && ! [[ "$DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]]; then
+    die "Invalid domain name: $DOMAIN"
+  fi
+  if [[ -n "$ACME_EMAIL" ]] && [[ "$ACME_EMAIL" =~ [[:space:]\{\}\"\'\;\\] ]]; then
+    die "Invalid ACME email address."
+  fi
+}
+
 write_env_production() {
+  validate_safe_inputs
   local secret env_file
   secret="$(generate_session_secret)"
   env_file="$(env_path)"
 
-  cat >"$env_file" <<EOF
+  (
+    umask 077
+    cat >"$env_file" <<EOF
 NODEXIA_IMAGE_VERSION=${IMAGE_VERSION}
 
 NODEXIA_APP_NAME=Nodexia
@@ -523,7 +535,7 @@ NODEXIA_LOG_LEVEL=info
 NODEXIA_LOG_FORMAT=json
 NODEXIA_HTTP_ADDR=:8080
 NODEXIA_HTTP_READ_TIMEOUT=15s
-NODEXIA_HTTP_WRITE_TIMEOUT=15s
+NODEXIA_HTTP_WRITE_TIMEOUT=60s
 NODEXIA_HTTP_IDLE_TIMEOUT=30s
 NODEXIA_HTTP_SHUTDOWN_TIMEOUT=15s
 
@@ -568,12 +580,14 @@ NODEXIA_TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
 NODEXIA_HEALTHCHECK_URL=http://127.0.0.1:8080/healthz
 NODEXIA_HEALTHCHECK_TIMEOUT=3s
 EOF
+  )
 
   chmod 600 "$env_file"
   ok "Configuration written: $env_file"
 }
 
 write_caddyfile() {
+  validate_safe_inputs
   local caddy_file="$INSTALL_DIR/$CADDYFILE_PATH"
   mkdir -p "$(dirname "$caddy_file")"
 
@@ -704,7 +718,9 @@ fetch_prebuilt_binary() {
     fi
     ok "Checksum verified"
   else
-    warn "Checksums file unavailable; skipping verification."
+    warn "Checksums file unavailable; refusing unverified binary and building from source."
+    rm -rf "$tmp"
+    return 1
   fi
 
   mkdir -p "${INSTALL_DIR}/dist"

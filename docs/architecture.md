@@ -59,15 +59,16 @@ Nodexia/
 Incoming requests pass through a layered middleware pipeline:
 
 ```
-Request ──► Recover ──► Logging ──► RequireAuth ──► CSRF ──► Session ──► Locale ──► SecurityHeaders ──► Module Handler
+Request ──► RequestID ──► SecurityHeaders ──► Session ──► Locale ──► RequireAuth ──► CSRF ──► Logging ──► Compress ──► Recover ──► Module Handler
 ```
 
 1. **Routing:** `internal/http/router.go` mounts domain modules to the `ServeMux`.
 2. **Authentication:** Two HTTP-only, `SameSite=Lax` cookies:
    - `nodexia_session`: visitor session anchoring the CSRF token.
    - `nodexia_auth`: authenticated admin identity with expiration.
-3. **CSRF Protection:** Synchronizer token pattern checking same-origin headers and hidden `_csrf_token` on mutable requests.
-4. **Rendering:** Handlers call `deps.Renderer.Render(w, status, view.PageData)` to execute the layout template with server-side localization (`page.T("key")`).
+3. **CSRF Protection:** Synchronizer token pattern checking same-origin headers and hidden `_csrf_token` (or `X-CSRF-Token`) on mutable requests. `RequireAuth` runs before `CSRF`, and every response carries a fresh `X-CSRF-Token` header so AJAX actions need no pre-flight token request.
+4. **Compression:** `middleware.Compress` gzips text responses through a `sync.Pool` and skips SSE, WebSocket, Range, and already-compressed content.
+5. **Rendering:** Handlers call `deps.Renderer.Render(w, status, view.PageData)` to execute the layout template with server-side localization (`page.T("key")`). Requests carrying `X-Nodexia-Partial: 1` (tab navigation) receive the page body without the shell, and ES modules are served immutably under `/static/v/<digest>/...`.
 
 ---
 
@@ -99,7 +100,10 @@ The workspace (`tab-manager.js`) intercepts in-app navigation and dynamically lo
 2. `POST /servers/{id}/terminal`: Verifies SSH credentials and issues a 30-second single-use ticket.
 3. `GET /servers/{id}/terminal/ws?ticket=...`: Upgrades connection via `coder/websocket`, opens a PTY shell (`xterm-256color`), and pipes bidirectional I/O.
 
-### 5.3. Scheduler & Background Workers
+### 5.3. SSH/SFTP Connection Pool & Database Read Pool
+`internal/sshclient/pool.go` reuses SSH and SFTP connections (90s idle expiry, 30s keepalive) and caches `known_hosts` in memory. GET pages for files, monitoring, and system never trigger SSH collection inline. SQLite uses a separate WAL read pool (`Runtime.Reader()`) alongside the single writer; MySQL is unaffected.
+
+### 5.4. Scheduler & Background Workers
 `internal/scheduler/` manages asynchronous cron tasks:
 - **Telemetry Sweeps:** Resource & vnStat snapshots.
 - **Node Discovery:** Background checks for Rebecca/PasarGuard processes.
@@ -115,7 +119,8 @@ To avoid regressions, maintain these key domain guarantees:
 - **Bulk Actions:** Never run SSH inline; queue jobs in an in-memory worker pool and redirect to an auto-refreshing status view.
 - **Node Management:** Discovery sweeps execute under a per-server single-flight lock (`AcquireServerSweep`), replace `node_snapshots` atomically per `sweep_id` only on healthy/empty sweeps (preserving cached nodes when SSH fails), keep `GET /servers/{id}/nodes` strictly read-only, and maintain 30-day UTC daily uptime buckets in `node_status_history`. Installs allocate a non-echoing PTY with base64 stdin secret framing (`umask 077`) for Rebecca, preflight PasarGuard script prompts before execution, and gate destructive `--override` flags behind explicit `confirm_override` confirmation.
 - **Terminal:** Static assets for xterm.js must remain vendored (`script-src 'self'`); WebGL renderer with canvas fallback.
-- **Analytics & Quotas:** Daily vnStat rows are retained for 35 days (5 weeks) to power seasonal weekday forecasting; period resets anchor to `traffic_reset_day`.
+- **Analytics & Quotas:** Daily vnStat rows are retained for 35 days (5 weeks) to power seasonal weekday forecasting; period resets anchor to `traffic_reset_day` and the fleet, per-server, Overview, and Alerts views share the same billing-period math. `GET /servers/{id}/analytics/data?metrics=...` aggregates chart series in one request (with 7D/30D fallback for servers younger than the range), and `GET/POST /analytics/limits*` manages global and per-tag traffic limits via AJAX JSON. Charts are server-data-driven SVG with no build-time dependencies.
+- **Security Posture:** Production refuses session secrets shorter than 32 characters; client IP is taken from the right-most trusted `X-Forwarded-For` hop with IPv6 grouped by `/64`; terminal sessions are closed on logout, delete, and shutdown; `/healthz/ready` never leaks error details.
 - **Alerts:** Unavailable metrics during a sweep are skipped (neither fired nor resolved) to prevent false cooldown flappings.
 - **Bilingual Parity:** All new UI text must be defined in both `en.json` and `fa.json`. Key parity is enforced by `internal/i18n/parity_test.go`.
 

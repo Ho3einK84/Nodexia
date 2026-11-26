@@ -1,6 +1,7 @@
 package system
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -55,16 +56,8 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hasStoredCreds := servers.HasStoredCredentials(server)
 	refreshParam := strings.TrimSpace(r.URL.Query().Get("refresh"))
 	wantRefresh := refreshParam == "1"
-	shouldCollect := hasStoredCreds && wantRefresh
 
-	if hasStoredCreds && !wantRefresh && refreshParam != "0" {
-		_, err := h.factRepo.GetLatestByServer(r.Context(), server.ID)
-		if err != nil && errors.Is(err, ErrNotFound) {
-			shouldCollect = true
-		}
-	}
-
-	if shouldCollect {
+	if hasStoredCreds && wantRefresh {
 		h.collectAndRender(w, r, server)
 		return
 	}
@@ -96,7 +89,10 @@ func (h PageHandler) collectAndRender(w http.ResponseWriter, r *http.Request, se
 		ConnectTimeout: connectTimeout,
 	}
 
-	snapshot, result, err := Collect(r.Context(), h.deps.SSH, sshclient.CommandRequest{
+	collectCtx, cancelCollect := boundedCollectionContext(r.Context(), h.deps)
+	defer cancelCollect()
+
+	snapshot, result, err := Collect(collectCtx, h.deps.SSH, sshclient.CommandRequest{
 		ConnectionRequest: connReq,
 		CommandTimeout:    commandTimeout,
 	})
@@ -173,7 +169,10 @@ func (h RefreshHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	snapshot, result, err := Collect(r.Context(), h.deps.SSH, sshclient.CommandRequest{
+	collectCtx, cancelCollect := boundedCollectionContext(r.Context(), h.deps)
+	defer cancelCollect()
+
+	snapshot, result, err := Collect(collectCtx, h.deps.SSH, sshclient.CommandRequest{
 		ConnectionRequest: sshclient.ConnectionRequest{
 			Host:           server.Host,
 			Port:           server.Port,
@@ -310,6 +309,18 @@ func defaultFormView(deps module.Dependencies, server servers.Server, hasStoredC
 
 func systemURL(serverID int64) string {
 	return "/servers/" + formatID(serverID) + "/system"
+}
+
+func boundedCollectionContext(ctx context.Context, deps module.Dependencies) (context.Context, context.CancelFunc) {
+	writeTimeout := deps.Config.HTTP.WriteTimeout
+	if writeTimeout <= 0 {
+		return context.WithCancel(ctx)
+	}
+	budget := writeTimeout - 2*time.Second
+	if budget <= 0 {
+		budget = writeTimeout / 2
+	}
+	return context.WithTimeout(ctx, budget)
 }
 
 func formInputFromRequest(r *http.Request, deps module.Dependencies) FormInput {

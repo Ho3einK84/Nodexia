@@ -118,6 +118,11 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 		showingTo = showingFrom + len(items) - 1
 	}
 
+	totalNodes := 0
+	for _, nc := range nodeCounts {
+		totalNodes += nc.total
+	}
+
 	pd := newServersPage(deps, r)
 	pd.CSRFToken = middleware.GetCSRFToken(r.Context())
 	pd.ContentTemplate = "content-servers-list"
@@ -126,7 +131,7 @@ func renderListPage(w http.ResponseWriter, r *http.Request, deps module.Dependen
 	pd.ServerCount = totalRegistered
 	pd.ServersUpCount = upCount
 	pd.ServersDownCount = downCount
-	pd.TotalNodeCount = totalNodeCount(r.Context(), deps)
+	pd.TotalNodeCount = totalNodes
 	pd.Servers = items
 	pd.ServerSearch = query
 	pd.ServerTagFilter = tagFilter
@@ -378,10 +383,11 @@ type serverNodeCounts struct {
 // a per-server MAX(id) subquery so that created_at is a regular column rather
 // than a GROUP-BY aggregate.
 func serverTelemetryMap(ctx context.Context, deps module.Dependencies) map[int64]serverTelemetry {
-	if deps.Database == nil || deps.Database.SQL == nil {
+	readDB := deps.Database.Reader()
+	if readDB == nil {
 		return nil
 	}
-	rows, err := deps.Database.SQL.QueryContext(ctx,
+	rows, err := readDB.QueryContext(ctx,
 		`SELECT ss.server_id, ss.cpu_usage, ss.ram_usage, ss.disk_usage, ss.created_at
 		 FROM system_snapshots ss
 		 JOIN (
@@ -439,10 +445,11 @@ func usageLevel(pct int) string {
 // serverNodeCountsMap collects per-server total/running/stopped node tallies
 // from each server's latest discovery sweep (excluding the "none" sentinel).
 func serverNodeCountsMap(ctx context.Context, deps module.Dependencies) map[int64]serverNodeCounts {
-	if deps.Database == nil || deps.Database.SQL == nil {
+	readDB := deps.Database.Reader()
+	if readDB == nil {
 		return nil
 	}
-	rows, err := deps.Database.SQL.QueryContext(ctx,
+	rows, err := readDB.QueryContext(ctx,
 		`SELECT ns.server_id, ns.health_status
 		 FROM node_snapshots ns
 		 WHERE ns.node_type <> 'none'

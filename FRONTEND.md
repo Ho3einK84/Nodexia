@@ -45,7 +45,7 @@ Loaded in `web/templates/partials.gohtml` via `{{ asset "/static/..." }}` (conte
 | `app.js` | Thin boot orchestrator & tab-pane rescan entry (`window.nxRescan`). Lazy-imports domain modules only when their DOM hooks exist. |
 | `modules/core.js` | Client i18n, byte formatting, escaping, CSRF, DOM factory, pane scoping, unified `.nx-toast` stack, strictly scoped `renderIcons`, top bar, delayed `#loading-overlay` (180ms), cleanup registry. |
 | `modules/ui.js` | Form guards, flash dismiss, masked secrets, copy buttons/targets, GPU `--pct` progress bars, rAF back-to-top & page-info popovers, collapsibles, keyboard shortcuts. |
-| `modules/modals.js` | Modal open/close with focus trap & scroll lock, accessible card overflow `.action-menu`. |
+| `modules/modals.js` | Modal open/close with focus trap & scroll lock, accessible card overflow `.action-menu`, and the unified Dark Graphite confirm dialog `window.nxConfirm()` (never use blocking `window.confirm()`). |
 | `modules/shell.js` | Dismissible fleet warnings, mobile drawer, bottom nav, PWA SW registration, portrait lock. |
 
 ### Lazy ES Modules (loaded via dynamic `import()` on demand)
