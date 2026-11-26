@@ -1,12 +1,10 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"time"
 
-	"github.com/Ho3einK84/Nodexia/internal/db"
 	"github.com/Ho3einK84/Nodexia/internal/humanize"
 	"github.com/Ho3einK84/Nodexia/internal/module/analytics"
 	"github.com/Ho3einK84/Nodexia/internal/module/monitoring"
@@ -18,14 +16,9 @@ import (
 // banner appears on the home dashboard.
 const resourceWarnThreshold = 90.0
 
-// homeWarnings computes the fleet warning banners for the home dashboard:
-// projected/actual traffic exhaustion before the period reset, any resource at
-// or above 90%, and forecast anomalies (spike / unusual growth). Everything is
-// best-effort — a read failure simply omits its warnings — and the whole pass
-// reuses data the dashboard already stores (no SSH).
-//
 // Banner ordering is severity-first (danger before warning), then server name,
-// so the most urgent problem always leads.
+// so the most urgent problem always leads. Warnings cover projected/actual
+// traffic exhaustion, any resource at or above 90%, and forecast anomalies.
 // computeHomeWarnings computes the fleet warning banners from preloaded
 // in-memory snapshots, traffic rows, and traffic limits (zero SQL queries).
 func computeHomeWarnings(
@@ -74,41 +67,6 @@ func computeHomeWarnings(
 		return warnings[i].ServerName < warnings[j].ServerName
 	})
 	return warnings
-}
-
-func homeWarnings(ctx context.Context, database *db.Runtime, loc interface {
-	T(key string, args ...any) string
-}) []view.HomeWarningView {
-	readDB := database.Reader()
-	if readDB == nil {
-		return nil
-	}
-
-	serverRepo := servers.NewSQLRepository(readDB)
-	serversList, err := serverRepo.List(ctx)
-	if err != nil || len(serversList) == 0 {
-		return nil
-	}
-
-	monitoringRepo := monitoring.NewSQLRepository(readDB)
-	snapshotByID := map[int64]monitoring.Snapshot{}
-	if snaps, err := monitoringRepo.ListAllLatestByServer(ctx); err == nil {
-		for _, snap := range snaps {
-			snapshotByID[snap.ServerID] = snap
-		}
-	}
-	ids := make([]int64, 0, len(serversList))
-	for _, s := range serversList {
-		ids = append(ids, s.ID)
-	}
-	trafficByServer := map[int64]monitoring.TrafficSnapshot{}
-	if snaps, err := monitoringRepo.GetLatestTrafficByServerIDs(ctx, ids); err == nil {
-		for _, ts := range snaps {
-			trafficByServer[ts.ServerID] = ts
-		}
-	}
-	limitResolver, _ := analytics.NewSQLRepository(readDB).LoadLimitResolver(ctx)
-	return computeHomeWarnings(serversList, snapshotByID, trafficByServer, limitResolver, loc)
 }
 
 // resourceWarnings flags any of CPU/RAM/disk at or above the threshold in the

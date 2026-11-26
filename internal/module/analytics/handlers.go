@@ -153,14 +153,9 @@ func (h PageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// limitView builds the monthly traffic-limit form state for a server. On any
-// read error it renders the form as "no limit" rather than failing the page —
-// the limit is an optional convenience, never a hard dependency of analytics.
-func (h PageHandler) limitView(r *http.Request, page view.PageData, server servers.Server) view.AnalyticsLimitView {
-	v, _, _ := h.limitViewWithEffective(r, page, server)
-	return v
-}
-
+// limitViewWithEffective builds the monthly traffic-limit form state for a
+// server. On any read error it renders the form as "no limit" rather than
+// failing the page — the limit is an optional convenience.
 func (h PageHandler) limitViewWithEffective(r *http.Request, page view.PageData, server servers.Server) (view.AnalyticsLimitView, TrafficLimit, bool) {
 	v := view.AnalyticsLimitView{
 		Action:        fmt.Sprintf("/servers/%d/analytics/limit", server.ID),
@@ -283,13 +278,8 @@ func limitFlash(r *http.Request, page view.PageData) (kind, message string) {
 	}
 }
 
-// currentPeriodTraffic reads the server's latest vnstat snapshot and pulls out
-// the current accounting period's download/upload/total.
-func (h PageHandler) currentPeriodTraffic(r *http.Request, server servers.Server) view.AnalyticsTrafficSummaryView {
-	summary, _, _, _ := h.currentPeriodTrafficWithBytes(r, server)
-	return summary
-}
-
+// currentPeriodTrafficWithBytes reads the server's latest vnstat snapshot and
+// pulls out the current accounting period's download/upload/total.
 func (h PageHandler) currentPeriodTrafficWithBytes(r *http.Request, server servers.Server) (view.AnalyticsTrafficSummaryView, int64, int64, int64) {
 	now := time.Now().UTC()
 	summary := view.AnalyticsTrafficSummaryView{MonthLabel: now.Format("2006-01")}
