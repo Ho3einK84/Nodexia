@@ -191,6 +191,16 @@ func (h TestConnectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			if id, err := strconv.ParseInt(rawID, 10, 64); err == nil && id > 0 {
 				if existing, err := h.repo.GetByID(r.Context(), id); err == nil &&
 					hasStoredSecret(existing.CredentialStrategy, existing.CredentialRef) {
+					if !sameCredentialTarget(server, existing) {
+						writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+							"ok":      false,
+							"message": loc.T("servers.form.fix_fields"),
+							"errors": map[string]string{
+								"credential_ref": "Re-enter credentials when changing host or username.",
+							},
+						})
+						return
+					}
 					server.CredentialRef = existing.CredentialRef
 				}
 			}
@@ -300,7 +310,11 @@ func (h UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if validated.Server.CredentialRef == "" &&
 		(validated.Server.CredentialStrategy == CredentialStrategyStored || validated.Server.CredentialStrategy == CredentialStrategyRuntime) &&
 		hasStoredSecret(existing.CredentialStrategy, existing.CredentialRef) {
-		validated.Server.CredentialRef = existing.CredentialRef
+		if sameCredentialTarget(validated.Server, existing) {
+			validated.Server.CredentialRef = existing.CredentialRef
+		} else if validated.Server.CredentialStrategy == CredentialStrategyStored {
+			validationErrors["credential_ref"] = "Re-enter credentials when changing host or username."
+		}
 	}
 	if validationErrors.HasAny() {
 		form := EditFormViewData(validated.Server, validationErrors)
@@ -362,6 +376,10 @@ func (h DeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.Delete(r.Context(), serverID); err != nil {
 		renderRepositoryError(w, r, h.deps, err, "servers.error.delete_title", "servers.error.delete_message")
 		return
+	}
+
+	if h.deps.TerminalTickets != nil {
+		h.deps.TerminalTickets.RevokeServer(serverID)
 	}
 
 	http.Redirect(w, r, "/servers?flash=deleted&id="+formatID(serverID), http.StatusSeeOther)
@@ -432,4 +450,13 @@ func formInputFromRequest(r *http.Request) FormInput {
 
 func formatID(id int64) string {
 	return strconv.FormatInt(id, 10)
+}
+
+// sameCredentialTarget reports whether a candidate server targets the same
+// remote host and username as an existing record. Stored SSH secrets may only
+// be reused across edits or connection tests when both match, preventing
+// exfiltration of a stored password/key to a different host or account.
+func sameCredentialTarget(candidate, existing Server) bool {
+	return strings.EqualFold(strings.TrimSpace(candidate.Host), strings.TrimSpace(existing.Host)) &&
+		strings.TrimSpace(candidate.Username) == strings.TrimSpace(existing.Username)
 }

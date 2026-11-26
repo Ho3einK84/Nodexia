@@ -11,11 +11,13 @@ package ansi
 import "regexp"
 
 // ansiPattern matches the escape forms that appear in this codebase's output:
+//   - OSC sequences (window title, hyperlinks, clipboard): ESC ']' … BEL or ST
 //   - CSI sequences (colours, cursor moves, erases): ESC '[' … final @–~
 //   - charset-select escapes such as ESC '(' 'B' emitted by `tput sgr0`
 //   - other simple two-byte Fe escapes
 var ansiPattern = regexp.MustCompile(
-	"\x1b\\[[0-9;?]*[ -/]*[@-~]" + // CSI
+	"\x1b\\][^\x07\x1b]*(?:\x07|\x1b\\\\)" + // OSC
+		"|\x1b\\[[0-9;?]*[ -/]*[@-~]" + // CSI
 		"|\x1b[()][@-~]" + // charset select
 		"|\x1b[@-Z\\\\^_]") // other Fe escapes
 

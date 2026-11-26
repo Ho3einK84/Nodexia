@@ -522,12 +522,15 @@ func (s *Service) OpenShell(ctx context.Context, req ConnectionRequest, pio Inte
 		return fmt.Errorf("sshclient: start shell: %w", err)
 	}
 
-	// Forward resize requests until ctx ends.
+	shellCtx, shellCancel := context.WithCancel(ctx)
+	defer shellCancel()
+
+	// Forward resize requests until the shell exits or ctx ends.
 	if pio.Resize != nil {
 		go func() {
 			for {
 				select {
-				case <-ctx.Done():
+				case <-shellCtx.Done():
 					return
 				case r, ok := <-pio.Resize:
 					if !ok {
@@ -549,6 +552,7 @@ func (s *Service) OpenShell(ctx context.Context, req ConnectionRequest, pio Inte
 		<-waitDone
 		return ctx.Err()
 	case err := <-waitDone:
+		_ = session.Close()
 		_ = client.Close()
 		return err
 	}

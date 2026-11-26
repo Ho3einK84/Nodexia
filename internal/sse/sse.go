@@ -49,6 +49,7 @@ func (x *Writer) Event(event, data string) error {
 		b.WriteByte('\n')
 	}
 	data = strings.ReplaceAll(data, "\r\n", "\n")
+	data = strings.ReplaceAll(data, "\r", "\n")
 	for _, line := range strings.Split(data, "\n") {
 		b.WriteString("data: ")
 		b.WriteString(line)

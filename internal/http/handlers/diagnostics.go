@@ -78,7 +78,9 @@ func (h DiagnosticsHandler) renderPage(w http.ResponseWriter, r *http.Request, s
 		}
 		return "/ops/diagnostics?sch_page=" + strconv.Itoa(p)
 	})
-	page.SchedulerOverview.RecentRuns = schedulerRunViews(h.scheduler.RecentRuns(r.Context(), 20))
+	if h.scheduler != nil {
+		page.SchedulerOverview.RecentRuns = schedulerRunViews(h.scheduler.RecentRuns(r.Context(), 20))
+	}
 
 	if err := h.renderer.Render(w, status, page); err != nil {
 		http.Error(w, "render diagnostics page", http.StatusInternalServerError)

@@ -15,6 +15,7 @@ import (
 	"github.com/Ho3einK84/Nodexia/internal/http/middleware"
 	"github.com/Ho3einK84/Nodexia/internal/i18n"
 	"github.com/Ho3einK84/Nodexia/internal/ratelimit"
+	"github.com/Ho3einK84/Nodexia/internal/terminalticket"
 	"github.com/Ho3einK84/Nodexia/internal/view"
 )
 
@@ -139,36 +140,47 @@ func loginLocalizer(r *http.Request) *i18n.Localizer {
 // clientKey identifies the caller for throttling. Behind a trusted reverse
 // proxy the original client address is taken from the forwarding headers;
 // otherwise only the direct connection address is trusted so callers cannot
-// spoof their identity to dodge the limiter.
+// spoof their identity to dodge the limiter. IPv6 addresses are normalized to
+// their /64 prefix so attackers cannot bypass brute-force throttling by
+// rotating addresses inside a single routed allocation.
 func (h LoginHandler) clientKey(r *http.Request) string {
 	if h.config.Install.BehindReverseProxy {
-		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-			// Scan right-to-left so client-forged leading XFF values cannot bypass
-			// per-IP rate limiting when the edge proxy appends the peer address.
-			parts := strings.Split(forwarded, ",")
+		// Scan all X-Forwarded-For headers right-to-left so multiple headers
+		// or client-forged leading entries cannot bypass per-IP rate limiting.
+		headers := r.Header.Values("X-Forwarded-For")
+		for hIdx := len(headers) - 1; hIdx >= 0; hIdx-- {
+			parts := strings.Split(headers[hIdx], ",")
 			for i := len(parts) - 1; i >= 0; i-- {
 				if addr, err := netip.ParseAddr(strings.TrimSpace(parts[i])); err == nil {
-					return addr.String()
+					return normalizeThrottleAddr(addr)
 				}
 			}
 		}
 		if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
 			if addr, err := netip.ParseAddr(realIP); err == nil {
-				return addr.String()
+				return normalizeThrottleAddr(addr)
 			}
 		}
 	}
 
 	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		if addr, parseErr := netip.ParseAddr(host); parseErr == nil {
-			return addr.String()
+			return normalizeThrottleAddr(addr)
 		}
 		return host
 	}
 	if addr, err := netip.ParseAddr(strings.TrimSpace(r.RemoteAddr)); err == nil {
-		return addr.String()
+		return normalizeThrottleAddr(addr)
 	}
 	return r.RemoteAddr
+}
+
+func normalizeThrottleAddr(addr netip.Addr) string {
+	addr = addr.Unmap()
+	if addr.Is6() {
+		return netip.PrefixFrom(addr, 64).Masked().String()
+	}
+	return addr.String()
 }
 
 func retryAfterSeconds(d time.Duration) string {
@@ -188,17 +200,27 @@ func humanizeRetryAfter(d time.Duration) string {
 }
 
 type LogoutHandler struct {
-	config config.Config
+	config          config.Config
+	terminalTickets *terminalticket.Store
 }
 
 func NewLogoutHandler(cfg config.Config) LogoutHandler {
 	return LogoutHandler{config: cfg}
 }
 
+func NewLogoutHandlerWithTickets(cfg config.Config, tickets *terminalticket.Store) LogoutHandler {
+	return LogoutHandler{config: cfg, terminalTickets: tickets}
+}
+
 func (h LogoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
+	}
+	if h.terminalTickets != nil {
+		if username := middleware.GetAuthenticatedUser(r.Context()); username != "" {
+			h.terminalTickets.RevokeUser(username)
+		}
 	}
 	http.SetCookie(w, middleware.ClearAuthCookie(h.config.Security.SessionCookieSecure))
 	http.SetCookie(w, middleware.ClearSessionCookie(h.config))

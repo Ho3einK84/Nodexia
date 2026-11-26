@@ -333,6 +333,52 @@ func TestConnectionHandlerValidatesAndHandlesUnavailableSSH(t *testing.T) {
 	}
 }
 
+func TestUpdateAndTestConnectionRefuseCredentialReuseAcrossChangedHostOrUser(t *testing.T) {
+	deps, repo := testServerDeps(t)
+	const secret = "VictimServerPassword#2026"
+	created, err := repo.Create(context.Background(), servers.Server{
+		Name:               "victim-1",
+		Host:               "198.51.100.50",
+		Port:               22,
+		AuthMode:           servers.AuthModePassword,
+		Username:           "root",
+		CredentialStrategy: servers.CredentialStrategyStored,
+		CredentialRef:      secret,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	sid := strconv.FormatInt(created.ID, 10)
+
+	// 1. UpdateHandler must reject changing host without re-entering credentials.
+	updH := servers.NewUpdateHandler(deps, repo)
+	updForm := url.Values{
+		"name":                {"victim-1"},
+		"host":                {"203.0.113.99"}, // changed host!
+		"port":                {"22"},
+		"auth_mode":           {servers.AuthModePassword},
+		"username":            {"root"},
+		"credential_strategy": {servers.CredentialStrategyStored},
+		"credential_ref":      {""},
+	}
+	updReq := httptest.NewRequest(http.MethodPost, "/servers/"+sid+"/edit", strings.NewReader(updForm.Encode()))
+	updReq.SetPathValue("id", sid)
+	updReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	updRec := httptest.NewRecorder()
+	updH.ServeHTTP(updRec, updReq)
+
+	if updRec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("host change without credential status = %d, want 422", updRec.Code)
+	}
+	after, err := repo.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if after.Host != "198.51.100.50" || after.CredentialRef != secret {
+		t.Fatalf("server unexpectedly mutated on rejected update: %+v", after)
+	}
+}
+
 func TestListHandlerRendersAddServerModalAndQueryAutoOpen(t *testing.T) {
 	deps, repo := testServerDeps(t)
 	h := servers.NewListHandler(deps, repo)

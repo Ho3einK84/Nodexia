@@ -21,6 +21,7 @@ func NewHealthHandler(cfg config.Config, database *db.Runtime) HealthHandler {
 
 func (h HealthHandler) Liveness(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
 }
@@ -52,7 +53,7 @@ func (h HealthHandler) Ready(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 		if err := h.database.SQL.PingContext(ctx); err != nil {
-			checks["database"] = checkResult{Status: "fail", Detail: err.Error()}
+			checks["database"] = checkResult{Status: "fail", Detail: "database unreachable"}
 			overall = "fail"
 			statusCode = http.StatusServiceUnavailable
 		} else {
@@ -83,6 +84,7 @@ type checkResult struct {
 func writeHealthJSON(w http.ResponseWriter, statusCode int, payload healthPayload) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(statusCode)
 	_ = json.NewEncoder(w).Encode(payload)
 }

@@ -1,6 +1,8 @@
 package terminal
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,9 +63,11 @@ func (h uploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	username := middleware.GetAuthenticatedUser(r.Context())
+	// Do NOT call r.FormValue() before r.MultipartReader(): parsing the body
+	// prematurely consumes the multipart stream and bypasses MaxBytesReader.
 	ticketID := strings.TrimSpace(r.URL.Query().Get("ticket"))
 	if ticketID == "" {
-		ticketID = strings.TrimSpace(r.FormValue("ticket"))
+		ticketID = strings.TrimSpace(r.Header.Get("X-Terminal-Ticket"))
 	}
 
 	var connReq sshclient.ConnectionRequest
@@ -103,6 +107,12 @@ func (h uploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Clear the HTTP server's default ReadTimeout/WriteTimeout so large
+	// uploads (up to 256 MiB) are not aborted mid-stream.
+	rc := http.NewResponseController(w)
+	_ = rc.SetReadDeadline(time.Time{})
+	_ = rc.SetWriteDeadline(time.Time{})
+
 	r.Body = http.MaxBytesReader(w, r.Body, maxTerminalUploadBytes)
 	reader, err := r.MultipartReader()
 	if err != nil {
@@ -126,10 +136,11 @@ func (h uploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		cleanName := sanitizeUploadFileName(part.FileName())
-		remoteFileName := fmt.Sprintf("upload_%d_%s", time.Now().Unix(), cleanName)
+		suffix := randomUploadSuffix()
+		remoteFileName := fmt.Sprintf("nodexia_%s_%s", suffix, cleanName)
 		remotePath := path.Join("/tmp", remoteFileName)
 
-		written, uploadErr := h.deps.SSH.UploadFile(r.Context(), connReq, remotePath, part)
+		written, uploadErr := h.deps.SSH.UploadFileExclusive(r.Context(), connReq, remotePath, part, 0o600)
 		_ = part.Close()
 		if uploadErr != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]any{
@@ -149,6 +160,14 @@ func (h uploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "No file found in request"})
+}
+
+func randomUploadSuffix() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b[:])
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

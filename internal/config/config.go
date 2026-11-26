@@ -15,14 +15,17 @@ const (
 	DriverMySQL  = "mysql"
 )
 
-// devSessionSecret is the insecure fallback secret applied only in development
-// and test environments. It must never be accepted in production or staging.
-const devSessionSecret = "nodexia-dev-session-secret-change-me"
+// devSessionSecret and exampleProductionSessionSecret are insecure placeholder
+// secrets that must never be accepted in production or staging.
+const (
+	devSessionSecret               = "nodexia-dev-session-secret-change-me"
+	exampleProductionSessionSecret = "change-this-production-secret"
+)
 
 // minProductionSessionSecretLength is the minimum length enforced for the
 // session secret outside development/test, so signed cookies cannot be forged
 // by brute-forcing a short key.
-const minProductionSessionSecretLength = 16
+const minProductionSessionSecretLength = 32
 
 // weakAdminPassword is the trivial default used in development and test.
 // exampleAdminPassword is the .env.example placeholder.
@@ -328,8 +331,8 @@ func (c Config) Validate() error {
 		if secret == "" {
 			return errors.New("config: NODEXIA_SESSION_SECRET cannot be empty outside development or test")
 		}
-		if secret == devSessionSecret {
-			return errors.New("config: NODEXIA_SESSION_SECRET must not use the development default outside development or test")
+		if secret == devSessionSecret || secret == exampleProductionSessionSecret {
+			return errors.New("config: NODEXIA_SESSION_SECRET must not use a development or example default outside development or test")
 		}
 		if len(secret) < minProductionSessionSecretLength {
 			return fmt.Errorf("config: NODEXIA_SESSION_SECRET must be at least %d characters outside development or test", minProductionSessionSecretLength)

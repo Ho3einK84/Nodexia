@@ -2360,7 +2360,16 @@
     var credsBody = qs('#file-creds-body');
 
     var readStored = function () {
-      try { return JSON.parse(sessionStorage.getItem(storageKey) || 'null'); } catch (e) { return null; }
+      var store = window.__nxRuntimeFileCreds;
+      if (!store || typeof store.get !== 'function') return null;
+      return store.get(storageKey) || null;
+    };
+    var writeStored = function (val) {
+      if (!window.__nxRuntimeFileCreds || typeof window.__nxRuntimeFileCreds.set !== 'function') {
+        window.__nxRuntimeFileCreds = new Map();
+      }
+      if (!val) window.__nxRuntimeFileCreds.delete(storageKey);
+      else window.__nxRuntimeFileCreds.set(storageKey, val);
     };
     var hasAnyInput = function () { return Boolean((pwdInput && pwdInput.value) || (keyInput && keyInput.value) || (phraseInput && phraseInput.value)); };
     var syncCredUI = function () {
@@ -2375,6 +2384,9 @@
       }
     };
 
+    // Purge any legacy plaintext credentials previously written to sessionStorage.
+    try { sessionStorage.removeItem(storageKey); } catch (e) {}
+
     var saved = readStored();
     if (saved) {
       if (pwdInput && saved.pwd) pwdInput.value = saved.pwd;
@@ -2383,14 +2395,12 @@
     }
 
     var persist = function () {
-      try {
-        if (!hasAnyInput()) sessionStorage.removeItem(storageKey);
-        else sessionStorage.setItem(storageKey, JSON.stringify({
-          pwd: pwdInput ? pwdInput.value : '',
-          key: keyInput ? keyInput.value : '',
-          passphrase: phraseInput ? phraseInput.value : ''
-        }));
-      } catch (e) {}
+      if (!hasAnyInput()) writeStored(null);
+      else writeStored({
+        pwd: pwdInput ? pwdInput.value : '',
+        key: keyInput ? keyInput.value : '',
+        passphrase: phraseInput ? phraseInput.value : ''
+      });
       syncCredUI();
     };
 
@@ -2409,6 +2419,7 @@
     }
     if (clearBtn) {
       clearBtn.addEventListener('click', function () {
+        writeStored(null);
         try { sessionStorage.removeItem(storageKey); } catch (e) {}
         if (pwdInput) pwdInput.value = '';
         if (keyInput) keyInput.value = '';

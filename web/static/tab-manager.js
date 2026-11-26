@@ -1171,6 +1171,18 @@
     document.addEventListener('submit', function (e) {
       var form = e.target;
       if (!form || !form.matches || !form.matches('form')) return;
+      // Clear ephemeral in-memory runtime credentials and tab metadata on logout.
+      var rawAction = (form.getAttribute('action') || '').trim();
+      if (rawAction === '/logout') {
+        try {
+          if (window.__nxRuntimeFileCreds && typeof window.__nxRuntimeFileCreds.clear === 'function') {
+            window.__nxRuntimeFileCreds.clear();
+          }
+          sessionStorage.removeItem(STORAGE_KEY);
+          sessionStorage.removeItem(CLOSED_KEY);
+        } catch (_) {}
+        return;
+      }
       if (e.defaultPrevented) return; // a confirm()-guard upstream already cancelled it
       if (form.hasAttribute('data-tab-bypass') || form.target === '_blank') return;
       var pane = form.closest('.tab-pane');

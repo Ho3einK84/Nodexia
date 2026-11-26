@@ -283,6 +283,38 @@ func (s *Service) UploadFileWithOptions(ctx context.Context, req ConnectionReque
 	return uploadFileWithClient(sftpClient, remotePath, content, createParents)
 }
 
+// UploadFileExclusive creates a brand-new remote file using O_EXCL (refusing to
+// overwrite or follow pre-existing symlinks in shared directories such as /tmp)
+// and applies perm (e.g. 0600) to the created file.
+func (s *Service) UploadFileExclusive(ctx context.Context, req ConnectionRequest, remotePath string, content io.Reader, perm os.FileMode) (int64, error) {
+	_, sftpClient, cleanup, err := s.openSFTP(ctx, req)
+	if err != nil {
+		return 0, err
+	}
+	defer cleanup()
+
+	remoteFile, err := sftpClient.OpenFile(remotePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL)
+	if err != nil {
+		return 0, fmt.Errorf("sshclient: create exclusive remote file %s: %w", remotePath, err)
+	}
+	if perm != 0 {
+		_ = remoteFile.Chmod(perm)
+	}
+
+	buf := make([]byte, copyBufSize)
+	written, copyErr := io.CopyBuffer(remoteFile, content, buf)
+	closeErr := remoteFile.Close()
+	if copyErr != nil {
+		_ = sftpClient.Remove(remotePath)
+		return written, fmt.Errorf("sshclient: write remote file %s: %w", remotePath, copyErr)
+	}
+	if closeErr != nil {
+		_ = sftpClient.Remove(remotePath)
+		return written, fmt.Errorf("sshclient: finalize remote file %s: %w", remotePath, closeErr)
+	}
+	return written, nil
+}
+
 func uploadFileWithClient(client *sftp.Client, remotePath string, content io.Reader, createParents bool) (int64, error) {
 	if createParents {
 		parent := path.Dir(remotePath)
