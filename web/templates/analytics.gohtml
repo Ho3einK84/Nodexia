@@ -2,6 +2,7 @@
 <section class="hero analytics-page analytics-server">
 
   {{ template "server-header" . }}
+  {{ template "flash-banner" . }}
 
   <!-- Network Traffic Hero Section (always 30d from vnStat) -->
   <div class="analytics-traffic-hero">
@@ -14,7 +15,7 @@
         </div>
         <div class="chart-card__meta">
           <span class="chart-card__live-val" id="live-traffic" hidden></span>
-          <span class="chart-card__unit">GB/day</span>
+          <span class="chart-card__unit" dir="ltr">{{ t "analytics.unit_gb_day" }}</span>
         </div>
       </div>
       <div class="chart-wrap chart-wrap--tall">
@@ -28,9 +29,13 @@
         <div class="chart-error" id="error-traffic" hidden>
           <i data-lucide="alert-circle"></i>
           <p>{{ t "analytics.traffic_error" }}</p>
+          <button type="button" class="btn btn--ghost btn--xs chart-retry-btn" data-chart-retry="traffic"><i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "analytics.retry" }}</button>
         </div>
       </div>
-      <div class="chart-legend" id="legend-traffic"></div>
+      <div class="chart-traffic-bottom">
+        <div class="chart-legend" id="legend-traffic"></div>
+        <div class="chart-card__footer chart-card__footer--inline" id="footer-traffic"></div>
+      </div>
     </article>
 
     <!-- This month's traffic split (download vs upload) -->
@@ -87,18 +92,25 @@
     {{ end }}
   </div>
 
-  <!-- Scoped Resource Telemetry Section (controlled by 1H / 24H / 7D / 30D range tabs) -->
+  <!-- Scoped Resource Telemetry Section (controlled by 1H / 6H / 24H / 7D / 30D range tabs) -->
   <div class="analytics-section-bar an-enter" style="--stagger:1">
     <h2 class="analytics-section-title">
       <span class="an-section-icon" aria-hidden="true"><i data-lucide="activity" class="chart-icon"></i></span>
       <span>{{ t "monitoring.resource_health" }}</span>
     </h2>
-    <div class="analytics-range-tabs" id="globalRangeTabs" role="tablist" aria-label="{{ t "analytics.time_range" }}">
-      <span class="range-tab-indicator" id="rangeTabIndicator" aria-hidden="true"></span>
-      <button class="range-tab" data-range="1h" role="tab">1H</button>
-      <button class="range-tab active" data-range="24h" role="tab" aria-selected="true">24H</button>
-      <button class="range-tab" data-range="7d" role="tab">7D</button>
-      <button class="range-tab" data-range="30d" role="tab">30D</button>
+    <div class="analytics-controls-bar">
+      <div class="analytics-range-tabs" id="globalRangeTabs" role="tablist" aria-label="{{ t "analytics.time_range" }}">
+        <span class="range-tab-indicator" id="rangeTabIndicator" aria-hidden="true"></span>
+        <button type="button" class="range-tab" data-range="1h" role="tab" aria-selected="false" tabindex="-1">1H</button>
+        <button type="button" class="range-tab" data-range="6h" role="tab" aria-selected="false" tabindex="-1">6H</button>
+        <button type="button" class="range-tab active" data-range="24h" role="tab" aria-selected="true" tabindex="0">24H</button>
+        <button type="button" class="range-tab" data-range="7d" role="tab" aria-selected="false" tabindex="-1">7D</button>
+        <button type="button" class="range-tab" data-range="30d" role="tab" aria-selected="false" tabindex="-1">30D</button>
+      </div>
+      <button type="button" class="btn btn--ghost btn--sm an-refresh-btn" id="analyticsRefreshBtn" title="{{ t "analytics.refresh" }}" aria-label="{{ t "analytics.refresh" }}">
+        <i data-lucide="refresh-cw" class="icon-in-button"></i>
+        <span class="an-refresh-btn__label">{{ t "analytics.refresh" }}</span>
+      </button>
     </div>
   </div>
 
@@ -126,6 +138,7 @@
         <div class="chart-error" id="error-cpu" hidden>
           <i data-lucide="alert-circle"></i>
           <p>{{ t "analytics.chart_error" }}</p>
+          <button type="button" class="btn btn--ghost btn--xs chart-retry-btn" data-chart-retry="cpu"><i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "analytics.retry" }}</button>
         </div>
       </div>
       <div class="chart-card__footer" id="footer-cpu"></div>
@@ -152,6 +165,7 @@
         <div class="chart-error" id="error-ram" hidden>
           <i data-lucide="alert-circle"></i>
           <p>{{ t "analytics.chart_error" }}</p>
+          <button type="button" class="btn btn--ghost btn--xs chart-retry-btn" data-chart-retry="ram"><i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "analytics.retry" }}</button>
         </div>
       </div>
       <div class="chart-card__footer" id="footer-ram"></div>
@@ -178,6 +192,7 @@
         <div class="chart-error" id="error-disk" hidden>
           <i data-lucide="alert-circle"></i>
           <p>{{ t "analytics.chart_error" }}</p>
+          <button type="button" class="btn btn--ghost btn--xs chart-retry-btn" data-chart-retry="disk"><i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "analytics.retry" }}</button>
         </div>
       </div>
       <div class="chart-card__footer" id="footer-disk"></div>
@@ -204,6 +219,7 @@
         <div class="chart-error" id="error-load" hidden>
           <i data-lucide="alert-circle"></i>
           <p>{{ t "analytics.chart_error" }}</p>
+          <button type="button" class="btn btn--ghost btn--xs chart-retry-btn" data-chart-retry="load"><i data-lucide="refresh-cw" class="icon-in-button"></i> {{ t "analytics.retry" }}</button>
         </div>
       </div>
       <div class="chart-card__footer" id="footer-load"></div>
@@ -211,7 +227,7 @@
 
   </div>
 
-  <!-- Monthly download limit (optional; drives exhaustion forecasting) -->
+  <!-- Monthly traffic limit (optional; drives exhaustion forecasting) -->
   {{ with .AnalyticsLimit }}
   <article class="card analytics-limit an-card an-card--limit an-enter" style="--stagger:2">
     <div class="analytics-limit__head">
@@ -228,6 +244,27 @@
       {{ end }}
     </div>
     <p class="analytics-limit__hint">{{ t "analytics.limit.hint" }}</p>
+
+    <div class="analytics-limit__quota{{ if .QuotaLevel }} analytics-limit__quota--{{ .QuotaLevel }}{{ end }}" data-limit-quota{{ if not .HasQuota }} hidden{{ end }}>
+      <div class="analytics-limit__quota-top">
+        <span class="analytics-limit__quota-text" data-limit-quota-text>{{ if .HasQuota }}{{ t "analytics.limit.quota_usage" "used" .QuotaUsedHuman "limit" .QuotaLimitHuman "kind" .QuotaKindLabel }}{{ end }}</span>
+        <span class="analytics-limit__quota-pct" dir="ltr" data-limit-quota-pct>{{ if .HasQuota }}{{ .QuotaPct }}%{{ end }}</span>
+      </div>
+      <div class="analytics-limit__quota-meter" aria-hidden="true">
+        <span class="analytics-limit__quota-fill" data-an-bar data-limit-quota-fill style="--pct:{{ .QuotaBarPct }}"></span>
+      </div>
+    </div>
+
+    <div class="limit-presets" data-limit-presets>
+      <span class="limit-presets__label">{{ t "analytics.limit.presets_label" }}</span>
+      <button type="button" class="limit-preset-chip" data-preset-val="250" data-preset-unit="GB" dir="ltr">250 GB</button>
+      <button type="button" class="limit-preset-chip" data-preset-val="500" data-preset-unit="GB" dir="ltr">500 GB</button>
+      <button type="button" class="limit-preset-chip" data-preset-val="1" data-preset-unit="TB" dir="ltr">1 TB</button>
+      <button type="button" class="limit-preset-chip" data-preset-val="2" data-preset-unit="TB" dir="ltr">2 TB</button>
+      <button type="button" class="limit-preset-chip" data-preset-val="5" data-preset-unit="TB" dir="ltr">5 TB</button>
+      <button type="button" class="limit-preset-chip" data-preset-val="10" data-preset-unit="TB" dir="ltr">10 TB</button>
+    </div>
+
     <div class="limit-form-row">
       <form class="limit-form" method="post" action="{{ .Action }}" data-limit-form>
         <input type="hidden" name="_csrf_token" value="{{ $.CSRFToken }}">
@@ -264,19 +301,37 @@
   </article>
   {{ end }}
 
-  <!-- Bandwidth Forecast (download only) -->
+  <!-- Bandwidth Forecast (follows effective limit direction: RX / TX / Total) -->
+  {{- $effKind := .AnalyticsLimit.EffectiveKind -}}
   <div class="forecast-header an-enter" style="--stagger:3">
     <p class="eyebrow forecast-eyebrow"><span class="an-dot an-dot--indigo" aria-hidden="true"></span> {{ t "analytics.forecast_eyebrow" }}</p>
     <h2 class="analytics-title">
       <span class="chart-icon-badge chart-icon-badge--forecast" aria-hidden="true"><i data-lucide="sparkles"></i></span>
       <span>{{ t "analytics.usage_forecast" }}</span>
-      <span class="forecast-scope"><i data-lucide="arrow-down"></i> {{ t "analytics.download" }}</span>
+      <span class="forecast-scope" id="forecastScopeBadge">
+        {{- if eq $effKind "tx" -}}
+          <i data-lucide="arrow-up"></i> <span>{{ t "analytics.upload" }}</span>
+        {{- else if eq $effKind "total" -}}
+          <i data-lucide="arrow-up-down"></i> <span>{{ t "analytics.total" }}</span>
+        {{- else -}}
+          <i data-lucide="arrow-down"></i> <span>{{ t "analytics.download" }}</span>
+        {{- end -}}
+      </span>
     </h2>
-    <p class="analytics-subtitle">{{ tsafe "analytics.forecast_subtitle" }}</p>
+    <p class="analytics-subtitle" id="forecastSubtitle">
+      {{- if eq $effKind "tx" -}}
+        {{ tsafe "analytics.forecast_subtitle_tx" }}
+      {{- else if eq $effKind "total" -}}
+        {{ tsafe "analytics.forecast_subtitle_total" }}
+      {{- else -}}
+        {{ tsafe "analytics.forecast_subtitle" }}
+      {{- end -}}
+    </p>
   </div>
 
   <div class="forecast-grid" id="forecastGrid">
-    <!-- Populated by analytics.js -->
+    <div class="forecast-skeleton an-shimmer"></div>
+    <div class="forecast-skeleton an-shimmer"></div>
     <div class="forecast-skeleton an-shimmer"></div>
   </div>
 

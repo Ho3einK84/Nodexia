@@ -79,6 +79,8 @@ type ServerMetricSummary struct {
 	AvgRAM      float64
 	AvgDisk     float64
 	AvgSwap     float64
+	LoadAvg1    float64
+	RecordedAt  time.Time
 }
 
 // ServerTrafficSummary holds the current-month traffic totals for one server,
@@ -89,11 +91,13 @@ type ServerTrafficSummary struct {
 	// CountryCode is the server's detected ISO 3166-1 alpha-2 code (or "" when
 	// unknown), folded into the traffic query so the overview can show a flag
 	// without an extra per-row lookup.
-	CountryCode string
-	MonthRX     int64
-	MonthTX     int64
-	MonthBytes  int64
-	MonthLabel  string
+	CountryCode    string
+	ResetDay       int
+	PeriodAnchored bool
+	MonthRX        int64
+	MonthTX        int64
+	MonthBytes     int64
+	MonthLabel     string
 }
 
 // Limit scopes for traffic_limit_rules. server-level caps live in their own

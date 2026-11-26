@@ -479,10 +479,10 @@ func (r SQLRepository) DeleteHourlyBefore(ctx context.Context, before time.Time)
 // LimitResolver resolves effective traffic caps for many servers in memory
 // using a single batch load of server_traffic_limits and traffic_limit_rules.
 type LimitResolver struct {
-	perServer  map[int64]TrafficLimit
-	byTag      map[string]int64
-	global     int64
-	hasGlobal  bool
+	perServer map[int64]TrafficLimit
+	byTag     map[string]int64
+	global    int64
+	hasGlobal bool
 }
 
 // Resolve mirrors SQLRepository.ResolveEffectiveLimit precedence in memory:
@@ -786,12 +786,8 @@ func (r SQLRepository) DeleteDailyBefore(ctx context.Context, before time.Time) 
 }
 
 func (r SQLRepository) ListServerMetricSummaries(ctx context.Context, limit int) ([]ServerMetricSummary, error) {
-	if limit <= 0 {
-		limit = 10
-	}
-	rows, err := r.conn.QueryContext(ctx,
-		`SELECT ss.server_id, s.name, s.country_code,
-		        ss.cpu_usage, ss.ram_usage, ss.disk_usage, ss.swap_usage
+	query := `SELECT ss.server_id, s.name, s.country_code,
+		        ss.cpu_usage, ss.ram_usage, ss.disk_usage, ss.swap_usage, ss.load_average_1, ss.created_at
 		 FROM system_snapshots ss
 		 JOIN servers s ON s.id = ss.server_id
 		 JOIN (
@@ -799,9 +795,13 @@ func (r SQLRepository) ListServerMetricSummaries(ctx context.Context, limit int)
 		   FROM system_snapshots
 		   GROUP BY server_id
 		 ) latest ON latest.latest_id = ss.id
-		 ORDER BY ss.cpu_usage DESC
-		 LIMIT ?`, limit,
-	)
+		 ORDER BY ss.cpu_usage DESC`
+	var args []any
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+	rows, err := r.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("analytics: list server metric summaries: %w", err)
 	}
@@ -812,22 +812,88 @@ func (r SQLRepository) ListServerMetricSummaries(ctx context.Context, limit int)
 	var summaries []ServerMetricSummary
 	for rows.Next() {
 		var s ServerMetricSummary
-		if err := rows.Scan(&s.ServerID, &s.ServerName, &s.CountryCode, &s.AvgCPU, &s.AvgRAM, &s.AvgDisk, &s.AvgSwap); err != nil {
+		var rawTime any
+		if err := rows.Scan(&s.ServerID, &s.ServerName, &s.CountryCode, &s.AvgCPU, &s.AvgRAM, &s.AvgDisk, &s.AvgSwap, &s.LoadAvg1, &rawTime); err != nil {
 			return nil, fmt.Errorf("analytics: scan server metric summary: %w", err)
+		}
+		if t, parseErr := parseDatabaseTime(rawTime); parseErr == nil {
+			s.RecordedAt = t
 		}
 		summaries = append(summaries, s)
 	}
 	return summaries, rows.Err()
 }
 
-// ListServerTrafficSummaries returns the current-month RX/TX/total for every
-// server with vnstat data. It does NOT apply a SQL LIMIT: the "top N" ordering
-// is by monthly total, which lives inside the JSON blob and can't be sorted in
-// SQL, so the caller sorts and truncates. (The previous LIMIT picked an
-// arbitrary N rows before sorting, so the real top consumers could be dropped.)
+// CountServers returns the total number of registered servers in the fleet.
+func (r SQLRepository) CountServers(ctx context.Context) (int, error) {
+	var n int
+	if err := r.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM servers`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("analytics: count servers: %w", err)
+	}
+	return n, nil
+}
+
+// ListFleetTagCounts returns every distinct server tag in use across the fleet
+// mapped to the number of servers carrying that tag.
+func (r SQLRepository) ListFleetTagCounts(ctx context.Context) (map[string]int, error) {
+	rows, err := r.conn.QueryContext(ctx, `SELECT tag, COUNT(*) FROM server_tags GROUP BY tag ORDER BY tag ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("analytics: list fleet tag counts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make(map[string]int)
+	for rows.Next() {
+		var tag string
+		var cnt int
+		if err := rows.Scan(&tag, &cnt); err != nil {
+			return nil, fmt.Errorf("analytics: scan fleet tag count: %w", err)
+		}
+		tag = strings.TrimSpace(tag)
+		if tag != "" {
+			out[tag] = cnt
+		}
+	}
+	return out, rows.Err()
+}
+
+// ListServerTagsMap loads all server_id -> []tag mappings in one query so fleet
+// analytics views can resolve tag-inherited limits without N+1 queries.
+func (r SQLRepository) ListServerTagsMap(ctx context.Context) (map[int64][]string, error) {
+	rows, err := r.conn.QueryContext(ctx, `SELECT server_id, tag FROM server_tags ORDER BY tag ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("analytics: list server tags map: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make(map[int64][]string)
+	for rows.Next() {
+		var sid int64
+		var tag string
+		if err := rows.Scan(&sid, &tag); err != nil {
+			return nil, fmt.Errorf("analytics: scan server tag: %w", err)
+		}
+		if tag = strings.TrimSpace(tag); tag != "" {
+			out[sid] = append(out[sid], tag)
+		}
+	}
+	return out, rows.Err()
+}
+
+// ServerLimitCount returns how many per-server overrides exist in memory.
+func (lr *LimitResolver) ServerLimitCount() int {
+	if lr == nil {
+		return 0
+	}
+	return len(lr.perServer)
+}
+
+// ListServerTrafficSummaries returns the current accounting period RX/TX/total
+// for every server with vnstat data, honouring each server's traffic_reset_day
+// so the global overview matches per-server analytics and forecasts.
 func (r SQLRepository) ListServerTrafficSummaries(ctx context.Context, limit int) ([]ServerTrafficSummary, error) {
 	rows, err := r.conn.QueryContext(ctx,
-		`SELECT vs.server_id, s.name, s.country_code, vs.monthly_rows_json
+		`SELECT vs.server_id, s.name, s.country_code, s.traffic_reset_day, vs.daily_rows_json, vs.monthly_rows_json
 		 FROM vnstat_snapshots vs
 		 JOIN servers s ON s.id = vs.server_id
 		 JOIN (
@@ -844,7 +910,9 @@ func (r SQLRepository) ListServerTrafficSummaries(ctx context.Context, limit int
 		_ = rows.Close()
 	}()
 
-	currentMonth := time.Now().UTC().Format("2006-01")
+	now := time.Now().UTC()
+	currentMonth := now.Format("2006-01")
+	monthStartLabel := currentMonth + "-01"
 	type rawRow struct {
 		Label string `json:"label"`
 		RX    int64  `json:"rx_bytes"`
@@ -855,32 +923,83 @@ func (r SQLRepository) ListServerTrafficSummaries(ctx context.Context, limit int
 	var summaries []ServerTrafficSummary
 	for rows.Next() {
 		var serverID int64
-		var serverName, countryCode, monthlyJSON string
-		if err := rows.Scan(&serverID, &serverName, &countryCode, &monthlyJSON); err != nil {
+		var resetDay int
+		var serverName, countryCode, dailyJSON, monthlyJSON string
+		if err := rows.Scan(&serverID, &serverName, &countryCode, &resetDay, &dailyJSON, &monthlyJSON); err != nil {
 			return nil, fmt.Errorf("analytics: scan server traffic summary: %w", err)
 		}
+		var dailyRows []rawRow
+		if dailyJSON != "" {
+			_ = json.Unmarshal([]byte(dailyJSON), &dailyRows)
+		}
 		var monthlyRows []rawRow
-		_ = json.Unmarshal([]byte(monthlyJSON), &monthlyRows)
+		if monthlyJSON != "" {
+			_ = json.Unmarshal([]byte(monthlyJSON), &monthlyRows)
+		}
 
 		var rx, tx, monthBytes int64
-		for _, m := range monthlyRows {
-			if m.Label == currentMonth {
-				rx, tx = m.RX, m.TX
-				monthBytes = m.Total
-				if monthBytes == 0 {
-					monthBytes = m.RX + m.TX
+		periodLabel := currentMonth
+		anchored := false
+
+		if resetDay > 1 {
+			anchored = true
+			start := trafficPeriodStart(now, resetDay)
+			end := start.AddDate(0, 1, 0)
+			startLabel := start.Format("2006-01-02")
+			periodLabel = startLabel + " → " + end.AddDate(0, 0, -1).Format("2006-01-02")
+			for _, d := range dailyRows {
+				if d.Label < startLabel {
+					continue
 				}
-				break
+				rx += d.RX
+				tx += d.TX
+				rowTot := d.Total
+				if rowTot == 0 {
+					rowTot = d.RX + d.TX
+				}
+				monthBytes += rowTot
+			}
+		} else {
+			foundMonth := false
+			for _, m := range monthlyRows {
+				if m.Label == currentMonth {
+					foundMonth = true
+					rx, tx = m.RX, m.TX
+					monthBytes = m.Total
+					if monthBytes == 0 {
+						monthBytes = m.RX + m.TX
+					}
+					break
+				}
+			}
+			// Fallback to daily rows from YYYY-MM-01 on the 1st of the month if
+			// vnstat's monthly table has not rolled over yet.
+			if !foundMonth && len(dailyRows) > 0 {
+				for _, d := range dailyRows {
+					if d.Label < monthStartLabel {
+						continue
+					}
+					rx += d.RX
+					tx += d.TX
+					rowTot := d.Total
+					if rowTot == 0 {
+						rowTot = d.RX + d.TX
+					}
+					monthBytes += rowTot
+				}
 			}
 		}
+
 		summaries = append(summaries, ServerTrafficSummary{
-			ServerID:    serverID,
-			ServerName:  serverName,
-			CountryCode: countryCode,
-			MonthRX:     rx,
-			MonthTX:     tx,
-			MonthBytes:  monthBytes,
-			MonthLabel:  currentMonth,
+			ServerID:       serverID,
+			ServerName:     serverName,
+			CountryCode:    countryCode,
+			ResetDay:       resetDay,
+			PeriodAnchored: anchored,
+			MonthRX:        rx,
+			MonthTX:        tx,
+			MonthBytes:     monthBytes,
+			MonthLabel:     periodLabel,
 		})
 	}
 	return summaries, rows.Err()

@@ -105,22 +105,22 @@ type PageData struct {
 	SchedulerOverview SchedulerOverviewView
 	// BackupCanRun gates the diagnostics backup/restore section; it is false
 	// when the database runtime is unavailable.
-	BackupCanRun   bool
-	BackupOverview BackupOverviewView
-	NodeTarget             NodeTargetView
-	NodeForm               NodeFormView
-	NodeSnapshots          []NodeSnapshotView
-	NodeFleet              NodeFleetView
-	NodeCollection         NodeCollectionResultView
-	NodeStream             CommandStreamView
-	NodeDeployForm         NodeDeployFormView
-	NodeDeployOpen         bool
-	NodeInstall            NodeInstallView
-	AlertsOverview         AlertsOverviewView
-	AlertRuleForm          AlertRuleFormView
-	AlertChannelForm       AlertChannelFormView
-	IsEditingAlertRule     bool
-	IsEditingAlertChannel  bool
+	BackupCanRun          bool
+	BackupOverview        BackupOverviewView
+	NodeTarget            NodeTargetView
+	NodeForm              NodeFormView
+	NodeSnapshots         []NodeSnapshotView
+	NodeFleet             NodeFleetView
+	NodeCollection        NodeCollectionResultView
+	NodeStream            CommandStreamView
+	NodeDeployForm        NodeDeployFormView
+	NodeDeployOpen        bool
+	NodeInstall           NodeInstallView
+	AlertsOverview        AlertsOverviewView
+	AlertRuleForm         AlertRuleFormView
+	AlertChannelForm      AlertChannelFormView
+	IsEditingAlertRule    bool
+	IsEditingAlertChannel bool
 
 	// Bulk actions result page.
 	BulkActionResult BulkActionResultView
@@ -129,7 +129,7 @@ type PageData struct {
 	TerminalTarget TerminalTargetView
 
 	// ServerHeader represents the unified identity & sub-navigation for server-scoped pages.
-	ServerHeader ServerHeaderView
+	ServerHeader   ServerHeaderView
 	TerminalTicket string
 	TerminalForm   TerminalFormView
 
@@ -740,33 +740,33 @@ type NodeUptimeDayView struct {
 // dynamic instance name (e.g. "node", "node2", "rebecca-node") and Actions
 // the provider's management operations.
 type NodeSnapshotView struct {
-	Name           string              `json:"name"`
-	NodeType       string              `json:"node_type"`
-	TypeLabel      string              `json:"type_label"`
-	EngineKind     string              `json:"engine_kind"`
-	InstallMode    string              `json:"install_mode"`
-	Version        string              `json:"version"`
-	HealthStatus   string              `json:"health_status"`
-	IsRunning      bool                `json:"is_running"`
-	IsDegraded     bool                `json:"is_degraded"`
-	IsRestarting   bool                `json:"is_restarting"`
-	IsStopped      bool                `json:"is_stopped"`
-	ActivePorts    []string            `json:"active_ports"`
-	XrayPorts      []string            `json:"xray_ports"`
-	ServicePort    string              `json:"service_port"`
-	APIPort        string              `json:"api_port"`
-	Protocol       string              `json:"protocol"`
-	DataDir        string              `json:"data_dir"`
-	Confidence     string              `json:"confidence"`
-	Dependencies   []string            `json:"dependencies"`
-	Evidence       []string            `json:"evidence"`
-	CollectedAt    string              `json:"collected_at"`
-	LastSeenAt     string              `json:"last_seen_at"`
-	LastSeenISO    string              `json:"last_seen_iso"`
-	LatencyMS      int                 `json:"latency_ms"`
-	LatencyLabel   string              `json:"latency_label"`
-	Actions        []NodeActionView    `json:"actions"`
-	ActionsEnabled bool                `json:"actions_enabled"`
+	Name           string           `json:"name"`
+	NodeType       string           `json:"node_type"`
+	TypeLabel      string           `json:"type_label"`
+	EngineKind     string           `json:"engine_kind"`
+	InstallMode    string           `json:"install_mode"`
+	Version        string           `json:"version"`
+	HealthStatus   string           `json:"health_status"`
+	IsRunning      bool             `json:"is_running"`
+	IsDegraded     bool             `json:"is_degraded"`
+	IsRestarting   bool             `json:"is_restarting"`
+	IsStopped      bool             `json:"is_stopped"`
+	ActivePorts    []string         `json:"active_ports"`
+	XrayPorts      []string         `json:"xray_ports"`
+	ServicePort    string           `json:"service_port"`
+	APIPort        string           `json:"api_port"`
+	Protocol       string           `json:"protocol"`
+	DataDir        string           `json:"data_dir"`
+	Confidence     string           `json:"confidence"`
+	Dependencies   []string         `json:"dependencies"`
+	Evidence       []string         `json:"evidence"`
+	CollectedAt    string           `json:"collected_at"`
+	LastSeenAt     string           `json:"last_seen_at"`
+	LastSeenISO    string           `json:"last_seen_iso"`
+	LatencyMS      int              `json:"latency_ms"`
+	LatencyLabel   string           `json:"latency_label"`
+	Actions        []NodeActionView `json:"actions"`
+	ActionsEnabled bool             `json:"actions_enabled"`
 	// UptimeKnown is true once at least one persisted status observation exists
 	// for this node; UptimePct is the 30-day running percentage, UptimeDetail
 	// is the "N/M checks" breakdown, and UptimeDays has the 30 UTC daily buckets.
@@ -840,9 +840,9 @@ type NodeDeployFormView struct {
 	// Rebecca fields.
 	Bundle string
 	// Shared: release channel (both engines offer one).
-	Channel         string `json:"channel"`
+	Channel         string                   `json:"channel"`
 	Channels        []NodeInstallChannelView `json:"channels"`
-	ConfirmOverride bool `json:"confirm_override"`
+	ConfirmOverride bool                     `json:"confirm_override"`
 
 	Enabled bool              `json:"enabled"`
 	Errors  map[string]string `json:"errors"`
@@ -1198,6 +1198,10 @@ type TopServerMetricView struct {
 	CPUPct      float64
 	RAMPct      float64
 	DiskPct     float64
+	Swap        string
+	SwapPct     float64
+	Load1       float64
+	CountryCode string
 	CPULevel    string
 	RAMLevel    string
 	DiskLevel   string
@@ -1210,22 +1214,34 @@ type TopServerTrafficView struct {
 	// FlagEmoji is the server's country flag (or "" when undetected); CountryName
 	// is shown on hover. Mirrors the servers-list badge so the overview stays
 	// visually consistent.
+	CountryCode string
 	FlagEmoji   string
 	CountryName string
 	Download    string // current-month RX, human-readable
 	Upload      string // current-month TX, human-readable
 	MonthBytes  string // current-month total, human-readable
+	RawRX       int64
+	RawTX       int64
+	RawTotal    int64
 	MonthLabel  string
 	SharePct    int
 	BarPct      float64
 	RXBarPct    float64
 	TXBarPct    float64
+	// Effective quota status (populated when a server, tag, or global cap applies).
+	HasQuota        bool
+	QuotaLimitHuman string
+	QuotaPct        int
+	QuotaLevel      string
 }
 
 type GlobalAnalyticsView struct {
-	ServerCount int
-	TopMetrics  []TopServerMetricView
-	TopTraffic  []TopServerTrafficView
+	ServerCount      int
+	MonitoredCount   int
+	ServerLimitCount int
+	ActiveLimitRules int
+	TopMetrics       []TopServerMetricView
+	TopTraffic       []TopServerTrafficView
 	// Traffic-limit summary for the banner that links to /analytics/limits:
 	// the current global default cap (if any) and how many per-tag caps exist.
 	HasGlobalLimit   bool
@@ -1252,13 +1268,21 @@ type GlobalAnalyticsView struct {
 // shown on a single server's analytics page. HasData is false when the server
 // has no vnstat row for the current month.
 type AnalyticsTrafficSummaryView struct {
-	HasData     bool
-	MonthLabel  string
-	Download    string
-	Upload      string
-	Total       string
-	DownloadPct int
-	UploadPct   int
+	HasData         bool
+	PeriodAnchored  bool
+	MonthLabel      string
+	Download        string
+	Upload          string
+	Total           string
+	DownloadPct     int
+	UploadPct       int
+	HasQuota        bool
+	QuotaUsedHuman  string
+	QuotaLimitHuman string
+	QuotaKindLabel  string
+	QuotaPct        int
+	QuotaBarPct     int
+	QuotaLevel      string
 }
 
 // AnalyticsLimitView powers the per-server monthly download (RX) limit form on
@@ -1274,15 +1298,32 @@ type AnalyticsLimitView struct {
 	UnitOptions []string
 	// KindInput is the selected limit kind ("rx"/"tx"/"total"); KindLabel is its
 	// localized label shown next to the current cap.
-	KindInput string
-	KindLabel string
-	Error     string
+	KindInput     string
+	KindLabel     string
+	EffectiveKind string
+	Error         string
 	// Inherited describes a group/global cap that applies when this server has no
 	// per-server limit of its own. InheritedHuman is the effective cap and
 	// InheritedSource is a human-readable origin ("global default" / tag "x").
 	// Both are empty when no limit applies at any level.
 	InheritedHuman  string
 	InheritedSource string
+	// Live current-period quota telemetry when any cap (explicit or inherited) applies.
+	HasQuota        bool
+	QuotaUsedHuman  string
+	QuotaLimitHuman string
+	QuotaKindLabel  string
+	QuotaPct        int
+	QuotaBarPct     int
+	QuotaLevel      string
+}
+
+// FleetTagSuggestionView represents an existing server tag across the fleet on
+// the limits admin page so operators can click to assign or edit its cap.
+type FleetTagSuggestionView struct {
+	Tag         string `json:"tag"`
+	ServerCount int    `json:"server_count"`
+	HasCap      bool   `json:"has_cap"`
 }
 
 // TrafficLimitsView powers the fleet-level group/global limits admin page. The
@@ -1298,13 +1339,17 @@ type TrafficLimitsView struct {
 	GlobalUnit      string
 	UnitOptions     []string
 	Tags            []TrafficLimitTagView
+	KnownTags       []FleetTagSuggestionView
 	Error           string
 }
 
 // TrafficLimitTagView is one per-tag cap row on the limits admin page.
 type TrafficLimitTagView struct {
-	Tag        string
-	LimitHuman string
+	Tag         string `json:"tag"`
+	LimitHuman  string `json:"limit_human"`
+	ValueInput  string `json:"value_input"`
+	UnitInput   string `json:"unit_input"`
+	ServerCount int    `json:"server_count"`
 }
 
 type Renderer struct {
